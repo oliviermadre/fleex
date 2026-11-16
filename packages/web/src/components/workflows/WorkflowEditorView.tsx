@@ -11,9 +11,12 @@ import { EditorStepNode, type EditorStepNodeData } from './EditorStepNode';
 import { StepConfigPanel } from './StepConfigPanel';
 import { EdgeConfigPanel } from './EdgeConfigPanel';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
+import { WorkflowJsonMenu } from './WorkflowJsonMenu';
+import { applyImportedDocument, toWorkflowDocument } from './workflowJson';
+import { toast } from '../../lib/toast';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
-import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
+import type { WorkflowDocument, WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
 import { NATIVE_STEP_KIND_TICKET_ACTIONS, formatEdgeCondition, normalizeEdgeCondition, includedWorkflowSlugs } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
@@ -175,6 +178,23 @@ function EditorInner({ template, onBack }: Props) {
   const selectedStep = selectedStepId ? steps.find((s) => s.id === selectedStepId) : undefined;
   const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : undefined;
 
+  // Export = what the editor shows, unsaved edits included.
+  const getDocument = () => toWorkflowDocument({ slug, name, emoji, description, enabled: template.enabled, entryStepId, steps, edges });
+  // Import replaces the editor content; nothing is persisted until Save.
+  const importDocument = (doc: WorkflowDocument) => {
+    const next = applyImportedDocument({ slug, name, emoji, description, enabled: template.enabled, entryStepId, steps, edges }, doc);
+    setName(next.name);
+    setEmoji(next.emoji);
+    setDescription(next.description);
+    setSteps(next.steps);
+    setEdges(next.edges);
+    setEntryStepId(next.entryStepId);
+    setSelectedStepId(null);
+    setSelectedEdgeId(null);
+    setTimeout(() => reactFlow.fitView({ padding: 0.3, duration: 300 }), 50);
+    toast.success('Workflow imported — not saved yet');
+  };
+
   const save = async () => {
     setSaving(true); setError(null);
     try {
@@ -225,6 +245,7 @@ function EditorInner({ template, onBack }: Props) {
             style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
             title="Reset positions (line up horizontally)"
           >Tidy</button>
+          <WorkflowJsonMenu getDocument={getDocument} editorSlug={slug} onImport={importDocument} />
           <button onClick={save} disabled={saving}
             className="text-xs px-3 py-1 rounded border disabled:opacity-50"
             style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}>{saving ? 'Saving…' : 'Save Workflow'}</button>

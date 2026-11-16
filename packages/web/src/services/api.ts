@@ -25,6 +25,8 @@ import type {
   Ticket,
   TicketRelationship,
   WorkflowTemplate,
+  WorkflowDocument,
+  Violation,
   WorkflowRun,
   StepRun,
   ModelsResponse,
@@ -1367,6 +1369,25 @@ export async function updateWorkflowTemplate(
 export async function deleteWorkflowTemplate(id: string, opts: { force?: boolean } = {}): Promise<void> {
   const query = opts.force ? '?force=true' : '';
   return request<void>(`/workflows/templates/${encodeURIComponent(id)}${query}`, { method: 'DELETE' });
+}
+
+/**
+ * Check a workflow document against this workspace without saving it
+ * (`apply?dryRun=1`, profile `apply`: unknown agents, skills, panels and
+ * sub-workflows included). A 422 is an answer, not a failure: its violations
+ * are returned. No toast — the import modal shows the result inline.
+ */
+export async function applyWorkflowDryRun(doc: WorkflowDocument): Promise<{ errors: Violation[]; warnings: Violation[] }> {
+  const res = await fetch(`${API_URL}/workflows/templates/apply?dryRun=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
+  });
+  if (res.status !== 200 && res.status !== 422) {
+    throw new Error(`API error ${res.status}: ${res.statusText}`);
+  }
+  const body = (await res.json()) as { errors?: Violation[]; warnings?: Violation[] };
+  return { errors: body.errors ?? [], warnings: body.warnings ?? [] };
 }
 
 // ── Workflow Runs ──
