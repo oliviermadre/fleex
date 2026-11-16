@@ -455,6 +455,15 @@ export class FactoryView {
         const s = f === 0 || f === 1 ? 1 : -1;
         ctx.strokeStyle = pal.chev;
         for (let k = 0; k < 2; k++) chevron(s * (off + k * 0.5 - 0.5), s);
+        /*
+         * Chevrons run in step along the whole lane, belts and bridge alike, so the one about to come in and the one
+         * that has just left overlap this tile's edges. They are drawn by the neighbouring belts, before this tile's
+         * background went over them: without this they would come in with their tip cut off and leave their tail
+         * behind. Put back, inside this tile only, what the background covered.
+         */
+        ctx.save(); ctx.beginPath(); ctx.rect(x - 0.01, y - 0.01, 1.02, 1.02); ctx.clip();
+        chevron(s * (off - 1), s); chevron(s * (off + 0.5), s);
+        ctx.restore();
       }
       ctx.lineCap = 'butt';
     };
