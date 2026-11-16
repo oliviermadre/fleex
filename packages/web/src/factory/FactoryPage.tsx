@@ -19,6 +19,7 @@ import { FactoryFinder } from './FactoryFinder';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryTicketModal } from './FactoryTicketModal';
 import { FactoryMachineModal } from './FactoryMachineModal';
+import { FactoryPlanModal } from './FactoryPlanModal';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
@@ -132,6 +133,7 @@ function Floor() {
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
   const [lens, setLens] = useState<Lens>('none');
   const stats = useFactoryStore((s) => s.stats);
   /* the lens is worked out when its inputs change, not at every frame */
@@ -377,6 +379,15 @@ function Floor() {
     setSelection(null); setTool('paste');
   }, []);
 
+  /** A plan is put down like anything copied: it follows the pointer until a click says where. */
+  const placePlan = useCallback((clip: Clip, name: string) => {
+    clipboard = clip; setHasClip(true); setPlanOpen(false); setSelection(null); setTool('paste');
+    /* a plan is often wider than what is on screen: step back until it can be seen whole while it is carried */
+    const v = viewRef.current;
+    if (v) v.cam.z = Math.max(5, Math.min(v.cam.z, 0.7 * Math.min(v.w / clip.w, v.h / clip.h)));
+    toast.info(`Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
+  }, []);
+
   const commands: Command[] = useMemo(() => {
     const out: Command[] = [];
     if (selTicket) {
@@ -408,6 +419,7 @@ function Floor() {
       out.push({ key: 'R', label: `Face ${ARROW[dir]}`, icon: 'rotate', title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
       out.push({ key: 'Z', label: 'Undo', icon: 'undo', disabled: !store.undoable, title: 'Take back the last change to the floor (also Ctrl+Z)', run: () => void store.undo() });
       out.push({ key: 'Y', label: 'Redo', icon: 'redo', disabled: !store.redoable, title: 'Put back the change you took back (also Ctrl+Shift+Z)', run: () => void store.redo() });
+      out.push({ key: 'P', label: 'Import plan', icon: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: () => setPlanOpen(true) });
       out.push({ key: '', keyText: `${MOD}V`, label: 'Paste', icon: 'paste', disabled: !hasClip, active: tool === 'paste', title: hasClip ? 'Put down what you copied or cut: click where' : 'Nothing copied yet', run: paste });
     } else {
       out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
@@ -518,6 +530,7 @@ function Floor() {
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
       {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
+      {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
   );

@@ -27,7 +27,8 @@ const LAYERS: [Lens, string, string][] = [
   ['human', LENS_LABEL.human, 'Where tickets wait for a human, and for how long'],
 ];
 
-const SLOTS = 18;
+/** The command card: three rows of seven. */
+const COLS = 7, SLOTS = COLS * 3;
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'in a zone',
@@ -167,8 +168,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
 
       {/* command card */}
       <div className={cn(box, 'flex flex-none flex-col gap-1 p-1.5')}>
-        <div className="max-w-[366px] truncate text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{many ? `${many} machines` : ticket ? `#${ticket.info?.displayId ?? '?'}` : machine ? machine.name || machine.kind : title}</div>
-        <div className="grid grid-cols-6 gap-1" role="toolbar" aria-label="Factory commands">
+        <div className="max-w-[428px] truncate text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{many ? `${many} machines` : ticket ? `#${ticket.info?.displayId ?? '?'}` : machine ? machine.name || machine.kind : title}</div>
+        <div className="grid grid-cols-7 gap-1" role="toolbar" aria-label="Factory commands">
           {Array.from({ length: SLOTS }, (_, i) => {
             const c = commands[i];
             if (!c) return <span key={i} className="h-[44px] w-[58px] rounded-md border border-dashed border-[var(--theme-border)] opacity-50" />;

@@ -30,6 +30,16 @@ new ids.
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
+## Plans
+
+A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`
+turns a template into machines (a station per step, an arm per way out, the belts between them, bridges where they
+cross, a zone to come in by and one to gather in) and says what it could not carry over. It is a conversion made in the
+page, placed like anything pasted: the workflow is not changed, nothing links the two afterwards, and the server knows
+nothing of plans. A step that branches on one field of its own output keeps those values as outcomes; other conditions
+cannot be evaluated by arms, so the outcomes are named after the ways out and the plan says so. Sub-workflows, routing
+steps and native actions other than a status change have no equivalent yet.
+
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from
