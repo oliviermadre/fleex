@@ -7,6 +7,7 @@ import type { LensLayer } from './lens';
 import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
+import { bridgeFlow, type LaneFlow } from './bridges';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
@@ -428,28 +429,45 @@ export class FactoryView {
   /** Two belts crossing: the north-south one passes under, the east-west one over it. */
   private bridge(m: MachineSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y } = m, off = (this.clock * 0.6) % 0.5;
+    /* a bridge has no direction of its own: each lane is drawn the way the belts that feed it send tickets across */
+    const flow = bridgeFlow((px, py) => this.at(px, py), m);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
-    const lane = (horizontal: boolean) => {
-      ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      for (let k = 0; k < 2; k++) {
-        const u = off + k * 0.5 - 0.5, cx = x + 0.5 + (horizontal ? u : 0), cy = y + 0.5 + (horizontal ? 0 : u);
+    const lane = (f: LaneFlow, horizontal: boolean) => {
+      const cx0 = x + 0.5, cy0 = y + 0.5;
+      ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      /* one chevron at `u` along the lane, pointing the way `s` says (+1 east or south, -1 west or north) */
+      const chevron = (u: number, s: number) => {
+        const cx = cx0 + (horizontal ? u : 0), cy = cy0 + (horizontal ? 0 : u);
         ctx.beginPath();
-        if (horizontal) { ctx.moveTo(cx - 0.09, cy - 0.19); ctx.lineTo(cx + 0.09, cy); ctx.lineTo(cx - 0.09, cy + 0.19); }
-        else { ctx.moveTo(cx - 0.19, cy - 0.09); ctx.lineTo(cx, cy + 0.09); ctx.lineTo(cx + 0.19, cy - 0.09); }
+        if (horizontal) { ctx.moveTo(cx - 0.09 * s, cy - 0.19); ctx.lineTo(cx + 0.09 * s, cy); ctx.lineTo(cx - 0.09 * s, cy + 0.19); }
+        else { ctx.moveTo(cx - 0.19, cy - 0.09 * s); ctx.lineTo(cx, cy + 0.09 * s); ctx.lineTo(cx + 0.19, cy - 0.09 * s); }
         ctx.stroke();
+      };
+      if (f === 'none') {
+        /* nothing feeds this lane yet: a plain mark, no arrow that would promise a way */
+        ctx.strokeStyle = pal.chev; ctx.globalAlpha = 0.6; ctx.beginPath();
+        if (horizontal) { ctx.moveTo(cx0 - 0.16, cy0); ctx.lineTo(cx0 + 0.16, cy0); } else { ctx.moveTo(cx0, cy0 - 0.16); ctx.lineTo(cx0, cy0 + 0.16); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      } else if (f === 'clash') {
+        /* fed from both ends: two chevrons facing each other, in the colour of a fault */
+        ctx.strokeStyle = pal.danger; chevron(-0.2, 1); chevron(0.2, -1);
+      } else {
+        const s = f === 0 || f === 1 ? 1 : -1;
+        ctx.strokeStyle = pal.chev;
+        for (let k = 0; k < 2; k++) chevron(s * (off + k * 0.5 - 0.5), s);
       }
       ctx.lineCap = 'butt';
     };
     const draw = (t: FactoryTicket) => this.ticket(t, x + 0.5 + t.fx * (t.p - 0.5), y + 0.5 + t.fy * (t.p - 0.5), 0.46, st, '', dt);
     /* under: the north-south lane, between its two rails */
     ctx.strokeStyle = pal.edge; ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
-    if (this.cam.z >= 8) lane(false);
+    if (this.cam.z >= 8) lane(flow.under, false);
     for (const t of tickets) if (t.fx === 0) draw(t);
     /* over: the deck of the east-west lane, with a shadow on the lane below */
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + 0.1, 1, 0.8);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y + 0.16, 1.02, 0.68);
     ctx.strokeStyle = pal.text3; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
-    if (this.cam.z >= 8) lane(true);
+    if (this.cam.z >= 8) lane(flow.over, true);
     for (const t of tickets) if (t.fx !== 0) draw(t);
   }
 

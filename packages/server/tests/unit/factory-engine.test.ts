@@ -127,6 +127,30 @@ describe('FactoryEngine', () => {
     await expect(engine.transfer('c', { machineId: 'x' })).rejects.toBeInstanceOf(FactoryError);
   });
 
+  it('a bridge has no direction of its own: a ticket crosses it the way it arrives, west and north as well', async () => {
+    const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 5, y: 5, w: 1, h: 1 };
+    await boot([
+      belt('e1', 7, 5, 2), belt('e2', 6, 5, 2), bridge, belt('w1', 4, 5, 2), zone('west', 2, 5),
+      belt('s1', 5, 7, 3), belt('s2', 5, 6, 3), belt('n1', 5, 4, 3), zone('north', 5, 2),
+    ]);
+    await engine.transfer('a', { machineId: 'e1' });
+    await engine.transfer('b', { machineId: 's1' });
+    await run(6);
+    expect([where('a'), where('b')]).toEqual(['west:zone', 'north:zone']);
+  });
+
+  it('an arm can drop on a bridge: the ticket crosses the way the arm points', async () => {
+    const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 4, y: 5, w: 1, h: 1 };
+    await boot([
+      zone('in', 6, 5, { release: 'auto' }), arm('a1', 5, 5, 2), bridge, belt('w1', 3, 5, 2), zone('west', 1, 5),
+      belt('n1', 4, 4, 1), belt('s1', 4, 6, 1), zone('south', 4, 7),
+    ]);
+    await engine.transfer('a', { machineId: 'in' });
+    await engine.transfer('b', { machineId: 'n1' });
+    await run(6);
+    expect([where('a'), where('b')]).toEqual(['west:zone', 'south:zone']);
+  });
+
   it('a bridge lane waits when the tile after it is taken, without blocking the other lane', async () => {
     const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 3, y: 3, w: 1, h: 1 };
     await boot([belt('w2', 2, 3), bridge, belt('e1', 4, 3), belt('n2', 3, 2, 1), belt('s1', 3, 4, 1), zone('south', 3, 5)]);   // e1 leads nowhere

@@ -15,6 +15,7 @@ import { ModelSelect } from '../components/agents/ModelSelect';
 import type { FactoryView } from './renderer';
 import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRules';
 import { FactoryArmForm } from './FactoryArmForm';
+import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
@@ -139,7 +140,19 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
           </div>
         </>
       )}
-      {m.kind === 'bridge' && <Hint>Where two belts cross. A ticket that enters keeps going straight, so an east-west line and a north-south line pass over each other without mixing.</Hint>}
+      {m.kind === 'bridge' && (() => {
+        const flow = bridgeFlow((px, py) => view.at(px, py), m);
+        return (
+          <>
+            <Hint>Where two belts cross. A bridge has no direction of its own: a ticket crosses it the way it arrives, so the belts on each side decide which way each lane flows. Nothing to turn.</Hint>
+            <div className="flex flex-col gap-1 text-xs">
+              {([['Over (east-west)', flow.over], ['Under (north-south)', flow.under]] as const).map(([name, f]) => (
+                <div key={name} className="flex justify-between gap-2"><span className="text-[var(--theme-text-primary)]">{name}</span><span className={f === 'clash' ? 'text-[var(--theme-danger)]' : f === 'none' ? 'text-[var(--theme-text-muted)]' : 'text-[var(--theme-text-secondary)]'}>{flowLabel(f)}</span></div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
       {(m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit') && <CommitInput id="f-name" label="Name" value={m.name ?? ''} onCommit={(v) => onPatch({ name: v })} />}
 
       {m.kind === 'arm' && (

@@ -251,9 +251,11 @@ export class FactoryEngine {
     return out.sort((a, b) => a.s.since.localeCompare(b.s.since));
   }
 
-  private canTake(m: Machine | null): boolean {
+  /** Whether a machine can take one more ticket. A bridge takes one per lane, so it needs to know which way the ticket would cross. */
+  private canTake(m: Machine | null, dir?: number): boolean {
     if (!m) return false;
     if (m.spec.kind === 'belt') return !m.item;
+    if (m.spec.kind === 'bridge') return dir !== undefined && !(dir % 2 === 0 ? m.item : m.item2);   // 0 and 2 cross east-west
     if (m.spec.kind === 'station') return this.inside(m).length < m.spec.cap;
     return m.spec.kind === 'zone' || m.spec.kind === 'exit';
   }
@@ -351,13 +353,15 @@ export class FactoryEngine {
     if (a.armState === 'carry' && a.item) {
       a.armP = Math.min(1, a.armP + step); a.item.s.p = a.armP;
       if (a.armP < 1) return;
-      if (a.dst ? !this.canTake(a.dst) : false) return;
+      if (a.dst ? !this.canTake(a.dst, spec.dir) : false) return;
       const t = a.item; a.item = null; a.armState = 'back';
-      if (a.dst) this.accept(a.dst, t);
+      /* dropped on a bridge, a ticket crosses it the way the arm points */
+      if (a.dst?.spec.kind === 'bridge') this.accept(a.dst, t, DX[spec.dir], DY[spec.dir], 0.5);
+      else if (a.dst) this.accept(a.dst, t);
       else { t.machineId = null; t.s.phase = 'loose'; t.s.x = spec.x + DX[spec.dir]; t.s.y = spec.y + DY[spec.dir]; this.dirty.add(t.ticketId); }
     } else if (a.armState === 'back' || (a.armState === 'carry' && !a.item)) { a.armP -= step; if (a.armP <= 0) { a.armP = 0; a.armState = 'rest'; } }
     else {
-      if (a.dst && !this.canTake(a.dst)) return;
+      if (a.dst && !this.canTake(a.dst, spec.dir)) return;
       const pick = this.pickFor(a);
       if (!pick) return;
       this.detach(pick);

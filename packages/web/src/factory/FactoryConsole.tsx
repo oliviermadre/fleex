@@ -10,6 +10,7 @@ import { since, span } from './format';
 import { TicketGlyphs, TicketSquare } from './FactoryTicketMeta';
 import { LENS_LABEL } from './lens';
 import { conditionsOf, longCondition } from './armRules';
+import { bridgeFlow, flowLabel } from './bridges';
 import { TYPE_COLORS, type FactoryView } from './renderer';
 import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
 
@@ -38,7 +39,7 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
-  if (m.kind === 'bridge') return 'Bridge · two belts cross here without mixing';
+  if (m.kind === 'bridge') { const f = bridgeFlow((px, py) => view.at(px, py), m); return `Bridge · over ${flowLabel(f.over)}, under ${flowLabel(f.under)}`; }
   return 'Label';
 }
 const Stat = ({ label, value }: { label: string; value: string | number }) => <span className="text-[11px] text-[var(--theme-text-muted)]">{label} <b className="font-mono font-medium text-[var(--theme-text-primary)]">{value}</b></span>;

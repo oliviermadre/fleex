@@ -22,7 +22,9 @@ so the ticket view's usual cards never see it: the Factory banner on the ticket 
 action (Run again, the gate's outcomes). Replying in the thread alone restarts nothing.
 
 The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
-Where two belts must cross, a **bridge** tile carries each ticket straight across. In build mode every change to the
+Where two belts must cross, a **bridge** tile carries each ticket straight across. A bridge has no direction of its
+own: a ticket crosses it the way it arrives, in any of the four directions, on the east-west lane or on the north-south
+one. The page draws each lane the way the belts (or the arm) that feed it send tickets across. In build mode every change to the
 floor can be taken back and put back (Ctrl+Z, Ctrl+Shift+Z); that history lives in the page and is gone on reload. A selection of
 machines can be copied, cut and pasted (Ctrl+C, Ctrl+X, Ctrl+V, then a click): the copies keep their settings and get
 new ids.
