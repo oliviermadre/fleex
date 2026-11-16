@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { Button } from '../components/ui/Button';
+import { tintClasses, type TintHue } from '../lib/tints';
+import { SLOTS, type Command, type Menu, type Tone } from './menu';
 import { cn } from '../lib/cn';
 import { FIcon } from './icons';
 import type { Selection } from './FactoryInspector';
@@ -11,13 +13,6 @@ import { conditionsOf, longCondition } from './armRules';
 import { TYPE_COLORS, type FactoryView } from './renderer';
 import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
 
-export interface Command {
-  /** The key that runs it. Empty when it only has a chord, shown through `keyText`. */
-  key: string; label: string; icon: string; run: () => void; primary?: boolean; active?: boolean; danger?: boolean; disabled?: boolean; title?: string;
-  /** What to print as its shortcut when it is not a single key (Ctrl+C…). */
-  keyText?: string;
-}
-
 /** The layers of the floor, in the order they are listed next to the minimap. */
 const LAYERS: [Lens, string, string][] = [
   ['none', 'Floor', 'The floor as it is'],
@@ -27,8 +22,6 @@ const LAYERS: [Lens, string, string][] = [
   ['human', LENS_LABEL.human, 'Where tickets wait for a human, and for how long'],
 ];
 
-/** The command card: three rows of seven. */
-const COLS = 7, SLOTS = COLS * 3;
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'in a zone',
@@ -65,9 +58,36 @@ function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: S
   );
 }
 
-export function FactoryConsole({ view, snapshot, layout, selection, onSelect, commands, title, hint, groups, onGroup, miniRef, lens, onLens, onFit }: {
+/** The colour of each family of commands. `null`: the app's own neutral, accent or outline. */
+const HUE: Record<Tone, TintHue | null> = { go: null, move: 'blue', station: 'purple', area: 'teal', plan: 'yellow', ticket: 'indigo', danger: 'red', back: null, plain: null };
+
+/** One command of the card: its key, a large icon, its label whole. */
+function Tile({ c, onRun }: { c: Command; onRun: (c: Command) => void }) {
+  const tone = c.tone ?? 'plain', hue = HUE[tone], t = hue ? tintClasses(hue) : null;
+  const look = t ? (c.active ? cn(t.solid, t.onSolid, 'border-transparent') : cn(t.bg, t.text, t.borderColor, t.hoverBg))
+    : tone === 'go' ? 'border-transparent bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]'
+    : tone === 'back' ? 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]'
+    : c.active ? 'border-transparent bg-[var(--theme-text-primary)] text-[var(--theme-bg-base)]'
+    : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-border-input)]';
+  const shortcut = c.keyText ?? keyLabel(c.key);
+  return (
+    <button type="button" disabled={c.disabled} onClick={() => onRun(c)} aria-pressed={c.active} aria-haspopup={c.menu ? 'menu' : undefined} title={`${c.title ?? c.label}${shortcut ? ` (${shortcut})` : ''}`}
+      className={cn('relative flex h-[64px] w-[88px] flex-col items-center justify-end gap-[3px] rounded-lg border px-1 pb-[5px] transition-colors', look,
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-35')}>
+      <kbd className="absolute left-1.5 top-1 font-mono text-[9.5px] font-bold opacity-75">{shortcut}</kbd>
+      {c.menu && <span className="absolute right-1.5 top-0.5 text-[11px] font-bold opacity-75" aria-hidden="true">›</span>}
+      <FIcon name={c.icon} size={24} />
+      {/* a label is shown whole: it wraps before it is ever cut */}
+      <span className="max-w-full break-words text-center text-[11px] font-medium leading-[1.05]">{c.label}</span>
+    </button>
+  );
+}
+
+export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit }: {
   view: FactoryView | null; snapshot: FactorySnapshot | null; layout: FactoryLayout | null; selection: Selection; onSelect: (s: Selection) => void;
-  commands: Command[]; title: string; hint: string; groups: Selection[]; onGroup: (index: number, save: boolean) => void; miniRef: React.RefObject<HTMLCanvasElement | null>;
+  /** The menu shown in the command card, the menus that lead to it, and what running one of its commands does. */
+  menu: Menu; trail: string[]; onRun: (c: Command) => void;
+  title: string; hint: string; groups: Selection[]; onGroup: (index: number, save: boolean) => void; miniRef: React.RefObject<HTMLCanvasElement | null>;
   lens: Lens; onLens: (lens: Lens) => void; onFit: () => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
@@ -93,10 +113,10 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
   const box = 'rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]';
 
   return (
-    <div className="flex h-[176px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
+    <div className="flex h-[254px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
       {/* minimap */}
       <div className={cn(box, 'flex flex-none gap-1.5 p-1.5')}>
-        <canvas ref={miniRef} className="h-full w-[200px] cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
+        <canvas ref={miniRef} className="h-full w-[250px] cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
           onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
         <div className="flex w-[104px] flex-col justify-between gap-1">
           {/* one layer at a time: a list, not commands */}
@@ -157,7 +177,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
             ) : (
               <>
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
-                <div className="line-clamp-2 text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
+                <div className="text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
                 <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={snapshot?.running ?? 0} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} /></div>
                 <Wire tickets={waiting} onSelect={onSelect} />
               </>
@@ -166,21 +186,15 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
         </div>
       </div>
 
-      {/* command card */}
+      {/* command card: four by three, one menu at a time */}
       <div className={cn(box, 'flex flex-none flex-col gap-1 p-1.5')}>
-        <div className="max-w-[428px] truncate text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{many ? `${many} machines` : ticket ? `#${ticket.info?.displayId ?? '?'}` : machine ? machine.name || machine.kind : title}</div>
-        <div className="grid grid-cols-7 gap-1" role="toolbar" aria-label="Factory commands">
+        <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]" aria-label="Menu">
+          {trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}
+        </div>
+        <div className="grid grid-cols-4 gap-1.5" role="toolbar" aria-label="Factory commands">
           {Array.from({ length: SLOTS }, (_, i) => {
-            const c = commands[i];
-            if (!c) return <span key={i} className="h-[44px] w-[58px] rounded-md border border-dashed border-[var(--theme-border)] opacity-50" />;
-            return (
-              <Button key={i} size="sm" variant={c.primary ? 'primary' : c.danger ? 'danger' : 'secondary'} disabled={c.disabled} onClick={c.run} aria-pressed={c.active}
-                title={`${c.title ?? c.label} (${c.keyText ?? keyLabel(c.key)})`} className={cn('relative h-[44px] w-[58px] flex-col justify-end gap-0 px-0.5 pb-[3px] pt-0', c.active && 'ring-2 ring-[var(--theme-accent)]')}>
-                <kbd className="absolute left-1 top-0.5 font-mono text-[8.5px] font-bold opacity-80">{c.keyText ?? keyLabel(c.key)}</kbd>
-                <FIcon name={c.icon} size={17} />
-                <span className="max-w-full truncate text-[9px] leading-tight">{c.label}</span>
-              </Button>
-            );
+            const c = menu.slots[i];
+            return c ? <Tile key={`${i}-${c.id}`} c={c} onRun={onRun} /> : <span key={i} className="h-[64px] w-[88px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
           })}
         </div>
       </div>

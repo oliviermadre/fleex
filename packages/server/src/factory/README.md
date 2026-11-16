@@ -40,6 +40,13 @@ nothing of plans. A step that branches on one field of its own output keeps thos
 cannot be evaluated by arms, so the outcomes are named after the ways out and the plan says so. Sub-workflows, routing
 steps and native actions other than a status change have no equivalent yet.
 
+## The command card
+
+The commands of the page are a grid of four columns by three rows (`packages/web/src/factory/menu.ts`), organised as
+menus that open sub-menus: Factory, then Build, then Move, Station or Area. Three levels at most. A command is found
+by its place: in every build menu Undo and Redo, then Copy, Cut, Paste and the way back, sit in the same slots. A
+label is one or two short words and is never cut. `factoryMenu.test.ts` holds every menu to these rules.
+
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from

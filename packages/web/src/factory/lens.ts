@@ -81,7 +81,7 @@ export function lensLayer(kind: Lens, layout: FactoryLayout, tickets: FactoryTic
     for (const r of rows) { values.set(r.machineId, r.totalMs); text.set(r.machineId, `${r.count} · ${span(r.oldestMs)}`); }
     legend = rows.length ? 'Tickets standing in each machine, and how long the oldest has been there' : 'Nothing stands anywhere right now';
   } else {
-    const period = stats ? `last ${stats.days === 1 ? '24 hours' : `${stats.days} days`}` : 'loading…';
+    const period = stats ? `last ${stats.days === 1 ? '24 hours' : `${stats.days} days`}` : 'loading';
     for (const m of stats?.machines ?? []) {
       if (!m.onFloor) continue;
       if (kind === 'cost' && m.costUsd > 0) { values.set(m.machineId, m.costUsd); text.set(m.machineId, money(m.costUsd)); }

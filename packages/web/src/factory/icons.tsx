@@ -28,6 +28,7 @@ const PATHS: Record<string, ReactNode> = {
   ticket: <rect x="5" y="5" width="14" height="14" rx="3.5" />,
   undo: <><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
   redo: <><path d="M15 14l5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></>,
+  select: <path d="M5 4l5.2 14 2.3-5.5L18 10.2z" />,
   plan: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 9.5h16M9.5 9.5V20M13 13.5h4M13 16.5h3" /></>,
   copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
   cut: <><circle cx="6" cy="6.5" r="2.5" /><circle cx="6" cy="17.5" r="2.5" /><path d="M8.2 8l11.8 9M8.2 16L20 7" /></>,

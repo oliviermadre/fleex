@@ -11,7 +11,9 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
 import { FactoryInspector, type Selection } from './FactoryInspector';
-import { FactoryConsole, type Command } from './FactoryConsole';
+import { FactoryConsole } from './FactoryConsole';
+import { factoryMenu } from './factoryMenu';
+import { byKey, menuAt, type Command } from './menu';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, specFor, update, type Clip, type Tool } from './layoutOps';
 import { find, NO_FINDER, type Finder } from './finder';
@@ -148,7 +150,7 @@ function Floor() {
   const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, allNames: false });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks;
   const fitted = useRef(false);
-  useToastOffset(184);   // keep toasts clear of the command bar
+  useToastOffset(262);   // keep toasts clear of the console
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {
@@ -388,48 +390,53 @@ function Floor() {
     toast.info(`Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
   }, []);
 
-  const commands: Command[] = useMemo(() => {
-    const out: Command[] = [];
-    if (selTicket) {
-      const m = layout?.machines.find((q) => q.id === selTicket.machineId);
-      if (selTicket.phase === 'review' && m?.kind === 'station') m.outcomes.slice(0, 4).forEach((o, i) => out.push({ key: 'QWER'[i]!, label: o, icon: i ? 'loop' : 'check', primary: i === 0, title: `Decide: ${o}`, run: () => void store.resolve(selTicket.ticketId, o) }));
-      if (selTicket.phase === 'zone' && !selTicket.released) out.push({ key: 'Q', label: 'Release', icon: 'play', primary: true, title: 'Let an arm take this ticket out of its zone', run: () => void store.release(selTicket.ticketId) });
-      if (selTicket.phase === 'failed' || selTicket.phase === 'question') out.push({ key: 'Q', label: 'Run again', icon: 'loop', primary: true, title: 'Run the station again on this ticket', run: () => void store.retry(selTicket.ticketId) });
-      out.push({ key: 'V', label: 'Open', icon: 'open', title: 'The ticket, its thread and its actions, without leaving the floor', run: () => setOpenTicket(selTicket.ticketId) });
-      if (selTicket.info) { const on = selTicket.info.favorite; out.push({ key: 'S', label: on ? 'Unstar' : 'Star', icon: 'star', active: on, title: on ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: () => void store.star(selTicket.ticketId, !on) }); }
-      out.push({ key: 'X', label: 'Give back', icon: 'give', title: 'Take this ticket out of the Factory', run: () => { void store.giveBack(selTicket.ticketId); setSelection(null); } });
-    } else if (selMany.length && building && tool === 'select') {
-      out.push({ key: '', keyText: `${MOD}C`, label: 'Copy', icon: 'copy', title: `Copy the ${selMany.length} selected machines`, run: () => copy(false) });
-      out.push({ key: '', keyText: `${MOD}X`, label: 'Cut', icon: 'cut', title: `Cut the ${selMany.length} selected machines`, run: () => copy(true) });
-      out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: `Remove the ${selMany.length} selected machines`, run: () => { const l = useFactoryStore.getState().layout; if (l) commit(eraseMany(l, new Set(selMany))); setSelection(null); } });
-    } else if (selMachine && (!building || tool === 'select')) {
-      if (selMachine.kind === 'belt' || selMachine.kind === 'arm') out.push({ key: 'R', label: 'Turn', icon: 'rotate', title: 'Quarter turn', run: () => { const l = useFactoryStore.getState().layout; if (l) commit(rotate(l, selMachine.id)); } });
-      if (!building && (selMachine.kind === 'station' || selMachine.kind === 'zone')) out.push({ key: 'V', label: 'Open', icon: 'open', primary: selMachine.kind === 'station', title: 'Everything inside, what each ticket waits for, and what this machine did lately', run: () => setOpenMachine(selMachine.id) });
-      if (selMachine.kind === 'zone') {
-        const next = snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0];
-        out.push({ key: 'L', label: 'Release 1', icon: 'play', primary: true, disabled: !next, title: 'Release the ticket that has waited longest', run: () => { if (next) void store.release(next.ticketId); } });
-      }
-      if (building) {
-        out.push({ key: '', keyText: `${MOD}C`, label: 'Copy', icon: 'copy', title: 'Copy this machine, with its settings', run: () => copy(false) });
-        out.push({ key: '', keyText: `${MOD}X`, label: 'Cut', icon: 'cut', title: 'Cut this machine', run: () => copy(true) });
-      }
-      out.push({ key: 'Delete', label: 'Remove', icon: 'trash', danger: true, title: 'Remove this machine from the floor', run: () => removeMachine(selMachine.id) });
-    } else if (building) {
-      for (const [t, key, label, title] of TOOLS) out.push({ key, label, icon: t === 'erase' ? 'erase' : t, title, active: tool === t, run: () => setTool((cur) => (cur === t ? 'select' : t)) });
-      out.push({ key: 'R', label: `Face ${ARROW[dir]}`, icon: 'rotate', title: 'Direction of the belts and arms you place', run: () => setDir((d) => ((d + 1) % 4) as Dir) });
-      out.push({ key: 'Z', label: 'Undo', icon: 'undo', disabled: !store.undoable, title: 'Take back the last change to the floor (also Ctrl+Z)', run: () => void store.undo() });
-      out.push({ key: 'Y', label: 'Redo', icon: 'redo', disabled: !store.redoable, title: 'Put back the change you took back (also Ctrl+Shift+Z)', run: () => void store.redo() });
-      out.push({ key: 'P', label: 'Import plan', icon: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: () => setPlanOpen(true) });
-      out.push({ key: '', keyText: `${MOD}V`, label: 'Paste', icon: 'paste', disabled: !hasClip, active: tool === 'paste', title: hasClip ? 'Put down what you copied or cut: click where' : 'Nothing copied yet', run: paste });
-    } else {
-      out.push({ key: 'B', label: 'Build', icon: 'build', primary: true, title: 'Lay belts, arms, stations and zones', run: () => { setBuilding(true); setSelection(null); } });
-      out.push({ key: 'T', label: 'Hand over', icon: 'inbound', title: 'Hand tickets over to the Factory: they land in Inbound', run: () => setTransferOpen(true) });
-    }
-    out.push({ key: 'F', label: 'Fit', icon: 'fit', title: 'Frame the floor', run: fit });
-    if (building) out.push({ key: 'Escape', label: tool !== 'select' ? 'Drop tool' : selection ? 'Menu' : 'Done', icon: 'back', title: tool !== 'select' ? 'Put the tool down' : selection ? 'Back to the build menu' : 'Leave build mode',
-      run: () => { if (tool !== 'select') setTool('select'); else if (selection) setSelection(null); else setBuilding(false); } });
-    return out;
-  }, [selTicket, selMachine, selMany, building, tool, dir, selection, layout, snapshot, store, commit, removeMachine, fit, copy, paste, hasClip]);
+  // The command card: the menu that fits what is selected and the mode, and the sub-menus opened in it.
+  const [path, setPath] = useState<string[]>([]);
+  const zoneNext = selMachine?.kind === 'zone' ? snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0] ?? null : null;
+  const gate = selTicket ? layout?.machines.find((q) => q.id === selTicket.machineId) : null;
+  const root = useMemo(() => factoryMenu({
+    building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
+    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [] } : null,
+    machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext } : null,
+    act: {
+      build: () => { setBuilding(true); setSelection(null); },
+      done: () => setBuilding(false),
+      intake: () => setTransferOpen(true),
+      fit, plan: () => setPlanOpen(true), paste,
+      tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
+      select: () => setTool('select'),
+      back: () => { setPath((p) => p.slice(0, -1)); setTool('select'); },
+      face: () => setDir((d) => ((d + 1) % 4) as Dir),
+      undo: () => void store.undo(), redo: () => void store.redo(),
+      copy: () => copy(false), cut: () => copy(true),
+      turn: () => { const l = useFactoryStore.getState().layout; if (l && selMachine) commit(rotate(l, selMachine.id)); },
+      remove: () => {
+        const l = useFactoryStore.getState().layout;
+        if (selMany.length > 1) { if (l) commit(eraseMany(l, new Set(selMany))); setSelection(null); }
+        else if (selMachine) removeMachine(selMachine.id);
+      },
+      deselect: () => setSelection(null),
+      openTicket: () => { if (selTicket) setOpenTicket(selTicket.ticketId); },
+      star: () => { if (selTicket?.info) void store.star(selTicket.ticketId, !selTicket.info.favorite); },
+      giveBack: () => { if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
+      resolve: (o) => { if (selTicket) void store.resolve(selTicket.ticketId, o); },
+      release: () => { if (selTicket) void store.release(selTicket.ticketId); },
+      retry: () => { if (selTicket) void store.retry(selTicket.ticketId); },
+      openMachine: () => { if (selMachine) setOpenMachine(selMachine.id); },
+      releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
+    },
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine]);
+  const card = useMemo(() => menuAt(root, path), [root, path]);
+  /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
+  const selKind = selection ? Object.keys(selection)[0] : '';
+  useEffect(() => { setPath([]); }, [building, selKind]);
+  /* where the card is, from the floor down: Factory › Build › Move */
+  const trail = useMemo(() => [...(root.title === 'Factory' ? [] : ['Factory']), ...(building && root.title !== 'Build' ? ['Build'] : []), ...card.titles], [root.title, building, card.titles]);
+  const runCommand = useCallback((c: Command) => {
+    if (c.disabled) return;
+    c.run?.();
+    if (c.menu) setPath([...card.path, c.id]);
+  }, [card.path]);
 
   // Saved selections, RTS style: Shift+1…9 and Shift+0 save, the digit alone recalls and centres the view on it.
   const onGroup = useCallback((i: number, save: boolean) => {
@@ -474,8 +481,9 @@ function Floor() {
       const digit = /^Digit([0-9])$/.exec(e.code);
       if (digit) { e.preventDefault(); onGroup((Number(digit[1]) + GROUPS - 1) % GROUPS, e.shiftKey); return; }
       const key = e.key === 'Backspace' ? 'Delete' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      const cmd = commands.find((c) => c.key === key);
-      if (cmd) { e.preventDefault(); cmd.run(); }
+      const cmd = byKey(card.menu, key);
+      if (cmd) { e.preventDefault(); runCommand(cmd); }
+      else if (key === 'F') { e.preventDefault(); fit(); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; if (e.key === 'Tab') live.current.allNames = false; };
@@ -483,7 +491,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; live.current.allNames = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [commands, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
+  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -524,7 +532,7 @@ function Floor() {
         </div>
         <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} found={found} onGoTo={goTo} building={building} />
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} commands={commands} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit}
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Hold Tab to name every ticket, hover one to see what it is; / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}

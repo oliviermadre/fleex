@@ -63,7 +63,7 @@ export function FactoryPlanModal({ onPlace, onClose }: { onPlace: (clip: Clip, n
             <p className="text-xs text-[var(--theme-text-muted)]">A workflow becomes machines: a station for each step, an arm for each way out, the belts between them. Once on the floor they are ordinary machines; the workflow itself is not changed, and nothing links the two afterwards.</p>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button size="sm" variant="primary" disabled={!template || !plan || empty} onClick={() => { if (template && plan) onPlace(plan.clip, template.name); }} title="Close this window, then click on the floor where the plan should go">Place on the floor…</Button>
+          <Button size="sm" variant="primary" disabled={!template || !plan || empty} onClick={() => { if (template && plan) onPlace(plan.clip, template.name); }} title="Close this window, then click on the floor where the plan should go">Place on the floor</Button>
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[260px_minmax(0,1fr)]">

@@ -57,7 +57,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
         const options = optionsFor(c.field, c.op, ctx), n = arity(c.field, c.op), label = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
         const pick = (id: string, value: string, set: (v: string) => void, what: string) => (
           <Select id={id} aria-label={what} value={value} onChange={(e) => set(e.target.value)}
-            options={[{ value: '', label: 'choose…' }, ...(options ?? []), ...(value && !options?.some((o) => o.value === value) ? [{ value, label: value }] : [])]} />
+            options={[{ value: '', label: 'choose' }, ...(options ?? []), ...(value && !options?.some((o) => o.value === value) ? [{ value, label: value }] : [])]} />
         );
         return (
           <div key={i} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Condition ${i + 1}`}>
@@ -71,7 +71,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
             <Select id={`f-cond-op-${i}`} aria-label="How it compares" value={c.op} onChange={(e) => patch(i, withOp(c, e.target.value as ArmOp))} options={OPS_BY_FIELD[c.field].map((op) => ({ value: op, label: opLabel(c.field, op) }))} />
             {n === 'many' && options && (
               <>
-                <MultiSelect label={FIELD_LABEL[c.field]} allLabel={options.length ? 'Choose…' : 'Nothing to choose from yet'} values={c.values} options={options} onChange={(values) => patch(i, { ...c, values })} searchable={options.length > 8} />
+                <MultiSelect label={FIELD_LABEL[c.field]} allLabel={options.length ? 'Choose' : 'Nothing to choose from yet'} values={c.values} options={options} onChange={(values) => patch(i, { ...c, values })} searchable={options.length > 8} />
                 {c.values.length > 0 && <div className="text-[11px] text-[var(--theme-text-secondary)]">{c.values.map(label).join(c.op === 'is_not' ? ', nor ' : ' or ')}</div>}
               </>
             )}
@@ -90,7 +90,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
         );
       })}
       <div><Button size="sm" onClick={add}>Add a condition</Button></div>
-      {rows.length > 1 && <p className="text-xs text-[var(--theme-text-muted)]">All the conditions must hold. For "either… or…", use one arm for each.</p>}
+      {rows.length > 1 && <p className="text-xs text-[var(--theme-text-muted)]">All the conditions must hold. For "either this or that", use one arm for each.</p>}
     </div>
   );
 }

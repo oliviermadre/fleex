@@ -64,8 +64,8 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
       <div className="flex h-[82vh] flex-col">
         <div className="flex flex-none items-start gap-3 border-b border-[var(--theme-border)] p-4">
           <div className="min-w-0 flex-1">
-            <div className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket?.displayId ?? ft?.info?.displayId ?? '…'} · {ticket?.status ?? ft?.info?.status ?? ''} · {ticket?.type ?? 'no type'} · {ticket?.priority ?? ''}</div>
-            <div className="text-base font-semibold text-[var(--theme-text-primary)]">{ticket?.title ?? ft?.info?.title ?? 'Loading…'}</div>
+            <div className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket?.displayId ?? ft?.info?.displayId ?? ''} · {ticket?.status ?? ft?.info?.status ?? ''} · {ticket?.type ?? 'no type'} · {ticket?.priority ?? ''}</div>
+            <div className="text-base font-semibold text-[var(--theme-text-primary)]">{ticket?.title ?? ft?.info?.title ?? 'Loading'}</div>
             <div className="mt-0.5 text-xs text-[var(--theme-text-secondary)]">{where}</div>
           </div>
           <Button size="sm" variant="ghost" onClick={() => { onClose(); openTicketInWork(ticketId); }} title="Leave the floor and open this ticket in Work">Open in Work</Button>
@@ -105,7 +105,7 @@ export function FactoryTicketModal({ ticketId, onClose }: { ticketId: string; on
             <div className="flex flex-none flex-col gap-2 border-t border-[var(--theme-border)] p-3">
               <textarea
                 value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} aria-label="Write a message on this ticket"
-                placeholder={call === 'question' ? 'Your answer to the agent…' : call === 'decision' ? 'A note with your decision (optional)…' : 'Write a message on this ticket…'}
+                placeholder={call === 'question' ? 'Your answer to the agent' : call === 'decision' ? 'A note with your decision (optional)' : 'Write a message on this ticket'}
                 onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && draft.trim()) void act(); }}
                 className="w-full resize-none rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 py-2 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]" />
               <div className="flex items-center justify-end gap-2">

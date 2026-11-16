@@ -115,9 +115,9 @@ export function FactoryMachineModal({ machineId, onClose, onOpenTicket }: { mach
                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">What it did</h3>
                 <PeriodSelect id="factory-machine-period" />
               </div>
-              {store.stats ? <MachineFigures m={figures} gate={gate} /> : <p className="text-xs text-[var(--theme-text-muted)]">Loading…</p>}
+              {store.stats ? <MachineFigures m={figures} gate={gate} /> : <p className="text-xs text-[var(--theme-text-muted)]">Loading</p>}
               <h3 className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Latest {gate ? 'decisions' : 'runs'}</h3>
-              {runs === null ? <p className="text-xs text-[var(--theme-text-muted)]">Loading…</p> : runs.length === 0 ? <p className="text-xs text-[var(--theme-text-muted)]">None yet.</p> : (
+              {runs === null ? <p className="text-xs text-[var(--theme-text-muted)]">Loading</p> : runs.length === 0 ? <p className="text-xs text-[var(--theme-text-muted)]">None yet.</p> : (
                 <ol className="flex flex-col">
                   {runs.map((r) => (
                     <li key={r.id} className="border-t border-[var(--theme-border)] py-1.5 first:border-t-0">

@@ -156,7 +156,7 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
               <Select id="f-exec" label="Runs" value={m.exec} onChange={(e) => onPatch({ exec: e.target.value as StationExec, ref: '' } as Partial<StationSpec>)}
                 options={[{ value: 'agent', label: 'an agent (persona)' }, { value: 'skill', label: 'a skill' }, { value: 'panel', label: 'a panel' }]} />
               <Select id="f-ref" label={m.exec === 'agent' ? 'Persona' : m.exec === 'skill' ? 'Skill' : 'Panel'} value={m.ref ?? ''} onChange={(e) => onPatch({ ref: e.target.value } as Partial<StationSpec>)}
-                options={[{ value: '', label: 'choose…' }, ...refs(m.exec).map((r) => ({ value: r, label: r }))]} />
+                options={[{ value: '', label: 'choose' }, ...refs(m.exec).map((r) => ({ value: r, label: r }))]} />
               {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
                 options={[{ value: 'edit', label: 'edit (can change code)' }, { value: 'plan', label: 'plan' }, { value: 'talk', label: 'talk (no workspace)' }]} />}
               {m.exec === 'agent' && (
@@ -177,7 +177,7 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
                 </button>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] text-[var(--theme-text-muted)]">{m.prompt?.trim() ? `${m.prompt.split('\n').length} lines · ${m.prompt.length.toLocaleString('en-US')} characters` : 'None yet'}</span>
-                  <Button size="sm" onClick={() => setEditing(true)}>Edit in a large window…</Button>
+                  <Button size="sm" onClick={() => setEditing(true)}>Edit in a large window</Button>
                 </div>
                 {editing && <FactoryPromptEditor title={m.name || 'Station'} value={m.prompt ?? ''} onSave={(v) => onPatch({ prompt: v } as Partial<StationSpec>)} onClose={() => setEditing(false)} />}
               </div>
@@ -233,14 +233,14 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
             {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" onClick={() => onSelect({ machine: a.id })}>arm · {armTag(a, takers) || 'anything'}</button>)}
           </Section>
           <Section title={`${inside.length} ticket${inside.length === 1 ? '' : 's'} inside`}>
-            <Button size="sm" onClick={onOpen} title="Everything inside, with what each ticket waits for (V, or double-click the machine)">Open {m.name || (m.kind === 'zone' ? 'the zone' : 'the station')}…</Button>
+            <Button size="sm" onClick={onOpen} title="Everything inside, with what each ticket waits for (V, or double-click the machine)">Open {m.name || (m.kind === 'zone' ? 'the zone' : 'the station')}</Button>
             {inside.slice(0, 8).map((t) => <TicketRow key={t.ticketId} t={t} onSelect={() => onSelect({ ticket: t.ticketId })} />)}
             {inside.length > 8 && <Hint>and {inside.length - 8} more: open it to see them all.</Hint>}
           </Section>
           {m.kind === 'station' && m.exec !== 'native' && (
             <Section title="What it did">
               <PeriodSelect id="f-period-machine" />
-              {stats ? <MachineFigures m={stats.machines.find((q) => q.machineId === m.id) ?? null} gate={m.exec === 'human_gate'} /> : <Hint>Loading…</Hint>}
+              {stats ? <MachineFigures m={stats.machines.find((q) => q.machineId === m.id) ?? null} gate={m.exec === 'human_gate'} /> : <Hint>Loading</Hint>}
             </Section>
           )}
         </>
@@ -285,7 +285,7 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
                 <div key={String(l)} className="rounded-md border border-[var(--theme-border)] px-1 py-1.5"><div className="text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">{l}</div><div className="font-mono text-sm text-[var(--theme-text-primary)]">{v}</div></div>
               ))}
             </div>
-            <Button variant="primary" size="sm" onClick={onTransfer}>Hand tickets over…</Button>
+            <Button variant="primary" size="sm" onClick={onTransfer}>Hand tickets over</Button>
             {found && (
               <Section title={`Found · ${found.length}`}>
                 {found.length === 0 && <Hint>No ticket on the floor matches. The others are only faded: clear the search to bring them back.</Hint>}
@@ -309,7 +309,7 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
             </Section>
             <Section title="What the floor did">
               <PeriodSelect id="f-period" />
-              {!stats ? <Hint>Loading…</Hint> : (
+              {!stats ? <Hint>Loading</Hint> : (
                 <>
                   <div className="grid grid-cols-3 gap-2">
                     <Tile label="Shipped" value={stats.totals.shipped} />
