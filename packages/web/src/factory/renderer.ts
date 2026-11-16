@@ -8,6 +8,7 @@ import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
+import { fadeIn, floorLook, glows, MAJOR, mix, stationState, veil, type StationState } from './floorLook';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
@@ -85,6 +86,8 @@ export function floorRect(layout: FactoryLayout): { x: number; y: number; w: num
   const growX = Math.max(0, 40 - (x1 - x0)), growY = Math.max(0, 24 - (y1 - y0));
   return { x: x0 - Math.floor(growX / 2), y: y0 - Math.floor(growY / 2), w: x1 - x0 + growX, h: y1 - y0 + growY };
 }
+/** Room kept around a box in the picture of its shadow, in tiles. */
+const SHADOW_PAD = 1.2;
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
 
 
@@ -104,6 +107,11 @@ export class FactoryView {
   /** Arm id → the swing it is drawn at (0..1). */
   private armShown = new Map<string, number>();
   private readonly ctx: CanvasRenderingContext2D;
+  /** The floor as last painted, and what it was painted for. */
+  private backdrop: HTMLCanvasElement | null = null;
+  private backdropKey: unknown[] = [];
+  private glowCache = new Map<string, HTMLCanvasElement>();
+  private shadowCache = new Map<string, HTMLCanvasElement>();
 
   constructor(private readonly cv: HTMLCanvasElement) { this.ctx = cv.getContext('2d')!; }
 
@@ -354,24 +362,13 @@ export class FactoryView {
   draw(st: ViewState, dtReal: number): void {
     const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, z = cam.z, L = st.layout;
     this.resize(); this.index(L); this.clock += dtReal;
-    ctx.setTransform(d, 0, 0, d, 0, 0);
-    ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, this.w, this.h);
-    ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
-
-    /* the floor has no edge: it is drawn as far as what is built, plus room to build further */
-    const F = floorRect(L);
-    rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = pal.floor; ctx.fill();
-    ctx.strokeStyle = st.edit ? pal.accent : pal.grid; ctx.lineWidth = st.edit ? 0.08 : 0.05; ctx.stroke();
-    if (st.grid !== false && z >= (st.edit ? 6 : 12)) {
-      ctx.strokeStyle = pal.grid; ctx.globalAlpha = st.edit ? 0.9 : 0.5; ctx.lineWidth = 1 / z; ctx.beginPath();
-      for (let i = 0; i <= F.w; i++) { ctx.moveTo(F.x + i, F.y); ctx.lineTo(F.x + i, F.y + F.h); }
-      for (let i = 0; i <= F.h; i++) { ctx.moveTo(F.x, F.y + i); ctx.lineTo(F.x + F.w, F.y + i); }
-      ctx.stroke(); ctx.globalAlpha = 1;
-    }
-
     const inside = new Map<string, FactoryTicket[]>();
     for (const t of st.tickets) if (t.machineId) { const a = inside.get(t.machineId); if (a) a.push(t); else inside.set(t.machineId, [t]); }
     for (const a of inside.values()) a.sort((p, q) => p.since.localeCompare(q.since));
+    this.floor(st, inside, pal);
+    ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
+    this.shadows(st, pal);
+
     const live = new Set(st.tickets.map((t) => t.ticketId));
     for (const id of this.shown.keys()) if (!live.has(id)) this.shown.delete(id);
 
@@ -408,6 +405,114 @@ export class FactoryView {
     this.overlay(st, pal);
     this.flushLabels();
     this.names(st, pal);
+  }
+
+  private lamp(s: StationState, pal: Palette): string { return s === 'failed' ? pal.danger : s === 'call' ? pal.warn : s === 'running' ? pal.ok : s === 'queue' ? '#60a5fa' : pal.text3; }
+
+  /**
+   * The floor, before anything built on it. It has no edge: it is drawn as far as what is built, plus room to build
+   * further. Out of build mode it is dressed (see `floorLook.ts`): a light over the middle, dots where tiles meet, and
+   * around a station that works or waits for someone, the glow of its lamp. In build mode it keeps plain lines, which
+   * is what one places machines against.
+   *
+   * It is painted on a canvas of its own and only when something it shows has changed (the view, the floor, the
+   * theme, what a station is doing): soft light over large areas is the costliest thing on the page to paint, and it
+   * changes the least. So its cost does not grow with the number of stations lit.
+   */
+  private floor(st: ViewState, inside: Map<string, FactoryTicket[]>, pal: Palette): void {
+    const d = this.dpr, z = this.cam.z, L = st.layout;
+    /* not in build mode, and not under a lens: there, colour is the lens's reading */
+    const lit: [MachineSpec, StationState][] = [];
+    if (!st.edit && !st.lens) for (const m of L.machines) if (m.kind === 'station') { const s = stationState(inside.get(m.id) ?? []); if (glows(s)) lit.push([m, s]); }
+    const key: unknown[] = [this.cv.width, this.cv.height, this.cam.x, this.cam.y, z, st.edit, st.grid !== false, L, pal, lit.map(([m, s]) => `${m.id}:${s}`).join()];
+    if (!this.backdrop) this.backdrop = document.createElement('canvas');
+    const cv = this.backdrop;
+    if (key.length === this.backdropKey.length && key.every((v, i) => v === this.backdropKey[i])) { this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0); return; }
+    this.backdropKey = key;
+    if (cv.width !== this.cv.width || cv.height !== this.cv.height) { cv.width = this.cv.width; cv.height = this.cv.height; }
+    const ctx = cv.getContext('2d', { alpha: false })!, F = floorRect(L), look = floorLook(pal.floor);
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, this.w, this.h);
+    ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - this.cam.x * z) * d, (this.h / 2 - this.cam.y * z) * d);
+    /* the light over the middle and the dusk at the edges are in the floor's own paint: one opaque coat */
+    let paint: string | CanvasGradient = pal.floor;
+    if (!st.edit) {
+      const cx = F.x + F.w / 2, cy = F.y + F.h / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(F.w, F.h) * 0.62);
+      g.addColorStop(0, mix(pal.floor, '#ffffff', look.light)); g.addColorStop(0.6, pal.floor); g.addColorStop(1, mix(pal.floor, '#000000', look.dusk));
+      paint = g;
+    }
+    rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = paint; ctx.fill();
+    ctx.strokeStyle = st.edit ? pal.accent : pal.grid; ctx.lineWidth = st.edit ? 0.08 : 0.05; ctx.stroke();
+
+    if (st.edit) {
+      if (st.grid !== false && z >= 6) {
+        ctx.strokeStyle = pal.grid; ctx.globalAlpha = 0.9; ctx.lineWidth = 1 / z; ctx.beginPath();
+        for (let i = 0; i <= F.w; i++) { ctx.moveTo(F.x + i, F.y); ctx.lineTo(F.x + i, F.y + F.h); }
+        for (let i = 0; i <= F.h; i++) { ctx.moveTo(F.x, F.y + i); ctx.lineTo(F.x + F.w, F.y + i); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+    } else {
+      /* dots, only the ones in view: one path for the plain ones, one for the stronger ones */
+      const seen = st.grid === false ? 0 : fadeIn(z, 8, 12);
+      if (seen > 0) {
+        const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h);
+        const i0 = Math.max(F.x, Math.floor(a.x)), i1 = Math.min(F.x + F.w, Math.ceil(b.x)), j0 = Math.max(F.y, Math.floor(a.y)), j1 = Math.min(F.y + F.h, Math.ceil(b.y));
+        for (const major of [false, true]) {
+          const r = major ? 0.06 : 0.035, round = r * z >= 1.2;
+          ctx.beginPath();
+          for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+            if ((i % MAJOR === 0 && j % MAJOR === 0) !== major) continue;
+            if (round) { ctx.moveTo(i + r, j); ctx.arc(i, j, r, 0, Math.PI * 2); } else ctx.rect(i - r, j - r, r * 2, r * 2);
+          }
+          ctx.globalAlpha = seen; ctx.fillStyle = major ? look.major : look.dot; ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      ctx.globalAlpha = look.glow;
+      for (const [m, s] of lit) { const R = Math.max(m.w, m.h) * 1.5; ctx.drawImage(this.glowSprite(this.lamp(s, pal)), m.x + m.w / 2 - R, m.y + m.h / 2 - R, R * 2, R * 2); }
+      ctx.globalAlpha = 1;
+    }
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0);
+  }
+
+  /** Whatever stands on the floor casts a shadow on it (not in build mode, which is a plain drawing). A picture made once per size, and stamped. */
+  private shadows(st: ViewState, pal: Palette): void {
+    if (st.edit) return;
+    const look = floorLook(pal.floor), a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h);
+    for (const m of st.layout.machines) {
+      if (!isBox(m) || m.x + m.w + SHADOW_PAD < a.x || m.x - SHADOW_PAD > b.x || m.y + m.h + SHADOW_PAD < a.y || m.y - SHADOW_PAD > b.y) continue;
+      this.ctx.drawImage(this.shadowSprite(m.w, m.h, look.shadow), m.x - SHADOW_PAD, m.y - SHADOW_PAD, m.w + SHADOW_PAD * 2, m.h + SHADOW_PAD * 2);
+    }
+  }
+
+  /** A lamp's light, fading from its colour to nothing: painted once per colour, then stamped at the strength wanted. */
+  private glowSprite(color: string): HTMLCanvasElement {
+    let cv = this.glowCache.get(color);
+    if (cv) return cv;
+    cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const c = cv.getContext('2d')!, g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, veil(color, 1)); g.addColorStop(1, veil(color, 0)); c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+    this.glowCache.set(color, cv);
+    return cv;
+  }
+
+  /**
+   * The shadow of a box of that size, alone (what casts it is drawn out of the picture). Blurring is what costs: it is
+   * done once per size, at a fixed scale, and the soft picture is then stretched to the zoom.
+   */
+  private shadowSprite(w: number, h: number, color: string): HTMLCanvasElement {
+    const key = `${w}x${h}|${color}`;
+    let cv = this.shadowCache.get(key);
+    if (cv) return cv;
+    const S = 24, far = 10000;
+    cv = document.createElement('canvas'); cv.width = Math.round((w + SHADOW_PAD * 2) * S); cv.height = Math.round((h + SHADOW_PAD * 2) * S);
+    const c = cv.getContext('2d')!;
+    c.shadowColor = color; c.shadowBlur = 0.5 * S; c.shadowOffsetX = far + 0.1 * S; c.shadowOffsetY = 0.16 * S; c.fillStyle = '#000';
+    c.setTransform(S, 0, 0, S, -far, 0);
+    rr(c, SHADOW_PAD + 0.12, SHADOW_PAD + 0.12, w - 0.24, h - 0.24, 0.3); c.fill();
+    if (this.shadowCache.size > 200) this.shadowCache.clear();
+    this.shadowCache.set(key, cv);
+    return cv;
   }
 
   /** Veil every station and zone, then heat the ones the lens has a value for: yellow is little, red is the most on the floor. */
@@ -565,8 +670,7 @@ export class FactoryView {
   private station(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y, w, h } = m, big = w >= 3, gate = m.exec === 'human_gate', nat = m.exec === 'native';
     const waiting = tickets.filter((t) => t.phase !== 'out'), out = tickets.filter((t) => t.phase === 'out');
-    const state = tickets.some((t) => t.phase === 'failed') ? pal.danger : tickets.some((t) => t.phase === 'review' || t.phase === 'question') ? pal.warn
-      : tickets.some((t) => t.phase === 'running') ? pal.ok : tickets.some((t) => t.phase === 'wait') ? '#60a5fa' : pal.text3;
+    const state = this.lamp(stationState(tickets), pal);
     rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.28); ctx.fillStyle = pal.body; ctx.fill();
     ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : nat ? pal.ok : pal.edge;
     if (gate) ctx.setLineDash([0.3, 0.2]);

@@ -62,6 +62,16 @@ On the page, four layers tint stations and zones (what stands there now, cost, r
 the minimap), the side panel lists where tickets stand and what the floor did over the period, and a station or a zone
 opens on everything it holds (double-click, or V).
 
+## The floor itself
+
+Out of build mode the floor is dressed (`packages/web/src/factory/floorLook.ts`): a dot where tiles meet instead of
+lines, a soft light over the middle, a shadow under each station, zone and exit, and around a station the glow of its
+lamp while it works (green), waits for a decision or an answer (amber) or has a failed run (red). The glow is the
+station's own state bar shining on the floor, nothing more; under a layer it is off, since colour there is the layer's
+reading. Build mode keeps plain lines and no light: that is the drawing one places machines against. The Grid toggle
+hides the dots as it hid the lines. Light and glows are painted on a canvas of their own, redone only when the view,
+the floor, the theme or a station's state changes, so their cost does not grow with the number of stations lit.
+
 ## Finding a ticket
 
 The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with
