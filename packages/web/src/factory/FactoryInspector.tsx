@@ -11,12 +11,16 @@ import { tint } from '../lib/tints';
 import { cn } from '../lib/cn';
 import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
-import { armTag, type FactoryView } from './renderer';
+import { ModelSelect } from '../components/agents/ModelSelect';
+import type { FactoryView } from './renderer';
+import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRules';
+import { FactoryArmForm } from './FactoryArmForm';
+import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
 import { standing } from './lens';
 import { TicketGlyphs } from './FactoryTicketMeta';
-import { byRunAt, needsHuman, QUESTION_OUTCOME, type ArmFilterField, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { byRunAt, needsHuman, QUESTION_OUTCOME, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
 
@@ -106,10 +110,12 @@ function TicketPanel({ t, view }: { t: FactoryTicket; view: FactoryView }) {
 function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, building }: {
   m: MachineSpec; view: FactoryView; tickets: FactoryTicket[]; onPatch: (patch: Partial<MachineSpec>) => void; onRemove: () => void; onSelect: (s: Selection) => void; onOpen: () => void; building: boolean;
 }) {
-  const stats = useFactoryStore((s) => s.stats);
+  const stats = useFactoryStore((s) => s.stats), layout = useFactoryStore((s) => s.layout)!;
+  const [editing, setEditing] = useState(false);
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
   const inside = tickets.filter((t) => t.machineId === m.id);
   const takers = view.takersOf(m);
+  const persona = m.kind === 'station' && m.exec === 'agent' ? personas.find((p) => p.name === m.ref) ?? null : null;
   const refs = (exec: StationExec) => (exec === 'agent' ? personas.map((p) => p.name) : exec === 'skill' ? skills.map((s) => s.commandName) : exec === 'panel' ? panels.map((p) => p.name) : []);
   return (
     <>
@@ -139,10 +145,7 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
       {m.kind === 'arm' && (
         <>
           <Hint>Takes a ticket from the tile behind it and drops it on the tile in front, if that one is free. Leads to: {view.leadsTo(view.at(m.x + [1, 0, -1, 0][m.dir]!, m.y + [0, 1, 0, -1][m.dir]!))?.name ?? 'the next tile'}.</Hint>
-          <Select id="f-field" label="Only takes" value={m.filter?.field ?? ''} onChange={(e) => onPatch({ filter: e.target.value ? { field: e.target.value as ArmFilterField, values: m.filter?.values ?? [] } : null })}
-            options={[{ value: '', label: 'anything (or what filtered arms leave)' }, { value: 'type', label: 'some ticket types' }, { value: 'priority', label: 'some priorities' }, { value: 'tag', label: 'some tags' }, { value: 'outcome', label: 'some outcomes of the station' }]} />
-          {m.filter && <CommitInput id="f-values" label="Values, comma separated" value={m.filter.values.join(', ')} placeholder={m.filter.field === 'type' ? 'fix, build' : m.filter.field === 'outcome' ? `reject, ${QUESTION_OUTCOME}` : ''}
-            onCommit={(v) => onPatch({ filter: { field: m.filter!.field, values: list(v) } })} />}
+          <FactoryArmForm key={m.id} arm={m} view={view} layout={layout} onChange={(when) => onPatch({ when, filter: null })} />
         </>
       )}
 
@@ -156,7 +159,28 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
                 options={[{ value: '', label: 'choose…' }, ...refs(m.exec).map((r) => ({ value: r, label: r }))]} />
               {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
                 options={[{ value: 'edit', label: 'edit (can change code)' }, { value: 'plan', label: 'plan' }, { value: 'talk', label: 'talk (no workspace)' }]} />}
-              <CommitInput id="f-prompt" label="Instructions for this station" value={m.prompt ?? ''} placeholder="What the agent should do here" onCommit={(v) => onPatch({ prompt: v } as Partial<StationSpec>)} />
+              {m.exec === 'agent' && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Model</span>
+                  <ModelSelect id="f-model" ariaLabel="Model this station runs on" value={m.model ?? ''} onChange={(v) => onPatch({ model: v || undefined } as Partial<StationSpec>)}
+                    leadingOption={{ value: '', label: persona?.model ? `The persona's own (${persona.model})` : "The persona's own" }} />
+                  {m.model && <Hint>Runs on this model here, whatever {m.ref || 'the persona'} is set to elsewhere.</Hint>}
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Instructions for this station</span>
+                <button type="button" onClick={() => setEditing(true)} title="Open the editor"
+                  className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-left text-sm hover:border-[var(--theme-accent)]">
+                  {m.prompt?.trim()
+                    ? <span className="line-clamp-4 whitespace-pre-wrap text-[var(--theme-text-primary)]">{m.prompt}</span>
+                    : <span className="text-[var(--theme-text-muted)]">What the agent should do here</span>}
+                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-[var(--theme-text-muted)]">{m.prompt?.trim() ? `${m.prompt.split('\n').length} lines · ${m.prompt.length.toLocaleString('en-US')} characters` : 'None yet'}</span>
+                  <Button size="sm" onClick={() => setEditing(true)}>Edit in a large window…</Button>
+                </div>
+                {editing && <FactoryPromptEditor title={m.name || 'Station'} value={m.prompt ?? ''} onSave={(v) => onPatch({ prompt: v } as Partial<StationSpec>)} onClose={() => setEditing(false)} />}
+              </div>
               {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: without it, every run fails.</div>}
             </>
           )}
@@ -165,16 +189,16 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
           <CommitInput id="f-cap" label="Capacity (tickets inside at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(50, Number(v) || 8)) } as Partial<StationSpec>)} />
           <Section title="Where each outcome leaves">
             {m.outcomes.map((o) => {
-              const arm = takers.find((a) => a.filter?.field === 'outcome' && a.filter.values.includes(o)) ?? takers.find((a) => !a.filter?.values.length);
+              const arm = takers.find((a) => acceptsOutcome(a, o)) ?? takers.find((a) => !isConditional(a));
               const dest = arm ? view.leadsTo(view.at(arm.x + [1, 0, -1, 0][arm.dir]!, arm.y + [0, 1, 0, -1][arm.dir]!)) : null;
               return <div key={o} className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-text-primary)]">{o}</span><span className={arm ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-danger)]'}>{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'no arm takes it'}</span></div>;
             })}
             {m.exec !== 'human_gate' && (() => {
-              const arm = takers.find((a) => a.filter?.field === 'outcome' && a.filter.values.includes(QUESTION_OUTCOME));
+              const arm = takers.find((a) => takesQuestions(a));
               const dest = arm ? view.leadsTo(view.at(arm.x + [1, 0, -1, 0][arm.dir]!, arm.y + [0, 1, 0, -1][arm.dir]!)) : null;
               return <div className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-warning)]">{QUESTION_OUTCOME}</span><span className="text-[var(--theme-text-secondary)]">{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'stays here until answered'}</span></div>;
             })()}
-            <Hint>An outcome leaves through the arm whose “outcome” filter holds it; an arm with no filter takes the rest. When the agent asks a question instead, only an arm filtered on “{QUESTION_OUTCOME}” takes the ticket.</Hint>
+            <Hint>An outcome leaves through the arm that asks for it (a condition on the outcome); an arm with no condition takes the rest. When the agent asks a question instead, only an arm that asks for “{QUESTION_OUTCOME}” takes the ticket.</Hint>
           </Section>
         </>
       )}
@@ -233,6 +257,8 @@ export function FactoryInspector({ selection, view, onSelect, onPatch, onRemove,
 }) {
   const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), setSettings = useFactoryStore((s) => s.setSettings), stats = useFactoryStore((s) => s.stats);
   if (!snapshot || !layout || !view) return null;
+  /* the page gets a fresh copy of the layout at every poll: the view must read this one before it is asked about it */
+  view.use(layout);
   const tickets = snapshot.tickets;
   const machine = selection && 'machine' in selection ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const ticket = selection && 'ticket' in selection ? tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;

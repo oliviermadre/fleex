@@ -169,16 +169,18 @@ function Floor() {
     return () => window.clearInterval(id);
   }, []);
 
+  const boardName = useCallback((id: string) => useTicketStore.getState().boards.find((b) => b.id === id)?.name ?? 'a board', []);
   const viewState = useCallback((): ViewState | null => {
     const s = useFactoryStore.getState(), l = live.current;
     if (!s.snapshot || !s.layout) return null;
     return {
-      layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, a.p])),
+      layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
+      armAge: (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, boardName,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named, allNames: l.allNames,
     };
-  }, []);
+  }, [boardName]);
 
   // The draw loop.
   useEffect(() => {
@@ -436,7 +438,8 @@ function Floor() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-      if (transferOpen || openTicket || openMachine) return;
+      /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
+      if (transferOpen || openTicket || openMachine || document.querySelector('[data-overlay-top]')) return;
       /* Tab held down: every ticket shows its name, as long as the key is down */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); live.current.allNames = true; return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */

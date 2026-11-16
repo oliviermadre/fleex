@@ -5,6 +5,8 @@
  */
 import type { LensLayer } from './lens';
 import { layoutNames, tie, type NamedTicket } from './nameTags';
+import { armTag, isConditional } from './armRules';
+import { armDue, armShown, easeSwing } from './armMotion';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
@@ -12,8 +14,13 @@ export interface DragState { ticketId: string; x: number; y: number; ok: boolean
 export interface ViewState {
   layout: FactoryLayout;
   tickets: FactoryTicket[];
-  /** Arm id → swing progress 0..1. */
-  arms: Map<string, number>;
+  /** Arm id → how far it had swung (0..1) and which way it was going when the last snapshot was taken. */
+  arms: Map<string, { p: number; state: 'rest' | 'carry' | 'back' }>;
+  /** Seconds since that snapshot, and seconds a swing takes: an arm keeps turning between two snapshots. */
+  armAge?: number;
+  armSwing?: number;
+  /** Board id → name, for the tag of an arm that sorts by board. */
+  boardName?: (id: string) => string;
   selMachine: string | null;
   /** Build mode: several machines selected at once. */
   selMany: string[];
@@ -70,11 +77,6 @@ export function floorRect(layout: FactoryLayout): { x: number; y: number; w: num
 }
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
 
-/** What an arm lets through, in a few words. */
-export function armTag(arm: ArmSpec, siblings: ArmSpec[]): string {
-  if (arm.filter && arm.filter.values.length) return arm.filter.values.join(' · ');
-  return siblings.some((s) => s.id !== arm.id && s.filter && s.filter.values.length) ? 'else' : '';
-}
 
 export class FactoryView {
   cam = { x: 24, y: 15, z: 18 };
@@ -89,6 +91,8 @@ export class FactoryView {
   private byId = new Map<string, MachineSpec>();
   /** Where each ticket is drawn; eased towards where the server says it is. */
   private shown = new Map<string, { x: number; y: number }>();
+  /** Arm id → the swing it is drawn at (0..1). */
+  private armShown = new Map<string, number>();
   private readonly ctx: CanvasRenderingContext2D;
 
   constructor(private readonly cv: HTMLCanvasElement) { this.ctx = cv.getContext('2d')!; }
@@ -139,6 +143,11 @@ export class FactoryView {
       for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) this.grid.set(`${i},${j}`, m);
     }
   }
+  /**
+   * Read the floor from this layout. The draw loop does it at every frame; whoever asks the view a question about a
+   * layout it holds (the side panel) says so first, since the page gets a fresh copy of the layout at every poll.
+   */
+  use(layout: FactoryLayout): void { this.index(layout); }
   at(x: number, y: number): MachineSpec | null { return this.grid.get(`${x},${y}`) ?? null; }
   machine(id: string | null): MachineSpec | null { return id ? this.byId.get(id) ?? null : null; }
   /** Does this neighbour push tickets onto the tile at (x, y)? A bridge does, unless that tile is a belt pointing back at it. */
@@ -159,7 +168,8 @@ export class FactoryView {
     const out: ArmSpec[] = [];
     for (let x = m.x - 1; x <= m.x + m.w; x++) for (let y = m.y - 1; y <= m.y + m.h; y++) {
       const n = this.at(x, y);
-      if (n && n.kind === 'arm' && this.at(n.x - DX[n.dir], n.y - DY[n.dir]) === m && !out.includes(n)) out.push(n);
+      /* by id, never by object: the machine asked about may come from another copy of the same layout */
+      if (n && n.kind === 'arm' && this.at(n.x - DX[n.dir], n.y - DY[n.dir])?.id === m.id && !out.some((q) => q.id === n.id)) out.push(n);
     }
     return out;
   }
@@ -444,9 +454,15 @@ export class FactoryView {
   }
 
   private arm(a: ArmSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir], p = st.arms.get(a.id) ?? 0, e = p * p * (3 - 2 * p);
+    const ctx = this.ctx, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir];
+    /*
+     * The half turn is drawn here, not sampled from the server: see `armMotion.ts`.
+     */
+    const swing = st.armSwing || 1.1, p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), dt, swing);
+    this.armShown.set(a.id, p);
+    const e = easeSwing(p);
     const th = Math.atan2(dy, dx) + Math.PI * (1 - e), hx = bx + Math.cos(th) * 0.92, hy = by + Math.sin(th) * 0.92;
-    const filtered = !!a.filter && a.filter.values.length > 0, col = filtered ? pal.warn : pal.text2;
+    const filtered = isConditional(a), col = filtered ? pal.warn : pal.text2;
     ctx.fillStyle = col; ctx.globalAlpha = 0.55; ctx.beginPath();
     ctx.moveTo(bx + dx * 0.48, by + dy * 0.48); ctx.lineTo(bx + dx * 0.3 - dy * 0.16, by + dy * 0.3 - dx * 0.16); ctx.lineTo(bx + dx * 0.3 + dy * 0.16, by + dy * 0.3 + dx * 0.16); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
     ctx.fillStyle = pal.bg; ctx.beginPath(); ctx.arc(bx, by, 0.3, 0, 6.3); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.07; ctx.stroke();
@@ -455,11 +471,26 @@ export class FactoryView {
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(bx, by, 0.13, 0, 6.3); ctx.fill();
     if (carried) this.ticket(carried, hx, hy, 0.44, st, '', dt);
     ctx.strokeStyle = col; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.arc(hx, hy, 0.17, th - 1.9, th + 1.9); ctx.stroke();
-    const src = this.at(a.x - dx, a.y - dy), tag = armTag(a, src ? this.takersOf(src) : []);
+    const src = this.at(a.x - dx, a.y - dy), tag = armTag(a, src ? this.takersOf(src) : [], st.boardName);
     if (!tag || (this.cam.z < 11 && st.selMachine !== a.id && st.hoverMachine !== a.id)) return;
-    const o = { min: 9, max: 12, mono: true, plate: filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' };
-    if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, filtered ? '#fde68a' : pal.text2, { ...o, align: 'center' });
-    else this.label(tag, a.x + 1.14, by, 0.3, filtered ? '#fde68a' : pal.text2, { ...o, fit: 6 });
+    /*
+     * What the arm takes is written past its head, on the side it drops on: on its own row for an arm that points
+     * sideways, in its own column otherwise. Arms stacked against a station then each carry their own tag, where a
+     * tag above the arm read as belonging to the one before.
+     */
+    const o = { min: 9, max: 12, mono: true, plate: filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = filtered ? '#fde68a' : pal.text2;
+    const dst = this.at(a.x + dx, a.y + dy);
+    if (isBox(dst) && isBox(src)) {
+      /* squeezed between two machines, there is no room on its own line: beside it, as a last resort */
+      if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, ink, { ...o, align: 'center' });
+      else this.label(tag, a.x + 1.14, by, 0.3, ink, { ...o, fit: 6 });
+      return;
+    }
+    /* past the head, unless that is a machine: then behind the arm, over the belt it takes from */
+    const fx = isBox(dst) ? -dx : dx, fy = isBox(dst) ? -dy : dy;
+    if (fx > 0) this.label(tag, a.x + 1.12, by, 0.3, ink, { ...o, align: 'left', fit: 5 });
+    else if (fx < 0) this.label(tag, a.x - 0.12, by, 0.3, ink, { ...o, align: 'right', fit: 5 });
+    else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
   }
 
   private station(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
@@ -516,7 +547,7 @@ export class FactoryView {
   private overlay(st: ViewState, pal: Palette): void {
     const ctx = this.ctx, outline = (m: MachineSpec, color: string, lw: number) => { ctx.strokeStyle = color; ctx.lineWidth = lw; rr(ctx, m.x - 0.04, m.y - 0.04, m.w + 0.08, m.h + 0.08, m.w > 1 ? 0.32 : 0.2); ctx.stroke(); };
     const hov = this.machine(st.hoverMachine), sel = this.machine(st.selMachine);
-    if (hov && hov !== sel) outline(hov, pal.text3, 0.05);
+    if (hov && hov.id !== sel?.id) outline(hov, pal.text3, 0.05);
     for (const id of st.selMany) { const m = this.machine(id); if (m) outline(m, pal.accent, 0.08); }
     if (st.marquee) {
       const q = st.marquee, mx = Math.min(q.x0, q.x1), my = Math.min(q.y0, q.y1);
@@ -529,8 +560,8 @@ export class FactoryView {
       if (isBox(sel)) {
         for (let x = sel.x - 1; x <= sel.x + sel.w; x++) for (let y = sel.y - 1; y <= sel.y + sel.h; y++) {
           const n = this.at(x, y);
-          if (!n || n === sel) continue;
-          if ((n.kind === 'belt' && this.at(n.x + DX[n.dir], n.y + DY[n.dir]) === sel) || (n.kind === 'arm' && this.at(n.x + DX[n.dir], n.y + DY[n.dir]) === sel)) outline(n, pal.ok, 0.07);
+          if (!n || n.id === sel.id) continue;
+          if ((n.kind === 'belt' || n.kind === 'arm') && this.at(n.x + DX[n.dir], n.y + DY[n.dir])?.id === sel.id) outline(n, pal.ok, 0.07);
         }
         for (const a of this.takersOf(sel)) outline(a, '#fb923c', 0.07);
       }

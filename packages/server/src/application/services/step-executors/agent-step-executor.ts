@@ -42,6 +42,7 @@ export class AgentStepExecutor implements StepExecutor {
       outputFormat,
       workflowContextPrompt,
       mode,
+      model: input.modelOverride,
       onExecutionStarted: input.onExecutionStarted,
       actorName: `workflow:${input.workflowContext.workflowName} → ${input.workflowContext.stepName}`,
     });

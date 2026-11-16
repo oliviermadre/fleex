@@ -10,13 +10,24 @@ export const DX = [1, 0, -1, 0] as const;
 export const DY = [0, 1, 0, -1] as const;
 
 export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
-export type ArmFilterField = 'type' | 'priority' | 'outcome' | 'tag';
+/** What an arm can look at on a ticket, and how it compares it. Mirrors the server's `types.ts`. */
+export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'outcome';
+export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
+export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 
 interface MachineBase { id: string; x: number; y: number; w: number; h: number; name?: string }
 export interface BeltSpec extends MachineBase { kind: 'belt'; dir: Dir }
-export interface ArmSpec extends MachineBase { kind: 'arm'; dir: Dir; filter?: { field: ArmFilterField; values: string[] } | null }
+export interface ArmSpec extends MachineBase {
+  kind: 'arm'; dir: Dir;
+  /** Takes a ticket when all of these hold; with none, what its neighbours' conditions leave. */
+  when?: ArmCondition[];
+  /** The single condition of floors saved before `when`: still read, rewritten at the next save. */
+  filter?: { field: string; values: string[] } | null;
+}
 export interface StationSpec extends MachineBase {
   kind: 'station'; exec: StationExec; ref?: string; mode?: 'talk' | 'plan' | 'edit'; prompt?: string;
+  /** Agent stations: the model to run on instead of the persona's own. */
+  model?: string;
   outcomes: string[]; cap: number; sets?: TicketStatus;
 }
 export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
@@ -45,7 +56,9 @@ export interface FactoryTicket {
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: FactoryTicket[];
-  arms: { id: string; p: number; carrying: string | null }[];
+  arms: { id: string; p: number; state?: 'rest' | 'carry' | 'back'; carrying: string | null }[];
+  /** Seconds an arm takes to swing one way. */
+  armSwing?: number;
   runsLastHour: number;
   running: number;
   serverTime: string;

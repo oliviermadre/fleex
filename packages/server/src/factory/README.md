@@ -1,9 +1,19 @@
 # Factory (experimental)
 
-A floor of machines that the tickets handed over to it travel through: belts, arms (optionally filtered by type,
-priority, tag or station outcome), stations (an agent, a skill, a panel, a human gate, or a status change), zones
+A floor of machines that the tickets handed over to it travel through: belts, arms (optionally with conditions on
+the ticket or on the outcome of the station it leaves), stations (an agent, a skill, a panel, a human gate, or a status change), zones
 and exits. Nothing is routed in advance: a ticket reacts to what it stands on. The concept and its interactive
 mock-up are in `docs/factory/`.
+
+An arm takes a ticket when all its conditions hold (`conditions.ts`): on the outcome, the type, the board, the tags,
+whether it is a favourite (is / is not), and on the priority and the complexity, which are ordered (at least, at most,
+above, below, between). With no condition it takes what the arms next to it leave. Floors saved with the earlier single
+`filter` are still read, and rewritten as conditions at their next save.
+
+An arm takes a little over a second to swing one way, and a ticket that is done in a station rests there a second
+before an arm may take it: the floor is meant to be watched. The page draws the swing itself between two snapshots.
+
+An agent station can run on another model than its persona's (`model` on the station).
 
 When a station's agent asks a question instead of answering, the ticket waits in the station, pulsing with a "?".
 It leaves only by an arm filtered on the reserved outcome `question` (an unfiltered arm leaves it alone, so an
@@ -75,6 +85,7 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
+| `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor}.ts` | an optional model for one workflow-step execution (`model`, `modelOverride`): unset by workflows, set by an agent station |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
 | web: `work/WorkView.tsx` | the "Managed by the Factory" banner on a ticket |
@@ -84,7 +95,8 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 1. Switch the flag off, then run the migration's `down()` (`cli-migrate.ts rollback`), or drop the three tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
-3. Revert the hooks listed above: each is a few lines that mention `factory`.
+3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step
+   execution does not; it can stay, since it changes nothing while unset.
 
 ## Not covered by tests
 

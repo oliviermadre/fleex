@@ -2,15 +2,19 @@ import { randomUUID } from 'node:crypto';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
+import { acceptsOutcome, isConditional, matches as armMatches, normaliseConditions, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
   DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY,
   type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
   type FactoryTicketInfo, type FactoryTicketState, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
-/** Tiles per second on a belt, and seconds for an arm to swing one way. */
+/** Tiles per second on a belt. */
 const BELT_SPEED = 1.2;
-const ARM_SWING = 0.45;
+/** Seconds for an arm to swing one way: slow enough for the half turn to be watched. */
+const ARM_SWING = 1.1;
+/** How long a ticket rests in a station once it is done there, before an arm may take it: long enough to be seen. */
+const STATION_REST_MS = 1000;
 const FLUSH_EVERY_MS = 2000;
 const REFRESH_INFO_EVERY_MS = 10_000;
 const HOUR_MS = 3_600_000;
@@ -39,7 +43,10 @@ interface Ticket {
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null; /** When it was handed over to the Factory (ISO). */ handedAt: string })[];
-  arms: { id: string; p: number; carrying: string | null }[];
+  /** `p` is how far each arm has swung (0 at its source, 1 at its destination) and `state` which way it is going, so the page can carry the motion on between two snapshots. */
+  arms: { id: string; p: number; state: 'rest' | 'carry' | 'back'; carrying: string | null }[];
+  /** Seconds an arm takes to swing one way. */
+  armSwing: number;
   runsLastHour: number;
   running: number;
   serverTime: string;
@@ -53,6 +60,8 @@ export interface FactoryEngineDeps {
   setStatus(ticketId: string, status: TicketStatus): Promise<void>;
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
   now?: () => number;
+  /** Paces of the floor, for tests that do not want to wait for them. */
+  timing?: { armSwing?: number; stationRestMs?: number };
 }
 
 export class FactoryError extends Error {}
@@ -62,14 +71,12 @@ function inboundZone(x: number, y: number): ZoneSpec {
   return { id: randomUUID(), kind: 'zone', x, y, w: 4, h: 6, name: 'Inbound', status: '', release: 'manual', inbound: true };
 }
 
-/**
- * The outcome a run gets when the agent asks a question instead of answering.
- * Only an arm filtered on it takes such a ticket out of its station: an
- * unfiltered arm leaves it there, so an unanswered ticket never carries on
- * down the normal path.
+/*
+ * `question` is the outcome a run gets when the agent asks instead of answering. Only an arm that asks for it takes
+ * such a ticket out of its station: any other arm leaves it there, so an unanswered ticket never carries on down the
+ * normal path.
  */
-export const QUESTION_OUTCOME = 'question';
-function takesQuestions(arm: ArmSpec): boolean { return arm.filter?.field === 'outcome' && arm.filter.values.includes(QUESTION_OUTCOME); }
+export { QUESTION_OUTCOME };
 function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit'); }
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
@@ -84,13 +91,18 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     ids.add(m.id);
     m.x = Math.floor(m.x); m.y = Math.floor(m.y);
     if (!Number.isFinite(m.x) || !Number.isFinite(m.y) || Math.abs(m.x) > 100_000 || Math.abs(m.y) > 100_000) throw new FactoryError(`machine ${m.id} has no usable position`);
-    if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label' || m.kind === 'bridge') { m.w = 1; m.h = 1; }
+    if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label' || m.kind === 'bridge') {
+      m.w = 1; m.h = 1;
+      if (m.kind === 'arm') { m.when = normaliseConditions(m); delete m.filter; }
+    }
     else if (m.kind === 'station') {
       const side = m.exec === 'native' ? 2 : 3; m.w = side; m.h = side;
       m.outcomes = Array.isArray(m.outcomes) && m.outcomes.length ? m.outcomes.map(String).filter(Boolean) : ['ok'];
       if (!m.outcomes.length) m.outcomes = ['ok'];
       m.cap = Math.max(1, Math.min(50, Math.floor(m.cap || 8)));
       if (!['agent', 'skill', 'panel', 'human_gate', 'native'].includes(m.exec)) throw new FactoryError(`unknown station executor "${String(m.exec)}"`);
+      m.model = m.exec === 'agent' && typeof m.model === 'string' && m.model.trim() ? m.model.trim().slice(0, 120) : undefined;
+      if (typeof m.prompt === 'string' && m.prompt.length > 60_000) throw new FactoryError(`the instructions of ${m.name || 'a station'} are too long`);
     } else if (m.kind === 'zone') {
       m.w = Math.max(2, Math.min(30, Math.floor(m.w || 4))); m.h = Math.max(2, Math.min(30, Math.floor(m.h || 4)));
       m.release = m.release === 'auto' ? 'auto' : 'manual';
@@ -129,8 +141,14 @@ export class FactoryEngine {
   private lastRefresh = 0;
   private ready = false;
   private readonly now: () => number;
+  private readonly armSwing: number;
+  private readonly restMs: number;
 
-  constructor(private readonly deps: FactoryEngineDeps) { this.now = deps.now ?? (() => Date.now()); }
+  constructor(private readonly deps: FactoryEngineDeps) {
+    this.now = deps.now ?? (() => Date.now());
+    this.armSwing = deps.timing?.armSwing ?? ARM_SWING;
+    this.restMs = deps.timing?.stationRestMs ?? STATION_REST_MS;
+  }
 
   // ---------- lifecycle ----------
 
@@ -297,25 +315,23 @@ export class FactoryEngine {
   // ---------- arms ----------
 
   private matches(arm: ArmSpec, t: Ticket): boolean {
-    const f = arm.filter;
-    if (!f || !f.values.length) return true;
-    if (f.field === 'outcome') return f.values.includes(t.s.outcome);
-    if (!t.info) return false;
-    if (f.field === 'tag') return t.info.tags.some((tag) => f.values.includes(tag));
-    return f.values.includes(f.field === 'type' ? t.info.type : t.info.priority);
+    return armMatches(arm, t.info, t.s.outcome);
   }
 
-  /** An arm with no filter is the "otherwise" of its source: it leaves alone what a filtered neighbour is after. */
+  /** An arm with no condition is the "otherwise" of its source: it leaves alone what a conditional neighbour is after. */
   private wants(arm: Machine, t: Ticket): boolean {
     const spec = arm.spec as ArmSpec;
     if (!this.matches(spec, t)) return false;
-    if (spec.filter && spec.filter.values.length) return true;
+    if (isConditional(spec)) return true;
     for (const other of arm.src ? arm.src.takers : []) {
       const o = other.spec as ArmSpec;
-      if (other !== arm && o.filter && o.filter.values.length && this.matches(o, t)) return false;
+      if (other !== arm && isConditional(o) && this.matches(o, t)) return false;
     }
     return true;
   }
+
+  /** A ticket that is done in a station stays in view a moment before an arm takes it, however fast the station was. */
+  private rested(t: Ticket): boolean { return this.restMs <= 0 || this.now() - Date.parse(t.s.since) >= this.restMs; }
 
   private pickFor(arm: Machine): Ticket | null {
     const s = arm.src, spec = arm.spec as ArmSpec;
@@ -325,13 +341,13 @@ export class FactoryEngine {
       return null;
     }
     if (s.spec.kind === 'belt') return s.item && this.wants(arm, s.item) ? s.item : null;
-    if (s.spec.kind === 'station') return this.inside(s).find((t) => (t.s.phase === 'out' || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
+    if (s.spec.kind === 'station') return this.inside(s).find((t) => ((t.s.phase === 'out' && this.rested(t)) || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
     if (s.spec.kind === 'zone') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
     return null;
   }
 
   private updateArm(a: Machine, dt: number): void {
-    const spec = a.spec as ArmSpec, step = dt / ARM_SWING;
+    const spec = a.spec as ArmSpec, step = dt / this.armSwing;
     if (a.armState === 'carry' && a.item) {
       a.armP = Math.min(1, a.armP + step); a.item.s.p = a.armP;
       if (a.armP < 1) return;
@@ -417,7 +433,7 @@ export class FactoryEngine {
     /* where each outcome leads, so the agent is told what its answer does */
     const targets: Record<string, string> = {};
     for (const o of spec.outcomes) {
-      const arm = m.takers.find((a) => { const f = (a.spec as ArmSpec).filter; return f && f.field === 'outcome' && f.values.includes(o); }) ?? m.takers.find((a) => !(a.spec as ArmSpec).filter?.values.length);
+      const arm = m.takers.find((a) => acceptsOutcome(a.spec as ArmSpec, o)) ?? m.takers.find((a) => !isConditional(a.spec as ArmSpec));
       const dest = arm ? this.leadsTo(arm.dst, (arm.spec as ArmSpec).dir) : null;
       targets[o] = dest?.spec.name || (dest ? dest.spec.kind : 'nowhere yet');
     }
@@ -599,7 +615,8 @@ export class FactoryEngine {
     return {
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
       tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
-      arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, carrying: m.item ? m.item.ticketId : null })),
+      arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: m.item ? m.item.ticketId : null })),
+      armSwing: this.armSwing,
       runsLastHour: this.runsLastHour(), running: this.runningCount(), serverTime: new Date(this.now()).toISOString(),
     };
   }

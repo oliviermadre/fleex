@@ -15,7 +15,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
   const id = newId();
   switch (tool) {
     case 'belt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir };
-    case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, filter: null };
+    case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [] };
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
       return { id, kind: 'station', x: x - 1, y: y - 1, w: 3, h: 3, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 8 };

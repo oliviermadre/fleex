@@ -7,6 +7,7 @@ import { useTicketStore } from '../stores/ticketStore';
 import { since, span } from './format';
 import { TicketGlyphs, TicketSquare } from './FactoryTicketMeta';
 import { LENS_LABEL } from './lens';
+import { conditionsOf, longCondition } from './armRules';
 import { TYPE_COLORS, type FactoryView } from './renderer';
 import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
 
@@ -37,9 +38,9 @@ function machineIcon(m: MachineSpec): string {
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'gate' : m.exec;
   return m.kind === 'zone' && m.inbound ? 'inbound' : m.kind;
 }
-function machineSub(m: MachineSpec, view: FactoryView): string {
+function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) => string): string {
   if (m.kind === 'belt') { const d = view.leadsTo(m); return `Belt · ${d ? `leads to ${d.name ?? d.kind}` : 'leads nowhere'}`; }
-  if (m.kind === 'arm') return `Arm · ${m.filter?.values.length ? `only takes ${m.filter.field} ${m.filter.values.join(', ')}` : 'takes anything'}`;
+  if (m.kind === 'arm') { const when = conditionsOf(m); return `Arm · ${when.length ? `takes a ticket when ${when.map((c) => longCondition(c, boardName)).join(', and ')}` : 'takes anything, or what the arms next to it leave'}`; }
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
@@ -146,7 +147,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, co
             ) : machine && view ? (
               <>
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
-                <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view)}</div>
+                <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view, (id) => boards.find((b) => b.id === id)?.name ?? 'a board')}</div>
                 {(machine.kind === 'station' || machine.kind === 'zone') && (
                   <div className="flex flex-wrap gap-x-3"><Stat label="inside" value={machine.kind === 'station' ? `${inside.length}/${machine.cap}` : inside.length} /><Stat label="waiting for you" value={inside.filter((t) => needsHuman(t)).length} /><Stat label="leaves by" value={`${view.takersOf(machine).length} arm(s)`} /></div>
                 )}

@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { FactoryEngine, FactoryError, normaliseLayout } from '../../src/factory/engine.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
 import type { StationRunResult } from '../../src/factory/station-runner.js';
-import type { FactoryFloorRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
+import type { ArmCondition, FactoryFloorRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
   floor: FactoryFloorRow | null = null;
@@ -52,10 +52,12 @@ const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve()
 const run = async (seconds: number) => { for (let i = 0; i < seconds * 10; i++) { clock += 100; engine.tick(0.1); await settle(); } };
 const where = (ticketId: string) => { const t = engine.snapshot().tickets.find((x) => x.ticketId === ticketId); return t ? `${t.machineId ?? 'floor'}:${t.phase}` : 'gone'; };
 
-async function boot(machines: MachineSpec[], w = 30, h = 12): Promise<void> {
+/** The floor's own paces (a slow arm, a rest in each station) are asked for by the tests that are about them; the others run brisk. */
+const BRISK = { armSwing: 0.45, stationRestMs: 0 };
+async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?: number; stationRestMs?: number } | 'real' = BRISK): Promise<void> {
   const layout: FactoryLayout = { w, h, machines };
   engine = new FactoryEngine({
-    store, now: () => clock, logger: { warn: () => {}, info: () => {} },
+    store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: timing === 'real' ? undefined : timing,
     loadTicket: async (id) => infos.get(id) ?? null,
     setStatus: async (id, status) => { statuses.push([id, status]); },
     runner: { run: (s, ticketId) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve }); }) },
@@ -102,7 +104,7 @@ describe('FactoryEngine', () => {
 
   it('a new floor starts with an Inbound zone, and a layout keeps at most one', async () => {
     engine = new FactoryEngine({
-      store, now: () => clock, logger: { warn: () => {}, info: () => {} }, loadTicket: async (id) => infos.get(id) ?? null,
+      store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async (id) => infos.get(id) ?? null,
       setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) },
     });
     await engine.init();
@@ -269,6 +271,60 @@ describe('FactoryEngine', () => {
     expect(where('a')).toBe('z:zone');
   });
 
+  it('a ticket rests a second in a station before an arm takes it out, however fast the station was', async () => {
+    await boot([belt('b1', 1, 1), arm('in', 2, 1, 0), station('prio', 3, 1, { exec: 'native', sets: 'doing', w: 2, h: 2 } as Partial<StationSpec>), arm('out', 5, 1, 0), zone('z', 6, 1)], 30, 12, 'real');
+    await engine.transfer('a', { machineId: 'b1' });
+    /* follow the ticket tick by tick: how long it is seen in the station, done and waiting */
+    let seen = 0, guard = 0;
+    while (where('a') !== 'z:zone' && guard++ < 200) { await run(0.1); if (where('a') === 'prio:out') seen++; }
+    expect(where('a')).toBe('z:zone');
+    expect(seen).toBeGreaterThanOrEqual(10);   // at least a second, in ticks of a tenth
+    expect(statuses).toEqual([['a', 'doing']]);
+  });
+
+  it('says which way each arm is swinging, and how long a swing takes, so the page can carry the motion on', async () => {
+    await boot([zone('in', 1, 1, { release: 'auto' }), arm('a1', 3, 1, 0), zone('z', 4, 1)], 30, 12, 'real');
+    const arm1 = () => engine.snapshot().arms[0]!;
+    expect(arm1()).toMatchObject({ id: 'a1', p: 0, state: 'rest', carrying: null });
+    expect(engine.snapshot().armSwing).toBeGreaterThanOrEqual(1);
+    await engine.transfer('a', { machineId: 'in' });
+    await run(0.5);
+    expect(arm1()).toMatchObject({ state: 'carry', carrying: 'a' });
+    expect(arm1().p).toBeGreaterThan(0.1); expect(arm1().p).toBeLessThan(0.9);   // half a second in, the half turn is under way, not done
+    await run(1.2);
+    expect(where('a')).toBe('z:zone');
+    expect(arm1()).toMatchObject({ state: 'back', carrying: null });
+    await run(1.5);
+    expect(arm1()).toMatchObject({ p: 0, state: 'rest' });
+  });
+
+  it('routes on any condition of an arm, and all of them together', async () => {
+    const when = (id: string, x: number, conditions: ArmCondition[]): MachineSpec => ({ id, kind: 'arm', x, y: 2, w: 1, h: 1, dir: 1, when: conditions });
+    await boot([
+      zone('in', 1, 0, { release: 'auto', w: 6, h: 2 } as Partial<MachineSpec>),
+      when('big', 1, [{ field: 'complexity', op: 'gte', values: ['8'] }]), zone('split', 1, 3),
+      when('hot', 3, [{ field: 'priority', op: 'gte', values: ['high'] }, { field: 'board', op: 'is', values: ['core'] }]), zone('now', 3, 3),
+      when('rest', 5, []), zone('later', 5, 3),
+    ]);
+    infos.set('a', info('a', { complexity: '13', priority: 'urgent', boardId: 'core' }));    // big wins: it is asked first
+    infos.set('b', info('b', { complexity: '3', priority: 'urgent', boardId: 'core' }));
+    infos.set('c', info('c', { complexity: null, priority: 'urgent', boardId: 'support' })); // urgent, but not on the board asked for
+    for (const id of ['a', 'b', 'c']) await engine.transfer(id, { machineId: 'in' });
+    await run(8);
+    expect([where('a'), where('b'), where('c')]).toEqual(['split:zone', 'now:zone', 'later:zone']);
+  });
+
+  it('a floor saved with the older single filter keeps routing, and is rewritten as conditions', async () => {
+    await boot([zone('in', 1, 1, { release: 'auto' }), arm('fixes', 3, 1, 0, 'type', ['fix']), zone('z', 4, 1)]);
+    const saved = store.floor!.layout.machines.find((m) => m.id === 'fixes') as { when?: ArmCondition[]; filter?: unknown };
+    expect(saved.when).toEqual([{ field: 'type', op: 'is', values: ['fix'] }]);
+    expect(saved.filter).toBeUndefined();
+    infos.set('a', info('a', { type: 'fix' }));
+    await engine.transfer('a', { machineId: 'in' }); await engine.transfer('b', { machineId: 'in' });
+    await run(3);
+    expect([where('a'), where('b')]).toEqual(['z:zone', 'in:zone']);
+  });
+
   it('the exit sets done and hands the ticket back to plain Fleex', async () => {
     await boot([belt('b1', 1, 1), exit('out', 2, 1)]);
     await engine.transfer('a', { machineId: 'b1' });
@@ -349,7 +405,7 @@ describe('FactoryEngine', () => {
     await engine.flush();
     const layout = store.floor!.layout;
     engine = new FactoryEngine({
-      store, now: () => clock, logger: { warn: () => {}, info: () => {} }, loadTicket: async (id) => infos.get(id) ?? null,
+      store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async (id) => infos.get(id) ?? null,
       setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) },
     });
     await engine.init();

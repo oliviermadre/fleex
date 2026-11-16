@@ -9,6 +9,8 @@ interface FactoryState {
   supported: boolean;
   enabled: boolean;
   snapshot: FactorySnapshot | null;
+  /** When the snapshot arrived, on the page's own clock (`performance.now()`): what moves keeps moving from there. */
+  receivedAt: number;
   /** The layout being edited: ahead of the server between a local edit and its save. */
   layout: FactoryLayout | null;
   /** Tickets handed over to the Factory, for the banner shown on a ticket elsewhere in Fleex. */
@@ -58,7 +60,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
   const apply = (snapshot: FactorySnapshot) => set((s) => {
     if (pendingLayoutSaves === 0) committed = snapshot.floor.layout;
     return {
-    snapshot, layout: pendingLayoutSaves > 0 && s.layout ? s.layout : snapshot.floor.layout,
+    snapshot, receivedAt: performance.now(), layout: pendingLayoutSaves > 0 && s.layout ? s.layout : snapshot.floor.layout,
     managed: new Set(snapshot.tickets.map((t) => t.ticketId)),
     };
   });
@@ -71,7 +73,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
   };
   const act = async (fn: () => Promise<FactorySnapshot>) => { try { apply(await fn()); } catch { /* the API call already raised a toast */ } };
   return {
-    supported: false, enabled: false, snapshot: null, layout: null, managed: new Set<string>(), stats: null, statsDays: 7,
+    supported: false, enabled: false, snapshot: null, receivedAt: 0, layout: null, managed: new Set<string>(), stats: null, statsDays: 7,
     loadStats: async (days) => {
       const span = days ?? get().statsDays;
       if (span !== get().statsDays) set({ statsDays: span, stats: null });

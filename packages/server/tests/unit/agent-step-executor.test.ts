@@ -31,6 +31,16 @@ describe('AgentStepExecutor', () => {
     expect(r.output.schemaFields).not.toHaveProperty('questions');
   });
 
+  it('passes a model override on, and none when the step has none', async () => {
+    const executeAgent = { executeForWorkflowStep: vi.fn().mockResolvedValue({ structuredOutput: { comment: 'ok' }, rawText: '', executionId: 'e' }) };
+    const exec = new AgentStepExecutor(executeAgent as never, config() as never);
+    const input = { ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1', step, workflowContext: ctx };
+    await exec.execute({ ...input, modelOverride: 'claude-haiku-5-5' });
+    expect(executeAgent.executeForWorkflowStep).toHaveBeenLastCalledWith(expect.objectContaining({ personaName: 'p', model: 'claude-haiku-5-5' }));
+    await exec.execute(input);
+    expect(executeAgent.executeForWorkflowStep.mock.lastCall![0].model).toBeUndefined();
+  });
+
   it('calls executeForWorkflowStep and maps result to StepOutput', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({

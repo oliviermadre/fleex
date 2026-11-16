@@ -6,19 +6,34 @@ export const DX = [1, 0, -1, 0] as const;
 export const DY = [0, 1, 0, -1] as const;
 
 export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
-export type ArmFilterField = 'type' | 'priority' | 'outcome' | 'tag';
+/** What an arm can look at on a ticket, and how it compares it. */
+export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'outcome';
+export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
+/**
+ * One thing an arm asks of a ticket. `values` are type names, priorities, complexity points, board ids, tags or
+ * station outcomes; `none` stands for no type, no priority or not estimated. `between` takes two, the ordered
+ * operators one, `is` and `is_not` any number (any of them). A favourite condition carries no value that matters.
+ */
+export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 
 interface MachineBase { id: string; x: number; y: number; w: number; h: number; name?: string }
 /** One tile, one ticket: pushes it to the tile it points at when that tile can take it. */
 export interface BeltSpec extends MachineBase { kind: 'belt'; dir: Dir }
-/** Takes from the tile behind it, drops on the tile in front; with a filter, only what matches. */
-export interface ArmSpec extends MachineBase { kind: 'arm'; dir: Dir; filter?: { field: ArmFilterField; values: string[] } | null }
+/** Takes from the tile behind it, drops on the tile in front; with conditions, only a ticket that meets them all. */
+export interface ArmSpec extends MachineBase {
+  kind: 'arm'; dir: Dir;
+  when?: ArmCondition[];
+  /** How floors saved before `when` wrote a single condition. Still read; rewritten as `when` at the next save. */
+  filter?: { field: string; values: string[] } | null;
+}
 export interface StationSpec extends MachineBase {
   kind: 'station';
   exec: StationExec;
   /** Persona name, skill command name or panel name. Unused by gates and native stations. */
   ref?: string;
   mode?: 'talk' | 'plan' | 'edit';
+  /** Agent stations: the model to run on instead of the persona's own. Empty: the persona's. */
+  model?: string;
   prompt?: string;
   /** The first one is the way forward. Each one leaves through the arm whose `outcome` filter holds it. */
   outcomes: string[];
