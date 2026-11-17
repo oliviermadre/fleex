@@ -239,6 +239,7 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | `infrastructure/http/tickets.routes.ts` | a comment that asks for a workflow on a ticket of the floor is refused before it is written |
 | `infrastructure/http/skill.routes.ts`, `panel.routes.ts` | a skill or a panel launched by its button tells the Factory (`launchedByHand`) |
 | web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
+| web: `work/timeline/buildTimeline.ts`, `TimelineGlyph.tsx`, `useTicketTimeline.ts` | a run a station started goes by the station's name on a ticket's timeline, with the Factory's glyph, instead of "Workflow": an optional `stationRuns` source (read by `useFactoryStationRuns`, empty while the Factory is off) and a `factory` glyph |
 | web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
 
 ## Removing it

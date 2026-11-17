@@ -62,6 +62,8 @@ export type TimelineGlyph =
   | { type: 'human' }
   | { type: 'primitive'; kind: TimelinePrimitive }
   | { type: 'executor'; executor: WorkflowExecutorType }
+  /** A run started by a station of the experimental Factory. */
+  | { type: 'factory' }
   | { type: 'cli'; session: 'claude' | 'shell' }
   | { type: 'deliverable'; deliverableType: string; unread: boolean }
   | { type: 'comment'; human: boolean }
@@ -274,6 +276,18 @@ export interface TimelineNames {
   skills: Record<string, string>;
 }
 
+/**
+ * A run a station of the experimental Factory started on the ticket: which execution it is, the station, what the
+ * station runs and what it concluded. Such an execution has no mention and no workflow run behind it; without this
+ * the timeline could only call it "Workflow".
+ */
+export interface TimelineStationRun {
+  executionId: string | null;
+  station: string;
+  executor: string;
+  outcome: string | null;
+}
+
 export interface TimelineSources {
   ticket: {
     id: string;
@@ -297,6 +311,8 @@ export interface TimelineSources {
   /** Live tmux sessions by id. */
   sessions: Readonly<Record<string, SessionInfo>>;
   names: TimelineNames;
+  /** Runs started by Factory stations, when the Factory is on (see `TimelineStationRun`). */
+  stationRuns?: readonly TimelineStationRun[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -865,6 +881,9 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
   const exchangeRuns = new Map<string, { kind: TimelinePrimitive; mention: TicketMention | null; execs: AgentExecution[] }>();
   const panelGroups = new Map<string, AgentExecution[]>();
   const transcripts: AgentExecution[] = [];
+  /** Execution → the Factory station that started it. */
+  const stationOf = new Map<string, TimelineStationRun>();
+  for (const r of src.stationRuns ?? []) if (r.executionId) stationOf.set(r.executionId, r);
 
   for (const e of standalone) {
     const mention = mentionById.get(e.mentionId) ?? null;
@@ -891,28 +910,34 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     } else {
       label = 'Workflow';
     }
+    /* a station of the Factory started it: it goes by the station's name, and says what the station ran and concluded */
+    const station = stationOf.get(e.id) ?? null;
+    const ran = station ? (kind === 'workflow' ? personaLabel(names, e.personaId) : label.split(' · ')[0]!) : null;
+    if (station) label = station.station;
     const trigger = mention ? commentById.get(mention.commentId) : undefined;
     const sub = trigger ? excerpt(trigger.body, 24) || null : null;
     const state = execState(e.status);
-    const rows: [string, string][] = [['Qui', label.split(' · ')[0]!], ['Quand', whenLabel(at, now)]];
+    const rows: [string, string][] = station
+      ? [['Station', station.station], ...(ran ? [['Qui', ran] as [string, string]] : []), ...(station.outcome ? [['Sortie', station.outcome] as [string, string]] : []), ['Quand', whenLabel(at, now)]]
+      : [['Qui', label.split(' · ')[0]!], ['Quand', whenLabel(at, now)]];
     // The frieze shows only the time under the node: the trigger lives here.
     if (trigger) rows.push(['Message', excerpt(trigger.body, 80)]);
     const dur = durationLabel(e.startedAt, e.completedAt);
     if (dur) rows.push(['Durée', dur]);
     if (e.costUsd != null) rows.push(['Coût', `$${e.costUsd.toFixed(2)}`]);
-    rows.push(['Source', 'Mention']);
+    rows.push(['Source', station ? 'Factory' : 'Mention']);
     drafts.push({
       id, kind: 'run', at, lane: 'spine', parentId: null,
-      glyph: { type: 'primitive', kind }, label, sub, state, attempt: 1, note: null, gate: false,
+      glyph: station ? { type: 'factory' } : { type: 'primitive', kind }, label, sub, state, attempt: 1, note: null, gate: false,
       tooltip: {
-        overline: `${kind === 'persona' ? 'Persona' : kind === 'skill' ? 'Skill' : 'Workflow'} · mention`,
+        overline: station ? `Factory · ${station.executor}` : `${kind === 'persona' ? 'Persona' : kind === 'skill' ? 'Skill' : 'Workflow'} · mention`,
         title: label,
         chip: chipFor(state, e.status),
         rows,
         footer: null,
       },
-      action: { type: 'execution', executionId: e.id, title: label },
-      ariaLabel: `Exécution ${label}, ${hhmm(at)}`,
+      action: { type: 'execution', executionId: e.id, title: station ? `Factory · ${label}` : label },
+      ariaLabel: station ? `Factory, station ${label}, ${hhmm(at)}` : `Exécution ${label}, ${hhmm(at)}`,
     });
     eventIdByExecution.set(e.id, id);
     if (kind !== 'workflow') exchangeRuns.set(id, { kind, mention, execs: [e] });
@@ -936,18 +961,21 @@ export function buildTimeline(src: TimelineSources, now: number): TimelineModel 
     const id = `run:${mentionId}`;
     const trigger = mention ? commentById.get(mention.commentId) : undefined;
     const cost = sorted.reduce((s, e) => s + (e.costUsd ?? 0), 0);
-    const rows: [string, string][] = [['Qui', panelName]];
+    /* a panel station of the Factory: the node goes by the station's name */
+    const station = sorted.map((e) => stationOf.get(e.id)).find((r) => !!r) ?? null;
+    const rows: [string, string][] = station ? [['Station', station.station], ['Qui', panelName]] : [['Qui', panelName]];
+    if (station?.outcome) rows.push(['Sortie', station.outcome]);
     if (members.length > 0) rows.push(['Membres', members.map((m) => `@${m}`).join(', ')]);
     if (trigger) rows.push(['Message', excerpt(trigger.body, 80)]);
     rows.push(['Quand', whenLabel(at, now)]);
     if (cost > 0) rows.push(['Coût', `$${cost.toFixed(2)}`]);
-    rows.push(['Source', 'Mention']);
+    rows.push(['Source', station ? 'Factory' : 'Mention']);
     drafts.push({
       id, kind: 'run', at, lane: 'spine', parentId: null,
-      glyph: { type: 'primitive', kind: 'panel' }, label: `Panel · ${panelName}`,
+      glyph: station ? { type: 'factory' } : { type: 'primitive', kind: 'panel' }, label: station ? station.station : `Panel · ${panelName}`,
       sub: trigger ? excerpt(trigger.body, 24) || null : null, state, attempt: 1, note: null, gate: false,
       tooltip: {
-        overline: 'Panel · mention', title: panelName,
+        overline: station ? 'Factory · panel' : 'Panel · mention', title: station ? station.station : panelName,
         chip: chipFor(state, state === 'running' ? 'running' : state === 'ko' ? 'failed' : 'completed'),
         rows, footer: null,
       },
