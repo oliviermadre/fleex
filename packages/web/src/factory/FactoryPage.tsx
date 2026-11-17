@@ -21,6 +21,9 @@ import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
+import { FactoryNeeds } from './FactoryNeeds';
+import { FactoryPeek, type PeekHandle } from './FactoryPeek';
+import { needsOf, stepNeed } from './needs';
 import { FactoryTicketModal } from './FactoryTicketModal';
 import { FactoryMachineModal } from './FactoryMachineModal';
 import { FactoryPlanModal } from './FactoryPlanModal';
@@ -134,6 +137,10 @@ function Floor() {
   const [hasClip, setHasClip] = useState(clipboard !== null);
   const tipRef = useRef<TicketTipHandle>(null);
   const lampTipRef = useRef<LampTipHandle>(null);
+  /* the thread of the selected ticket, beside its machine: opened by a click on the ticket, closed by Escape */
+  const peekRef = useRef<PeekHandle>(null);
+  const [peekOpen, setPeekOpen] = useState(false);
+  const peekFor = useRef<string | null>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const jumpAt = useRef(0);
   const groupsRef = useRef(groups); groupsRef.current = groups;
@@ -207,6 +214,7 @@ function Floor() {
       if (st) {
         if (!fitted.current) { v.fit(st.layout, st.layout.machines.length <= 1); fitted.current = true; }
         v.draw(st, dt);
+        if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
         if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
       raf = requestAnimationFrame(frame);
@@ -340,14 +348,14 @@ function Floor() {
     } else if (pr?.kind === 'ticket') {
       const dr = live.current.drag; live.current.drag = null;
       if (pr.dragging && dr) { const d = dropTarget(v, dr.x, dr.y); if (d.can) void store.move(pr.id, d.target); else toast.warning(d.text); }
-      setSelection({ ticket: pr.id });
+      setSelection({ ticket: pr.id }); setPeekOpen(!pr.dragging);
     } else if (click) {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
       if (hit && 'lamp' in hit) {
         /* the light of a machine that runs something is its switch; a gate's only speaks */
         const m = v.machine(hit.lamp);
         if (m?.kind === 'station' && RUNS.includes(m.exec)) void store.power(m.id, !!m.off);
-      } else setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null);
+      } else { setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null); setPeekOpen(!!hit && 'ticketId' in hit); }
     }
   };
 
@@ -375,6 +383,10 @@ function Floor() {
     if (v && p) { v.cam.x = p.x; v.cam.y = p.y; if (v.cam.z < 22) v.cam.z = 22; }
     setSelection({ ticket: ticketId });
   }, []);
+  /* what waits for someone: listed top-left, and walked with the left and right arrows */
+  const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
+  const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
+  peekFor.current = peekOpen && selTicket && !building ? selTicket.ticketId : null;
   /** Enter in the search box: the next ticket found, round and round. */
   const jump = useCallback(() => {
     if (!found?.length) return;
@@ -496,6 +508,13 @@ function Floor() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
+      /* out of build mode, left and right walk the tickets that wait for someone; with none, and up and down always, the arrows move the view */
+      if (!live.current.building && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const next = stepNeed(needs, selTicket?.ticketId ?? null, e.key === 'ArrowRight' ? 1 : -1);
+        if (next) { e.preventDefault(); pickNeed(next); return; }
+      }
+      if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
       const digit = /^Digit([0-9])$/.exec(e.code);
@@ -511,7 +530,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste]);
+  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste, needs, selTicket, pickNeed]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -534,6 +553,8 @@ function Floor() {
           />
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
+          {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
+          {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} />}
           {snapshot?.notice && (
             <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-3xl items-start gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('yellow'))} role="status">
               <span className="min-w-0 flex-1">{snapshot.notice}</span>
@@ -541,7 +562,7 @@ function Floor() {
             </div>
           )}
           {layer && !building && (
-            <div className="absolute left-3 top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg" role="status">
+            <div className={cn('absolute top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg', needs.length ? 'left-[292px]' : 'left-3')} role="status">
               <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>
               <span className="min-w-0 flex-1 text-[11px] text-[var(--theme-text-secondary)]">{layer.legend}{layer.kind !== 'load' && stats && layer.values.size === 0 ? ' — nothing to show yet.' : ''}</span>
               <Button size="sm" variant="ghost" onClick={() => setLens('none')}>Off</Button>

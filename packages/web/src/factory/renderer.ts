@@ -368,6 +368,16 @@ export class FactoryView {
   }
 
   ticketPos(ticketId: string): { x: number; y: number } | null { return this.shown.get(ticketId) ?? null; }
+  /** Where a ticket's machine is on screen (the ticket itself, when it stands on no box), in the canvas's own pixels: what a card about the ticket sits beside. */
+  anchorOf(ticketId: string, st: ViewState): { x: number; y: number; w: number; h: number } | null {
+    const t = st.tickets.find((q) => q.ticketId === ticketId); if (!t) return null;
+    const z = this.cam.z, sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
+    this.index(st.layout);
+    const m = this.machine(t.machineId);
+    if (m && isBox(m)) return { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z };
+    const p = this.shown.get(ticketId);
+    return p ? { x: sx(p.x - 0.7), y: sy(p.y - 0.7), w: 1.4 * z, h: 1.4 * z } : null;
+  }
 
   draw(st: ViewState, dtReal: number): void {
     const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, z = cam.z, L = st.layout;

@@ -107,6 +107,18 @@ reading. Build mode keeps plain lines and no light: that is the drawing one plac
 hides the dots as it hid the lines. Light and glows are painted on a canvas of their own, redone only when the view,
 the floor, the theme or a station's state changes, so their cost does not grow with the number of stations lit.
 
+## What waits for someone
+
+Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,
+`FactoryNeeds.tsx`): a decision at a gate, a question, a failed run, a ticket set aside by a human, one lying on the
+floor; longest wait first, with what each is, where it stands and for how long. Left and right arrows walk them (up and
+down still move the view, and so do left and right when nothing waits).
+
+A click on a ticket, there or on the floor, opens its thread beside its machine (`FactoryPeek.tsx`): the whole
+conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:
+a gate's decision with an optional reason, an answer that gives the ticket back to its station, another run after a
+failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
+
 ## Finding a ticket
 
 The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with
