@@ -30,6 +30,8 @@ export interface MenuContext {
   machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; popup?: boolean } | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
   many: number;
+  /** How many tickets wait for someone on the floor. */
+  waiting?: number;
   undoable: boolean; redoable: boolean; hasClip: boolean;
   /** How the platform writes its chord key: `⌘` or `Ctrl+`. */
   mod: string;
@@ -54,12 +56,17 @@ export interface MenuContext {
     power(): void;
     /** Open the popup of the floor itself: its figures and its limits. */
     floor(): void;
+    /** Go to the next ticket that waits for someone. */
+    next(): void;
   };
 }
 
 export function factoryMenu(c: MenuContext): Menu {
   const a = c.act;
   const back = (label: string, title: string, run: () => void): Command => ({ id: 'back', key: 'Escape', label, icon: 'back', tone: 'back', title, run });
+
+  /* out of build mode, always at the same place: the next ticket that waits for someone */
+  const next: Command = { id: 'next', key: 'N', label: 'Next', icon: 'person', tone: 'plan', disabled: !c.waiting, title: c.waiting ? 'Go to the next ticket that waits for you (Shift+N: the one before)' : 'No ticket waits for you', run: a.next };
 
   // ---------- a ticket ----------
   if (c.ticket && !c.building) {
@@ -77,6 +84,7 @@ export function factoryMenu(c: MenuContext): Menu {
       5: t.favorite === null ? null : { id: 'star', key: 'S', label: t.favorite ? 'Unstar' : 'Star', icon: 'star', tone: 'plan', active: t.favorite, title: t.favorite ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: a.star },
       6: { id: 'give', key: 'X', label: 'Give back', icon: 'give', tone: 'plain', title: 'Take this ticket out of the Factory', run: a.giveBack },
       7: t.canAside ? { id: 'aside', key: 'H', label: 'Set aside', icon: 'person', tone: 'plan', title: t.phase === 'running' ? 'Stop the run and keep the ticket in its station until you put it back' : 'Keep the ticket in its station until you put it back', run: a.setAside } : null,
+      8: next,
       [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
     });
   }
@@ -93,6 +101,7 @@ export function factoryMenu(c: MenuContext): Menu {
           : c.machine.power ? { id: 'power', key: 'Q', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
         4: c.machine.popup && edit,
+        8: next,
         [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
       });
     }
@@ -102,6 +111,7 @@ export function factoryMenu(c: MenuContext): Menu {
       2: { id: 'fit', key: 'F', label: 'Fit', icon: 'fit', tone: 'plain', title: 'Frame the floor', run: a.fit },
       3: { id: 'tickets', key: 'Tab', label: 'Tickets', icon: 'list', tone: 'ticket', title: 'Every ticket on the floor, as a list to filter and to jump from', run: a.tickets },
       4: { id: 'floor', key: 'V', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
+      8: next,
     });
   }
 

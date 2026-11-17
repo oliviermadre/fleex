@@ -49,7 +49,7 @@ describe('the command card', () => {
 
   it('starts with Build, Intake, Fit, the list of tickets, which Tab opens, and the floor\'s figures', () => {
     const root = factoryMenu(ctx());
-    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets', 'Stats']);
+    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets', 'Stats', 'Next']);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
   });
 
@@ -109,7 +109,7 @@ describe('the command card', () => {
 
   it('a ticket shows what it waits for first, then the same three commands', () => {
     const gate = factoryMenu(ctx({ ticket: { phase: 'review', released: false, favorite: false, outcomes: ['approve', 'rework'] } }));
-    expect(labels(gate)).toEqual(['approve', 'rework', null, null, 'Open', 'Star', 'Give back', null, null, null, null, 'Previous']);
+    expect(labels(gate)).toEqual(['approve', 'rework', null, null, 'Open', 'Star', 'Give back', null, 'Next', null, null, 'Previous']);
     expect(gate.slots.slice(0, 2).map((c) => c!.key)).toEqual(['Q', 'W']);
     const zone = factoryMenu(ctx({ ticket: { phase: 'zone', released: false, favorite: true, outcomes: [] } }));
     expect([at(zone, 0), at(zone, 4), at(zone, 5), at(zone, 6)]).toEqual(['Release', 'Open', 'Unstar', 'Give back']);
@@ -124,7 +124,7 @@ describe('the command card', () => {
 
   it('a machine is stopped or started from the card, and Edit opens its popup where a ticket has Open', () => {
     const c = ctx({ machine: { kind: 'station', waiting: false, popup: true, power: 'on' } }), on = factoryMenu(c);
-    expect(labels(on)).toEqual(['Stop', null, null, null, 'Edit', null, null, null, null, null, null, 'Previous']);
+    expect(labels(on)).toEqual(['Stop', null, null, null, 'Edit', null, null, null, 'Next', null, null, 'Previous']);
     byKey(on, 'Q')!.run!(); expect(c.act.power).toHaveBeenCalled();
     byKey(on, 'V')!.run!(); expect(c.act.openMachine).toHaveBeenCalled();
     expect(at(factoryMenu(ctx({ machine: { kind: 'station', waiting: false, popup: true, power: 'off' } })), 0)).toBe('Start');
@@ -141,6 +141,16 @@ describe('the command card', () => {
     const c = ctx(), floor = factoryMenu(c);
     expect(at(floor, 4)).toBe('Stats');
     byKey(floor, 'V')!.run!(); expect(c.act.floor).toHaveBeenCalled();
+  });
+
+  it('out of build mode, Next is always at the same place: the next ticket that waits, when one does', () => {
+    const c = ctx({ waiting: 2 });
+    for (const m of [factoryMenu(c), factoryMenu({ ...c, machine: { kind: 'zone', waiting: false, popup: true } }), factoryMenu({ ...c, ticket: { phase: 'belt', released: false, favorite: false, outcomes: [] } })]) {
+      expect(m.slots[8]).toMatchObject({ label: 'Next', key: 'N', disabled: false });
+    }
+    byKey(factoryMenu(c), 'N')!.run!(); expect(c.act.next).toHaveBeenCalled();
+    expect(factoryMenu(ctx()).slots[8]).toMatchObject({ label: 'Next', disabled: true });
+    expect(labels(factoryMenu(ctx({ building: true, waiting: 2 })))).not.toContain('Next');
   });
 
   it('a path that no longer exists stops where it breaks', () => {

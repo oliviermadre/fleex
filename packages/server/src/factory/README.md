@@ -22,7 +22,16 @@ so the ticket view's usual cards never see it: a card at the foot of the ticket'
 carries the action (Run again, the gate's outcomes). Replying to a question gives the ticket back to the station that
 asked it (see "In the Work view").
 
-The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
+The floor grows with what is built: it is what is built plus a margin, so there is always room to extend it. In the
+page it is the map, as in a strategy game: it takes the shape of the view, the view cannot zoom out past the point
+where the floor fills it nor move beyond the floor's edge (`FactoryView.constrain`), and the minimap's frame never
+leaves the minimap.
+
+Moving the view is the same in build mode and out of it: Space and a drag (or a drag with the right button), the arrow
+keys, the minimap, and the edges of the page (`edgeScroll.ts`). Within 50 px of an edge (against the app's navigation,
+under the top bar, at the right and at the bottom of the window, under the console) the view glides that way, faster
+the closer the pointer is, and the pointer turns into an arrowhead towards the edge; not while it is over a control.
+A plain drag never moves the view: it is for tickets and machines.
 Where two belts must cross, a **bridge** tile carries each ticket straight across. A bridge has no direction of its
 own: a ticket crosses it the way it arrives, in any of the four directions, on the east-west lane or on the north-south
 one. The page draws each lane the way the belts (or the arm) that feed it send tickets across. In build mode every change to the
@@ -111,8 +120,8 @@ the floor, the theme or a station's state changes, so their cost does not grow w
 
 Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,
 `FactoryNeeds.tsx`): a decision at a gate, a question, a failed run, a ticket set aside by a human, one lying on the
-floor; longest wait first, with what each is, where it stands and for how long. Left and right arrows walk them (up and
-down still move the view, and so do left and right when nothing waits).
+floor; longest wait first, with what each is, where it stands and for how long. N goes to the next one and Shift+N to the one before
+(**Next** on the command card, at the same place in every menu out of build mode); the arrows only ever move the view.
 
 A click on a ticket, there or on the floor, opens its thread beside its machine (`FactoryPeek.tsx`): the whole
 conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:

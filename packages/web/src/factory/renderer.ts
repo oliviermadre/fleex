@@ -81,15 +81,26 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 /** Empty tiles kept around what is built, so there is always room to extend it. */
 export const FLOOR_MARGIN = 8;
-/** The rectangle of floor that is drawn: what is built plus the margin, never smaller than a starting floor. */
-export function floorRect(layout: FactoryLayout): { x: number; y: number; w: number; h: number } {
+/**
+ * The floor: what is built plus the margin, never smaller than a starting floor. Given the shape of the view
+ * (`aspect`, its width over its height), it is widened or heightened to that shape, so that seen whole it fills the
+ * view: the floor is the map, and nothing shows beyond it. Its sides stay on whole tiles.
+ */
+export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: number; w: number; h: number } {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
   if (!layout.machines.length) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; }
   x0 -= FLOOR_MARGIN; y0 -= FLOOR_MARGIN; x1 += FLOOR_MARGIN; y1 += FLOOR_MARGIN;
   const growX = Math.max(0, 40 - (x1 - x0)), growY = Math.max(0, 24 - (y1 - y0));
-  return { x: x0 - Math.floor(growX / 2), y: y0 - Math.floor(growY / 2), w: x1 - x0 + growX, h: y1 - y0 + growY };
+  let x = x0 - Math.floor(growX / 2), y = y0 - Math.floor(growY / 2), w = x1 - x0 + growX, h = y1 - y0 + growY;
+  if (aspect > 0 && Number.isFinite(aspect)) {
+    if (w / h < aspect) { const wide = Math.ceil(h * aspect), by = wide - w; x -= Math.floor(by / 2); w = wide; }
+    else { const high = Math.ceil(w / aspect), by = high - h; y -= Math.floor(by / 2); h = high; }
+  }
+  return { x, y, w, h };
 }
+/** The closest and the farthest the floor is ever seen from, in pixels per tile. The farthest is also bounded by the floor: see `FactoryView.constrain`. */
+const Z_MAX = 80, Z_MIN = 3;
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
@@ -126,20 +137,41 @@ export class FactoryView {
     this.cv.width = Math.max(1, Math.round(w * d)); this.cv.height = Math.max(1, Math.round(h * d));
   }
   toWorld(sx: number, sy: number): { x: number; y: number } { return { x: (sx - this.w / 2) / this.cam.z + this.cam.x, y: (sy - this.h / 2) / this.cam.z + this.cam.y }; }
+  /** The view's shape, for the floor to take. */
+  private get aspect(): number { return this.h > 0 ? this.w / this.h : 0; }
+  /** The floor as this view sees it: shaped like the view. */
+  floorOf(layout: FactoryLayout): { x: number; y: number; w: number; h: number } { return floorRect(layout, this.aspect); }
+  /** The farthest zoom: the one at which the floor just covers the view. Kept from the last frame, for what zooms between two. */
+  private zMin = Z_MIN;
+  /**
+   * The floor is the map, and the view never leaves it: it cannot zoom out past the point where the floor covers it,
+   * nor move so that anything beyond the floor would show. Called at every frame, so whatever moves the view (a drag,
+   * the keys, the edges, the minimap, a jump to a ticket) is held to it.
+   */
+  constrain(layout: FactoryLayout): void {
+    if (!this.w || !this.h) return;
+    const F = this.floorOf(layout);
+    this.zMin = Math.max(Z_MIN, this.w / F.w, this.h / F.h);
+    this.cam.z = clamp(this.cam.z, this.zMin, Z_MAX);
+    const hw = this.w / 2 / this.cam.z, hh = this.h / 2 / this.cam.z;
+    this.cam.x = hw * 2 >= F.w ? F.x + F.w / 2 : clamp(this.cam.x, F.x + hw, F.x + F.w - hw);
+    this.cam.y = hh * 2 >= F.h ? F.y + F.h / 2 : clamp(this.cam.y, F.y + hh, F.y + F.h - hh);
+  }
   zoomAt(sx: number, sy: number, factor: number): void {
     const before = this.toWorld(sx, sy);
-    this.cam.z = clamp(this.cam.z * factor, 5, 80);
+    this.cam.z = clamp(this.cam.z * factor, this.zMin, Z_MAX);
     const after = this.toWorld(sx, sy);
     this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
   }
   /** Frame what is built, or the whole floor when it is empty or being edited. */
   fit(layout: FactoryLayout, whole: boolean): void {
     this.resize();
-    const f = floorRect(layout), pad = whole || layout.machines.length === 0 ? 0 : FLOOR_MARGIN - 1.5;
+    const f = this.floorOf(layout), pad = whole || layout.machines.length === 0 ? 0 : FLOOR_MARGIN - 1.5;
     const x0 = f.x + pad, y0 = f.y + pad, x1 = f.x + f.w - pad, y1 = f.y + f.h - pad;
     const bw = x1 - x0, bh = y1 - y0;
-    this.cam.z = clamp(Math.min(this.w / bw, this.h / bh), 5, 60);
+    this.cam.z = clamp(Math.min(this.w / bw, this.h / bh), Z_MIN, 60);
     this.cam.x = (x0 + x1) / 2; this.cam.y = (y0 + y1) / 2;
+    this.constrain(layout);
   }
 
   private palette(): Palette {
@@ -380,8 +412,10 @@ export class FactoryView {
   }
 
   draw(st: ViewState, dtReal: number): void {
-    const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, z = cam.z, L = st.layout;
+    const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, L = st.layout;
     this.resize(); this.index(L); this.clock += dtReal;
+    this.constrain(L);
+    const z = cam.z;
     const inside = new Map<string, FactoryTicket[]>();
     for (const t of st.tickets) if (t.machineId) { const a = inside.get(t.machineId); if (a) a.push(t); else inside.set(t.machineId, [t]); }
     for (const a of inside.values()) a.sort((p, q) => p.since.localeCompare(q.since));
@@ -448,9 +482,10 @@ export class FactoryView {
     if (key.length === this.backdropKey.length && key.every((v, i) => v === this.backdropKey[i])) { this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0); return; }
     this.backdropKey = key;
     if (cv.width !== this.cv.width || cv.height !== this.cv.height) { cv.width = this.cv.width; cv.height = this.cv.height; }
-    const ctx = cv.getContext('2d', { alpha: false })!, F = floorRect(L), look = floorLook(pal.floor);
+    const ctx = cv.getContext('2d', { alpha: false })!, F = this.floorOf(L), look = floorLook(pal.floor);
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, this.w, this.h);
+    /* the view never leaves the floor: a first coat of its colour keeps a rounding at its edge from showing anything else */
+    ctx.fillStyle = pal.floor; ctx.fillRect(0, 0, this.w, this.h);
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - this.cam.x * z) * d, (this.h / 2 - this.cam.y * z) * d);
     /* the light over the middle and the dusk at the edges are in the floor's own paint: one opaque coat */
     let paint: string | CanvasGradient = pal.floor;
@@ -869,7 +904,7 @@ export class FactoryView {
     if (!w || !h) return;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
     const c = cv.getContext('2d'); if (!c) return;
-    const F = floorRect(L), s = Math.min(w / (F.w + 2), h / (F.h + 2)), ox = (w - F.w * s) / 2 - F.x * s, oy = (h - F.h * s) / 2 - F.y * s;
+    const F = this.floorOf(L), s = Math.min(w / F.w, h / F.h), ox = (w - F.w * s) / 2 - F.x * s, oy = (h - F.h * s) / 2 - F.y * s;
     this.mini = { s, ox, oy };
     c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);

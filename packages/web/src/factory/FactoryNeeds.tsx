@@ -23,7 +23,10 @@ export function FactoryNeeds({ needs, selected, onPick, onOpen }: { needs: Need[
   const longest = Math.max(3_600_000, ...needs.map((n) => n.waitMs));
   return (
     <div className="pointer-events-none absolute left-2.5 top-2.5 z-[5] flex max-h-[calc(100%-20px)] w-[272px] flex-col gap-1" aria-label="Needs you">
-      <h2 className="pl-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-secondary)] [text-shadow:0_1px_2px_#000]">Needs you · {needs.length}</h2>
+      <h2 className="flex items-center gap-2 pl-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-secondary)] [text-shadow:0_1px_2px_#000]">
+        Needs you · {needs.length}
+        <span className="font-normal normal-case tracking-normal text-[var(--theme-text-muted)]" title="N goes to the next one, Shift+N to the one before"><kbd className="rounded border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-1 font-mono">N</kbd> next</span>
+      </h2>
       <div className="pointer-events-auto flex min-h-0 flex-col gap-1 overflow-y-auto">
         {needs.map((n) => {
           const t = n.ticket, info = t.info, on = selected === t.ticketId;

@@ -25,6 +25,7 @@ import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
+import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
@@ -38,6 +39,8 @@ const POLL_MS = 600;
 const STATS_EVERY_MS = 30_000;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
+/** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */
+const EDGE_CSS = edgeCursorCss('.factory-page');
 /** Above this many, the tickets a filter keeps are ringed but not all named: the floor would be covered in text. */
 const NAMED_MAX = 30;
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
@@ -125,6 +128,7 @@ function Floor() {
   const store = useFactoryStore();
   const { snapshot, layout } = store;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FactoryView | null>(null);
   const [view, setView] = useState<FactoryView | null>(null);
   const [building, setBuilding] = useState(false);
@@ -271,7 +275,7 @@ function Floor() {
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
     moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide(); lampTipRef.current?.hide();
     /* right or middle button, or Space held: move the view, whatever the tool */
-    if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; return; }
+    if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; e.currentTarget.style.cursor = 'grabbing'; return; }
     if (live.current.building) {
       const t = live.current.tool;
       if (t === 'belt') { store.beginEdit(); press.current = { kind: 'paint', last: { x: tx, y: ty }, did: false, draft: st.layout }; }
@@ -298,7 +302,7 @@ function Floor() {
       /* a ticket says what it is as soon as the pointer is over it, and so does a machine's light */
       if (hit && 'ticketId' in hit) tipRef.current?.show(hit.ticketId, p.x, p.y); else tipRef.current?.hide();
       if (hit && 'lamp' in hit) lampTipRef.current?.show(hit.lamp, p.x, p.y); else lampTipRef.current?.hide();
-      e.currentTarget.style.cursor = hit && 'lamp' in hit ? 'pointer' : '';
+      e.currentTarget.style.cursor = live.current.space ? 'grab' : hit && 'lamp' in hit ? 'pointer' : '';
       return;
     }
     const dx = p.x - lastPt.current.x, dy = p.y - lastPt.current.y; moved.current += Math.abs(dx) + Math.abs(dy); lastPt.current = p;
@@ -316,14 +320,14 @@ function Floor() {
       live.current.marquee = { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y };
     } else if (pr?.kind === 'ticket') {
       if (moved.current > 5) { pr.dragging = true; const d = dropTarget(v, w.x, w.y); live.current.drag = { ticketId: pr.id, x: w.x, y: w.y, ok: d.ok, text: d.text }; }
-    } else if (moved.current > 5) { v.cam.x -= dx / v.cam.z; v.cam.y -= dy / v.cam.z; }
+    } else if (pr?.kind === 'pan') { v.cam.x -= dx / v.cam.z; v.cam.y -= dy / v.cam.z; }
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(), pr = press.current; press.current = null;
     if (!v || !st) return;
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y), click = moved.current <= 5;
-    if (pr?.kind === 'pan') return;
+    if (pr?.kind === 'pan') { e.currentTarget.style.cursor = live.current.space ? 'grab' : ''; return; }
     if (pr?.kind === 'paint') {
       const final = !pr.did && click ? place(pr.draft, specFor('belt', tx, ty, live.current.dir)!) ?? paintBelts(pr.draft, { x: tx, y: ty }, { x: tx, y: ty }).layout : pr.draft;
       void store.setLayout(final).finally(() => store.endEdit());
@@ -396,6 +400,23 @@ function Floor() {
   /* what waits for someone: listed top-left, and walked with the left and right arrows */
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
+  /* to the next ticket that waits for someone, or the one before, round and round */
+  const stepWaiting = useCallback((dir: 1 | -1) => {
+    const sel = live.current.selection, next = stepNeed(needs, sel && 'ticket' in sel ? sel.ticket : null, dir);
+    if (next) pickNeed(next);
+  }, [needs, pickNeed]);
+
+  // The edges of the page move the view: the left one against the app's navigation, the top one under the bar, the right and the bottom ones at the window's.
+  const edgeRect = useCallback(() => {
+    const root = rootRef.current, cv = canvasRef.current;
+    if (!root || !cv) return null;
+    const r = root.getBoundingClientRect();
+    return { left: r.left, top: cv.getBoundingClientRect().top, right: r.right, bottom: r.bottom };
+  }, []);
+  const edgeMove = useCallback((dx: number, dy: number) => { const v = viewRef.current; if (v) { v.cam.x += dx / v.cam.z; v.cam.y += dy / v.cam.z; } }, []);
+  /* not while the view is being dragged: one hand moves it at a time */
+  const edgePaused = useCallback(() => press.current?.kind === 'pan', []);
+  useEdgeScroll(rootRef, edgeRect, edgeMove, edgePaused);
   peekFor.current = peekOpen && selTicket && !building ? selTicket.ticketId : null;
   /* the workbench: a ticket opened over the floor. Moving to another one in it selects that one on the floor too, so the floor is on it when the workbench goes down */
   const openOn = useCallback((ticketId: string) => { setSelection({ ticket: ticketId }); setOpenTicket(ticketId); }, []);
@@ -439,6 +460,7 @@ function Floor() {
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
     ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
+    waiting: needs.length,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
@@ -470,9 +492,10 @@ function Floor() {
       openMachine: () => { if (selMachine && hasPopup(selMachine)) setOpenMachine(selMachine.id); },
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
+      next: () => stepWaiting(1),
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
-  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine]);
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting]);
   const card = useMemo(() => menuAt(root, path), [root, path]);
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';
@@ -522,12 +545,9 @@ function Floor() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.code === 'Space') { e.preventDefault(); live.current.space = true; return; }
-      /* out of build mode, left and right walk the tickets that wait for someone; with none, and up and down always, the arrows move the view */
-      if (!live.current.building && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        const next = stepNeed(needs, selTicket?.ticketId ?? null, e.key === 'ArrowRight' ? 1 : -1);
-        if (next) { e.preventDefault(); pickNeed(next); return; }
-      }
+      if (e.code === 'Space') { e.preventDefault(); live.current.space = true; if (canvasRef.current && !press.current) canvasRef.current.style.cursor = 'grab'; return; }
+      /* N goes to the next ticket that waits for someone, Shift+N to the one before: the arrows only ever move the view */
+      if (e.code === 'KeyN' && !live.current.building) { e.preventDefault(); stepWaiting(e.shiftKey ? -1 : 1); return; }
       if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
       if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
@@ -541,17 +561,18 @@ function Floor() {
       else if (key === 'F') { e.preventDefault(); fit(); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') live.current.space = false; };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { live.current.space = false; if (canvasRef.current && !press.current) canvasRef.current.style.cursor = ''; } };
     /* a key released while the window is elsewhere never says so: let go of it */
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, onGroup, copy, paste, needs, selTicket, selMachine, pickNeed]);
+  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+    <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+      <style>{EDGE_CSS}</style>
       <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
         <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
@@ -563,7 +584,7 @@ function Floor() {
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
           <canvas
-            ref={canvasRef} className={cn('absolute inset-0 h-full w-full touch-none', building && tool !== 'select' ? 'cursor-crosshair' : 'cursor-grab')}
+            ref={canvasRef} className={cn('absolute inset-0 h-full w-full touch-none', building && tool !== 'select' && 'cursor-crosshair')}
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
@@ -597,7 +618,7 @@ function Floor() {
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}

@@ -125,7 +125,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   const go = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!view || !layout) return;
     const r = e.currentTarget.getBoundingClientRect(), w = view.miniToWorld(e.clientX - r.left, e.clientY - r.top);
-    if (w) { view.cam.x = Math.max(0, Math.min(layout.w, w.x)); view.cam.y = Math.max(0, Math.min(layout.h, w.y)); }
+    /* the view holds itself to the floor: it goes as near as it can */
+    if (w) { view.cam.x = w.x; view.cam.y = w.y; }
   };
   const zoom = (f: number) => view?.zoomAt(view.w / 2, view.h / 2, f);
   const tickets = snapshot?.tickets ?? [], now = snapshot?.serverTime ?? '';
