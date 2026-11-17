@@ -163,27 +163,29 @@ Comme les autres prototypes, c'est une intention visuelle : pour l'intégrer à 
 
 Seconde maquette, [`workbench.html`](./workbench.html) (un seul fichier, données simulées ; c'est le contenu d'une page, à
 envelopper d'un `<html><body>` pour l'ouvrir hors d'un visualiseur d'artifacts). Elle répond à une question : comment garder la
-vue Work comme lieu de travail manuel quand les tickets sont dans la Factory. Version 2, après un premier tour de retours.
+vue Work comme lieu de travail manuel quand les tickets sont dans la Factory. Version 3, après deux tours de retours.
 
-- **Des postes qui se lisent de loin.** Un poste est une machine : une plaque avec le pictogramme de sa nature, une colonne
-  lumineuse (rouge un run a échoué, ambre quelqu'un est attendu, vert ça tourne), une file, une baie où le ticket en cours tourne,
-  et une zone « SET ASIDE » hachurée, dans le poste, pour ce qui est mis de côté : une question de l'agent, un run échoué, un
-  ticket pris en main. Un gate montre ce qui est à décider et ses issues.
+- **Un poste est une machine.** Une plaque avec le pictogramme de sa nature, autant de cellules qu'il peut faire tourner de
+  tickets à la fois, un bac « OUT » pour ce qui est fini et ne peut pas encore sortir, et une zone hachurée « SET ASIDE » pour ce
+  qui est mis de côté : une question de l'agent, un run échoué, un ticket qu'on a arrêté. **Rien ne fait la queue dans un
+  poste** : ce qui ne peut pas entrer attend sur le convoyeur en amont.
+- **Le feu est l'interrupteur.** Rouge : le poste est éteint, ce qui arrive est retenu dans ses cellules sans démarrer (ce qui
+  tournait finit). Vert : allumé. Jaune : allumé, et au moins un ticket y est mis de côté. Un clic l'allume ou l'éteint ; au
+  survol il dit ce qui tourne, ce qui est mis de côté, ce qui attend sur le convoyeur et si la sortie est bloquée.
+- **Un gate n'a ni interrupteur ni mise de côté** : c'est une étape humaine. Son feu est jaune tant qu'il reste quelque chose à
+  décider. Ses issues ne sont pas écrites dessus : ce sont les bras, étiquetés, qui les portent.
 - **« Needs you », en haut à gauche.** Comme les cadres d'un groupe dans un jeu : uniquement les tickets qui attendent une
-  intervention. Pictogramme du type, titre, priorité, complexité ; dessous, le poste et ce qui est attendu (question, décision,
-  run échoué, entre tes mains), et depuis quand.
-- **Micro-chat au premier clic.** Cliquer un ticket (ou une entrée de la liste) ouvre la fin de son fil à côté de son poste, avec
-  un champ pour répondre. `←` / `→` passent au ticket suivant qui attend.
-- **La glissière.** `Espace`, `V` ou un double-clic font monter du bas la surface de la vue Work, sur presque toute la largeur et
-  la hauteur, sous la barre de titre de la fenêtre. `←` / `→` y changent de ticket ; un sélecteur dit ce qu'elles parcourent
-  (« Needs you » ou « Same station ») et la rangée de tickets parcourus est visible.
-- **Mettre de côté.** Lancer un agent, un skill ou un panel depuis un commentaire coupe le run du poste s'il tournait, range le
-  ticket dans « SET ASIDE » et lance ce qui est demandé. Un commentaire, le shell, le diff ne mettent rien de côté. Un workflow ne
-  se lance pas sur un ticket en usine.
-- **Remettre.** Quand le run à la main finit, on décide : sortir du poste par telle issue (« Leave Build as ok », fait à la main),
-  refaire une itération (« Run Build again »), ou envoyer ailleurs. Mêmes choix dans la carte de commandes du HUD ; les survoler
-  allume sur le floor le bras par lequel le ticket sortirait et la machine qui le recevrait.
-- **Répondre relance.** Répondre à la question d'un agent relance le poste, sans second geste.
+  intervention, avec leur type, titre, priorité, complexité, le poste, ce qui est attendu et depuis quand.
+- **Micro-chat au premier clic.** La fin du fil s'ouvre à côté du poste ; remonter charge la suite. Les derniers livrables sont
+  en tête. Sur un gate, la décision se prend là : un bouton par issue et une raison facultative, gardée dans le fil.
+- **La glissière.** `Espace`, `V` ou un double-clic font monter du bas la surface de la vue Work, sous la barre de titre de la
+  fenêtre. `←` / `→` changent de ticket ; un sélecteur dit ce qu'elles parcourent (« Needs you » ou « Same station »).
+- **Ce qui demande une décision est demandé dans le fil** : la décision d'un gate, un run échoué à relancer. Aucune bande
+  « Factory » en haut de la vue Work : la Factory est un groupe du panneau Context, avec le seul geste qui se fait de là, mettre
+  de côté et remettre (sortir par telle issue, refaire une itération, envoyer ailleurs).
+- **Lancer à la main met de côté.** Un agent, un skill ou un panel lancé depuis un commentaire coupe le run du poste s'il
+  tournait et range le ticket dans « SET ASIDE ». Sur un gate ou dans une zone rien ne tourne, donc rien ne bouge. Un workflow
+  ne se lance pas sur un ticket en usine.
 
 Ce que la maquette ne montre pas : le mode build, les calques et les réglages du HUD (dessinés, inertes), et les panneaux de
 Work autres que Context, Diff, Docs et Todo. Le floor est une seule ligne, sans déplacement de caméra.

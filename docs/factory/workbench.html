@@ -51,11 +51,14 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}.btn.pri:hover{background:var(--accent-h)}
 .btn.ghost{border-color:transparent;background:none;color:var(--t2)}.btn.ghost:hover{background:var(--hover);color:var(--t1)}
 .btn.ok{background:var(--ok);border-color:var(--ok);color:#052e16;font-weight:600}
+.btn.wide{width:100%;justify-content:flex-start;height:auto;min-height:28px;padding:5px 10px;white-space:normal;text-align:left}
 .kbd{font-family:var(--mono);font-size:10px;padding:0 4px;border-radius:4px;border:1px solid var(--border-in);color:var(--t2);background:var(--bg)}
 .btn.pri .kbd{border-color:rgba(0,0,0,.25);background:rgba(0,0,0,.15);color:var(--on-accent)}
 .pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:500;white-space:nowrap}
 .pill.ok{background:var(--ok-bg);color:#86efac}.pill.warn{background:var(--warn-bg);color:#fde047}.pill.danger{background:var(--danger-bg);color:#fca5a5}
 .pill.hand{background:var(--accent-m);color:var(--accent-h)}.pill.gray{background:var(--overlay);color:var(--t2)}.pill.blue{background:var(--blue-bg);color:#93c5fd}
+.field{height:28px;border-radius:7px;border:1px solid var(--border-in);background:var(--surface);padding:0 9px;outline:none;min-width:0}
+.field:focus{border-color:var(--accent)}
 
 /* ---------- a ticket on the floor: a token in its type's colour, carrying the type's pictogram ---------- */
 .tok{position:relative;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#0b0b0d;flex:none;
@@ -65,11 +68,12 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .tok[data-ty=ops]{background:var(--ty-ops)}.tok[data-ty=lead]{background:var(--ty-lead)}.tok[data-ty=think]{background:var(--ty-think)}
 .tok.sel{outline:2.5px solid var(--t1);outline-offset:2px}
 .tok .mark{position:absolute;right:-6px;bottom:-6px;width:15px;height:15px;border-radius:50%;font:800 10px var(--sans);display:grid;place-items:center;color:#0b0b0d;border:2px solid #17171a}
-.tok .mark.q{background:var(--warn)}.tok .mark.f{background:var(--danger);color:#fff}.tok .mark.h{background:var(--accent);color:var(--on-accent)}
-.tok .mark.h{width:18px;height:18px;right:-8px;bottom:-8px}
+.tok .mark.q{background:var(--warn)}.tok .mark.f{background:var(--danger);color:#fff}.tok .mark.h{background:var(--accent);color:var(--on-accent);width:18px;height:18px;right:-8px;bottom:-8px}
 .tok .mark svg{width:11px;height:11px;fill:none;stroke-width:2.4}
-.tok.big{width:44px;height:44px;border-radius:12px}
+.tok.big{width:40px;height:40px;border-radius:11px}
 .tok.sm{width:18px;height:18px;border-radius:5px;box-shadow:none}
+.tok.onbelt{position:absolute;margin:-13px 0 0 -13px;z-index:2}
+.tok.paused{filter:saturate(.35) brightness(.75)}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes blink{50%{opacity:.25}}
 
@@ -80,64 +84,65 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .fhead .find{height:26px;width:220px;border:1px solid var(--border-in);border-radius:6px;background:var(--bg);color:var(--t4);display:flex;align-items:center;padding:0 9px;font-size:12px}
 .floor{flex:1;min-height:0;position:relative;overflow:hidden;
   background:radial-gradient(circle,rgba(255,255,255,.12) 1px,transparent 1.4px) 0 0/26px 26px,radial-gradient(ellipse at 55% 45%,#1e1e22,#111114 78%)}
-.stage{position:absolute;left:0;top:0;transform-origin:0 0;width:900px;height:556px}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0;width:1010px;height:570px}
 
-/* a station: a machine with a head plate, a stack light, lanes for what queues, runs and waits, and a bay for what was set aside */
+/* a station: a machine with a head plate, a light that is also its switch, as many cells as it can run at once, a tray for
+   what is done and cannot leave yet, and a bay for what was set aside. Nothing queues inside: what cannot enter waits on the belt. */
 .st{position:absolute;border-radius:16px;background:linear-gradient(var(--steel-2),var(--steel));border:1.5px solid var(--steel-edge);
   box-shadow:6px 10px 24px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.07);display:flex;flex-direction:column;padding:8px}
-.st::before{content:"";position:absolute;inset:-64px;border-radius:50%;z-index:-1;pointer-events:none;opacity:0;transition:opacity .4s}
-.st.g-run::before{opacity:1;background:radial-gradient(circle,rgba(34,197,94,.2),transparent 66%)}
-.st.g-call::before{opacity:1;background:radial-gradient(circle,rgba(234,179,8,.2),transparent 66%)}
-.st.g-fail::before{opacity:1;background:radial-gradient(circle,rgba(239,68,68,.24),transparent 66%)}
+.st::before{content:"";position:absolute;inset:-60px;border-radius:50%;z-index:-1;pointer-events:none;opacity:0;transition:opacity .4s}
+.st.l-call::before{opacity:1;background:radial-gradient(circle,rgba(234,179,8,.2),transparent 66%)}
+.st.l-off::before{opacity:1;background:radial-gradient(circle,rgba(239,68,68,.16),transparent 66%)}
+.st.l-off{filter:saturate(.6)}
 .st.hl{outline:3px solid var(--accent);outline-offset:4px}
-.st.pick{cursor:crosshair;outline:2px dashed var(--accent);outline-offset:4px}
-.st header{display:flex;align-items:center;gap:8px;padding:0 30px 6px 2px}
+.st.pickable{cursor:crosshair;outline:2px dashed var(--accent);outline-offset:4px}
+.st header{display:flex;align-items:center;gap:8px;padding:0 34px 6px 2px}
 .st .badge{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;flex:none;border:1.5px solid}
 .st.k-agent .badge{background:var(--purple-bg);color:var(--purple);border-color:rgba(192,132,252,.45)}
 .st.k-gate .badge{background:var(--warn-bg);color:#fde047;border-color:rgba(234,179,8,.5)}
 .st.k-zone .badge{background:var(--accent-m);color:var(--accent-h);border-color:rgba(215,118,85,.5)}
 .st.k-exit .badge{background:var(--ok-bg);color:#4ade80;border-color:rgba(34,197,94,.5)}
 .st header b{display:block;font-size:14.5px;line-height:1.15}.st header small{color:var(--t3);font-size:10.5px}
-/* the stack light every station carries: what it is doing, read from across the floor */
-.andon{position:absolute;top:-13px;right:14px;width:15px;border-radius:5px;background:#101013;border:1.5px solid var(--steel-edge);padding:2.5px;display:grid;gap:2px}
-.andon i{height:8px;border-radius:2px;background:#2a2a2f}
-.st.g-fail .andon .r{background:var(--danger);box-shadow:0 0 10px 2px rgba(239,68,68,.8);animation:blink 1s steps(2,jump-none) infinite}
-.st.g-call .andon .a{background:var(--warn);box-shadow:0 0 10px 2px rgba(234,179,8,.8);animation:blink 1.4s ease-in-out infinite}
-.st.g-run .andon .g,.st.has-run .andon .g{background:var(--ok);box-shadow:0 0 10px 2px rgba(34,197,94,.75)}
+/* the light: red the station is off, green it is on, amber it is on and something in it needs you. On a machine it is the switch. */
+.lamp{position:absolute;top:8px;right:9px;width:20px;border-radius:7px;background:#0d0d10;border:1.5px solid var(--steel-edge);padding:3px;display:grid;gap:2.5px}
+button.lamp:hover{border-color:var(--t1)}
+.lamp i{height:9px;border-radius:50%;background:#2a2a2f}
+.l-off .lamp .r{background:var(--danger);box-shadow:0 0 10px 2px rgba(239,68,68,.8)}
+.l-call .lamp .a{background:var(--warn);box-shadow:0 0 10px 2px rgba(234,179,8,.8);animation:blink 1.4s ease-in-out infinite}
+.l-on .lamp .g{background:var(--ok);box-shadow:0 0 10px 2px rgba(34,197,94,.75)}
+.lamp .tip{display:none;position:absolute;z-index:9;top:calc(100% + 6px);right:-6px;width:214px;text-align:left;background:#0c0c0f;border:1px solid var(--border-in);border-radius:9px;padding:8px 10px;font-size:11.5px;line-height:1.5;color:var(--t2);box-shadow:0 12px 30px rgba(0,0,0,.6)}
+.lamp .tip b{color:var(--t1);display:block}
+.lamp:hover .tip,.lamp:focus-visible .tip{display:block}
 .lanes{flex:1;min-height:0;display:flex;gap:6px}
-.pit{background:var(--pit);border-radius:10px;border:1px solid rgba(255,255,255,.05);position:relative;padding:15px 6px 6px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-start;justify-content:center}
-.pit>label,.side>label{position:absolute;top:3px;left:7px;font:700 8px var(--sans);letter-spacing:.1em;color:var(--t4)}
-.pit.in{flex:0 0 38%}
-.pit.bay{flex:1;align-content:center;align-items:center}
-.bay .rig{position:relative;display:grid;place-items:center;width:64px;height:64px}
-.bay .rig::before,.bay .rig::after{pointer-events:none}
-.bay .rig::before{content:"";position:absolute;inset:0;border-radius:50%;border:3px dashed rgba(34,197,94,.75);animation:spin 5s linear infinite}
-.bay .rig::after{content:"";position:absolute;inset:6px;border-radius:50%;border:3px solid transparent;border-top-color:var(--ok);animation:spin 1.1s linear infinite}
-.bay .idle{color:var(--t4);font-size:26px;opacity:.6}
-.exits{display:flex;flex-direction:column;gap:4px;justify-content:center;flex:none}
-.exits span{font:600 9.5px var(--mono);padding:2px 6px;border-radius:5px;background:#2b2410;color:#fde047;white-space:nowrap}
-/* set aside, inside the station: an agent's question, a failed run, a ticket you took in hand. Hazard edge, as a hold area has */
-.side{flex:none;margin-top:6px;height:46px;border-radius:10px;position:relative;padding:13px 8px 5px 34px;display:flex;gap:9px;align-items:center;
+.pit{background:var(--pit);border-radius:10px;border:1px solid rgba(255,255,255,.05);position:relative;padding:15px 6px 6px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-start;justify-content:center;min-width:0}
+.pit>label,.aside>label{position:absolute;top:3px;left:7px;font:700 8px var(--sans);letter-spacing:.1em;color:var(--t4);white-space:nowrap}
+.pit.cell{flex:1;align-content:center;align-items:center}
+.pit.outtray{flex:0 0 44px;padding-inline:3px}
+.rig{position:relative;display:grid;place-items:center;width:58px;height:58px}
+.rig::before,.rig::after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.rig::before{inset:0;border:3px dashed rgba(34,197,94,.75);animation:spin 5s linear infinite}
+.rig::after{inset:6px;border:3px solid transparent;border-top-color:var(--ok);animation:spin 1.1s linear infinite}
+.cell .idle{color:var(--t4);font-size:24px;opacity:.5}
+/* set aside, inside the machine: an agent's question, a failed run, a ticket you stopped. Hazard edge, as a hold area has */
+.aside{flex:none;margin-top:6px;height:46px;border-radius:10px;position:relative;padding:13px 8px 5px 34px;display:flex;gap:9px;align-items:center;
   background:repeating-linear-gradient(-45deg,rgba(234,179,8,.5) 0 5px,rgba(0,0,0,.5) 5px 10px) 0 0/22px 100% no-repeat,rgba(0,0,0,.5);border:1px solid rgba(234,179,8,.22)}
-.side>label{left:30px;color:#a38a2e}
-.side.vacant{opacity:.45}
+.aside>label{left:30px;color:#a38a2e}
+.aside.vacant{opacity:.45}
 .st.k-zone{border-style:dashed;border-color:var(--accent);background:linear-gradient(#141416,#0c0c0e)}
 .st.k-exit{border-color:var(--ok)}.st.k-exit .big{flex:1;display:grid;place-items:center;color:#4ade80;font-size:44px;opacity:.85}
 .st.k-exit .cnt{text-align:center;color:var(--t3);font-size:11px;padding-bottom:6px}
 .st.k-gate{border:2.5px dashed var(--hazard)}
-.belt{position:absolute;border-radius:5px;background:#26262a;border:1px solid #3a3a40;overflow:hidden}
+.belt{position:absolute;border-radius:5px;background:#26262a;border:1px solid #3a3a40;overflow:hidden;transition:border-color .15s}
 .belt::before{content:"";position:absolute;inset:0;animation:belt 1.1s linear infinite}
-.belt.h::before{background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(161,161,170,.55) 9px 11px,transparent 11px 18px)}
-.belt.v::before{background:repeating-linear-gradient(180deg,transparent 0 9px,rgba(161,161,170,.55) 9px 11px,transparent 11px 18px);animation-name:beltv}
+.belt.h::before{background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(161,161,170,.5) 9px 11px,transparent 11px 18px)}
+.belt.v::before{background:repeating-linear-gradient(180deg,transparent 0 9px,rgba(161,161,170,.5) 9px 11px,transparent 11px 18px);animation-name:beltv}
 .belt.rev::before{animation-direction:reverse}
+.belt.hl{border-color:var(--accent)}
 @keyframes belt{to{background-position:18px 0}}@keyframes beltv{to{background-position:0 18px}}
-.arm{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--bg);border:4px solid #c7c7cf;transition:box-shadow .15s,border-color .15s}
+.arm{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--bg);border:4px solid #c7c7cf;z-index:1;transition:box-shadow .15s,border-color .15s}
 .arm.hl{border-color:var(--accent);box-shadow:0 0 0 6px var(--accent-m),0 0 18px 4px rgba(215,118,85,.7)}
-.loop{position:absolute;border:2px dashed #55555e;pointer-events:none;transition:border-color .15s}
-.loop.up{border-bottom:0;border-radius:14px 14px 0 0}.loop.down{border-top:0;border-radius:0 0 14px 14px}
-.loop.hl{border-color:var(--accent)}
-.loop span{position:absolute;left:50%;transform:translateX(-50%);font:600 10.5px var(--mono);background:#2b2410;color:#fde047;padding:1px 7px;border-radius:5px}
-.loop.up span{top:-10px}.loop.down span{bottom:-10px}
+.tag{position:absolute;font:600 10.5px var(--mono);background:#2b2410;color:#fde047;padding:1px 7px;border-radius:5px;z-index:1;white-space:nowrap}
+.tag.hl{background:var(--accent);color:var(--on-accent)}
 .pickbar{position:absolute;z-index:4;left:50%;bottom:12px;transform:translateX(-50%);background:var(--glass);backdrop-filter:blur(8px);border:1px solid var(--accent);border-radius:10px;padding:7px 12px;display:flex;gap:10px;align-items:center}
 
 /* ---------- "needs you": the frames of a party, top-left, over the floor ---------- */
@@ -157,24 +162,28 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .cx{flex:none;min-width:17px;height:17px;border-radius:50%;border:1.5px solid var(--border-in);font:600 9.5px var(--mono);display:grid;place-items:center;color:var(--t2);padding:0 2px}
 
 /* ---------- micro chat: the first click on a ticket ---------- */
-.peek{position:absolute;z-index:4;width:340px;max-width:calc(100% - 20px);background:rgba(18,18,21,.96);border:1px solid var(--border-in);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.65);display:flex;flex-direction:column;max-height:calc(100% - 16px)}
-.peek .ph{display:flex;gap:9px;align-items:center;padding:9px 10px 8px;border-bottom:1px solid var(--border)}
+.peek{position:absolute;z-index:4;width:372px;max-width:calc(100% - 20px);background:rgba(18,18,21,.97);border:1px solid var(--border-in);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.65);display:flex;flex-direction:column;max-height:min(480px,calc(100% - 16px))}
+.peek .ph{flex:none;display:flex;gap:9px;align-items:center;padding:9px 10px 8px;border-bottom:1px solid var(--border)}
 .peek .ph b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .peek .ph small{color:var(--t3);font-size:11px}
-.peek .pt{overflow:auto;padding:10px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;min-height:60px}
-.peek .more{align-self:center;color:var(--t3);font-size:11px}
-.peek .pfoot{border-top:1px solid var(--border);padding:8px;display:flex;gap:6px;align-items:center}
-.peek input{flex:1;min-width:0;height:28px;border-radius:7px;border:1px solid var(--border-in);background:var(--surface);padding:0 9px;outline:none}
-.peek input:focus{border-color:var(--accent)}
+.peek .dl{flex:none;display:flex;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.peek .dl button{flex:none;display:flex;gap:6px;align-items:center;height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);border-left:2px solid var(--accent);font-size:11.5px}
+.peek .dl button:hover{background:var(--hover)}
+.peek .pt{flex:1;min-height:70px;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:9px;font-size:12.5px}
+.peek .more{align-self:center;color:var(--t3);font-size:11px;padding:2px 8px;border-radius:6px}
+.peek .more:hover{background:var(--hover);color:var(--t1)}
+.peek .pfoot{flex:none;border-top:1px solid var(--border);padding:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.peek .pfoot .field{flex:1}.peek .pfoot .field.full{flex:1 1 100%}
+.peek .pfoot .ask{flex:1 1 100%;font-size:11.5px;color:#fde047;font-weight:600}
 
 /* ---------- HUD ---------- */
 .hud{flex:none;height:var(--hud-h);display:flex;gap:8px;padding:8px var(--gut-r) 8px 8px;background:#0c0c0e;border-top:1px solid var(--border)}
 .hud>div{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:8px;min-width:0}
 .hmap{flex:none;width:320px;display:grid;grid-template-columns:1fr 104px;grid-template-rows:auto 1fr;gap:6px 8px}
-.toggles{display:flex;gap:4px}.toggles button{width:26px;height:22px;border-radius:5px;border:1px solid var(--border-in);display:grid;place-items:center;color:var(--t2);font-size:13px}
-.toggles button[aria-pressed=true]{background:var(--toggle-on);border-color:var(--toggle-on);color:#111}
+.toggles{display:flex;gap:4px}.toggles span{width:26px;height:22px;border-radius:5px;border:1px solid var(--border-in);display:grid;place-items:center;color:var(--t2);font-size:13px}
+.toggles span.on{background:var(--toggle-on);border-color:var(--toggle-on);color:#111}
 .mini{position:relative;background:#1b1b1f;border-radius:6px;overflow:hidden;min-height:0}
-.mini i{position:absolute;border-radius:1.5px;background:#6b6b75}.mini .view{position:absolute;inset:6px;border:1.5px solid #fff;border-radius:2px}
+.mini i{position:absolute;border-radius:1.5px;background:#6b6b75}.mini .view{position:absolute;inset:5px;border:1.5px solid #fff;border-radius:2px}
 .layers{grid-row:1/3;grid-column:2;display:flex;flex-direction:column;gap:1px;border:1px solid var(--border-in);border-radius:7px;padding:3px;align-self:start;font-size:11px}
 .layers span{padding:2.5px 7px;border-radius:5px;color:var(--t3);white-space:nowrap}.layers span:first-child{background:var(--overlay);color:var(--t1)}
 .hsel{flex:1;display:flex;flex-direction:column;gap:8px}
@@ -187,7 +196,7 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .hcmd .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:5px;min-height:0}
 .tile{position:relative;border-radius:8px;border:1px solid var(--border-in);background:#1c1c20;display:grid;place-items:center;align-content:center;gap:1px;font-size:11px;font-weight:600;min-height:0;padding:2px}
 .tile .i{font-size:17px}.tile .k{position:absolute;top:3px;left:5px;font:600 9px var(--mono);color:inherit;opacity:.75}
-.tile:hover{filter:brightness(1.2)}
+.tile:hover{filter:brightness(1.2)}.tile:disabled{opacity:.4}
 .tile.none{border-style:dashed;border-color:var(--border);background:none;pointer-events:none}
 .tile.go{background:var(--ok);border-color:var(--ok);color:#052e16}.tile.hand{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .tile.ticket{background:#1d2140;border-color:#3b4170;color:#c7d0ff}.tile.back{color:var(--t2)}.tile.danger{background:#3a1717;border-color:#6b2323;color:#fca5a5}
@@ -207,7 +216,7 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .chip{flex:none;display:flex;align-items:center;gap:6px;height:26px;padding:0 9px 0 5px;border-radius:7px;border:1px solid var(--border);font-size:11.5px;color:var(--t2);max-width:210px}
 .chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip.on{border-color:var(--t1);color:var(--t1);background:var(--overlay)}
-@media (prefers-reduced-motion:reduce){.bench.in,.belt::before,.bay .rig::before,.bay .rig::after,.andon i{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.bench.in,.belt::before,.rig::before,.rig::after,.lamp i{animation:none!important}}
 
 /* ---------- work view ---------- */
 .work{flex:1;min-width:0;display:flex}
@@ -223,18 +232,6 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 
 /* ---------- the workbench surface (the same in both hosts) ---------- */
 .surface{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg);position:relative}
-.strip{flex:none;display:flex;align-items:center;gap:10px;padding:7px var(--gut-r) 7px 12px;border-bottom:1px solid var(--border);background:#131316;flex-wrap:wrap;position:relative}
-.strip.hand{background:linear-gradient(90deg,var(--accent-m),transparent 70%),#131316}
-.path{display:flex;align-items:center;gap:2px;font-size:11.5px;flex-wrap:wrap}
-.path .s{padding:2px 7px;border-radius:5px;color:var(--t4);white-space:nowrap}
-.path .s.done{color:var(--t2)}.path .s.done::before{content:"✓ ";color:var(--ok)}
-.path .s.cur{background:var(--overlay);color:var(--t1);font-weight:600}
-.path .s.cur.run{box-shadow:inset 0 -2px 0 var(--ok)}.path .s.cur.call{box-shadow:inset 0 -2px 0 var(--warn)}.path .s.cur.fail{box-shadow:inset 0 -2px 0 var(--danger)}.path .s.cur.hand{box-shadow:inset 0 -2px 0 var(--accent);background:var(--accent-m)}
-.path .sep{color:var(--t4)}
-.strip .say{flex:1;min-width:160px;color:var(--t2);font-size:12px}.strip .say b{color:var(--t1);font-weight:600}
-.strip .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.pop{position:absolute;z-index:25;right:var(--gut-r);top:calc(100% - 2px);width:250px;background:var(--surface);border:1px solid var(--border-in);border-radius:10px;padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.6)}
-.pop button{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:6px}.pop button:hover{background:var(--hover)}.pop button small{color:var(--t3);margin-left:6px}
 .topbar{flex:none;height:40px;display:flex;align-items:center;gap:10px;padding:0 var(--gut-r) 0 12px;border-bottom:1px solid var(--border);overflow:hidden}
 .ib{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--t2);font:600 11px var(--mono);border:1px solid var(--border);flex:none}
 .wt{display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);font:500 11px var(--mono);color:var(--t2);flex:none}
@@ -246,15 +243,21 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .stream .col{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .desc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--t2)}
 .me{align-self:flex-end;max-width:80%;background:var(--accent-m);border-radius:12px 12px 3px 12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.me.verdict{border:1px solid rgba(215,118,85,.5)}.me.verdict b{font-family:var(--mono)}
 .at{color:var(--accent-h);font-family:var(--mono);font-size:12px}
 .ag{display:flex;gap:9px;max-width:92%}.ag .av{flex:none;width:24px;height:24px;border-radius:50%;background:var(--purple-bg);color:var(--purple);display:grid;place-items:center}
 .ag .who{font-size:11px;color:var(--t3)}.ag .txt{overflow-wrap:anywhere}
-.run{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:7px 10px;flex-wrap:wrap}
-.run .p{color:var(--purple)}.run .meta{color:var(--t3);font:11px var(--mono)}.run .sp{flex:1}
-.run .state{font-weight:600}.run .state.running{color:var(--accent-h)}.run .state.failed{color:#fca5a5}.run .state.interrupted{color:#fde047}
-.run .state.running::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;animation:blink 1s ease-in-out infinite}
+.runc{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:7px 10px;flex-wrap:wrap}
+.runc .p{color:var(--purple)}.runc .meta{color:var(--t3);font:11px var(--mono)}.runc .sp{flex:1}
+.runc .state{font-weight:600}.runc .state.running{color:var(--accent-h)}.runc .state.failed{color:#fca5a5}.runc .state.interrupted{color:#fde047}
+.runc .state.running::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;animation:blink 1s ease-in-out infinite}
 .deliv{border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:8px;padding:7px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .ev{align-self:center;color:var(--t3);font-size:11px;text-align:center}.ev::before{content:"✓ ";color:var(--ok)}.ev.hand::before{content:"◆ ";color:var(--accent)}
+/* what waits for a decision is asked in the thread, where what it is decided on can be read */
+.askc{border:1px solid rgba(234,179,8,.5);background:var(--warn-bg);border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.askc b{flex:1 1 100%}.askc .field{flex:1;min-width:160px;background:var(--bg)}
+.askc.fail{border-color:rgba(239,68,68,.5);background:var(--danger-bg)}.askc.hand{border-color:rgba(215,118,85,.5);background:var(--accent-m)}
+.askc p{margin:0;flex:1;min-width:200px;color:var(--t2)}
 .composer{flex:none;border-top:1px solid var(--border);padding:10px 12px;position:relative}
 .composer .box{display:flex;gap:8px;align-items:flex-end;max-width:760px;margin:0 auto}
 .composer textarea{flex:1;min-width:0;resize:none;height:58px;background:var(--surface);border:1px solid var(--border-in);border-radius:9px;padding:8px 10px;outline:none}
@@ -274,6 +277,10 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .rpanel .ttl{flex:none;height:36px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--border)}
 .rpanel .in{overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:12px}
 .kv{display:grid;grid-template-columns:86px 1fr;gap:6px 8px;align-items:center}.kv span:nth-child(odd){color:var(--t3);font-size:11.5px}
+.fgroup{border:1px solid var(--border-in);border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:8px}
+.fgroup.hand{border-color:rgba(215,118,85,.6);background:var(--accent-m)}
+.fgroup .acts{display:flex;flex-direction:column;gap:5px}
+.fgroup small{color:var(--t3);font-size:11px}
 .tools{flex:none;width:60px;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;overflow:auto;padding-right:env(safe-area-inset-right,0px)}
 .tools button{width:52px;padding:6px 0 4px;border-radius:7px;display:grid;justify-items:center;gap:2px;font-size:10px;color:var(--t3);position:relative}
 .tools button:hover{background:var(--hover);color:var(--t1)}.tools button[aria-pressed=true]{background:var(--accent-m);color:var(--accent-h)}
@@ -290,7 +297,7 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .code{flex:1;min-height:0;display:flex}.code .tree{flex:none;width:200px;border-right:1px solid var(--border);padding:10px;font:12px var(--mono);color:var(--t2);overflow:auto}
 .code pre{flex:1;margin:0;padding:12px 16px;font:12.5px/1.6 var(--mono);overflow:auto;color:var(--t2)}
 .add{color:#86efac}.del{color:#fca5a5}
-.empty{flex:1;display:grid;place-items:center;color:var(--t3)}
+.blank{flex:1;display:grid;place-items:center;color:var(--t3)}
 
 /* ---------- toast (Fleex has one, bottom-centre) and the guide ---------- */
 #toast{position:fixed;z-index:60;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--overlay);border:1px solid var(--border-in);border-radius:10px;padding:8px 12px;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px);box-shadow:0 12px 30px rgba(0,0,0,.55)}
@@ -327,7 +334,7 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6M4 12h16"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
-  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.900 1-6.100L3.200 9.500l6.100-.900z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
   <symbol id="i-build" viewBox="0 0 24 24"><path d="M4 20h16M6 20V9l6-4 6 4v11M10 20v-5h4v5"/></symbol>
   <symbol id="i-in" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
   <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
@@ -335,9 +342,9 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
   <symbol id="t-build" viewBox="0 0 16 16"><g transform="rotate(-38 8 8)"><rect x="3" y="2.2" width="10" height="4.4" rx="1.2"/><rect x="6.8" y="6" width="2.4" height="8.4" rx="1"/></g></symbol>
   <symbol id="t-fix" viewBox="0 0 16 16"><ellipse cx="8" cy="9.4" rx="3.1" ry="3.9"/><circle cx="8" cy="4.2" r="1.7"/><path d="M4.9 8H2.2M4.9 11l-2.2 1.4M11.1 8h2.7M11.1 11l2.2 1.4" fill="none"/></symbol>
   <symbol id="t-think" viewBox="0 0 16 16"><circle cx="8" cy="6.4" r="4"/><rect x="6.2" y="11.2" width="3.6" height="2.8" rx=".9"/></symbol>
-  <symbol id="t-lead" viewBox="0 0 16 16"><rect x="2.2" y="5.6" width="11.6" height="8" rx="1.6"/><path d="M6 5.4V4a1 1 0 011-1h2a1 1 0 011 1v1.400" fill="none"/></symbol>
+  <symbol id="t-lead" viewBox="0 0 16 16"><rect x="2.2" y="5.6" width="11.6" height="8" rx="1.6"/><path d="M6 5.4V4a1 1 0 011-1h2a1 1 0 011 1v1.4" fill="none"/></symbol>
   <symbol id="t-ops" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><circle cx="8" cy="8" r="5" fill="none" stroke-width="2.6" stroke-dasharray="2.4 1.53"/></symbol>
-  <symbol id="t-review" viewBox="0 0 16 16"><path d="M1.6 8c1.900-3.300 4-4.800 6.400-4.800s4.500 1.500 6.400 4.800c-1.900 3.300-4 4.800-6.400 4.800S3.500 11.300 1.600 8z" fill="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+  <symbol id="t-review" viewBox="0 0 16 16"><path d="M1.6 8c1.9-3.3 4-4.8 6.4-4.8s4.5 1.5 6.4 4.8c-1.9 3.3-4 4.8-6.4 4.8S3.5 11.3 1.6 8z" fill="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
 </defs></svg>
 
 <div id="app">
@@ -359,22 +366,33 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 /* ============================================================ data (all simulated) ============================================================ */
 const MACH = {
   inbound: { name: 'Inbound', kind: 'zone', sub: 'handed over', x: 0, y: 64, w: 176 },
-  spec:    { name: 'Spec', kind: 'agent', ref: 'catalyst', outs: ['ok'], x: 252, y: 64, w: 236 },
-  check:   { name: 'Check spec', kind: 'gate', outs: ['approve', 'reject'], x: 564, y: 64, w: 236 },
-  build:   { name: 'Build', kind: 'agent', ref: 'builder', outs: ['ok'], x: 564, y: 322, w: 236 },
-  review:  { name: 'Review', kind: 'gate', outs: ['merge', 'changes'], x: 252, y: 322, w: 236 },
+  spec:    { name: 'Spec', kind: 'agent', ref: 'catalyst', outs: ['ok'], cap: 2, on: true, x: 306, y: 64, w: 236 },
+  check:   { name: 'Check spec', kind: 'gate', outs: ['approve', 'reject'], x: 672, y: 64, w: 236 },
+  build:   { name: 'Build', kind: 'agent', ref: 'builder', outs: ['ok'], cap: 2, on: true, x: 672, y: 322, w: 236 },
+  review:  { name: 'Review', kind: 'gate', outs: ['merge', 'changes'], x: 306, y: 322, w: 236 },
   exit:    { name: 'Exit', kind: 'exit', x: 20, y: 322, w: 156 },
 };
 const SH = 192, ORDER = ['inbound', 'spec', 'check', 'build', 'review', 'exit'];
+/* a belt goes from an arm on the machine it leaves to an arm on the machine it feeds; an arm that sorts carries what it takes */
+const BELTS = {
+  'inbound>spec':  { path: [[200, 160], [282, 160]], arms: [[188, 160], [294, 160]], cap: 3 },
+  'spec>check':    { path: [[566, 160], [648, 160]], arms: [[554, 160], [660, 160]], cap: 3 },
+  'check>build':   { path: [[932, 160], [978, 160], [978, 418], [932, 418]], arms: [[920, 160], [920, 418]], cap: 5, tag: 'approve', tagAt: [934, 120] },
+  'build>review':  { path: [[648, 418], [566, 418]], arms: [[660, 418], [554, 418]], cap: 3 },
+  'review>exit':   { path: [[282, 418], [200, 418]], arms: [[294, 418], [188, 418]], cap: 3, tag: 'merge', tagAt: [222, 380] },
+  'check>spec':    { path: [[790, 38], [424, 38]], arms: [[790, 57], [424, 57]], cap: 5, tag: 'reject', tagAt: [810, 29] },
+  'review>build':  { path: [[424, 540], [790, 540]], arms: [[424, 521], [790, 521]], cap: 5, tag: 'changes', tagAt: [338, 531] },
+};
+const mainInto = (m) => Object.keys(BELTS).find((k) => k.endsWith('>' + m));
 let clock = 0; const uid = () => 'x' + (++clock);
 const T = [
   { id: 't105', num: 105, title: 'Import Linear issues', ty: 'build', prio: 'high', cx: 8, at: 'check', phase: 'review', wait: 150, board: 'Core product' },
   { id: 't111', num: 111, title: 'Emoji picker crashes on Safari', ty: 'fix', prio: 'urgent', cx: 3, at: 'check', phase: 'review', wait: 40, board: 'Support' },
-  { id: 't104', num: 104, title: 'Cost budgets and alerts', ty: 'lead', prio: 'medium', cx: 13, at: 'spec', phase: 'question', wait: 25, board: 'Core product' },
-  { id: 't106', num: 106, title: 'SSO redirect loop', ty: 'fix', prio: 'urgent', cx: 5, at: 'build', phase: 'failed', wait: 12, board: 'Support', note: 'The agent returned no usable output' },
+  { id: 't104', num: 104, title: 'Cost budgets and alerts', ty: 'lead', prio: 'medium', cx: 13, at: 'spec', phase: 'aside', why: 'question', wait: 25, board: 'Core product' },
+  { id: 't106', num: 106, title: 'SSO redirect loop', ty: 'fix', prio: 'urgent', cx: 5, at: 'build', phase: 'aside', why: 'failed', wait: 12, board: 'Support', note: 'The agent returned no usable output.' },
   { id: 't131', num: 131, title: 'Implement jev as a native workflow step', ty: 'build', prio: 'medium', cx: 8, at: 'build', phase: 'running', eta: 240, wait: 3, board: 'Core product' },
-  { id: 't122', num: 122, title: 'Kanban card flickers', ty: 'fix', prio: 'low', cx: 2, at: 'build', phase: 'wait', wait: 6, board: 'Core product' },
-  { id: 't140', num: 140, title: 'Rotate the signing key', ty: 'ops', prio: 'high', cx: 3, at: 'build', phase: 'wait', wait: 2, board: 'Core product' },
+  { id: 't122', num: 122, title: 'Kanban card flickers', ty: 'fix', prio: 'low', cx: 2, at: 'build', phase: 'running', eta: 45, wait: 1, board: 'Core product' },
+  { id: 't140', num: 140, title: 'Rotate the signing key', ty: 'ops', prio: 'high', cx: 3, at: 'build', phase: 'belt', via: 'check>build', age: 9, wait: 2, board: 'Core product' },
   { id: 't103', num: 103, title: 'Weekly agenda view', ty: 'build', prio: 'high', cx: 5, at: 'review', phase: 'review', wait: 65, board: 'Core product' },
   { id: 't108', num: 108, title: 'Pricing: per seat or usage?', ty: 'think', prio: 'none', cx: null, at: 'inbound', phase: 'zone', wait: 240, board: 'Core product' },
   { id: 't109', num: 109, title: 'Slack webhook received twice', ty: 'fix', prio: 'medium', cx: 2, at: 'inbound', phase: 'zone', wait: 180, board: 'Support' },
@@ -397,14 +415,21 @@ const DESC = {
 const passed = (t, m) => ORDER.indexOf(m) < ORDER.indexOf(t.at);
 function seed(t) {
   const th = [{ k: 'desc', txt: DESC[t.id] }];
-  if (passed(t, 'spec') || t.id === 't104') th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: 'ran', meta: '3m 05s · $0.42' });
-  if (passed(t, 'spec')) { th.push({ k: 'deliv', type: 'spec', title: 'Spec: ' + t.title, by: 'catalyst', v: 'v2' }); th.push({ k: 'agent', who: 'catalyst', txt: 'Spec written. Two stories, five acceptance criteria. One open point left in the deliverable: what happens to items already imported.' }); }
-  if (passed(t, 'check')) th.push({ k: 'ev', txt: 'Check spec: approve. Moved to Doing' });
-  if (t.id === 't104') th.push({ k: 'agent', who: 'catalyst', txt: 'Before I write the spec: should a budget be set per board or for the whole workspace? Per board is more useful to leads but needs a rule for tickets that move between boards.' });
-  if (t.id === 't106') { th.push({ k: 'run', who: 'builder', what: 'Build', state: 'failed', meta: '1m 12s · $0.08' }); th.push({ k: 'agent', who: 'builder', txt: 'I could not reproduce the loop with the test provider, and the run ended without a patch.' }); }
-  if (t.id === 't131') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'running', meta: 'started 3m ago', station: true });
-  if (t.id === 't103') { th.push({ k: 'run', who: 'builder', what: 'Build', state: 'ran', meta: '14m 20s · $2.31' }); th.push({ k: 'deliv', type: 'pr', title: 'PR: Weekly agenda view', by: 'builder', v: 'v1' }); th.push({ k: 'agent', who: 'builder', txt: 'Ready for review. The drag uses the same hook as the kanban; the week starts on the workspace locale.' }); }
-  t.thread = th; t.manual = []; t.hand = null; t.draft = '';
+  if (passed(t, 'spec')) {
+    th.push({ k: 'me', txt: 'Keep it small: one story if you can.' });
+    th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: 'ran', meta: '3m 05s · $0.42' });
+    th.push({ k: 'agent', who: 'catalyst', txt: 'First pass done. I split it in two stories because the mapping of statuses and the links back are separable; say so if you want one.' });
+    th.push({ k: 'me', txt: 'Two is fine. Add what happens on a second import.' });
+    th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: 'ran', meta: '1m 40s · $0.19' });
+    th.push({ k: 'deliv', type: 'spec', title: 'Spec: ' + t.title, by: 'catalyst', v: 'v2' });
+    th.push({ k: 'agent', who: 'catalyst', txt: 'Spec v2 written. Two stories, five acceptance criteria. One open point left in the deliverable: what happens to items already imported.' });
+  }
+  if (passed(t, 'check')) th.push({ k: 'me', verdict: 'approve', txt: 'Go, and treat a second import as an update.' }, { k: 'ev', txt: 'Check spec: approve. Moved to Doing' });
+  if (t.id === 't104') th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: 'ran', meta: '2m 10s · $0.27', station: true }, { k: 'agent', who: 'catalyst', txt: 'Before I write the spec: should a budget be set per board or for the whole workspace? Per board is more useful to leads but needs a rule for tickets that move between boards.' });
+  if (t.id === 't106') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'failed', meta: '1m 12s · $0.08', station: true }, { k: 'agent', who: 'builder', txt: 'I could not reproduce the loop with the test provider, and the run ended without a patch.' });
+  if (t.phase === 'running') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'running', meta: 'started 3m ago', station: true });
+  if (t.id === 't103') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'ran', meta: '14m 20s · $2.31' }, { k: 'deliv', type: 'pr', title: 'PR: Weekly agenda view', by: 'builder', v: 'v1' }, { k: 'agent', who: 'builder', txt: 'Ready for review. The drag uses the same hook as the kanban; the week starts on the workspace locale.' });
+  t.thread = th; t.manual = []; t.draft = ''; t.reason = '';
 }
 T.forEach(seed);
 const MENTIONS = [
@@ -421,73 +446,75 @@ const REPLY = {
   'panel:squad': 'Synthesis of the panel: ship it, with the retry bound added first.',
 };
 
-const S = { view: 'factory', open: null, justOpened: false, sel: null, peek: false, workSel: 't105', mode: 'chat', tool: 'context', timeline: false, sendpop: false,
-  scope: 'needs', sending: null, mm: null, hint: '', guideOpen: false, done: {} };
+const S = { view: 'factory', open: null, justOpened: false, sel: null, peek: false, peekAll: false, workSel: 't105', mode: 'chat', tool: 'context', timeline: false,
+  scope: 'needs', sending: null, mm: null, hint: '', guideOpen: false, done: {}, hl: null, shipped: 3 };
 
 /* ============================================================ rules ============================================================ */
 const nextOf = (m, out) => m === 'inbound' ? 'spec' : m === 'spec' ? 'check' : m === 'check' ? (out === 'reject' ? 'spec' : 'build') : m === 'build' ? 'review' : m === 'review' ? (out === 'changes' ? 'build' : 'exit') : 'exit';
+const live = () => T.filter((t) => !t.gone);
+const at = (m, ...phases) => live().filter((t) => t.at === m && phases.includes(t.phase));
+const onBelt = (key) => live().filter((t) => t.phase === 'belt' && t.via === key).sort((a, b) => (a.seq || 0) - (b.seq || 0));
 const manualOn = (t) => t.thread.some((x) => x.k === 'run' && x.manual && x.state === 'running');
-/* what asks for you: a decision, a question, a failure, or a ticket in your hands whose run by hand has ended */
-const needs = (t) => !t.gone && (t.hand ? !manualOn(t) : t.phase === 'review' || t.phase === 'question' || t.phase === 'failed');
+/* what asks for you: a decision at a gate, or a ticket set aside in a machine (a question, a failure, or one you stopped and are done with) */
+const needs = (t) => !t.gone && (t.phase === 'review' || (t.phase === 'aside' && !manualOn(t)));
 const calls = () => T.filter(needs).sort((a, b) => b.wait - a.wait);
 const cur = () => byId(S.view === 'factory' ? S.open : S.workSel);
-const callOf = (t) => t.hand ? ['hand', 'in your hands'] : t.phase === 'failed' ? ['fail', 'run failed'] : t.phase === 'question' ? ['call', 'question'] : t.phase === 'review' ? ['call', 'decision'] : ['', ''];
+const callOf = (t) => t.phase === 'review' ? ['call', 'decision'] : t.phase !== 'aside' ? ['', ''] : t.why === 'failed' ? ['fail', 'run failed'] : t.why === 'question' ? ['call', 'question'] : ['hand', 'set aside by you'];
+const where = (t) => { const n = MACH[t.at].name; return t.phase === 'belt' ? `on the belt to ${n}` : `${n} · ` + ({ zone: 'waiting', held: 'held, the station is off', running: 'running', out: 'done, waiting for the arm', review: 'waiting for your decision', done: 'done',
+  aside: t.why === 'question' ? 'set aside, the agent asked a question' : t.why === 'failed' ? 'set aside, the run failed' : manualOn(t) ? 'set aside, your run is going' : 'set aside by you' })[t.phase]; };
 const mark = (k) => { if (!S.done[k]) { S.done[k] = true; guide(); } };
 const span = (m) => m >= 60 ? Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + String(m % 60).padStart(2, '0') + 'm' : '') : m + 'm';
+/* the light: off, on, or on and something in it needs you */
+const lampOf = (m) => { const M = MACH[m]; return M.kind === 'agent' ? (!M.on ? 'off' : at(m, 'aside').length ? 'call' : 'on') : M.kind === 'gate' ? (at(m, 'review').length ? 'call' : 'on') : ''; };
 
-function arrive(t, m, why) {
-  t.at = m; t.wait = 0; t.note = ''; const k = MACH[m].kind;
-  if (why) t.thread.push({ k: 'ev', txt: why });
-  if (k === 'exit') { t.gone = true; t.phase = 'done'; S.shipped = (S.shipped || 3) + 1; t.thread.push({ k: 'ev', txt: 'Reached Exit. Moved to Done' }); toast(`#${t.num} shipped`); if (S.open === t.id) S.open = null; if (S.sel === t.id) { S.sel = null; S.peek = false; } return; }
-  t.phase = k === 'gate' ? 'review' : k === 'zone' ? 'zone' : 'wait';
+function start(t) { t.phase = 'running'; t.eta = 14; t.thread.push({ k: 'run', who: MACH[t.at].ref, what: MACH[t.at].name, state: 'running', meta: 'started just now', station: true, id: uid() }); }
+/* a machine takes what it has a free cell for; off, it holds it without starting. A gate takes everything. */
+function enter(t) {
+  const M = MACH[t.at];
+  if (M.kind === 'exit') { t.gone = true; t.phase = 'done'; S.shipped++; t.thread.push({ k: 'ev', txt: 'Reached Exit. Moved to Done' }); toast(`#${t.num} shipped`); if (S.open === t.id) S.open = null; if (S.sel === t.id) { S.sel = null; S.peek = false; } return true; }
+  if (M.kind === 'gate') { t.phase = 'review'; t.wait = 0; return true; }
+  if (at(t.at, 'running', 'held').length >= M.cap) return false;
+  t.wait = 0; if (M.on) start(t); else t.phase = 'held';
+  return true;
 }
-function startRuns() { /* one run at a time per station */
-  for (const m of ORDER) { if (MACH[m].kind !== 'agent') continue;
-    const here = T.filter((t) => !t.gone && !t.hand && t.at === m);
-    if (here.some((t) => t.phase === 'running')) continue;
-    const w = here.find((t) => t.phase === 'wait'); if (!w) continue;
-    w.phase = 'running'; w.eta = 12;
-    w.thread.push({ k: 'run', who: MACH[m].ref, what: MACH[m].name, state: 'running', meta: 'started just now', station: true, id: uid() });
+function toBelt(t, key) { t.phase = 'belt'; t.via = key; t.at = key.split('>')[1]; t.age = 0; t.seq = ++clock; }
+function step() {
+  let ch = false;
+  for (const t of live()) {
+    if (t.phase === 'running' && --t.eta <= 0) { const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'ran'; r.meta = '14s · $0.31'; } t.phase = 'out'; t.outcome = 'ok'; ch = true; }
+    for (const r of t.thread) if (r.k === 'run' && r.manual && r.state === 'running' && --r.eta <= 0) { endManual(t, r); ch = true; }
   }
+  for (const t of live()) if (t.phase === 'out') { const key = `${t.at}>${nextOf(t.at, t.outcome)}`; if (onBelt(key).length < BELTS[key].cap) { t.thread.push({ k: 'ev', txt: `${MACH[t.at].name}: ${t.outcome}` }); toBelt(t, key); ch = true; } }
+  for (const key of Object.keys(BELTS)) { const q = onBelt(key); q.forEach((t) => t.age++); if (q[0] && q[0].age >= 3 && enter(q[0])) ch = true; }
+  for (const t of live()) if (t.phase === 'held' && MACH[t.at].on) { start(t); ch = true; }
+  return ch;
 }
-function finishStation(t) {
-  const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'ran'; r.meta = '12s · $0.31'; }
-  const from = t.at; arrive(t, nextOf(from, 'ok'), `${MACH[from].name}: ok`);
-}
-setInterval(() => {
-  let changed = false;
-  for (const t of T) {
-    if (t.gone) continue;
-    if (!t.hand && t.phase === 'running' && --t.eta <= 0) { finishStation(t); changed = true; }
-    for (const r of t.thread) if (r.k === 'run' && r.manual && r.state === 'running' && --r.eta <= 0) { endManual(t, r); changed = true; }
-  }
-  const before = T.filter((t) => t.phase === 'running').length; startRuns(); if (T.filter((t) => t.phase === 'running').length !== before) changed = true;
-  if (changed) render();
-}, 1000);
+setInterval(() => { if (step()) render(); }, 1000);
 
 /* ---------- set aside, and put back ---------- */
-function take(t, quiet) {
-  if (t.hand) return;
-  const wasRunning = t.phase === 'running';
-  if (wasRunning) { const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'interrupted'; r.meta = 'stopped by you'; } }
-  t.hand = { from: t.at, phase: wasRunning ? 'wait' : t.phase }; t.phase = 'hand';
-  t.thread.push({ k: 'ev', hand: true, txt: `${wasRunning ? MACH[t.at].name + "'s run stopped. " : ''}Set aside in ${MACH[t.at].name}: it is in your hands` });
-  if (!quiet) toast(wasRunning ? `${MACH[t.at].name}'s run stopped. #${t.num} is set aside` : `#${t.num} is set aside in ${MACH[t.at].name}`, wasRunning ? '' : 'Undo', () => undoTake(t));
-  mark('take'); startRuns();
+const canAside = (t) => MACH[t.at].kind === 'agent' && ['running', 'held', 'belt', 'out'].includes(t.phase);
+function setAside(t, quiet) {
+  if (!canAside(t)) return;
+  const was = t.phase === 'running';
+  if (was) { const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'interrupted'; r.meta = 'stopped by you'; } }
+  t.prev = was ? null : { phase: t.phase, via: t.via, seq: t.seq }; t.phase = 'aside'; t.why = 'you'; t.wait = 0;
+  t.thread.push({ k: 'ev', hand: true, txt: `${was ? MACH[t.at].name + "'s run stopped. " : ''}Set aside in ${MACH[t.at].name}` });
+  if (!quiet) toast(was ? `${MACH[t.at].name}'s run stopped. #${t.num} is set aside` : `#${t.num} is set aside in ${MACH[t.at].name}`, t.prev ? 'Undo' : '', () => undoAside(t));
+  mark('aside');
 }
-function undoTake(t) {
-  if (!t.hand) return;
+function undoAside(t) {
+  if (t.phase !== 'aside' || !t.prev) return;
   t.thread = t.thread.filter((x) => !(x.k === 'run' && x.manual && x.state === 'running') && !(x.k === 'ev' && x.hand));
-  t.phase = t.hand.phase; t.hand = null; startRuns(); render();
+  Object.assign(t, t.prev); t.prev = null; render();
 }
 function putBack(t, how, arg) {
-  if (!t || !t.hand) return;
-  const from = t.hand.from; t.hand = null; S.sendpop = false; S.sending = null;
-  if (how === 'again') { arrive(t, from); t.thread.push({ k: 'ev', hand: true, txt: `Back in ${MACH[from].name}'s queue: it runs again, with what you did` }); mark('putback'); }
-  else if (how === 'as') { t.thread.push({ k: 'ev', hand: true, txt: `Left ${MACH[from].name} as ${arg}, done by hand` }); arrive(t, nextOf(from, arg)); mark('putback'); }
-  else { t.thread.push({ k: 'ev', hand: true, txt: `Sent to ${MACH[arg].name}` }); arrive(t, arg); }
-  if (!t.gone) toast(`#${t.num} is back on the line: ${MACH[t.at].name}`);
-  startRuns();
+  if (!t || t.phase !== 'aside') return;
+  const m = t.at, M = MACH[m]; S.sending = null; t.note = '';
+  if (how === 'as') { t.phase = 'out'; t.outcome = arg; t.thread.push({ k: 'ev', hand: true, txt: `Put back as ${M.name}: ${arg}, done by hand` }); }
+  else if (how === 'again') { t.thread.push({ k: 'ev', hand: true, txt: `Put back in ${M.name}: it runs again, with what is in the thread` });
+    if (at(m, 'running', 'held').length < M.cap) { if (M.on) start(t); else t.phase = 'held'; } else toBelt(t, mainInto(m)); }
+  else { t.thread.push({ k: 'ev', hand: true, txt: `Sent to ${MACH[arg].name}` }); if (MACH[arg].kind === 'zone') { t.at = arg; t.phase = 'zone'; } else toBelt(t, mainInto(arg)); }
+  t.why = null; t.wait = 0; mark('putback'); toast(`#${t.num} is back on the line`);
 }
 function manualRun(t, what, text) {
   t.thread.push({ k: 'me', txt: text });
@@ -498,7 +525,7 @@ function endManual(t, r) {
   r.state = 'ran'; r.meta = '5s · $0.12';
   t.thread.push({ k: 'agent', who: r.who, txt: REPLY[r.key] || 'Done.' });
   t.manual.push({ what: r.key }); t.wait = 0;
-  toast(`Your run on #${t.num} ended. Decide where the ticket goes`);
+  toast(t.phase === 'aside' ? `Your run on #${t.num} ended. It is still set aside in ${MACH[t.at].name}` : `Your run on #${t.num} ended`);
 }
 function send(t, text, replyOnly) {
   text = (text || '').trim(); if (!t || !text) return;
@@ -507,200 +534,206 @@ function send(t, text, replyOnly) {
   const m = /@(agent|skill|panel):([\w-]+)/.exec(text);
   if (!m) {
     t.thread.push({ k: 'me', txt: text }); t.draft = '';
-    if (t.phase === 'question' && !t.hand && !replyOnly) { t.phase = 'wait'; t.thread.push({ k: 'ev', txt: `${MACH[t.at].name} takes the ticket again with your answer` }); startRuns(); mark('reply'); }
+    if (t.phase === 'aside' && t.why === 'question' && !replyOnly) { putBack(t, 'again'); mark('reply'); }
     return;
   }
-  if (!t.hand) { const was = t.phase === 'running'; take(t, true); toast(was ? `${MACH[t.hand.from].name}'s run stopped. #${t.num} is set aside while your run goes` : `#${t.num} is set aside in ${MACH[t.hand.from].name} while your run goes`, was ? '' : 'Undo', () => undoTake(t)); mark('auto'); }
+  /* a run started by hand and a machine do not share a ticket: the machine's run stops and the ticket is set aside in it.
+     At a gate or in a zone nothing runs on the ticket, so it stays where it is. */
+  if (canAside(t)) { const was = t.phase === 'running'; setAside(t, true); toast(was ? `${MACH[t.at].name}'s run stopped. #${t.num} is set aside while your run goes` : `#${t.num} is set aside in ${MACH[t.at].name} while your run goes`, t.prev ? 'Undo' : '', () => undoAside(t)); mark('auto'); }
   manualRun(t, m[1] + ':' + m[2], text);
 }
-function decide(t, out) { const from = t.at; arrive(t, nextOf(from, out), `${MACH[from].name}: ${out}`); startRuns(); mark('decide'); }
+function decide(t, out) {
+  if (!t || t.phase !== 'review') return;
+  t.thread.push({ k: 'me', verdict: out, txt: (t.reason || '').trim() }); t.reason = ''; t.phase = 'out'; t.outcome = out; mark('decide');
+}
 
 /* ============================================================ rendering ============================================================ */
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rich = (s) => esc(s).replace(/@[\w:-]+/g, (m) => `<span class="at">${m}</span>`);
 const ico = (n) => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const glyph = (ty) => `<svg aria-hidden="true"><use href="#t-${ty}"/></svg>`;
-function tok(t, cls = '', inert) {
+function tok(t, cls = '', inert, style = '') {
   const c = callOf(t)[0], m = c === 'hand' ? `<span class="mark h"><svg viewBox="0 0 24 24" stroke="currentColor"><use href="#i-hand"/></svg></span>` : c === 'fail' ? '<span class="mark f">!</span>' : c === 'call' ? '<span class="mark q">?</span>' : '';
   const inner = glyph(t.ty) + m;
   return inert ? `<span class="tok ${cls}" data-ty="${t.ty}" aria-hidden="true">${inner}</span>`
-    : `<button type="button" class="tok ${cls} ${S.sel === t.id && S.view === 'factory' ? 'sel' : ''}" data-ty="${t.ty}" data-a="pick" data-t="${t.id}" title="#${t.num} ${esc(t.title)}" aria-label="Ticket ${t.num}: ${esc(t.title)}">${inner}</button>`;
+    : `<button type="button" class="tok ${cls} ${S.sel === t.id && S.view === 'factory' ? 'sel' : ''}" data-ty="${t.ty}" data-a="pick" data-t="${t.id}" style="${style}" title="#${t.num} ${esc(t.title)}" aria-label="Ticket ${t.num}: ${esc(t.title)}">${inner}</button>`;
 }
 const prio = (p) => { const n = { urgent: 3, high: 3, medium: 2, low: 1, none: 0 }[p], c = p === 'urgent' ? 'var(--danger)' : p === 'high' ? '#fb923c' : 'var(--t2)'; return `<span class="prio" title="Priority: ${p}">${[0, 1, 2].map((i) => `<i${i < n ? ` style="background:${c}"` : ''}></i>`).join('')}</span>`; };
 const cx = (v) => `<span class="cx" title="Complexity: ${v == null ? 'not estimated' : v}">${v == null ? '·' : v}</span>`;
-const sayPhase = (t) => t.hand ? (manualOn(t) ? 'in your hands, your run is going' : 'in your hands') : ({ review: 'waiting for your decision', question: 'the agent asked a question', failed: 'the run failed', running: 'running', wait: 'queueing', zone: 'waiting', done: 'done' })[t.phase];
-const pillOf = (t) => t.hand ? '<span class="pill hand">in your hands</span>' : t.phase === 'failed' ? '<span class="pill danger">run failed</span>' : needs(t) ? '<span class="pill warn">needs you</span>' : t.phase === 'running' ? '<span class="pill ok">running</span>' : `<span class="pill gray">${t.phase === 'zone' ? 'waiting' : 'queueing'}</span>`;
-const stateOf = (m) => { const a = T.filter((t) => !t.gone && !t.hand && t.at === m); return a.some((t) => t.phase === 'failed') ? 'fail' : a.some((t) => t.phase === 'review' || t.phase === 'question') ? 'call' : a.some((t) => t.phase === 'running') ? 'run' : ''; };
+const pillOf = (t) => t.phase === 'aside' ? (t.why === 'failed' ? '<span class="pill danger">run failed</span>' : t.why === 'question' ? '<span class="pill warn">question</span>' : '<span class="pill hand">set aside</span>')
+  : t.phase === 'review' ? '<span class="pill warn">needs your decision</span>' : t.phase === 'running' ? '<span class="pill ok">running</span>' : `<span class="pill gray">${t.phase === 'out' ? 'done here' : t.phase === 'held' ? 'held' : 'waiting'}</span>`;
 
-function station(m) {
-  const M = MACH[m], here = T.filter((t) => !t.gone && t.at === m), g = stateOf(m), run = here.some((t) => !t.hand && t.phase === 'running');
-  const aside = here.filter((t) => t.hand || t.phase === 'question' || t.phase === 'failed'), cls = `st k-${M.kind}${g ? ' g-' + g : ''}${run ? ' has-run' : ''}${S.sending ? ' pick' : ''}`;
-  const frame = (inner) => `<div class="${cls}" data-m="${m}" data-key="st:${m}" ${S.sending ? `data-a="sendhere" data-m2="${m}"` : ''} style="left:${M.x}px;top:${M.y}px;width:${M.w}px;height:${SH}px">${inner}</div>`;
-  const sideBay = `<div class="side ${aside.length ? '' : 'vacant'}"><label>SET ASIDE</label>${aside.map((t) => tok(t)).join('')}</div>`;
-  if (M.kind === 'exit') return frame(`<header><span class="badge">${ico('exit')}</span><div><b>${M.name}</b><small>sets done</small></div></header><div class="big">${ico('out')}</div><div class="cnt">${S.shipped || 3} shipped today</div>`);
-  const head = `<div class="andon" aria-hidden="true"><i class="r"></i><i class="a"></i><i class="g"></i></div><header><span class="badge">${ico(M.kind)}</span><div><b>${M.name}</b><small>${M.kind === 'gate' ? 'gate · you decide' : M.kind === 'zone' ? M.sub : 'agent · ' + M.ref}</small></div></header>`;
-  if (M.kind === 'zone') return frame(`<header><span class="badge">${ico('zone')}</span><div><b>${M.name}</b><small>${M.sub}</small></div></header><div class="lanes"><div class="pit" style="flex:1"><label>WAITING · ${here.filter((t) => !t.hand).length}</label>${here.filter((t) => !t.hand).map((t) => tok(t)).join('')}</div></div>${sideBay}`);
-  if (M.kind === 'gate') return frame(`${head}<div class="lanes"><div class="pit" style="flex:1"><label>TO DECIDE · ${here.filter((t) => t.phase === 'review').length}</label>${here.filter((t) => t.phase === 'review').map((t) => tok(t)).join('')}</div><div class="exits">${M.outs.map((o) => `<span>${o} ›</span>`).join('')}</div></div>${sideBay}`);
-  const q = here.filter((t) => t.phase === 'wait'), r = here.find((t) => !t.hand && t.phase === 'running');
-  return frame(`${head}<div class="lanes"><div class="pit in"><label>QUEUE · ${q.length}</label>${q.map((t) => tok(t)).join('')}</div>
-    <div class="pit bay"><label>${r ? 'RUNNING' : 'IDLE'}</label>${r ? `<div class="rig">${tok(r, 'big')}</div>` : `<span class="idle">${ico('agent')}</span>`}</div></div>${sideBay}`);
+function lamp(m) {
+  const M = MACH[m], run = at(m, 'running').length, held = at(m, 'held').length, aside = at(m, 'aside'), out = at(m, 'out').length, up = live().filter((t) => t.phase === 'belt' && t.at === m).length;
+  const lights = '<i class="r"></i><i class="a"></i><i class="g"></i>';
+  if (M.kind === 'gate') { const n = at(m, 'review').length; return `<span class="lamp" tabindex="0">${lights}<span class="tip"><b>${n ? `${n} to decide` : 'Nothing to decide'}</b>${out ? `${out} decided, waiting for the arm<br>` : ''}A gate has no switch: it only waits for you.</span></span>`; }
+  const q = aside.filter((t) => t.why === 'question').length, f = aside.filter((t) => t.why === 'failed').length, y = aside.length - q - f;
+  return `<button type="button" class="lamp" data-a="power" data-m="${m}" aria-label="${M.name}: ${M.on ? 'on' : 'off'}. Switch">${lights}<span class="tip"><b>${M.on ? (aside.length ? 'On, and it needs you' : 'On') : 'Off'}</b>
+    ${run} running of ${M.cap}${held ? `, ${held} held` : ''}<br>${aside.length ? `set aside: ${[q && q + ' question', f && f + ' failed', y && y + ' by you'].filter(Boolean).join(', ')}<br>` : ''}${up ? `${up} waiting on the belt<br>` : ''}exit ${out ? `blocked, ${out} done inside` : 'clear'}<br>
+    <span style="color:var(--t3)">${M.on ? 'Click to switch it off: nothing new starts here.' : 'Click to switch it on: what it holds starts.'}</span></span></button>`;
 }
-function floorHtml() {
-  const mid = SH / 2, c1 = MACH.spec.y + mid, c2 = MACH.build.y + mid, cxm = (m) => MACH[m].x + MACH[m].w / 2;
-  const arm = (x, y, key) => `<div class="arm" data-key="arm:${key}" style="left:${x - 10}px;top:${y - 10}px"></div>`;
-  const belt = (x, y, w, h, cls) => `<div class="belt ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`;
-  let h = ORDER.map(station).join('');
-  h += arm(190, c1, 'inbound>spec') + belt(204, c1 - 13, 20, 26, 'h') + arm(238, c1, 'inbound>spec');
-  h += arm(502, c1, 'spec>check') + belt(516, c1 - 13, 20, 26, 'h') + arm(550, c1, 'spec>check');
-  h += arm(814, c1, 'check>build') + belt(828, c1 - 13, 40, 26, 'h') + belt(854, c1 - 13, 26, c2 - c1 + 26, 'v') + belt(828, c2 - 13, 40, 26, 'h rev') + arm(814, c2, 'check>build');
-  h += arm(550, c2, 'build>review') + belt(516, c2 - 13, 20, 26, 'h rev') + arm(502, c2, 'build>review');
-  h += arm(238, c2, 'review>exit') + belt(204, c2 - 13, 20, 26, 'h rev') + arm(190, c2, 'review>exit');
-  h += `<div class="loop up" data-key="arm:check>spec" style="left:${cxm('spec')}px;width:${cxm('check') - cxm('spec')}px;top:26px;height:38px"><span>reject</span></div>`;
-  h += `<div class="loop down" data-key="arm:review>build" style="left:${cxm('review')}px;width:${cxm('build') - cxm('review')}px;top:${MACH.build.y + SH}px;height:34px"><span>changes</span></div>`;
+function station(m) {
+  const M = MACH[m], L = lampOf(m), cls = `st k-${M.kind}${L ? ' l-' + L : ''}${S.sending ? ' pickable' : ''}`;
+  const frame = (inner) => `<div class="${cls}" data-m="${m}" data-key="st:${m}" ${S.sending ? `data-a="sendhere" data-m2="${m}"` : ''} style="left:${M.x}px;top:${M.y}px;width:${M.w}px;height:${SH}px">${inner}</div>`;
+  const head = (sub) => `<header><span class="badge">${ico(M.kind)}</span><div><b>${M.name}</b><small>${sub}</small></div></header>`;
+  const outs = at(m, 'out'), outTray = `<div class="pit outtray"><label>OUT</label>${outs.map((t) => tok(t)).join('')}</div>`;
+  if (M.kind === 'exit') return frame(`${head('sets done')}<div class="big">${ico('out')}</div><div class="cnt">${S.shipped} shipped today</div>`);
+  if (M.kind === 'zone') { const w = at(m, 'zone'); return frame(`${head(M.sub)}<div class="lanes"><div class="pit" style="flex:1"><label>WAITING · ${w.length}</label>${w.map((t) => tok(t)).join('')}</div></div>`); }
+  if (M.kind === 'gate') { const w = at(m, 'review'); return frame(`${lamp(m)}${head('gate · you decide')}<div class="lanes"><div class="pit" style="flex:1"><label>TO DECIDE · ${w.length}</label>${w.map((t) => tok(t)).join('')}</div>${outTray}</div>`); }
+  const inside = at(m, 'running', 'held'), aside = at(m, 'aside');
+  const cells = Array.from({ length: M.cap }, (_, i) => { const t = inside[i]; return `<div class="pit cell"><label>${t ? (t.phase === 'held' ? 'HELD' : 'RUNNING') : 'FREE'}</label>${t ? (t.phase === 'held' ? tok(t, 'big paused') : `<div class="rig">${tok(t, 'big')}</div>`) : `<span class="idle">${ico('agent')}</span>`}</div>`; }).join('');
+  return frame(`${lamp(m)}${head('agent · ' + M.ref)}<div class="lanes">${cells}${outTray}</div><div class="aside ${aside.length ? '' : 'vacant'}"><label>SET ASIDE</label>${aside.map((t) => tok(t)).join('')}</div>`);
+}
+function along(path, d) { /* the point at distance d from the end of a belt, walking back along it */
+  for (let i = path.length - 1; i > 0; i--) { const [x2, y2] = path[i], [x1, y1] = path[i - 1], len = Math.hypot(x2 - x1, y2 - y1); if (d <= len) return [x2 + (x1 - x2) * d / len, y2 + (y1 - y2) * d / len]; d -= len; }
+  return path[0];
+}
+function beltHtml(key) {
+  const B = BELTS[key], p = B.path, ext = p.length > 2 ? 13 : 0; let h = '';
+  for (let i = 0; i < p.length - 1; i++) { const [x1, y1] = p[i], [x2, y2] = p[i + 1];
+    h += y1 === y2 ? `<div class="belt h ${x2 < x1 ? 'rev' : ''}" data-key="arm:${key}" style="left:${Math.min(x1, x2) - ext}px;top:${y1 - 13}px;width:${Math.abs(x2 - x1) + ext * 2}px;height:26px"></div>`
+      : `<div class="belt v ${y2 < y1 ? 'rev' : ''}" data-key="arm:${key}" style="left:${x1 - 13}px;top:${Math.min(y1, y2)}px;width:26px;height:${Math.abs(y2 - y1)}px"></div>`; }
+  h += B.arms.map(([x, y]) => `<div class="arm" data-key="arm:${key}" style="left:${x - 10}px;top:${y - 10}px"></div>`).join('');
+  if (B.tag) h += `<span class="tag" data-key="arm:${key}" style="left:${B.tagAt[0]}px;top:${B.tagAt[1]}px">${B.tag}</span>`;
+  onBelt(key).forEach((t, i) => { const [x, y] = along(p, 15 + i * 29); h += tok(t, 'onbelt', false, `left:${x}px;top:${y}px`); });
   return h;
 }
 function party() {
   const cs = calls(), max = Math.max(60, ...cs.map((t) => t.wait));
-  return `<div class="party" aria-label="Needs you"><h2>Needs you · ${cs.length}</h2>${cs.map((t) => { const [c, w] = callOf(t), at = t.hand ? t.hand.from : t.at;
+  return `<div class="party" aria-label="Needs you"><h2>Needs you · ${cs.length}</h2>${cs.map((t) => { const [c, w] = callOf(t);
     return `<button type="button" class="pf ${c === 'fail' ? 'f' : c === 'hand' ? 'h' : ''} ${S.sel === t.id ? 'on' : ''}" data-a="pick" data-t="${t.id}">${tok(t, '', true)}
-      <span class="l1"><b>${esc(t.title)}</b>${prio(t.prio)}${cx(t.cx)}</span><span class="l2"><span>${MACH[at].name}</span><span class="${c}">· ${w}</span><span class="w">${span(t.wait)}</span></span>
+      <span class="l1"><b>${esc(t.title)}</b>${prio(t.prio)}${cx(t.cx)}</span><span class="l2"><span>${MACH[t.at].name}</span><span class="${c}">· ${w}</span><span class="w">${span(t.wait)}</span></span>
       <span class="bar" style="width:${Math.max(6, Math.round(t.wait / max * 100))}%"></span></button>`; }).join('') || '<div class="pf" style="display:block;color:var(--t3)">Nothing needs you.</div>'}</div>`;
-}
-function peek() {
-  const t = byId(S.sel); if (!t || t.gone || !S.peek) return '';
-  const items = t.thread.filter((x) => x.k !== 'desc'), tail = items.slice(-3), at = t.hand ? t.hand.from : t.at;
-  return `<div class="peek" id="peek" role="dialog" aria-label="Ticket ${t.num}">
-    <div class="ph">${tok(t, '', true)}<div style="min-width:0;flex:1"><b>${esc(t.title)}</b><small><span class="mono">#${t.num}</span> · ${MACH[at].name} · ${sayPhase(t)}</small></div>${prio(t.prio)}${cx(t.cx)}</div>
-    <div class="pt" id="peekt">${items.length > 3 ? `<span class="more">${items.length - 3} earlier in the thread</span>` : `<div class="desc" style="padding:7px 9px">${esc(t.thread[0].txt)}</div>`}${tail.map(item).join('')}</div>
-    <div class="pfoot"><input id="peekdraft" aria-label="Reply" placeholder="${t.phase === 'question' && !t.hand ? 'Answer: the station takes it again' : 'Reply'}" value="${esc(t.draft)}"><button type="button" class="btn pri" data-a="open" data-t="${t.id}">Open <span class="kbd">Space</span></button></div></div>`;
 }
 function item(x) {
   if (x.k === 'desc') return `<div class="desc">${esc(x.txt)}</div>`;
-  if (x.k === 'me') return `<div class="me">${rich(x.txt)}</div>`;
+  if (x.k === 'me') return x.verdict ? `<div class="me verdict"><b>${x.verdict}</b>${x.txt ? ' · ' + rich(x.txt) : ''}</div>` : `<div class="me">${rich(x.txt)}</div>`;
   if (x.k === 'agent') return `<div class="ag"><span class="av" aria-hidden="true">⌬</span><div><div class="who">${x.who}</div><div class="txt">${esc(x.txt)}</div></div></div>`;
-  if (x.k === 'run') return `<div class="run"><span class="p">⌬ ${x.who}</span><span class="state ${x.state}">${x.state}</span><span class="pill ${x.manual ? 'hand' : 'gray'}">${x.manual ? 'by hand' : 'station · ' + x.what}</span><span class="sp"></span><span class="meta">${x.meta}</span></div>`;
+  if (x.k === 'run') return `<div class="runc"><span class="p">⌬ ${x.who}</span><span class="state ${x.state}">${x.state}</span><span class="pill ${x.manual ? 'hand' : 'gray'}">${x.manual ? 'by hand' : 'station · ' + x.what}</span><span class="sp"></span><span class="meta">${x.meta}</span></div>`;
   if (x.k === 'deliv') return `<div class="deliv"><span class="pill gray">${x.type}</span><b>${esc(x.title)}</b><span style="color:var(--purple)">${x.by}</span><span class="pill warn">draft</span><span style="margin-left:auto;color:var(--t3)">open ›</span></div>`;
   if (x.k === 'ev') return `<div class="ev ${x.hand ? 'hand' : ''}">${esc(x.txt)}</div>`;
   return '';
+}
+const PEEK_TAIL = 4;
+function peek() {
+  const t = byId(S.sel); if (!t || t.gone || !S.peek) return '';
+  const all = t.thread, shown = S.peekAll ? all : all.slice(-PEEK_TAIL), hidden = all.length - shown.length, M = MACH[t.at], dl = all.filter((x) => x.k === 'deliv');
+  const foot = t.phase === 'review'
+    ? `<span class="ask">${M.name} waits for your decision</span><input class="field full" id="peekreason" aria-label="Reason" placeholder="Reason (optional)" value="${esc(t.reason)}">${M.outs.map((o, i) => `<button type="button" class="btn ${i ? '' : 'ok'}" data-a="decide" data-t="${t.id}" data-o="${o}">${o}</button>`).join('')}`
+    : `<input class="field" id="peekdraft" aria-label="Reply" placeholder="${t.phase === 'aside' && t.why === 'question' ? 'Answer: the station takes it again' : 'Reply'}" value="${esc(t.draft)}">${t.phase === 'aside' && t.why === 'failed' ? `<button type="button" class="btn" data-a="put" data-t="${t.id}" data-how="again">Run again</button>` : ''}`;
+  return `<div class="peek" id="peek" role="dialog" aria-label="Ticket ${t.num}">
+    <div class="ph">${tok(t, '', true)}<div style="min-width:0;flex:1"><b>${esc(t.title)}</b><small><span class="mono">#${t.num}</span> · ${where(t)}</small></div>${prio(t.prio)}${cx(t.cx)}</div>
+    ${dl.length ? `<div class="dl">${dl.map((x) => `<button type="button" data-a="opendocs" data-t="${t.id}"><span style="color:var(--t3)">${x.type}</span><b>${x.v}</b><span class="pill warn" style="height:16px;padding:0 6px">draft</span></button>`).join('')}</div>` : ''}
+    <div class="pt" id="peekt">${hidden > 0 ? `<button type="button" class="more" data-a="peekall">${hidden} earlier: scroll up, or click</button>` : ''}${shown.map(item).join('')}</div>
+    <div class="pfoot">${foot}<button type="button" class="btn pri" data-a="open" data-t="${t.id}" style="margin-left:auto">Open <span class="kbd">Space</span></button></div></div>`;
 }
 
 /* the command card: four by three, fixed places. Q W E R on the first row are what the selection is waiting for. */
 function tiles() {
   const t = byId(S.sel), out = Array(12).fill(null);
   if (!t || t.gone) { out[0] = { k: 'B', l: 'Build', i: 'build', tone: 'go' }; out[1] = { k: 'T', l: 'Intake', i: 'in', tone: 'ticket' }; out[2] = { k: 'F', l: 'Fit', i: 'fit' }; out[3] = { k: 'Tab', l: 'Tickets', i: 'list', tone: 'ticket' }; return { title: 'Factory', out }; }
-  const at = t.hand ? t.hand.from : t.at, M = MACH[at];
-  if (t.hand) {
+  const m = t.at, M = MACH[m], hl = (o) => `arm:${m}>${nextOf(m, o)},st:${nextOf(m, o)}`;
+  if (t.phase === 'aside') {
     const busy = manualOn(t);
-    (M.outs || []).slice(0, 2).forEach((o, i) => { out[i] = { k: 'QW'[i], l: 'As ' + o, i: 'out', tone: 'hand', a: 'put', how: 'as', arg: o, off: busy, hl: `arm:${at}>${nextOf(at, o)},st:${nextOf(at, o)}`, title: `Leave ${M.name} as ${o}: it goes on to ${MACH[nextOf(at, o)].name}` }; });
-    out[2] = { k: 'E', l: 'Run again', i: 'again', a: 'put', how: 'again', off: busy, hl: `st:${at}`, title: `Back in ${M.name}: it takes the ticket again` };
+    M.outs.slice(0, 2).forEach((o, i) => { out[i] = { k: 'QW'[i], l: 'As ' + o, i: 'out', tone: 'hand', a: 'put', how: 'as', arg: o, off: busy, hl: hl(o), title: `Leave ${M.name} as ${o}: it goes on to ${MACH[nextOf(m, o)].name}` }; });
+    out[2] = { k: 'E', l: 'Run again', i: 'again', a: 'put', how: 'again', off: busy, hl: `st:${m}`, title: `Back in ${M.name}: it takes the ticket again` };
     out[3] = { k: 'R', l: 'Send to', i: 'send', a: 'sendto', off: busy, title: 'Then click the machine that takes it' };
-  } else {
-    if (t.phase === 'review') M.outs.forEach((o, i) => { out[i] = { k: 'QW'[i], l: o, i: i ? 'x' : 'check', tone: i ? '' : 'go', a: 'decide', o, hl: `arm:${at}>${nextOf(at, o)},st:${nextOf(at, o)}` }; });
-    else if (t.phase === 'failed') out[0] = { k: 'Q', l: 'Run again', i: 'again', tone: 'go', a: 'retry', hl: `st:${at}` };
-    else if (t.phase === 'zone') out[0] = { k: 'Q', l: 'Release', i: 'out', tone: 'go', a: 'release', hl: `arm:${at}>${nextOf(at)},st:${nextOf(at)}` };
-    out[3] = { k: 'H', l: t.phase === 'running' ? 'Stop, take' : 'Take', i: 'hand', tone: 'hand', a: 'take', title: 'Set it aside in its station: it is in your hands' };
-  }
+  } else if (t.phase === 'review') M.outs.forEach((o, i) => { out[i] = { k: 'QW'[i], l: o, i: i ? 'x' : 'check', tone: i ? '' : 'go', a: 'decide', o, hl: hl(o) }; });
+  else if (t.phase === 'zone') out[0] = { k: 'Q', l: 'Release', i: 'out', tone: 'go', a: 'release', hl: hl() };
+  if (canAside(t)) out[3] = { k: 'H', l: 'Set aside', i: 'hand', tone: 'hand', a: 'aside', title: t.phase === 'running' ? `Stop ${M.name}'s run and set the ticket aside in it` : `Set it aside in ${M.name}` };
   out[4] = { k: 'V', l: 'Open', i: 'open', tone: 'ticket', a: 'open', title: 'The workbench (also Space, or a double-click)' };
   out[5] = { k: 'S', l: 'Star', i: 'star' }; out[6] = { k: 'X', l: 'Give back', i: 'x', tone: 'danger' };
   out[11] = { k: 'Esc', l: 'Previous', i: 'back', tone: 'back', a: 'unsel' };
   return { title: 'Ticket', out };
 }
 function hud() {
-  const t = byId(S.sel), c = tiles(), live = T.filter((x) => !x.gone), at = t && (t.hand ? t.hand.from : t.at);
-  const mini = ORDER.map((m) => { const M = MACH[m]; return `<i style="left:${6 + M.x * 0.2}px;top:${8 + (M.y - 20) * 0.2}px;width:${M.w * 0.2}px;height:${SH * 0.2}px;${stateOf(m) === 'fail' ? 'background:var(--danger)' : stateOf(m) === 'call' ? 'background:var(--warn)' : stateOf(m) === 'run' ? 'background:var(--ok)' : ''}"></i>`; }).join('');
-  const sel = t && !t.gone ? `<div class="selc">${tok(t, 'big', true)}<div style="min-width:0"><h3><span class="mono" style="color:var(--t3);font-weight:400">#${t.num}</span> ${esc(t.title)}</h3><p>${MACH[at].name} · ${sayPhase(t)}</p>
+  const t = byId(S.sel), c = tiles(), all = live();
+  const mini = ORDER.map((m) => { const M = MACH[m], L = lampOf(m); return `<i style="left:${5 + M.x * 0.18}px;top:${6 + (M.y - 20) * 0.18}px;width:${M.w * 0.18}px;height:${SH * 0.18}px;${L === 'off' ? 'background:var(--danger)' : L === 'call' ? 'background:var(--warn)' : ''}"></i>`; }).join('');
+  const sel = t && !t.gone ? `<div class="selc">${tok(t, 'big', true)}<div style="min-width:0"><h3><span class="mono" style="color:var(--t3);font-weight:400">#${t.num}</span> ${esc(t.title)}</h3><p>${where(t)}</p>
       <div class="meta">${prio(t.prio)}<span>${t.prio}</span>${cx(t.cx)}<span>${t.ty}</span><span>${t.board}</span><span>here for ${span(t.wait)}</span></div></div></div>`
-    : `<div class="selc"><span class="ic">${ico('floor')}</span><div><h3>Factory floor</h3><p>Click a ticket to read its thread, double-click or Space to open it. The arrows walk the tickets that need you.</p>
-      <div class="meta"><span>tickets <b class="mono">${live.length}</b></span><span>running <b class="mono">${live.filter((x) => x.phase === 'running').length}</b></span><span>waiting for you <b class="mono">${calls().length}</b></span></div></div></div>`;
-  return `<div class="hud"><div class="hmap"><div class="toggles"><button type="button" aria-pressed="false" title="Ticket names">Ab</button><button type="button" aria-pressed="true" title="Arm rules">⌐</button><button type="button" aria-pressed="false" title="Ticket numbers">#</button><button type="button" aria-pressed="true" title="Grid">▦</button></div>
-      <div class="layers"><span>Floor</span><span>Standing now</span><span>Cost</span><span>Run time</span><span>Human wait</span></div><div class="mini">${mini}<span class="view"></span></div></div>
-    <div class="hsel"><div class="groups">${'1234567890'.split('').map((n) => `<span>${n}</span>`).join('')}</div>${sel}</div>
-    <div class="hcmd"><span class="cap" style="color:var(--t2)">${c.title}</span><div class="grid">${c.out.map((x) => x ? `<button type="button" class="tile ${x.tone || ''}" ${x.a ? `data-a="${x.a}" data-t="${t ? t.id : ''}"` : ''} ${x.how ? `data-how="${x.how}"` : ''} ${x.arg ? `data-arg="${x.arg}"` : ''} ${x.o ? `data-o="${x.o}"` : ''} ${x.hl ? `data-hl="${x.hl}"` : ''} ${x.off ? 'disabled style="opacity:.4"' : ''} data-key2="${x.k}" title="${esc(x.title || x.l)}"><span class="k">${x.k}</span>${ico(x.i)}<span>${x.l}</span></button>` : '<span class="tile none"></span>').join('')}</div></div></div>`;
+    : `<div class="selc"><span class="ic">${ico('floor')}</span><div><h3>Factory floor</h3><p>Click a ticket to read its thread, double-click or Space to open it. The arrows walk the tickets that need you. A station's light is its switch.</p>
+      <div class="meta"><span>tickets <b class="mono">${all.length}</b></span><span>running <b class="mono">${all.filter((x) => x.phase === 'running').length}</b></span><span>waiting for you <b class="mono">${calls().length}</b></span></div></div></div>`;
+  return `<div class="hud"><div class="hmap"><div class="toggles" aria-hidden="true"><span>Ab</span><span class="on">⌐</span><span>#</span><span class="on">▦</span></div>
+      <div class="layers" aria-hidden="true"><span>Floor</span><span>Standing now</span><span>Cost</span><span>Run time</span><span>Human wait</span></div><div class="mini" aria-hidden="true">${mini}<span class="view"></span></div></div>
+    <div class="hsel"><div class="groups" aria-hidden="true">${'1234567890'.split('').map((n) => `<span>${n}</span>`).join('')}</div>${sel}</div>
+    <div class="hcmd"><span class="cap" style="color:var(--t2)">${c.title}</span><div class="grid">${c.out.map((x) => x ? `<button type="button" class="tile ${x.tone || ''}" ${x.a ? `data-a="${x.a}" data-t="${t ? t.id : ''}"` : ''} ${x.how ? `data-how="${x.how}"` : ''} ${x.arg ? `data-arg="${x.arg}"` : ''} ${x.o ? `data-o="${x.o}"` : ''} ${x.hl ? `data-hl="${x.hl}"` : ''} ${x.off ? 'disabled' : ''} data-key2="${x.k}" title="${esc(x.title || x.l)}"><span class="k">${x.k}</span>${ico(x.i)}<span>${x.l}</span></button>` : '<span class="tile none"></span>').join('')}</div></div></div>`;
 }
-function navSet() { const c = cur(); if (!c) return calls(); if (S.scope === 'station') { const at = c.hand ? c.hand.from : c.at; return T.filter((t) => !t.gone && (t.hand ? t.hand.from : t.at) === at); } const cs = calls(); return cs.includes(c) ? cs : [c, ...cs]; }
+function navSet() { const c = cur(); if (!c) return calls(); if (S.scope === 'station') return live().filter((t) => t.at === c.at); const cs = calls(); return cs.includes(c) ? cs : [c, ...cs]; }
 function factoryView() {
-  const set = S.open ? navSet() : [], c = byId(S.open);
+  const set = S.open ? navSet() : [];
   const bench = S.open ? `<div class="scrim" data-a="close"></div><section class="bench ${S.justOpened ? 'in' : ''}" aria-label="Workbench">
       <div class="benchbar"><button type="button" class="btn ghost" data-a="close">▾ Floor <span class="kbd">Esc</span></button>
         <button type="button" class="btn" data-a="nav" data-d="-1" aria-label="Previous ticket"><span class="kbd">←</span></button><button type="button" class="btn" data-a="nav" data-d="1" aria-label="Next ticket"><span class="kbd">→</span></button>
         <div class="seg" role="group" aria-label="What the arrows walk"><button type="button" data-a="scope" data-v="needs" aria-pressed="${S.scope === 'needs'}">Needs you</button><button type="button" data-a="scope" data-v="station" aria-pressed="${S.scope === 'station'}">Same station</button></div>
         <div class="chips">${set.map((t) => `<button type="button" class="chip ${t.id === S.open ? 'on' : ''}" data-a="open" data-t="${t.id}">${tok(t, 'sm', true)}<span>#${t.num} ${esc(t.title)}</span></button>`).join('')}</div></div>
-      ${surface(c)}</section>` : '';
+      ${surface(byId(S.open))}</section>` : '';
   return `<div class="factory">
     <div class="fhead"><h1>Factory</h1><span class="find">Find a ticket</span><span class="pill gray">All boards</span><span class="pill gray">All types</span><span style="flex:1"></span><span style="color:var(--t3);font-size:11.5px">runs this hour <b class="mono" style="color:var(--t2)">4/20</b></span></div>
-    <div class="floor" id="floor" data-a="bg"><div class="stage" id="stage">${floorHtml()}</div>${party()}${peek()}
+    <div class="floor" id="floor" data-a="bg"><div class="stage" id="stage">${ORDER.map(station).join('')}${Object.keys(BELTS).map(beltHtml).join('')}</div>${party()}${peek()}
       ${S.sending ? `<div class="pickbar"><span>Click the machine that takes <b>#${byId(S.sending).num}</b></span><span class="kbd">Esc</span></div>` : ''}</div>
     ${hud()}${bench}</div>`;
 }
 
 function workView() {
-  const live = T.filter((t) => !t.gone), secs = [
-    ['NEEDS YOU', 'var(--warn)', calls()],
-    ['RUNNING', 'var(--ok)', live.filter((t) => !needs(t) && (t.hand || t.phase === 'running' || t.phase === 'wait'))],
-    ['IDLE', 'var(--t4)', live.filter((t) => !t.hand && t.phase === 'zone')],
-  ];
+  const all = live(), secs = [['NEEDS YOU', 'var(--warn)', calls()], ['RUNNING', 'var(--ok)', all.filter((t) => !needs(t) && t.phase !== 'zone')], ['IDLE', 'var(--t4)', all.filter((t) => t.phase === 'zone')]];
   const t = byId(S.workSel);
-  return `<div class="work"><aside class="queue"><header><span class="cap" style="color:var(--t2)">Tasks</span><span class="mono" style="color:var(--t3)">${live.length}</span></header>
+  return `<div class="work"><aside class="queue"><header><span class="cap" style="color:var(--t2)">Tasks</span><span class="mono" style="color:var(--t3)">${all.length}</span></header>
     <div class="list">${secs.filter((s) => s[2].length).map(([n, c, rows]) => `<div class="sec"><span class="dot" style="background:${c}"></span><span class="cap">${n}</span></div>${rows.map((r) => `<button type="button" class="qrow ${r.id === S.workSel ? 'on' : ''}" data-a="wsel" data-t="${r.id}">
         <div class="l1">${tok(r, 'sm', true)}<span>${esc(r.title)}</span><span class="mono" style="color:var(--t4);font-size:11px">#${r.num}</span></div>
-        <div class="l2">${MACH[r.hand ? r.hand.from : r.at].name} · ${sayPhase(r)}</div></button>`).join('')}`).join('')}</div></aside>
-    ${t && !t.gone ? surface(t) : '<div class="empty">No task selected</div>'}</div>`;
+        <div class="l2">${where(r)}</div></button>`).join('')}`).join('')}</div></aside>
+    ${t && !t.gone ? surface(t) : '<div class="blank">No task selected</div>'}</div>`;
 }
 
-function strip(t) {
-  const at = t.hand ? t.hand.from : t.at, M = MACH[at], g = t.hand ? 'hand' : t.phase === 'failed' ? 'fail' : needs(t) ? 'call' : t.phase === 'running' ? 'run' : '';
-  const path = ORDER.map((m, i, a) => `<span class="s ${m === at ? 'cur ' + g : ORDER.indexOf(m) < ORDER.indexOf(at) ? 'done' : ''}">${MACH[m].name}</span>${i < a.length - 1 ? '<span class="sep">›</span>' : ''}`).join('');
-  const quick = t.phase === 'review' ? M.outs.map((o, i) => `<button type="button" class="btn ${i ? '' : 'ok'}" data-a="decide" data-t="${t.id}" data-o="${o}">${o}</button>`).join('')
-    : t.phase === 'failed' ? `<button type="button" class="btn" data-a="retry" data-t="${t.id}">Run again</button>` : t.phase === 'zone' ? `<button type="button" class="btn" data-a="release" data-t="${t.id}">Release</button>` : '';
-  const takeBtn = `<button type="button" class="btn" data-a="take" data-t="${t.id}">${ico('hand')} ${t.phase === 'running' ? 'Stop the run and take it' : 'Take in hand'}</button>`;
-  let say, acts, pop = '';
-  if (t.hand) {
-    const busy = manualOn(t);
-    say = busy ? `<b>Set aside in ${M.name}: your run is going.</b> When it ends, you decide where the ticket goes.` : `<b>Set aside in ${M.name}, in your hands.</b> Where does it go?`;
-    acts = (M.outs || []).map((o, i) => `<button type="button" class="btn ${i ? '' : 'pri'}" data-a="put" data-how="as" data-arg="${o}" ${busy ? 'disabled' : ''} title="As if ${M.name} had produced it, done by hand">Leave ${M.name} as ${o} › ${MACH[nextOf(at, o)].name}</button>`).join('')
-      + `<button type="button" class="btn" data-a="put" data-how="again" ${busy ? 'disabled' : ''}>${M.kind === 'agent' ? `Run ${M.name} again` : `Back in ${M.name}`}</button><button type="button" class="btn" data-a="sendpop" ${busy ? 'disabled' : ''} aria-expanded="${S.sendpop}">Send to ▾</button>`;
-    if (S.sendpop) pop = `<div class="pop" role="menu">${ORDER.filter((m) => m !== at && m !== 'exit').map((m) => `<button type="button" data-a="put" data-how="to" data-arg="${m}">${MACH[m].name}<small>${MACH[m].kind === 'agent' ? 'agent · ' + MACH[m].ref : MACH[m].kind}</small></button>`).join('')}</div>`;
-  }
-  else if (t.phase === 'review') { say = `<b>${M.name} waits for your decision.</b>`; acts = quick + takeBtn; }
-  else if (t.phase === 'question') { say = `<b>${M.name} asked you a question.</b> Answer below: the station takes the ticket again.`; acts = takeBtn; }
-  else if (t.phase === 'failed') { say = `<b>${M.name}: the run failed.</b> ${esc(t.note || '')}`; acts = quick + takeBtn; }
-  else if (t.phase === 'running') { say = `<b>${M.name} is running on it.</b>`; acts = takeBtn; }
-  else if (t.phase === 'zone') { say = `<b>Waiting in ${M.name}.</b>`; acts = quick + takeBtn; }
-  else { say = `<b>Queueing at ${M.name}.</b>`; acts = takeBtn; }
-  if (S.view === 'work') acts += `<button type="button" class="btn ghost" data-a="showfloor" data-t="${t.id}">Show on floor</button>`;
-  return `<div class="strip ${t.hand ? 'hand' : ''}">${ico('floor')}<div class="path">${path}</div><div class="say">${say}</div><div class="acts">${acts}</div>${pop}</div>`;
+/* what the ticket waits for is asked at the end of its thread */
+function asks(t) {
+  const M = MACH[t.at];
+  if (t.phase === 'review') return `<div class="askc"><b>${M.name} waits for your decision</b><input class="field" id="reason" aria-label="Reason" placeholder="Reason (optional), kept in the thread" value="${esc(t.reason)}">${M.outs.map((o, i) => `<button type="button" class="btn ${i ? '' : 'ok'}" data-a="decide" data-t="${t.id}" data-o="${o}">${o}</button>`).join('')}</div>`;
+  if (t.phase !== 'aside' || manualOn(t)) return '';
+  if (t.why === 'failed') return `<div class="askc fail"><b>${M.name}'s run failed</b><p>${esc(t.note || '')} Run it again as it is, or work on it here first.</p><button type="button" class="btn" data-a="put" data-t="${t.id}" data-how="again">Run ${M.name} again</button></div>`;
+  if (t.why === 'you') return `<div class="askc hand"><b>Set aside in ${M.name}</b><p>${t.manual.length ? 'Your run ended. ' : ''}The ticket stays out of the line until you put it back.</p><button type="button" class="btn" data-a="ctx">Put it back: Context › Factory</button></div>`;
+  return '';
 }
-
 function composer(t) {
-  const q = t.phase === 'question' && !t.hand, launch = /@(agent|skill|panel):[\w-]+/.test(t.draft);
+  const q = t.phase === 'aside' && t.why === 'question', launch = /@(agent|skill|panel):[\w-]+/.test(t.draft), n = MACH[t.at].name;
   const mm = S.mm != null ? MENTIONS.filter((m) => m.k.includes(S.mm)) : [];
   const menu = mm.length ? `<div class="mmenu" role="listbox">${mm.map((m, i) => `<button type="button" class="${m.off ? 'off' : ''} ${i === 0 ? 'on' : ''}" data-a="mention" data-k="${m.k}"><span>@${m.k}</span><small>${m.off || m.d}</small></button>`).join('')}</div>` : '';
-  const at = MACH[t.hand ? t.hand.from : t.at].name;
   const hint = S.hint ? `<div class="hint warn">${esc(S.hint)}</div>`
-    : launch && !t.hand ? `<div class="hint"><span class="pill hand">by hand</span>${t.phase === 'running' ? `Sending this stops ${at}'s run and sets the ticket aside in ${at}.` : `Sending this sets the ticket aside in ${at}.`} You put it back when your run ends.</div>`
-    : q ? `<div class="hint"><span class="pill warn">question</span>Your answer restarts ${at}. No second click.</div>` : '';
+    : launch && canAside(t) ? `<div class="hint"><span class="pill hand">by hand</span>${t.phase === 'running' ? `Sending this stops ${n}'s run and sets the ticket aside in ${n}.` : `Sending this sets the ticket aside in ${n}.`} You put it back when your run ends.</div>`
+    : q ? `<div class="hint"><span class="pill warn">question</span>Your answer restarts ${n}. No second click.</div>` : '';
   return `<div class="composer">${menu}${hint}<div class="box"><textarea id="draft" aria-label="Message" placeholder="Reply, or @ to bring in agents, skills, panels, workflows, tickets…">${esc(t.draft)}</textarea>
       ${q && !launch ? `<button type="button" class="btn" style="height:36px" data-a="send" data-only="1">Reply only</button><button type="button" class="send" data-a="send">Reply &amp; run again</button>` : `<button type="button" class="send" data-a="send" title="Send (Enter)" aria-label="Send">↑</button>`}</div>
     <div class="exec"><span>Mode : <span class="pill" style="background:var(--teal-bg);color:#5eead4">Talk</span> <span class="kbd">⇧⇥</span></span><label>Model : <select id="model" aria-label="Model"><option>Auto (persona)</option><option>Largest</option><option>Fastest</option></select></label><span style="margin-left:auto;color:var(--t4)">⇧⏎ newline</span></div></div>`;
 }
 
+/* the Factory, in the Context panel: where the ticket is, and the one thing done from here: taking it off the line, putting it back */
+function factoryGroup(t) {
+  const m = t.at, M = MACH[m], busy = manualOn(t);
+  let acts;
+  if (t.phase === 'aside') acts = `<span class="cap">Put it back</span><div class="acts">${M.outs.map((o, i) => `<button type="button" class="btn wide ${i ? '' : 'pri'}" data-a="put" data-t="${t.id}" data-how="as" data-arg="${o}" data-hl="arm:${m}>${nextOf(m, o)}" ${busy ? 'disabled' : ''}>Leave ${M.name} as ${o} › ${MACH[nextOf(m, o)].name}</button>`).join('')}
+      <button type="button" class="btn wide" data-a="put" data-t="${t.id}" data-how="again" ${busy ? 'disabled' : ''}>Run ${M.name} again</button>
+      <select class="field" id="sendsel" aria-label="Send to another machine" ${busy ? 'disabled' : ''}><option value="">Send to another machine</option>${ORDER.filter((x) => x !== m && x !== 'exit').map((x) => `<option value="${x}">${MACH[x].name}</option>`).join('')}</select></div>
+      <small>${busy ? 'Your run is going: decide when it ends.' : `"Leave as" sends it out by that arm, as done by hand. "Run again" gives it back to ${M.name}.`}</small>`;
+  else if (canAside(t)) acts = `<div class="acts"><button type="button" class="btn wide" data-a="aside" data-t="${t.id}">${ico('hand')} Set aside${t.phase === 'running' ? `, stopping ${M.name}'s run` : ''}</button></div><small>Takes it off the line: it waits in ${M.name}'s bay until you put it back. Starting an agent, a skill or a panel from the thread does it for you.</small>`;
+  else if (t.phase === 'review') acts = `<small>At a gate nothing runs on the ticket: there is nothing to set aside. The decision is asked in the thread.</small>`;
+  else acts = `<div class="acts"><button type="button" class="btn wide" data-a="release" data-t="${t.id}">Release to ${MACH[nextOf(m)].name}</button></div><small>It waits here until released.</small>`;
+  return `<div class="fgroup ${t.phase === 'aside' ? 'hand' : ''}"><div class="cap" style="color:var(--t2)">Factory</div><div class="kv"><span>Where</span><b>${t.phase === 'belt' ? 'Belt to ' + M.name : M.name}</b><span>State</span><span>${where(t).split(' · ').pop()}</span><span>By hand</span><span>${t.manual.length ? t.manual.length + ' run' + (t.manual.length > 1 ? 's' : '') + ' on this ticket' : 'nothing yet'}</span></div>${acts}</div>`;
+}
 const TOOLS = [['context', '◧', 'Context'], ['diff', '±', 'Diff'], ['docs', '▤', 'Docs'], ['todo', '☑', 'Todo'], ['mentions', '@', 'Mentions'], ['notes', '✎', 'Notes'], ['browser', '◎', 'Browser']];
 function rpanel(t) {
-  const at = t.hand ? t.hand.from : t.at; let h = '';
-  if (S.tool === 'context') h = `<div class="kv"><span>Board</span><b>${t.board}</b><span>Status</span><span class="pill blue" style="justify-self:start">${ORDER.indexOf(at) >= 3 ? 'Doing' : 'Todo'}</span><span>Type</span><span>${t.ty}</span><span>Priority</span><span>${t.prio}</span><span>Complexity</span><span>${t.cx == null ? 'not estimated' : t.cx}</span></div>
-      <div><div class="cap" style="margin-bottom:6px">Factory</div><div class="kv"><span>Where</span><b>${MACH[at].name}</b><span>State</span><span>${sayPhase(t)}</span><span>By hand</span><span>${t.manual.length ? t.manual.length + ' run' + (t.manual.length > 1 ? 's' : '') + ' on this ticket' : 'nothing yet'}</span></div></div>
+  let h = '';
+  if (S.tool === 'context') h = `<div class="kv"><span>Board</span><b>${t.board}</b><span>Status</span><span class="pill blue" style="justify-self:start">${ORDER.indexOf(t.at) >= 3 ? 'Doing' : 'Todo'}</span><span>Type</span><span>${t.ty}</span><span>Priority</span><span>${t.prio}</span><span>Complexity</span><span>${t.cx == null ? 'not estimated' : t.cx}</span></div>
+      ${factoryGroup(t)}
       <div><div class="cap" style="margin-bottom:6px">Repos</div><div class="mono" style="color:var(--t2)">fleex · ticket/${t.num}</div></div>
       <div><div class="cap" style="margin-bottom:6px">Pull requests</div><div style="color:var(--t3)">${t.id === 't103' ? 'PR open · checks green' : 'None yet'}</div></div>`;
   else if (S.tool === 'diff') h = `<div class="mono" style="font-size:12px">packages/web/src/Board.tsx <span class="add">+41</span> <span class="del">−12</span><br><br><span class="del">- key={card.id + column.id}</span><br><span class="add">+ key={card.id}</span><br><span class="add">+ layoutId={card.id}</span></div><div style="color:var(--t3)">The branch diff, as in Work today.</div>`;
-  else if (S.tool === 'docs') h = t.thread.filter((x) => x.k === 'deliv').map((x) => `<div class="deliv"><span class="pill gray">${x.type}</span><b>${esc(x.title)}</b></div>`).join('') || '<div style="color:var(--t3)">No deliverable yet.</div>';
+  else if (S.tool === 'docs') h = t.thread.filter((x) => x.k === 'deliv').map((x) => `<div class="deliv"><span class="pill gray">${x.type}</span><b>${esc(x.title)}</b><span class="mono" style="color:var(--t3)">${x.v}</span></div>`).join('') || '<div style="color:var(--t3)">No deliverable yet.</div>';
   else if (S.tool === 'todo') h = ['Reproduce on Safari 17', 'Write the failing test', 'Check the mobile empty state'].map((x, i) => `<label style="display:flex;gap:8px"><input type="checkbox" id="td${i}" ${i === 0 ? 'checked' : ''}>${x}</label>`).join('');
   else h = `<div style="color:var(--t3)">The ${S.tool} panel is the one Work has today. Not redrawn in this mock-up.</div>`;
   return `<aside class="rpanel"><div class="ttl"><span class="cap" style="color:var(--t2)">${S.tool === 'docs' ? 'Deliverables' : S.tool}</span></div><div class="in">${h}</div></aside>`;
 }
 
 function surface(t) {
-  if (!t || t.gone) return '<div class="empty">This ticket left the floor.</div>';
-  const at = t.hand ? t.hand.from : t.at;
+  if (!t || t.gone) return '<div class="blank">This ticket left the floor.</div>';
   let center;
   if (S.mode === 'shell') center = `<div class="term" id="term">${S.term || ''}<span class="p">ticket/${t.num} ❯</span> <input id="cmd" aria-label="Command" autocomplete="off" placeholder="bun test, git status, fleex start --workspace qa"></div>`;
   else if (S.mode === 'code') center = `<div class="code"><div class="tree">packages/web/src<br>&nbsp;&nbsp;Board.tsx<br>&nbsp;&nbsp;Card.tsx<br>&nbsp;&nbsp;useDrag.ts</div><pre>export function Card({ card }: Props) {
@@ -708,43 +741,51 @@ function surface(t) {
   return &lt;motion.li layoutId={card.id}&gt;…&lt;/motion.li&gt;;
 }</pre></div>`;
   else center = `<div class="thead">${tok(t, 'sm', true)}<b>${esc(t.title)}</b><span class="mono" style="color:var(--t4)">#${t.num}</span><span style="margin-left:auto">${pillOf(t)}</span></div>
-    <div class="stream" id="stream"><div class="col">${t.thread.map(item).join('')}</div></div>${composer(t)}`;
-  const tl = S.timeline ? `<div class="drawer"><div class="frise">${ORDER.filter((m) => ORDER.indexOf(m) <= ORDER.indexOf(at)).map((m) => `<div class="${m === at && t.hand ? 'hand' : ''}">${MACH[m].name}<small>${m === at ? sayPhase(t) : 'done'}</small></div>`).join('')}${t.manual.map((r) => `<div class="hand">@${r.what}<small>by hand</small></div>`).join('')}<div class="now">now</div></div></div>` : '';
-  return `<div class="surface">${strip(t)}
+    <div class="stream" id="stream"><div class="col">${t.thread.map(item).join('')}${asks(t)}</div></div>${composer(t)}`;
+  const tl = S.timeline ? `<div class="drawer"><div class="frise">${ORDER.filter((m) => ORDER.indexOf(m) <= ORDER.indexOf(t.at)).map((m) => `<div class="${m === t.at && t.phase === 'aside' ? 'hand' : ''}">${MACH[m].name}<small>${m === t.at ? where(t).split(' · ').pop() : 'done'}</small></div>`).join('')}${t.manual.map((r) => `<div class="hand">@${r.what}<small>by hand</small></div>`).join('')}<div class="now">now</div></div></div>` : '';
+  return `<div class="surface">
     <div class="topbar"><span class="cap">Mode</span><div class="seg">${[['chat', 'Chat'], ['shell', 'Shell'], ['code', 'Code']].map(([k, l]) => `<button type="button" data-a="mode" data-v="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}</div>
       <span style="flex:1"></span><span class="ib" title="New terminal">&gt;_</span><span class="cap">Pinned</span><span class="ib" title="Boot the stack">▶</span><span class="ib" title="Logs">≡</span>
       <span class="cap">Ticket</span><span class="ib" title="Open in editor">⌘</span><span class="cap">Worktrees</span><span class="wt"><span class="dot" style="background:var(--ok);border-radius:50%"></span>ticket/${t.num}</span></div>
     <div class="body"><div class="center">${center}</div>${S.tool ? rpanel(t) : ''}
-      <div class="tools">${TOOLS.map(([k, i, l]) => `<button type="button" data-a="tool" data-v="${k}" aria-pressed="${S.tool === k}"><span class="ico" aria-hidden="true">${i}</span>${l}${k === 'docs' && t.thread.some((x) => x.k === 'deliv') ? `<span class="bdg">${t.thread.filter((x) => x.k === 'deliv').length}</span>` : ''}${k === 'todo' ? '<span class="bdg">2</span>' : ''}</button>`).join('')}<hr><button type="button" data-a="timeline" aria-pressed="${S.timeline}"><span class="ico" aria-hidden="true">⟷</span>Timeline</button></div></div>
-    ${tl}<div class="status"><span>${t.board} › #${t.num} ${esc(t.title)} › ~/fleex-worktrees/ticket-${t.num}</span><span style="margin-left:auto">${sayPhase(t)}</span><span class="mono">$${(0.42 + t.manual.length * 0.12).toFixed(2)}</span></div></div>`;
+      <div class="tools">${TOOLS.map(([k, i, l]) => `<button type="button" data-a="tool" data-v="${k}" aria-pressed="${S.tool === k}"><span class="ico" aria-hidden="true">${i}</span>${l}${k === 'context' && t.phase === 'aside' && !manualOn(t) ? '<span class="bdg">!</span>' : ''}${k === 'docs' && t.thread.some((x) => x.k === 'deliv') ? `<span class="bdg">${t.thread.filter((x) => x.k === 'deliv').length}</span>` : ''}${k === 'todo' ? '<span class="bdg">2</span>' : ''}</button>`).join('')}<hr><button type="button" data-a="timeline" aria-pressed="${S.timeline}"><span class="ico" aria-hidden="true">⟷</span>Timeline</button></div></div>
+    ${tl}<div class="status"><span>${t.board} › #${t.num} ${esc(t.title)} › ~/fleex-worktrees/ticket-${t.num}</span><span style="margin-left:auto">${where(t)}</span><span class="mono">$${(0.42 + t.manual.length * 0.12).toFixed(2)}</span></div></div>`;
 }
 
+/* a scrolling thread keeps its place across a redraw, unless it was at the bottom or something was added: then it follows */
+const scrollKeys = {};
 function render() {
-  const main = document.getElementById('main'), ae = document.activeElement, keep = ae && ae.id ? { id: ae.id, s: ae.selectionStart, e: ae.selectionEnd } : null;
-  const st = document.getElementById('stream'), stick = !st || st.scrollTop + st.clientHeight >= st.scrollHeight - 30, top = st ? st.scrollTop : 0, n = S.lastCount;
+  const main = document.getElementById('main'), ae = document.activeElement, keep = ae && ae.id ? { id: ae.id, s: ae.selectionStart, e: ae.selectionEnd } : null, was = {};
+  for (const id of ['stream', 'peekt']) { const el = document.getElementById(id); if (el) was[id] = { top: el.scrollTop, bottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 30, h: el.scrollHeight }; }
   main.innerHTML = S.view === 'factory' ? factoryView() : workView();
   for (const v of ['work', 'factory']) document.getElementById('nav-' + v).removeAttribute('aria-current');
   document.getElementById('nav-' + S.view).setAttribute('aria-current', 'page');
   S.justOpened = false; fit();
-  const st2 = document.getElementById('stream'), t = cur();
-  if (st2) { S.lastCount = t ? t.id + t.thread.length : ''; st2.scrollTop = stick || n !== S.lastCount ? st2.scrollHeight : top; }
-  for (const id of ['term', 'peekt']) { const el = document.getElementById(id); if (el) el.scrollTop = el.scrollHeight; }
+  for (const [id, t] of [['stream', cur()], ['peekt', byId(S.sel)]]) { const el = document.getElementById(id); if (!el || !t) continue;
+    const key = t.id + ':' + t.thread.length + ':' + (id === 'peekt' && S.peekAll), w = was[id];
+    if (!w || scrollKeys[id] !== key && !S.grew || w.bottom && !S.grew) el.scrollTop = el.scrollHeight; else el.scrollTop = S.grew && id === 'peekt' ? el.scrollHeight - w.h + w.top : w.top;
+    scrollKeys[id] = key; }
+  S.grew = false;
+  const term = document.getElementById('term'); if (term) term.scrollTop = term.scrollHeight;
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); if (keep.s != null && el.setSelectionRange) try { el.setSelectionRange(keep.s, keep.e); } catch (e) { /* not a text field */ } } }
+  /* what was pointed at may be gone with the redraw: a highlight does not outlive it */
+  if (S.hl && document.querySelector('[data-hl]:hover')) light(S.hl, true); else S.hl = null;
   place();
 }
-/* the line is centred in the floor, clear of the frames on the left; the micro chat sits beside the station of the ticket it shows */
+/* the line is centred in the floor, clear of the frames on the left; the micro chat sits beside the machine of the ticket it shows */
 function fit() {
   const fl = document.getElementById('floor'), s = document.getElementById('stage'); if (!fl || !s) return;
-  const pad = window.innerWidth > 1000 ? 286 : 8, W = 900, H = 556, k = Math.max(0.36, Math.min(1.2, (fl.clientWidth - pad - 16) / W, (fl.clientHeight - 8) / H));
+  const pad = window.innerWidth > 1000 ? 286 : 8, W = 1010, H = 570, k = Math.max(0.34, Math.min(1.15, (fl.clientWidth - pad - 16) / W, (fl.clientHeight - 8) / H));
   const x = pad + Math.max(0, (fl.clientWidth - pad - W * k) / 2), y = Math.max(0, (fl.clientHeight - H * k) / 2);
   s.style.transform = `translate(${x}px,${y}px) scale(${k})`;
   const p = document.getElementById('peek'), t = byId(S.sel); if (!p || !t) return;
-  const M = MACH[t.hand ? t.hand.from : t.at], left = x + M.x * k, right = left + M.w * k, topY = y + M.y * k, pw = p.offsetWidth, ph = p.offsetHeight;
+  const M = MACH[t.at], left = x + M.x * k, right = left + M.w * k, topY = y + M.y * k, pw = p.offsetWidth, ph = p.offsetHeight;
   const px = right + 14 + pw <= fl.clientWidth - 8 ? right + 14 : left - 14 - pw >= pad ? left - 14 - pw : Math.max(8, fl.clientWidth - pw - 8);
   p.style.left = px + 'px'; p.style.top = Math.max(8, Math.min(topY, fl.clientHeight - ph - 8)) + 'px';
 }
 function place() { const g = document.getElementById('guide'), deep = S.view === 'work' || !!S.open; g.classList.toggle('low', deep); g.classList.toggle('bar', !deep && !S.guideOpen && window.innerWidth > 1000); }
 window.addEventListener('resize', () => { fit(); place(); });
+function light(keys, on) { for (const k of keys.split(',')) document.querySelectorAll(`[data-key="${k}"]`).forEach((n) => n.classList.toggle('hl', on)); }
 
 let toastTimer = 0, toastAct = null;
 function toast(msg, label, act) {
@@ -754,15 +795,14 @@ function toast(msg, label, act) {
 }
 
 const STEPS = [
-  ['peek', 'Clique un ticket du floor, ou une entrée de « Needs you » en haut à gauche : son fil s\'ouvre à côté du poste.'],
-  ['arrows', '<code>←</code> / <code>→</code> sur le floor : le ticket suivant qui a besoin de toi.'],
-  ['open', '<code>Espace</code> ou double-clic : la glissière monte du bas avec la vue Work.'],
-  ['nav', 'Dans la glissière, <code>←</code> / <code>→</code>, puis bascule « Needs you » / « Same station ».'],
-  ['reply', 'Sur #104 (question) : réponds, le poste repart.'],
-  ['auto', 'Sur #131 (Build tourne) : envoie <code>@agent:builder</code>. Le run est coupé, le ticket passe dans « SET ASIDE » du poste.'],
-  ['putback', 'Quand ton run finit : « Leave Build as ok », ou « Run Build again ».'],
-  ['hl', 'Sur le floor, sélectionne un ticket mis de côté et survole les tuiles du HUD : le bras de sortie s\'allume.'],
-  ['work', 'Passe sur Work (rail de gauche) : même établi, même bande de ligne.'],
+  ['peek', 'Clique un ticket du floor, ou une entrée de « Needs you » : son fil s\'ouvre à côté du poste. Remonte dedans ; les livrables sont en haut.'],
+  ['decide', 'Sur un gate (ex. #105) : décide depuis le micro-chat, bouton d\'issue et raison facultative. Le bras étiqueté l\'emporte.'],
+  ['arrows', '<code>←</code> / <code>→</code> : le ticket suivant qui a besoin de toi.'],
+  ['open', '<code>Espace</code> ou double-clic : la glissière. Plus de bande en haut : la Factory est dans Context, à droite.'],
+  ['auto', 'Sur #131 (Build tourne) : envoie <code>@agent:builder</code>. Le run est coupé, le ticket passe dans « SET ASIDE ».'],
+  ['putback', 'Remets-le depuis Context › Factory, ou depuis les tuiles du HUD (elles allument le bras de sortie).'],
+  ['power', 'Clique le feu de Build : rouge, le poste est éteint, ce qui arrive est retenu. Survole un feu pour le détail.'],
+  ['work', 'Passe sur Work (rail de gauche) : même établi.'],
 ];
 function guide() {
   const n = STEPS.filter(([k]) => S.done[k]).length;
@@ -772,80 +812,84 @@ function guide() {
 }
 
 /* ============================================================ input ============================================================ */
-function openBench(id) { S.open = id; S.sel = id; S.peek = false; S.justOpened = true; S.sendpop = false; S.hint = ''; S.mm = null; mark('open'); }
-function select(id) { S.sel = id; S.peek = true; S.sending = null; mark('peek'); }
+function openBench(id) { S.open = id; S.sel = id; S.peek = false; S.justOpened = true; S.hint = ''; S.mm = null; mark('open'); }
+function select(id) { if (S.sel !== id) S.peekAll = false; S.sel = id; S.peek = true; S.sending = null; mark('peek'); }
 function stepSel(d) { const cs = calls(); if (!cs.length) return; const i = cs.findIndex((t) => t.id === S.sel); select(cs[i < 0 ? (d > 0 ? 0 : cs.length - 1) : (i + d + cs.length) % cs.length].id); mark('arrows'); }
-function stepNav(d) { const set = navSet(); if (set.length < 2) return; const i = set.findIndex((t) => t.id === S.open); openBench(set[(i + d + set.length) % set.length].id); S.justOpened = false; mark('nav'); }
+function stepNav(d) { const set = navSet(); if (set.length < 2) return; const i = set.findIndex((t) => t.id === S.open); openBench(set[(i + d + set.length) % set.length].id); S.justOpened = false; }
 const A = {
-  view: (d) => { S.view = d.v; S.sendpop = false; S.mm = null; S.sending = null; if (d.v === 'work') { if (S.open || S.sel) S.workSel = S.open || S.sel; S.open = null; mark('work'); } },
+  view: (d) => { S.view = d.v; S.mm = null; S.sending = null; if (d.v === 'work') { if (S.open || S.sel) S.workSel = S.open || S.sel; S.open = null; mark('work'); } },
   pick: (d) => { const now = Date.now(); if (S.sel === d.t && now - (S.pickAt || 0) < 400) openBench(d.t); else select(d.t); S.pickAt = now; },
   bg: () => { if (!S.sending) { S.sel = null; S.peek = false; } },
   unsel: () => { S.sel = null; S.peek = false; },
   open: (d) => openBench(d.t || S.sel),
-  close: () => { S.open = null; S.sendpop = false; },
+  opendocs: (d) => { openBench(d.t); S.tool = 'docs'; },
+  peekall: () => { S.peekAll = true; S.grew = true; },
+  close: () => { S.open = null; },
   nav: (d) => stepNav(+d.d),
-  scope: (d) => { S.scope = d.v; mark('nav'); },
-  wsel: (d) => { S.workSel = d.t; S.sendpop = false; S.hint = ''; S.mm = null; },
-  showfloor: (d) => { S.view = 'factory'; S.open = null; select(d.t); },
+  scope: (d) => { S.scope = d.v; },
+  wsel: (d) => { S.workSel = d.t; S.hint = ''; S.mm = null; },
   mode: (d) => { S.mode = d.v; },
   tool: (d) => { S.tool = S.tool === d.v ? null : d.v; },
+  ctx: () => { S.tool = 'context'; },
   timeline: () => { S.timeline = !S.timeline; },
-  take: (d) => take(byId(d.t)),
+  power: (d) => { const M = MACH[d.m]; M.on = !M.on; if (M.on) for (const t of at(d.m, 'held')) start(t); toast(M.on ? `${M.name} is on` : `${M.name} is off: what arrives is held, nothing new starts. What runs finishes`); mark('power'); },
+  aside: (d) => setAside(byId(d.t)),
   put: (d) => putBack(d.t ? byId(d.t) : cur(), d.how, d.arg),
-  sendpop: () => { S.sendpop = !S.sendpop; },
   sendto: (d) => { S.sending = d.t; S.peek = false; },
-  sendhere: (d) => { const t = byId(S.sending); if (t && t.hand && d.m2 !== 'exit' && d.m2 !== t.hand.from) putBack(t, 'to', d.m2); else S.sending = null; },
+  sendhere: (d) => { const t = byId(S.sending); if (t && t.phase === 'aside' && d.m2 !== 'exit' && d.m2 !== t.at) putBack(t, 'to', d.m2); else S.sending = null; },
   decide: (d) => decide(byId(d.t), d.o),
-  retry: (d) => { const t = byId(d.t); t.phase = 'wait'; t.note = ''; t.thread.push({ k: 'ev', txt: `${MACH[t.at].name} runs again` }); startRuns(); },
-  release: (d) => { const t = byId(d.t); arrive(t, nextOf(t.at), 'Released from ' + MACH[t.at].name); startRuns(); },
+  release: (d) => { const t = byId(d.t), key = `${t.at}>${nextOf(t.at)}`; if (onBelt(key).length >= BELTS[key].cap) return toast('The belt is full: nothing more fits on it'); t.thread.push({ k: 'ev', txt: 'Released from ' + MACH[t.at].name }); toBelt(t, key); },
   send: (d) => { const t = cur(); send(t, t.draft, !!d.only); },
   mention: (d) => { const t = cur(); t.draft = t.draft.replace(/@[\w:-]*$/, '@' + d.k + ' '); S.mm = null; setTimeout(() => { const e = document.getElementById('draft'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }); },
   guide: () => { S.guideOpen = !S.guideOpen; guide(); },
   toastact: () => { document.getElementById('toast').hidden = true; if (toastAct) toastAct(); },
 };
 document.addEventListener('click', (e) => {
-  const el = e.target.closest('[data-a]');
-  if (!el) { if (S.sendpop) { S.sendpop = false; render(); } return; }
+  const el = e.target.closest('[data-a]'); if (!el) return;
   const a = el.dataset.a; if (!A[a] || el.disabled) return;
   if (a === 'bg' && e.target.closest('.party,.peek,.pickbar')) return;
   A[a](el.dataset); if (a !== 'guide') render();
 });
-/* pointing at a command lights what it would use on the floor: the arm the ticket would leave by, the machine it would go to */
-document.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-hl]'); if (!el) return; for (const k of el.dataset.hl.split(',')) document.querySelectorAll(`[data-key="${k}"]`).forEach((n) => n.classList.add('hl')); if (byId(S.sel) && byId(S.sel).hand) mark('hl'); });
-document.addEventListener('mouseout', (e) => { if (e.target.closest('[data-hl]')) document.querySelectorAll('.hl').forEach((n) => n.classList.remove('hl')); });
+document.addEventListener('change', (e) => { if (e.target.id === 'sendsel' && e.target.value) { putBack(cur(), 'to', e.target.value); render(); } });
+/* pointing at a way out lights it on the floor: the arm the ticket would leave by, the machine it would reach */
+document.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-hl]'); if (!el || S.hl === el.dataset.hl) return; if (S.hl) light(S.hl, false); S.hl = el.dataset.hl; light(S.hl, true); });
+document.addEventListener('mouseout', (e) => { const el = e.target.closest('[data-hl]'); if (el && S.hl && !el.contains(e.relatedTarget)) { light(S.hl, false); S.hl = null; } });
+/* the micro chat shows the end of the thread; reaching its top brings the rest */
+document.addEventListener('scroll', (e) => { const el = e.target; if (el.id === 'peekt' && el.scrollTop === 0 && !S.peekAll && el.querySelector('.more')) { S.peekAll = true; S.grew = true; render(); } }, true);
 document.addEventListener('input', (e) => {
-  const t = e.target.id === 'draft' ? cur() : e.target.id === 'peekdraft' ? byId(S.sel) : null; if (!t) return;
-  t.draft = e.target.value; if (e.target.id !== 'draft') return;
+  const id = e.target.id, t = id === 'draft' || id === 'reason' ? cur() : id === 'peekdraft' || id === 'peekreason' ? byId(S.sel) : null; if (!t) return;
+  if (id.endsWith('reason')) { t.reason = e.target.value; return; }
+  t.draft = e.target.value; if (id !== 'draft') return;
   const m = /@([\w:-]*)$/.exec(e.target.value.slice(0, e.target.selectionStart));
   const mm = m ? m[1] : null, before = S.launch; S.launch = /@(agent|skill|panel):[\w-]+/.test(t.draft);
   if (mm !== S.mm || S.launch !== before || S.hint) { S.mm = mm; S.hint = ''; render(); }
 });
 document.addEventListener('keydown', (e) => {
   const el = e.target, typing = /^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName), arrow = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
-  if (el.id === 'draft' || el.id === 'peekdraft') {
-    const t = el.id === 'draft' ? cur() : byId(S.sel);
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault();
-      if (el.id === 'draft' && S.mm != null) { const first = MENTIONS.find((m) => m.k.includes(S.mm)); if (first) { A.mention({ k: first.k }); return render(); } }
-      send(t, t.draft); return render(); }
-    /* an empty field lets Escape and the arrows through: they close, and walk the tickets. With text in it, Escape only leaves the field */
-    if (e.key === 'Escape' && (S.mm != null || el.value)) { if (S.mm != null) S.mm = null; else el.blur(); return render(); }
-    if (e.key === 'Escape') el.blur();
-    else if (!arrow || el.value) return;
-  } else if (el.id === 'cmd') {
+  if (el.id === 'cmd') {
     if (e.key !== 'Enter') return;
     const c = el.value.trim(), t = cur(); if (!c) return;
     const out = /test/.test(c) ? ' 42 pass · 0 fail' : /status/.test(c) ? ` On branch ticket/${t.num}\n nothing to commit, working tree clean` : /start/.test(c) ? ' SQLite storage initialized\n Event hub disabled\n server: http://localhost:4111' : ' done';
     S.term = (S.term || '') + `<span class="p">ticket/${t.num} ❯</span> ${esc(c)}\n${out}\n<span style="color:var(--t4)"> the line carries on: a command does not set the ticket aside</span>\n`; render();
     const n = document.getElementById('cmd'); if (n) n.focus(); return;
-  } else if (typing) return;
+  }
+  if (typing) {
+    const chat = el.id === 'draft' || el.id === 'peekdraft';
+    if (chat && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const t = el.id === 'draft' ? cur() : byId(S.sel);
+      if (el.id === 'draft' && S.mm != null) { const first = MENTIONS.find((m) => m.k.includes(S.mm)); if (first) { A.mention({ k: first.k }); return render(); } }
+      send(t, t.draft); return render(); }
+    /* an empty field lets Escape and the arrows through: they close, and walk the tickets. With text in it, Escape only leaves the field */
+    if (e.key === 'Escape' && (S.mm != null || el.value)) { if (S.mm != null) S.mm = null; else el.blur(); return render(); }
+    if (e.key === 'Escape') el.blur(); else if (!arrow || el.value || el.tagName === 'SELECT') return;
+  }
   if (S.view !== 'factory') return;
-  if (e.key === 'Escape') { if (S.sending) S.sending = null; else if (S.sendpop) S.sendpop = false; else if (S.open) S.open = null; else if (S.peek) S.peek = false; else if (S.sel) S.sel = null; else return; return render(); }
+  if (e.key === 'Escape') { if (S.sending) S.sending = null; else if (S.open) S.open = null; else if (S.peek) S.peek = false; else if (S.sel) S.sel = null; else return; return render(); }
   if (arrow) { e.preventDefault(); if (S.open) stepNav(arrow); else stepSel(arrow); return render(); }
-  if (S.open) return;
+  if (S.open || typing) return;
   if ((e.key === ' ' || e.key === 'Enter') && S.sel) { e.preventDefault(); openBench(S.sel); return render(); }
   const tile = document.querySelector(`.tile[data-key2="${e.key.length === 1 ? e.key.toUpperCase() : e.key}"]`);
   if (tile && tile.dataset.a && !tile.disabled) { e.preventDefault(); tile.click(); }
 });
 
-startRuns(); render(); guide();
+render(); guide();
 </script>
