@@ -8,7 +8,8 @@ import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
-import { fadeIn, floorLook, glows, MAJOR, mix, stationState, veil, type StationState } from './floorLook';
+import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
+import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
@@ -50,8 +51,11 @@ export interface ViewState {
   numbers?: boolean;
   /** The lines of the grid (on by default). */
   grid?: boolean;
+  /** The machine whose light the pointer is on. */
+  hoverLamp?: string | null;
 }
-export type Hit = { ticketId: string } | { machineId: string } | null;
+/** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */
+export type Hit = { ticketId: string } | { machineId: string } | { lamp: string } | null;
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). */
 export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
@@ -288,6 +292,12 @@ export class FactoryView {
         this.label(call === 'failed' ? '!' : '?', bx, by + br * 0.08, br * 1.5, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 22 });
       } else this.label(call === 'failed' ? '!' : '?', px, py + s * 0.04, s * 0.74, 'rgba(0,0,0,0.82)', { align: 'center', weight: 800, min: 8, max: 30 });
     }
+    if (!call && !dragging && t.phase === 'aside' && B * z >= 12) {
+      /* set aside by a human: a pause sign on the corner, in the accent, where a question carries its "?" */
+      const bx = px + B * 0.36, by = py + B * 0.34, br = B * 0.25;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.3); ctx.fillStyle = pal.accent; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(9,9,11,0.88)'; ctx.fillRect(bx - br * 0.42, by - br * 0.45, br * 0.28, br * 0.9); ctx.fillRect(bx + br * 0.14, by - br * 0.45, br * 0.28, br * 0.9);
+    }
     const found = !!st.found?.has(t.ticketId);
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
@@ -407,8 +417,6 @@ export class FactoryView {
     this.names(st, pal);
   }
 
-  private lamp(s: StationState, pal: Palette): string { return s === 'failed' ? pal.danger : s === 'call' ? pal.warn : s === 'running' ? pal.ok : s === 'queue' ? '#60a5fa' : pal.text3; }
-
   /**
    * The floor, before anything built on it. It has no edge: it is drawn as far as what is built, plus room to build
    * further. Out of build mode it is dressed (see `floorLook.ts`): a light over the middle, dots where tiles meet, and
@@ -422,8 +430,8 @@ export class FactoryView {
   private floor(st: ViewState, inside: Map<string, FactoryTicket[]>, pal: Palette): void {
     const d = this.dpr, z = this.cam.z, L = st.layout;
     /* not in build mode, and not under a lens: there, colour is the lens's reading */
-    const lit: [MachineSpec, StationState][] = [];
-    if (!st.edit && !st.lens) for (const m of L.machines) if (m.kind === 'station') { const s = stationState(inside.get(m.id) ?? []); if (glows(s)) lit.push([m, s]); }
+    const lit: [MachineSpec, Lamp][] = [];
+    if (!st.edit && !st.lens) for (const m of L.machines) if (m.kind === 'station' && m.exec !== 'native') { const s = lampOf(m, inside.get(m.id) ?? []); if (s !== 'on') lit.push([m, s]); }
     const key: unknown[] = [this.cv.width, this.cv.height, this.cam.x, this.cam.y, z, st.edit, st.grid !== false, L, pal, lit.map(([m, s]) => `${m.id}:${s}`).join()];
     if (!this.backdrop) this.backdrop = document.createElement('canvas');
     const cv = this.backdrop;
@@ -468,8 +476,8 @@ export class FactoryView {
         }
         ctx.globalAlpha = 1;
       }
-      ctx.globalAlpha = look.glow;
-      for (const [m, s] of lit) { const R = Math.max(m.w, m.h) * 1.5; ctx.drawImage(this.glowSprite(this.lamp(s, pal)), m.x + m.w / 2 - R, m.y + m.h / 2 - R, R * 2, R * 2); }
+      /* amber around a machine that needs someone, a dimmer red around one that is off; one that simply works throws no light */
+      for (const [m, s] of lit) { const R = Math.max(m.w, m.h) * 1.25; ctx.globalAlpha = look.glow * (s === 'off' ? 0.7 : 1); ctx.drawImage(this.glowSprite(s === 'off' ? pal.danger : pal.warn), m.x + m.w / 2 - R, m.y + m.h / 2 - R, R * 2, R * 2); }
       ctx.globalAlpha = 1;
     }
     this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0);
@@ -667,10 +675,86 @@ export class FactoryView {
     else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
   }
 
+  /**
+   * A station as a machine (see `machineArt.ts`): head plate, light, places, a tray for what is done, a bay for what
+   * was set aside. A status station stays the small box it was: it holds nothing.
+   */
   private station(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y, w, h } = m, big = w >= 3, gate = m.exec === 'human_gate', nat = m.exec === 'native';
+    if (m.exec === 'native') { this.statusStation(m, tickets, st, pal, dt); return; }
+    const ctx = this.ctx, z = this.cam.z, { x, y, w, h } = m, gate = m.exec === 'human_gate', P = machineParts(m), S = sortInto(m, tickets), L = lampOf(m, tickets);
+    const tint = gate ? pal.warn : '#c084fc', tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
+    const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke(); };
+    /* the body: a plate lit from above; a gate keeps its dashed amber edge */
+    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34);
+    const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : pal.edge;
+    if (gate) ctx.setLineDash([0.3, 0.2]);
+    ctx.stroke(); ctx.setLineDash([]);
+    /* head plate: what it is, and its name */
+    rr(ctx, P.badge.x, P.badge.y, P.badge.w, P.badge.h, 0.18); ctx.fillStyle = veil(tint, 0.16); ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = veil(tint, 0.55); ctx.stroke();
+    if (P.badge.w * z >= 11 && typeof Path2D !== 'undefined') {
+      const k = (P.badge.w * 0.7) / 24;
+      ctx.save(); ctx.translate(P.badge.x + P.badge.w * 0.15, P.badge.y + P.badge.h * 0.15); ctx.scale(k, k);
+      ctx.strokeStyle = tint; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const d of MACHINE_ICONS[m.exec as keyof typeof MACHINE_ICONS] ?? []) ctx.stroke(new Path2D(d));
+      ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    }
+    this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y, 0.33, pal.text, { weight: 650, min: 9, max: 17, fit: P.lamp.x - P.name.x - 0.1 });
+    this.label(gate ? 'gate · you decide' : `${m.exec} · ${m.ref || 'nothing chosen'}`, P.name.x, P.name.y + 0.36, 0.2, pal.text3, { fit: P.lamp.x - P.name.x - 0.1 });
+    /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
+    rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
+    P.lights.forEach((l, i) => {
+      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = i === 0 ? pal.danger : i === 1 ? pal.warn : pal.ok;
+      if (on) { ctx.globalAlpha = 0.28 * (i === 1 ? 0.6 + 0.4 * Math.sin(this.clock * 4) ** 2 : 1); ctx.beginPath(); ctx.arc(l.x, l.y, l.r * 2.3, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 6.3); ctx.fillStyle = on ? col : '#2a2a2f'; ctx.fill();
+    });
+    /* places, or what a gate decides on */
+    if (gate) {
+      pit(P.work); tiny(`TO DECIDE · ${S.deciding.length}`, P.work);
+      const pitch = 0.8, cols = Math.max(1, Math.floor((P.work.w - 0.2) / pitch)), rows = Math.max(1, Math.floor((P.work.h - 0.36) / pitch)), n = cols * rows;
+      S.deciding.forEach((t, i) => {
+        if (i < n) this.ticket(t, P.work.x + 0.1 + pitch / 2 + (i % cols) * pitch, P.work.y + 0.34 + pitch / 2 + Math.floor(i / cols) * pitch, 0.44, st, 'human', dt);
+        else this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + P.work.h - 0.3 });
+      });
+      if (S.deciding.length > n) this.label(`+${S.deciding.length - n}`, P.work.x + P.work.w - 0.1, P.work.y + P.work.h - 0.2, 0.22, pal.text2, { mono: true, align: 'right' });
+    } else {
+      P.places.forEach((c, i) => {
+        pit(c);
+        const t = S.places[i], size = Math.min(c.w, c.h - 0.2) * 0.52, cx = c.x + c.w / 2, cy = c.y + c.h / 2 + 0.08;
+        tiny(t ? (t.phase === 'running' ? 'RUNNING' : 'HELD') : 'FREE', c, t?.phase === 'running' ? pal.ok : pal.text3);
+        if (t) this.ticket(t, cx, cy, size, st, t.phase === 'running' ? 'run' : 'wait', dt);
+      });
+      S.extra.forEach((t) => this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + 0.3 }));
+      if (S.extra.length) this.label(`+${S.extra.length}`, P.work.x + P.work.w - 0.1, P.work.y + 0.2, 0.22, pal.text2, { mono: true, align: 'right', plate: 'rgba(9,9,11,0.84)' });
+    }
+    /* the tray: what is done and not yet taken by an arm */
+    pit(P.out); tiny('OUT', P.out);
+    const os = Math.min(0.42, P.out.w * 0.56), room = Math.max(1, Math.floor((P.out.h - 0.36) / (os + 0.12)));
+    S.out.forEach((t, i) => { if (i < room) this.ticket(t, P.out.x + P.out.w / 2, P.out.y + 0.36 + os / 2 + i * (os + 0.12), os, st, 'out', dt); else this.shown.set(t.ticketId, { x: P.out.x + P.out.w / 2, y: P.out.y + P.out.h - 0.2 }); });
+    if (S.out.length > room) this.label(`+${S.out.length - room}`, P.out.x + P.out.w / 2, P.out.y + P.out.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
+    /* the bay: what was set aside. Hazard stripes on its edge, as a hold area has. */
+    if (P.aside) {
+      const a = P.aside, band = 0.42;
+      pit(a);
+      ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
+      ctx.strokeStyle = veil(pal.warn, S.aside.length ? 0.75 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
+      for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
+      ctx.stroke(); ctx.restore();
+      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, veil(pal.warn, S.aside.length ? 0.9 : 0.45), { weight: 700 });
+      /* the tickets stand to the right of the bay's name, apart enough for their signs not to cover one another */
+      const as = Math.min(0.44, a.h * 0.56), step = as + 0.4, x0 = a.x + band + 1.2, fit = Math.max(1, Math.floor((a.x + a.w - 0.1 - x0) / step));
+      S.aside.forEach((t, i) => { if (i < fit) this.ticket(t, x0 + as / 2 + i * step, a.y + a.h / 2, as, st, t.phase === 'failed' ? 'fail' : 'human', dt); else this.shown.set(t.ticketId, { x: a.x + a.w - 0.3, y: a.y + a.h / 2 }); });
+      if (S.aside.length > fit) this.label(`+${S.aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
+    }
+    if (L === 'off') { ctx.globalAlpha = 0.28; rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
+  }
+
+  private statusStation(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, { x, y, w, h } = m, big = w >= 3, gate = false, nat = true;
     const waiting = tickets.filter((t) => t.phase !== 'out'), out = tickets.filter((t) => t.phase === 'out');
-    const state = this.lamp(stationState(tickets), pal);
+    const state = tickets.length ? pal.ok : pal.text3;
     rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.28); ctx.fillStyle = pal.body; ctx.fill();
     ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : nat ? pal.ok : pal.edge;
     if (gate) ctx.setLineDash([0.3, 0.2]);
@@ -806,6 +890,8 @@ export class FactoryView {
     }
     this.index(st.layout);
     const m = this.at(Math.floor(p.x), Math.floor(p.y));
+    /* out of build mode, the light of a machine is its own target: its switch, and what it has to say */
+    if (m && withTickets && m.kind === 'station' && m.exec !== 'native' && inRect(machineParts(m).lamp, p.x, p.y)) return { lamp: m.id };
     if (m) return { machineId: m.id };
     for (const l of st.layout.machines) if (l.kind === 'label' && Math.floor(p.x) === l.x && Math.floor(p.y) === l.y) return { machineId: l.id };
     return null;

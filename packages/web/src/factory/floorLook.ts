@@ -1,21 +1,11 @@
 /**
  * How the floor itself looks, apart from what is built on it: a dot where four
  * tiles meet, a light over the middle, the shadow of what stands on it, and the
- * glow a station throws around itself while it works or calls for someone.
+ * glow of a machine's light when it needs someone or is switched off (what the
+ * light says is in `machineArt.ts`).
  * Decoration only, kept faint: it never says anything the machines do not
  * already say. Pure helpers; the renderer paints.
  */
-import type { FactoryTicket } from './types';
-
-/** What a station is doing, most pressing first. Drives its lamp and the glow around it. */
-export type StationState = 'failed' | 'call' | 'running' | 'queue' | 'idle';
-export function stationState(tickets: readonly FactoryTicket[]): StationState {
-  const has = (...phases: FactoryTicket['phase'][]) => tickets.some((t) => phases.includes(t.phase));
-  return has('failed') ? 'failed' : has('review', 'question', 'aside') ? 'call' : has('running') ? 'running' : has('wait') ? 'queue' : 'idle';
-}
-/** A station lights the floor when it works, or when it waits for a human. Queueing and idle stations stay dark. */
-export const glows = (s: StationState): boolean => s === 'failed' || s === 'call' || s === 'running';
-
 /** The channels of a theme colour (`#rgb` or `#rrggbb`), or null for anything else. */
 export function channels(color: string): [number, number, number] | null {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());

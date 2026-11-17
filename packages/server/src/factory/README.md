@@ -51,6 +51,22 @@ tickets in but starts nothing on them; what already runs finishes.
 A decision at a gate (`…/resolve`, with an optional `reason`) is written in the ticket's thread in the human's name,
 as a comment that creates no mention and so starts no agent.
 
+## Machines, and the version of a layout
+
+A station that is not a status station is drawn as a machine (`packages/web/src/factory/machineArt.ts`): a head plate
+with an icon for what it is, a light, as many places as it works on tickets at once (six at most), a tray for what is
+done and not yet taken, and a hatched bay for what is set aside. It takes 5 by 4 tiles (the engine accepts 3 by 3 to
+8 by 6). The light says: red the machine is off, green it is on, amber it is on and something in it is set aside; on a
+gate, amber while something is to decide. On a machine that runs something it is the switch: a click turns it off or
+on, and pointing at it says what runs, what is set aside and whether the exit is clear. The floor's glow follows the
+light: amber around a machine that needs someone, a dimmer red around one that is off.
+
+A layout carries a `version` (`layout-versions.ts`). When what a layout means changes, the version goes up and a step
+is added, as a migration is for a table. A change of shape is converted when the floor is loaded. A change of
+geometry cannot be: the step returns null, the old layout is kept as an archived floor (`default@v<n>-<time>` in
+`factory_floors`), the floor starts over with only Inbound, the tickets go back to Inbound, and the page says so once
+(`notice` in the snapshot, `POST /api/factory/notice/ack`). Version 2 is the first such step: stations grew from 3 by 3.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`

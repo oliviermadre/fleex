@@ -40,7 +40,8 @@ export interface BridgeSpec extends MachineBase { kind: 'bridge' }
 export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
 export type MachineKind = MachineSpec['kind'];
 
-export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }
+/** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
+export interface FactoryLayout { version?: number; w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number }
 
 export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone';
@@ -70,6 +71,8 @@ export interface FactorySnapshot {
   runsLastHour: number;
   running: number;
   serverTime: string;
+  /** Something to tell once (the floor was started over for a new layout version). */
+  notice?: string | null;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
 export type RunExecutor = StationExec | 'exit';

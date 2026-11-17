@@ -5,16 +5,18 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FactoryEngine, FactoryError, normaliseLayout } from '../../src/factory/engine.js';
+import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
 import type { StationRunResult } from '../../src/factory/station-runner.js';
 import type { ArmCondition, FactoryFloorRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
-  floor: FactoryFloorRow | null = null;
+  floors = new Map<string, FactoryFloorRow>();
+  get floor(): FactoryFloorRow | null { return this.floors.get('default') ?? null; }
   tickets = new Map<string, FactoryTicketRow>();
   runs = new Map<string, FactoryRunRow>();
-  async getFloor() { return this.floor; }
-  async saveFloor(f: FactoryFloorRow) { this.floor = structuredClone(f); }
+  async getFloor(id: string) { return this.floors.get(id) ?? null; }
+  async saveFloor(f: FactoryFloorRow) { this.floors.set(f.id, structuredClone(f)); }
   async listTickets() { return [...this.tickets.values()].map((t) => structuredClone(t)); }
   async saveTicket(t: FactoryTicketRow) { this.tickets.set(t.ticketId, structuredClone(t)); }
   async removeTicket(id: string) { this.tickets.delete(id); }
@@ -470,8 +472,9 @@ describe('normaliseLayout', () => {
   });
 
   it('gives each kind its footprint and a station at least one outcome', () => {
-    const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), w: 9, h: 9, outcomes: [] } as MachineSpec, { ...station('n', 6, 1, { exec: 'native' }), w: 9 } as MachineSpec] });
-    expect(out.machines.map((m) => [m.w, m.h])).toEqual([[3, 3], [2, 2]]);
+    const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), w: 9, h: 9, outcomes: [] } as MachineSpec, { ...station('n', 12, 1, { exec: 'native' }), w: 9 } as MachineSpec] });
+    expect(out.machines.map((m) => [m.w, m.h])).toEqual([[8, 6], [2, 2]]);          // a machine is 3 by 3 to 8 by 6, a status station 2 by 2
+    expect(out.version).toBe(LAYOUT_VERSION);
     expect((out.machines[0] as StationSpec).outcomes).toEqual(['ok']);
   });
 });
@@ -609,5 +612,60 @@ describe('a decision at a gate', () => {
     await run(3);
     expect(where('a')).toBe('next:zone');
     expect(decisions).toEqual([['a', 'Check spec', 'approve', 'keep the mapping editable']]);
+  });
+});
+
+describe('layout versions', () => {
+  const v1: FactoryLayout = { w: 10, h: 10, machines: [station('s', 1, 1), zone('z', 6, 1)] };
+
+  it('a layout saved before versions existed is version 1', () => {
+    expect(versionOf(v1)).toBe(1);
+    expect(versionOf({ ...v1, version: 3 })).toBe(3);
+    expect(versionOf({ ...v1, version: 0 })).toBe(1);
+  });
+
+  it('goes through every step on the way, in order, and stamps the version it reached', () => {
+    const steps = {
+      2: (l: FactoryLayout) => ({ ...l, machines: l.machines.map((m) => ({ ...m, name: `${m.name}+2` })) }),
+      3: (l: FactoryLayout) => ({ ...l, machines: l.machines.map((m) => ({ ...m, name: `${m.name}+3` })) }),
+    };
+    const { layout, from } = upgradeLayout(v1, steps, 3);
+    expect(from).toBe(1);
+    expect(layout?.version).toBe(3);
+    expect(layout?.machines.map((m) => m.name)).toEqual(['s+2+3', 'z+2+3']);
+    expect(upgradeLayout({ ...v1, version: 2 }, steps, 3).layout?.machines[0]?.name).toBe('s+3');
+  });
+
+  it('gives up on a layout a step cannot convert, and leaves alone one that is current or newer', () => {
+    expect(upgradeLayout(v1, { 2: () => null, 3: (l) => l }, 3).layout).toBeNull();
+    const current = { ...v1, version: LAYOUT_VERSION };
+    expect(upgradeLayout(current).layout).toBe(current);
+    const newer = { ...v1, version: LAYOUT_VERSION + 4 };
+    expect(upgradeLayout(newer).layout).toBe(newer);
+  });
+
+  it('a floor that cannot be carried over is archived and started over, its tickets back in Inbound', async () => {
+    const iso = new Date(clock).toISOString();
+    await store.saveFloor({ id: 'default', name: 'Factory', layout: v1, settings: { maxRunsPerHour: 7, maxConcurrentRuns: 2 }, createdAt: iso, updatedAt: iso });
+    await store.saveTicket({ ticketId: 'a', floorId: 'default', machineId: 's', createdAt: iso, updatedAt: iso, state: { x: 1, y: 1, phase: 'out', p: 0, fx: 1, fy: 0, outcome: 'ok', released: false, since: iso, runId: null, note: '' } });
+    engine = new FactoryEngine({ store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async (id) => infos.get(id) ?? null, setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) } });
+    await engine.init();
+    const snap = engine.snapshot();
+    expect(snap.floor.layout.version).toBe(LAYOUT_VERSION);
+    expect(snap.floor.layout.machines.map((m) => m.kind)).toEqual(['zone']);       // an empty floor: only Inbound
+    expect(snap.floor.settings.maxRunsPerHour).toBe(7);                             // its settings are kept
+    expect(snap.notice).toContain('started over');
+    const t = snap.tickets[0]!;
+    expect([t.machineId, t.phase, t.outcome]).toEqual([snap.floor.layout.machines[0]!.id, 'zone', '']);
+    const archived = [...store.floors.values()].find((f) => f.id !== 'default');
+    expect(archived?.id).toMatch(/^default@v1-/);
+    expect(archived?.layout.machines).toHaveLength(2);                              // what was built is still there to be read
+    engine.ackNotice();
+    expect(engine.snapshot().notice).toBeNull();
+    /* loaded again, it is current: nothing more is archived */
+    const again = new FactoryEngine({ store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async (id) => infos.get(id) ?? null, setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) } });
+    await again.init();
+    expect(store.floors.size).toBe(2);
+    expect(again.snapshot().notice).toBeNull();
   });
 });

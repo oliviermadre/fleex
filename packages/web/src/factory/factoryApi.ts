@@ -18,6 +18,7 @@ export const factoryApi = {
   status: () => call<{ supported: boolean; enabled: boolean }>('/status', undefined, true),
   state: () => call<FactorySnapshot>('/state', undefined, true),
   managed: () => call<{ ticketIds: string[] }>('/managed', undefined, true),
+  ackNotice: () => post<FactorySnapshot>('/notice/ack'),
   setLayout: (layout: FactoryLayout) => call<FactorySnapshot>('/layout', { method: 'PUT', body: JSON.stringify({ layout }) }),
   setSettings: (settings: Partial<FactorySettings>) => call<FactorySnapshot>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   transfer: (ticketId: string, target: Target) => post<FactorySnapshot>(`/tickets/${ticketId}/transfer`, target),

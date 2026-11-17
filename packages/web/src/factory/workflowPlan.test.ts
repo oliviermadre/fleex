@@ -124,20 +124,20 @@ describe('a workflow as a plan', () => {
       step('Tag it', { executorType: 'native', nativeActions: [{ id: 'a', operationId: 'ticket.add_tags', params: { tags: ['x'] } }] }),
       step('Release train', { executorType: 'workflow', executorRef: 'release' }),
       step('Fan', { executorType: 'route' }),
-      step('A'), step('B'), step('C'), step('D'),
+      step('A'), step('B'), step('C'), step('D'), step('E'),
     ], [
       edge('Tag it', 'Release train'), edge('Release train', 'Fan'),
-      edge('Fan', 'A', { label: 'a' }), edge('Fan', 'B', { label: 'b' }), edge('Fan', 'C', { label: 'c' }), edge('Fan', 'D', { label: 'd' }),
+      edge('Fan', 'A', { label: 'a' }), edge('Fan', 'B', { label: 'b' }), edge('Fan', 'C', { label: 'c' }), edge('Fan', 'D', { label: 'd' }), edge('Fan', 'E', { label: 'e' }),
     ]));
     const f = floorOf(plan.clip.machines);
     expect(f.named('Tag it')).toMatchObject({ exec: 'native', sets: undefined });
     expect(f.named('Sub-workflow: release')).toMatchObject({ kind: 'zone', release: 'manual' });
-    expect(f.named('Route: Fan')).toMatchObject({ exec: 'human_gate', outcomes: ['a', 'b', 'c', 'd'] });
-    expect(f.ways('Route: Fan')).toHaveLength(3);
+    expect(f.named('Route: Fan')).toMatchObject({ exec: 'human_gate', outcomes: ['a', 'b', 'c', 'd', 'e'] });
+    expect(f.ways('Route: Fan')).toHaveLength(4);                // a machine is four tiles high: four arms stand against it
     expect(plan.warnings.join('\n')).toMatch(/“Tag it” runs ticket\.add_tags/);
     expect(plan.warnings.join('\n')).toMatch(/sub-workflow release/);
     expect(plan.warnings.join('\n')).toMatch(/“Fan” is a routing step/);
-    expect(plan.warnings.join('\n')).toMatch(/“Route: Fan” has 4 ways out and room for 3 arms/);
+    expect(plan.warnings.join('\n')).toMatch(/“Route: Fan” has 5 ways out and room for 4 arms/);
     expect(f.taken).toEqual([]);
   });
 

@@ -36,8 +36,10 @@ export interface WorkflowPlan {
 type Unplaced<T = MachineSpec> = T extends unknown ? Omit<T, 'x' | 'y'> : never;
 
 const EAST: Dir = 0, SOUTH: Dir = 1, WEST: Dir = 2, NORTH: Dir = 3;
+/** The room every step is given: wide and high enough for a station, which is a machine of 5 by 4 tiles. */
+const SLOT_W = 5, SLOT_H = 4;
 /** Vertical distance between two stations of one column, and room under the last one before the rows of belts. */
-const PITCH = 5, UNDER = 2;
+const PITCH = SLOT_H + 2, UNDER = 2;
 
 let seq = 0;
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `p${Date.now().toString(36)}${(seq++).toString(36)}`);
@@ -46,7 +48,7 @@ interface Node {
   key: string;
   step: WorkflowStep | null;
   layer: number; row: number;
-  /** Top-left of its 3×3 slot; the machine sits in it, flush with the slot's east side. */
+  /** Top-left of its slot; the machine sits in it, flush with the slot's east side. */
   sx: number; sy: number;
   machine: MachineSpec;
   /** Rows of its east side an arm can stand against, from the top of the slot. */
@@ -127,12 +129,12 @@ function routingOf(step: WorkflowStep, outs: WorkflowEdge[], nameOf: (id: string
 /** The machine a step becomes, with what could not be carried over. */
 function machineOf(step: WorkflowStep, outcomes: string[], branching: boolean, warn: (w: string) => void): { machine: Unplaced; small: boolean } {
   const id = newId(), name = step.name || step.executorType;
-  const station = (over: Partial<StationSpec>): Omit<StationSpec, 'x' | 'y'> => ({ id, kind: 'station', w: 3, h: 3, name, exec: 'agent', outcomes, cap: 8, ...over });
+  const station = (over: Partial<StationSpec>): Omit<StationSpec, 'x' | 'y'> => ({ id, kind: 'station', w: SLOT_W, h: SLOT_H, name, exec: 'agent', outcomes, cap: 2, ...over });
   switch (step.executorType) {
     case 'agent': return { machine: station({ exec: 'agent', ref: step.executorRef, mode: step.mode ?? 'edit', prompt: step.prompt ?? '' }), small: false };
     case 'skill': return { machine: station({ exec: 'skill', ref: step.executorRef, prompt: step.prompt ?? '' }), small: false };
     case 'panel': return { machine: station({ exec: 'panel', ref: step.executorRef, prompt: step.prompt ?? '' }), small: false };
-    case 'human_gate': return { machine: station({ exec: 'human_gate' }), small: false };
+    case 'human_gate': return { machine: station({ exec: 'human_gate', cap: 8 }), small: false };
     case 'native': {
       const actions = step.nativeActions ?? [], status = actions.find((a) => a.operationId === 'ticket.set_status')?.params['status'];
       const sets = typeof status === 'string' && (TICKET_STATUSES as readonly string[]).includes(status) ? (status as TicketStatus) : undefined;
@@ -142,7 +144,7 @@ function machineOf(step: WorkflowStep, outcomes: string[], branching: boolean, w
       return { machine: station({ exec: 'native', w: 2, h: 2, outcomes: ['ok'], cap: 3, sets }), small: true };
     }
     case 'route':
-      if (branching) { warn(`“${name}” is a routing step: here it is a gate where you choose the way out, until arms sort the tickets on what they are.`); return { machine: station({ exec: 'human_gate', name: `Route: ${name}` }), small: false }; }
+      if (branching) { warn(`“${name}” is a routing step: here it is a gate where you choose the way out, until arms sort the tickets on what they are.`); return { machine: station({ exec: 'human_gate', name: `Route: ${name}`, cap: 8 }), small: false }; }
       return { machine: station({ exec: 'native', w: 2, h: 2, outcomes: ['ok'], cap: 3, sets: undefined }), small: true };
     default:
       warn(step.executorType === 'workflow'
@@ -182,7 +184,10 @@ export function planFromWorkflow(t: WorkflowTemplate): WorkflowPlan {
   // ---- nodes: a zone to come in by, the steps, a zone to gather in ----
   const nodes: Node[] = [], byStep = new Map<string, Node>();
   const blank = (key: string, step: WorkflowStep | null, layer: number, machine: Unplaced, small: boolean): Node => {
-    const n: Node = { key, step, layer, row: 0, sx: 0, sy: 0, machine: { ...machine, x: 0, y: 0 } as MachineSpec, armRows: small ? [1, 0] : [1, 2, 0], trunk: null, land: 0 };
+    /* an arm can stand against each row of the machine's east side; row 1 first, which is the one a straight belt leaves by */
+    const rows = Array.from({ length: machine.h }, (_, i) => i), armRows = [1, ...rows.filter((r) => r > 1), 0].filter((r) => r < machine.h);
+    void small;
+    const n: Node = { key, step, layer, row: 0, sx: 0, sy: 0, machine: { ...machine, x: 0, y: 0 } as MachineSpec, armRows, trunk: null, land: 0 };
     nodes.push(n); return n;
   };
   const inZone = blank('in', null, 0, { id: newId(), kind: 'zone', w: 3, h: 3, name: `${t.name} · in`, status: '', release: 'auto' }, false);
@@ -234,12 +239,12 @@ export function planFromWorkflow(t: WorkflowTemplate): WorkflowPlan {
     if (!col) continue;
     for (const n of col) if (routed.some((l) => l.to === n)) n.trunk = x++;
     x += 1;                                        // the last tile of the belts that enter the column's stations
-    for (const n of col) { n.sx = x; n.land = x + 4; }
-    x += 5;                                        // the stations, their arms, and the tiles the arms drop on
+    for (const n of col) { n.sx = x; n.land = x + SLOT_W + 1; }
+    x += SLOT_W + 2;                               // the stations, their arms, and the tiles the arms drop on
     for (const n of col) for (const l of routed.filter((q) => q.from === n).sort((a, b) => b.armRow - a.armRow)) l.down = x++;
     x += 1;
   }
-  const floor = Math.max(...nodes.map((n) => n.sy)) + 3 + UNDER;
+  const floor = Math.max(...nodes.map((n) => n.sy)) + SLOT_H + UNDER;
   routed.forEach((l, i) => { l.bus = floor + i; });
 
   // ---- belts ----
@@ -252,7 +257,7 @@ export function planFromWorkflow(t: WorkflowTemplate): WorkflowPlan {
     if ((t0.dir + dir) % 2 === 1) { t0.bridge = true; return; }                     // two belts cross: a bridge
     clash = true;
   };
-  const place = (n: Node): void => { const m = n.machine; m.x = n.sx + 3 - m.w; m.y = n.sy; };
+  const place = (n: Node): void => { const m = n.machine; m.x = n.sx + SLOT_W - m.w; m.y = n.sy; };
   for (const n of nodes) place(n);
   for (const n of nodes) {
     if (n.trunk === null) continue;
@@ -273,7 +278,7 @@ export function planFromWorkflow(t: WorkflowTemplate): WorkflowPlan {
 
   // ---- the machines, from the top-left corner of the plan ----
   const machines: MachineSpec[] = nodes.map((n) => n.machine);
-  for (const l of wired) machines.push({ id: newId(), kind: 'arm', x: l.from.sx + 3, y: l.from.sy + l.armRow, w: 1, h: 1, dir: EAST, when: l.when });
+  for (const l of wired) machines.push({ id: newId(), kind: 'arm', x: l.from.sx + SLOT_W, y: l.from.sy + l.armRow, w: 1, h: 1, dir: EAST, when: l.when });
   for (const b of tiles.values()) machines.push(b.bridge ? { id: newId(), kind: 'bridge', x: b.x, y: b.y, w: 1, h: 1 } : { id: newId(), kind: 'belt', x: b.x, y: b.y, w: 1, h: 1, dir: b.dir });
   machines.push({ id: newId(), kind: 'label', x: Math.min(...machines.map((m) => m.x)), y: -2, w: 1, h: 1, text: `${t.emoji ? `${t.emoji} ` : ''}${t.name}` });
   const x0 = Math.min(...machines.map((m) => m.x)), y0 = Math.min(...machines.map((m) => m.y));

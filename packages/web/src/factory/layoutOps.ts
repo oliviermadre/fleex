@@ -11,6 +11,11 @@ export function machineAt(layout: FactoryLayout, x: number, y: number): MachineS
 }
 
 /** The machine a tool would place with its top-left corner chosen so the cursor sits near its middle. */
+/** A station is a machine of 5 by 4 tiles: room for its places, its tray and its bay. A status station stays 2 by 2. */
+export const STATION_W = 5, STATION_H = 4;
+/** How many tickets a machine can be asked to work on at once: as many places as it can show. */
+export const MAX_PLACES = 6;
+
 export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec | null {
   const id = newId();
   switch (tool) {
@@ -18,8 +23,8 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [] };
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
-      return { id, kind: 'station', x: x - 1, y: y - 1, w: 3, h: 3, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 8 };
-    case 'gate': return { id, kind: 'station', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
+      return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 2 };
+    case 'gate': return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
     case 'native': return { id, kind: 'station', x, y, w: 2, h: 2, name: 'Set status', exec: 'native', outcomes: ['ok'], cap: 3, sets: 'doing' };
     case 'zone': return { id, kind: 'zone', x: x - 1, y: y - 1, w: 4, h: 4, name: 'Zone', status: '', release: 'manual' };
     case 'exit': return { id, kind: 'exit', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Exit' };

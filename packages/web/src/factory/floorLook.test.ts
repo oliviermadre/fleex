@@ -1,24 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { channels, fadeIn, floorLook, glows, isLight, mix, stationState, veil } from './floorLook';
-import type { FactoryTicket } from './types';
+import { channels, fadeIn, floorLook, isLight, mix, veil } from './floorLook';
 
-const t = (phase: FactoryTicket['phase']): FactoryTicket => ({ ticketId: phase, machineId: 'm', info: null, x: 0, y: 0, phase, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: '', runId: null, note: '', handedAt: '' });
-
-describe('what a station is doing', () => {
-  it('names the most pressing thing among its tickets', () => {
-    expect(stationState([])).toBe('idle');
-    expect(stationState([t('out')])).toBe('idle');
-    expect(stationState([t('wait')])).toBe('queue');
-    expect(stationState([t('wait'), t('running')])).toBe('running');
-    expect(stationState([t('running'), t('review')])).toBe('call');
-    expect(stationState([t('running'), t('question')])).toBe('call');
-    expect(stationState([t('review'), t('running'), t('failed')])).toBe('failed');
-  });
-
-  it('lights the floor when it works or waits for a human, and stays dark otherwise', () => {
-    expect((['failed', 'call', 'running', 'queue', 'idle'] as const).filter(glows)).toEqual(['failed', 'call', 'running']);
-  });
-});
 
 describe('theme colours', () => {
   it('reads the short and the long hexadecimal forms', () => {

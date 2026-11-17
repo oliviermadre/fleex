@@ -39,6 +39,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
       return { ticketIds: [...factory.engine.managedIds()] };
     });
 
+    app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.engine.snapshot(); });
     app.put<{ Body: { layout: FactoryLayout } }>('/api/factory/layout', (request, reply) => guard(reply, (f) => f.engine.setLayout(request.body?.layout)));
     app.put<{ Body: Partial<FactorySettings> }>('/api/factory/settings', (request, reply) => guard(reply, (f) => f.engine.setSettings(request.body ?? {})));
 

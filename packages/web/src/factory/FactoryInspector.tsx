@@ -21,6 +21,7 @@ import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
 import { standing } from './lens';
 import { TicketGlyphs } from './FactoryTicketMeta';
+import { MAX_PLACES } from './layoutOps';
 import { byRunAt, canSetAside, needsHuman, QUESTION_OUTCOME, RUNS, SET_ASIDE, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
@@ -209,7 +210,7 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
               <Button size="sm" onClick={() => onPatch({ off: m.off ? undefined : true } as Partial<StationSpec>)}>{m.off ? 'Switch on' : 'Switch off'}</Button>
             </div>
           )}
-          <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(50, Number(v) || 8)) } as Partial<StationSpec>)} />
+          <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(RUNS.includes(m.exec) ? MAX_PLACES : 50, Number(v) || 2)) } as Partial<StationSpec>)} />
           <Section title="Where each outcome leaves">
             {m.outcomes.map((o) => {
               const arm = takers.find((a) => acceptsOutcome(a, o)) ?? takers.find((a) => !isConditional(a));

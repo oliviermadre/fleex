@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
@@ -50,6 +51,8 @@ export interface FactorySnapshot {
   runsLastHour: number;
   running: number;
   serverTime: string;
+  /** Something to tell the human once (the floor was started over for a new layout version), or null. */
+  notice: string | null;
 }
 
 export interface FactoryEngineDeps {
@@ -100,7 +103,9 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       if (m.kind === 'arm') { m.when = normaliseConditions(m); delete m.filter; }
     }
     else if (m.kind === 'station') {
-      const side = m.exec === 'native' ? 2 : 3; m.w = side; m.h = side;
+      /* a status station is two tiles a side; the others are machines the page draws with places, a tray and a bay: 5 by 4 unless said otherwise */
+      if (m.exec === 'native') { m.w = 2; m.h = 2; }
+      else { m.w = Math.max(3, Math.min(8, Math.floor(m.w || 5))); m.h = Math.max(3, Math.min(6, Math.floor(m.h || 4))); }
       m.outcomes = Array.isArray(m.outcomes) && m.outcomes.length ? m.outcomes.map(String).filter(Boolean) : ['ok'];
       if (!m.outcomes.length) m.outcomes = ['ok'];
       m.cap = Math.max(1, Math.min(50, Math.floor(m.cap || 8)));
@@ -124,7 +129,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     machines.push(m);
   }
   /* the floor has no edge: `w` and `h` only record how far what is built extends */
-  return { w: machines.length ? x1 - x0 : 0, h: machines.length ? y1 - y0 : 0, machines };
+  return { version: LAYOUT_VERSION, w: machines.length ? x1 - x0 : 0, h: machines.length ? y1 - y0 : 0, machines };
 }
 
 /**
@@ -133,7 +138,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
  * is the only writer of the three `factory_*` tables.
  */
 export class FactoryEngine {
-  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { w: 48, h: 30, machines: [inboundZone(1, 1)] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
+  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { version: LAYOUT_VERSION, w: 48, h: 30, machines: [inboundZone(1, 1)] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
   private machines: Machine[] = [];
   private byId = new Map<string, Machine>();
   private grid = new Map<string, Machine>();
@@ -147,6 +152,8 @@ export class FactoryEngine {
   private lastFlush = 0;
   private lastRefresh = 0;
   private ready = false;
+  /** Something the page should tell once: the floor was started over because its layout could not be carried to this version. */
+  private notice: string | null = null;
   private readonly now: () => number;
   private readonly armSwing: number;
   private readonly restMs: number;
@@ -163,14 +170,28 @@ export class FactoryEngine {
   async init(): Promise<void> {
     const nowIso = new Date(this.now()).toISOString();
     const existing = await this.deps.store.getFloor(DEFAULT_FLOOR_ID);
-    if (existing) this.floor = { ...existing, settings: { ...DEFAULT_SETTINGS, ...existing.settings } };
-    else { this.floor = { ...this.floor, createdAt: nowIso, updatedAt: nowIso }; await this.deps.store.saveFloor(this.floor); }
+    let startedOver = false;
+    if (existing) {
+      this.floor = { ...existing, settings: { ...DEFAULT_SETTINGS, ...existing.settings } };
+      const { layout, from } = upgradeLayout(existing.layout);
+      if (layout && layout !== existing.layout) { this.floor = { ...this.floor, layout, updatedAt: nowIso }; await this.deps.store.saveFloor(this.floor); }
+      else if (!layout) {
+        /* it cannot be carried over: keep it as it was under another id, and start from an empty floor */
+        await this.deps.store.saveFloor({ ...existing, id: `${DEFAULT_FLOOR_ID}@v${from}-${this.now()}`, name: `${existing.name} (layout v${from})`, updatedAt: nowIso });
+        this.floor = { ...this.floor, layout: { version: LAYOUT_VERSION, w: 48, h: 30, machines: [inboundZone(1, 1)] }, updatedAt: nowIso };
+        await this.deps.store.saveFloor(this.floor);
+        startedOver = true;
+        this.notice = `The floor was started over: machines changed size (layout v${from} to v${LAYOUT_VERSION}) and what was built could not be carried over. The previous layout is kept as an archive, and the tickets are back in Inbound. Import your plans again.`;
+        this.deps.logger.info('Factory: the floor was started over for a new layout version', { from, to: LAYOUT_VERSION });
+      }
+    } else { this.floor = { ...this.floor, createdAt: nowIso, updatedAt: nowIso }; await this.deps.store.saveFloor(this.floor); }
     this.build(this.floor.layout);
     const interrupted = new Set((await this.deps.store.interruptRunningRuns(nowIso)).map((r) => r.id));
     for (const row of await this.deps.store.listTickets(this.floor.id)) {
       const t: Ticket = { ticketId: row.ticketId, machineId: row.machineId, s: row.state, createdAt: row.createdAt, info: null };
       if (t.s.phase === 'running') { t.s.phase = 'failed'; t.s.note = interrupted.has(t.s.runId ?? '') ? 'Run interrupted by a server restart' : 'Run interrupted'; this.dirty.add(t.ticketId); }
       this.tickets.set(t.ticketId, t);
+      if (startedOver) { const inbound = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound); if (inbound) { this.accept(inbound, t); t.s.outcome = ''; continue; } }
       this.attach(t);
     }
     const sinceIso = new Date(this.now() - HOUR_MS).toISOString();
@@ -682,8 +703,12 @@ export class FactoryEngine {
     await this.flush();
   }
 
+  /** The page has shown the notice. */
+  ackNotice(): void { this.notice = null; }
+
   snapshot(): FactorySnapshot {
     return {
+      notice: this.notice,
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
       tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
       arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: m.item ? m.item.ticketId : null })),

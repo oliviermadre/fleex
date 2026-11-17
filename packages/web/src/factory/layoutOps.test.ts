@@ -22,7 +22,8 @@ describe('factory layout edits', () => {
     const belts = paintBelts(empty, { x: 1, y: 4 }, { x: 8, y: 4 }).layout;
     const station = specFor('agent', 5, 4, 0)!;
     const withStation = place(belts, station)!;
-    expect(withStation.machines.filter((m) => m.kind === 'belt').map((m) => m.x)).toEqual([1, 2, 3, 7, 8]);
+    expect([station.x, station.y, station.w, station.h]).toEqual([3, 3, 5, 4]);          // a machine of 5 by 4 tiles, around where it was put
+    expect(withStation.machines.filter((m) => m.kind === 'belt').map((m) => m.x)).toEqual([1, 2, 8]);
     expect(place(withStation, specFor('gate', 6, 4, 0)!)).toBeNull();
     expect(canPlace(withStation, { x: -40, y: 80, w: 3, h: 3 })).toBe(true);          // the floor has no edge
   });
@@ -49,19 +50,19 @@ describe('factory layout edits', () => {
   });
   it('copies a group with its settings and pastes it elsewhere under new ids', () => {
     const station = { ...specFor('agent', 5, 5, 0)!, name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'] };
-    const arm = { ...specFor('arm', 7, 5, 0)!, when: [{ field: 'outcome' as const, op: 'is' as const, values: ['rework'] }] };
+    const arm = { ...specFor('arm', 8, 5, 0)!, when: [{ field: 'outcome' as const, op: 'is' as const, values: ['rework'] }] };
     const inbound = { ...specFor('zone', 12, 2, 0)!, inbound: true };
     const floor: FactoryLayout = { ...empty, machines: [station, arm, inbound, specFor('belt', 15, 9, 0)!] };
     const clip = copyOf(floor, new Set([station.id, arm.id, inbound.id]))!;
-    expect([clip.w, clip.h]).toEqual([11, 6]);
+    expect([clip.w, clip.h]).toEqual([12, 7]);
     expect(copyOf(floor, new Set(['nope']))).toBeNull();
 
     const pasted = pasteAt(floor, clip, 30, 20)!;
     expect(pasted.ids).toHaveLength(3);
     expect(pasted.ids.some((id) => [station.id, arm.id, inbound.id].includes(id))).toBe(false);
     const copies = pasted.layout.machines.filter((m) => pasted.ids.includes(m.id));
-    expect(copies.find((m) => m.kind === 'station')).toMatchObject({ name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'], x: 25, y: 20 });
-    expect(copies.find((m) => m.kind === 'arm')).toMatchObject({ when: [{ field: 'outcome', op: 'is', values: ['rework'] }], x: 28, y: 21 });
+    expect(copies.find((m) => m.kind === 'station')).toMatchObject({ name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'], x: 24, y: 20 });
+    expect(copies.find((m) => m.kind === 'arm')).toMatchObject({ when: [{ field: 'outcome', op: 'is', values: ['rework'] }], x: 29, y: 21 });
     expect(copies.find((m) => m.kind === 'zone')).toMatchObject({ inbound: false });
     expect(pasted.layout.machines).toHaveLength(7);
     /* the originals are untouched, and a later change to a copy does not reach the clip */

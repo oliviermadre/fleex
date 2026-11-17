@@ -9,6 +9,7 @@ import { usePanelStore } from '../stores/panelStore';
 import { openTicketInWork } from '../components/work/openInWork';
 import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
+import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
 import { FactoryInspector, type Selection } from './FactoryInspector';
 import { FactoryConsole } from './FactoryConsole';
@@ -19,13 +20,14 @@ import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machin
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
+import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryTicketModal } from './FactoryTicketModal';
 import { FactoryMachineModal } from './FactoryMachineModal';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadShow, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
+import { canSetAside, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -131,6 +133,7 @@ function Floor() {
   const [finder, setFinder] = useState<Finder>(NO_FINDER);
   const [hasClip, setHasClip] = useState(clipboard !== null);
   const tipRef = useRef<TicketTipHandle>(null);
+  const lampTipRef = useRef<LampTipHandle>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const jumpAt = useRef(0);
   const groupsRef = useRef(groups); groupsRef.current = groups;
@@ -153,7 +156,7 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, show });
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, show });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
@@ -187,7 +190,7 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       armAge: (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, boardName,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
-      hoverMachine: l.hover, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
+      hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
     };
@@ -257,7 +260,7 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
-    moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide();
+    moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide(); lampTipRef.current?.hide();
     /* right or middle button, or Space held: move the view, whatever the tool */
     if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; return; }
     if (live.current.building) {
@@ -281,9 +284,12 @@ function Floor() {
     if (e.buttons === 0) {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
       live.current.hover = hit && 'machineId' in hit ? hit.machineId : null;
+      live.current.hoverLamp = hit && 'lamp' in hit ? hit.lamp : null;
       live.current.ghost = ghostAt(v, w.x, w.y);
-      /* a ticket says what it is as soon as the pointer is over it */
+      /* a ticket says what it is as soon as the pointer is over it, and so does a machine's light */
       if (hit && 'ticketId' in hit) tipRef.current?.show(hit.ticketId, p.x, p.y); else tipRef.current?.hide();
+      if (hit && 'lamp' in hit) lampTipRef.current?.show(hit.lamp, p.x, p.y); else lampTipRef.current?.hide();
+      e.currentTarget.style.cursor = hit && 'lamp' in hit ? 'pointer' : '';
       return;
     }
     const dx = p.x - lastPt.current.x, dy = p.y - lastPt.current.y; moved.current += Math.abs(dx) + Math.abs(dy); lastPt.current = p;
@@ -337,7 +343,11 @@ function Floor() {
       setSelection({ ticket: pr.id });
     } else if (click) {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
-      setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null);
+      if (hit && 'lamp' in hit) {
+        /* the light of a machine that runs something is its switch; a gate's only speaks */
+        const m = v.machine(hit.lamp);
+        if (m?.kind === 'station' && RUNS.includes(m.exec)) void store.power(m.id, !!m.off);
+      } else setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null);
     }
   };
 
@@ -520,9 +530,16 @@ function Floor() {
           <canvas
             ref={canvasRef} className={cn('absolute inset-0 h-full w-full touch-none', building && tool !== 'select' ? 'cursor-crosshair' : 'cursor-grab')}
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-            onPointerLeave={() => { live.current.hover = null; live.current.ghost = null; tipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
+            onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
           <FactoryTicketTip ref={tipRef} />
+          <FactoryLampTip ref={lampTipRef} />
+          {snapshot?.notice && (
+            <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-3xl items-start gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('yellow'))} role="status">
+              <span className="min-w-0 flex-1">{snapshot.notice}</span>
+              <Button size="sm" onClick={() => void store.ackNotice()}>Got it</Button>
+            </div>
+          )}
           {layer && !building && (
             <div className="absolute left-3 top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg" role="status">
               <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>

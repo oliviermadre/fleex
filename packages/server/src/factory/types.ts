@@ -63,8 +63,11 @@ export interface LabelSpec extends MachineBase { kind: 'label'; text: string; co
 export interface BridgeSpec extends MachineBase { kind: 'bridge' }
 export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
 
-/** `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. */
-export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }
+/**
+ * `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. `version` says what
+ * the document means (see `layout-versions.ts`); a layout without one predates versions.
+ */
+export interface FactoryLayout { version?: number; w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings {
   /** Station runs the Factory may start per rolling hour. A runaway floor stops here. */
   maxRunsPerHour: number;
