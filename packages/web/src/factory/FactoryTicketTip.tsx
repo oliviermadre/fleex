@@ -13,7 +13,7 @@ export interface TicketTipHandle {
 
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'lying on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'queueing to run', running: 'running', review: 'waiting for your decision',
-  question: 'the agent asked a question', failed: 'the run failed', out: 'done, waiting for an arm', zone: 'waiting',
+  question: 'the agent asked a question', failed: 'the run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting',
 };
 
 /**

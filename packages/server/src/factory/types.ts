@@ -37,8 +37,13 @@ export interface StationSpec extends MachineBase {
   prompt?: string;
   /** The first one is the way forward. Each one leaves through the arm whose `outcome` filter holds it. */
   outcomes: string[];
-  /** How many tickets it holds at once; full, whatever feeds it backs up. */
+  /**
+   * How many tickets it works on at once: full, it takes nothing more and whatever feeds it backs up on the belts.
+   * A ticket set aside in it (a question, a failed run, one a human stopped) no longer takes one of these places.
+   */
   cap: number;
+  /** Agent, skill and panel stations: switched off, it still takes tickets in but starts nothing on them. */
+  off?: boolean;
   /** Native stations: the status to set. */
   sets?: TicketStatus;
 }
@@ -73,9 +78,15 @@ export const DEFAULT_FLOOR_ID = 'default';
  * Where a ticket stands:
  * loose (on the floor) · belt · arm · wait (in a station, run not started) · running ·
  * review (a gate waits for a human) · question (the agent asked something) ·
- * failed · out (done, waits for an arm) · zone
+ * failed · aside (a human took it off the station's hands) · out (done, waits for an arm) · zone
+ *
+ * `question`, `failed` and `aside` are the three ways a ticket is set aside in its station: it stays there, takes
+ * none of the station's places, and waits for a human to put it back.
  */
-export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'out' | 'zone';
+export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone';
+export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
+/** The stations that run something, and so can be switched off and have tickets set aside in them. */
+export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel'];
 export interface FactoryTicketState {
   x: number; y: number;
   phase: TicketPhase;

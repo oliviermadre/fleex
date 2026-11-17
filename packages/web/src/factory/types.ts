@@ -29,6 +29,8 @@ export interface StationSpec extends MachineBase {
   /** Agent stations: the model to run on instead of the persona's own. */
   model?: string;
   outcomes: string[]; cap: number; sets?: TicketStatus;
+  /** Agent, skill and panel stations: switched off, it takes tickets in but starts nothing on them. */
+  off?: boolean;
 }
 export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
 export interface ExitSpec extends MachineBase { kind: 'exit' }
@@ -41,7 +43,11 @@ export type MachineKind = MachineSpec['kind'];
 export interface FactoryLayout { w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number }
 
-export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'out' | 'zone';
+export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone';
+/** The three ways a ticket is set aside in its station: the agent asked, the run failed, or a human took it. It waits there to be put back. */
+export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
+/** The stations that run something: they have a switch, and tickets can be set aside in them. */
+export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel'];
 export interface FactoryTicketInfo {
   id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
   boardId: string; complexity: string | null; favorite: boolean;
@@ -109,6 +115,12 @@ export function needsHuman(t: FactoryTicket): string | null {
   if (call === 'decision') return 'Waiting for your decision';
   if (call === 'question') return 'The agent asked a question';
   if (call === 'failed') return 'The run failed';
+  if (t.phase === 'aside') return 'Set aside: waiting to be put back';
   if (t.phase === 'loose') return 'Lying on the floor';
   return null;
+}
+
+/** A ticket a station is working on (held, running, or done and not yet taken) can be set aside in it; nothing else can. */
+export function canSetAside(t: { phase: TicketPhase }, machine: MachineSpec | null | undefined): boolean {
+  return !!machine && machine.kind === 'station' && RUNS.includes(machine.exec) && (t.phase === 'wait' || t.phase === 'running' || t.phase === 'out');
 }

@@ -45,9 +45,15 @@ export function factoryRoutes(factory: FactoryModule | null) {
     app.post<{ Params: { ticketId: string }; Body: Target }>('/api/factory/tickets/:ticketId/transfer', (request, reply) => guard(reply, (f) => f.engine.transfer(request.params.ticketId, request.body ?? {})));
     app.post<{ Params: { ticketId: string }; Body: Target }>('/api/factory/tickets/:ticketId/move', (request, reply) => guard(reply, (f) => f.engine.move(request.params.ticketId, request.body ?? {})));
     app.post<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/release', (request, reply) => guard(reply, (f) => f.engine.release(request.params.ticketId)));
-    app.post<{ Params: { ticketId: string }; Body: { outcome: string } }>('/api/factory/tickets/:ticketId/resolve', (request, reply) => guard(reply, (f) => f.engine.resolveGate(request.params.ticketId, String(request.body?.outcome ?? ''))));
+    app.post<{ Params: { ticketId: string }; Body: { outcome: string; reason?: string } }>('/api/factory/tickets/:ticketId/resolve', (request, reply) => guard(reply, (f) => f.engine.resolveGate(request.params.ticketId, String(request.body?.outcome ?? ''), String(request.body?.reason ?? ''))));
     app.post<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/refresh', (request, reply) => guard(reply, (f) => f.engine.refreshInfo(request.params.ticketId)));
     app.post<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/retry', (request, reply) => guard(reply, (f) => f.engine.retry(request.params.ticketId)));
+    /** Take a ticket off its station's hands (a run in progress is stopped), and put one back: run the station again, or leave it by an outcome. */
+    app.post<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/aside', (request, reply) => guard(reply, (f) => f.engine.setAside(request.params.ticketId)));
+    app.post<{ Params: { ticketId: string }; Body: { how?: string; outcome?: string } }>('/api/factory/tickets/:ticketId/put-back', (request, reply) =>
+      guard(reply, (f) => f.engine.putBack(request.params.ticketId, request.body?.how === 'as' ? 'as' : 'again', String(request.body?.outcome ?? ''))));
+    /** A station's switch: off, it takes tickets in but starts nothing on them. */
+    app.post<{ Params: { machineId: string }; Body: { on?: boolean } }>('/api/factory/machines/:machineId/power', (request, reply) => guard(reply, (f) => f.engine.setPower(request.params.machineId, request.body?.on !== false)));
     app.delete<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId', (request, reply) => guard(reply, (f) => f.engine.giveBack(request.params.ticketId)));
 
     app.get<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/runs', async (request) => {

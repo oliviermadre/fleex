@@ -26,7 +26,7 @@ const LAYERS: [Lens, string, string][] = [
 
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
-  question: 'the agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'in a zone',
+  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone',
 };
 const YELLOW = tintClasses('yellow');
 const keyLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);

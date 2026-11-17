@@ -11,7 +11,7 @@ import type { FactoryTicket } from './types';
 export type StationState = 'failed' | 'call' | 'running' | 'queue' | 'idle';
 export function stationState(tickets: readonly FactoryTicket[]): StationState {
   const has = (...phases: FactoryTicket['phase'][]) => tickets.some((t) => phases.includes(t.phase));
-  return has('failed') ? 'failed' : has('review', 'question') ? 'call' : has('running') ? 'running' : has('wait') ? 'queue' : 'idle';
+  return has('failed') ? 'failed' : has('review', 'question', 'aside') ? 'call' : has('running') ? 'running' : has('wait') ? 'queue' : 'idle';
 }
 /** A station lights the floor when it works, or when it waits for a human. Queueing and idle stations stay dark. */
 export const glows = (s: StationState): boolean => s === 'failed' || s === 'call' || s === 'running';

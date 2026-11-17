@@ -17,6 +17,8 @@ const everyMenu = (): [string, Menu][] => {
     ['gate ticket', factoryMenu(ctx({ ticket: { phase: 'review', released: false, favorite: false, outcomes: ['approve', 'rework', 'reject', 'park'] } }))],
     ['zone ticket', factoryMenu(ctx({ ticket: { phase: 'zone', released: false, favorite: true, outcomes: [] } }))],
     ['failed ticket', factoryMenu(ctx({ ticket: { phase: 'failed', released: false, favorite: null, outcomes: [] } }))],
+    ['ticket set aside', factoryMenu(ctx({ ticket: { phase: 'aside', released: false, favorite: false, outcomes: ['ok', 'redo', 'drop', 'later'] } }))],
+    ['running ticket', factoryMenu(ctx({ ticket: { phase: 'running', released: false, favorite: false, outcomes: ['ok'], canAside: true } }))],
     ['zone', factoryMenu(ctx({ machine: { kind: 'zone', waiting: true } }))],
     ['belt, not building', factoryMenu(ctx({ machine: { kind: 'belt', waiting: false } }))],
     ['arm, building', factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false } }))],
@@ -110,6 +112,11 @@ describe('the command card', () => {
     expect([at(zone, 0), at(zone, 4), at(zone, 5), at(zone, 6)]).toEqual(['Release', 'Open', 'Unstar', 'Give back']);
     expect(at(factoryMenu(ctx({ ticket: { phase: 'question', released: false, favorite: false, outcomes: [] } })), 0)).toBe('Run again');
     expect(at(factoryMenu(ctx({ ticket: { phase: 'belt', released: false, favorite: false, outcomes: [] } })), 0)).toBeNull();
+    /* set aside in its station: back for another run at the same place as after a failure, then one tile per outcome to leave by */
+    const aside = factoryMenu(ctx({ ticket: { phase: 'aside', released: false, favorite: false, outcomes: ['ok', 'drop'] } }));
+    expect([0, 1, 2, 3].map((i) => at(aside, i))).toEqual(['Run again', 'ok', 'drop', null]);
+    expect(at(aside, 7)).toBeNull();
+    expect(at(factoryMenu(ctx({ ticket: { phase: 'running', released: false, favorite: false, outcomes: ['ok'], canAside: true } })), 7)).toBe('Set aside');
   });
 
   it('a path that no longer exists stops where it breaks', () => {

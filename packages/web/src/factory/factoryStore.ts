@@ -36,7 +36,11 @@ interface FactoryState {
   transfer: (ticketId: string, target: Target) => Promise<void>;
   move: (ticketId: string, target: Target) => Promise<void>;
   release: (ticketId: string) => Promise<void>;
-  resolve: (ticketId: string, outcome: string) => Promise<void>;
+  resolve: (ticketId: string, outcome: string, reason?: string) => Promise<void>;
+  setAside: (ticketId: string) => Promise<void>;
+  /** With an outcome the ticket leaves its station by that arm; without, the station runs again. */
+  putBack: (ticketId: string, outcome?: string) => Promise<void>;
+  power: (machineId: string, on: boolean) => Promise<void>;
   retry: (ticketId: string) => Promise<void>;
   giveBack: (ticketId: string) => Promise<void>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
@@ -113,7 +117,10 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     transfer: (ticketId, target) => act(() => factoryApi.transfer(ticketId, target)),
     move: (ticketId, target) => act(() => factoryApi.move(ticketId, target)),
     release: (ticketId) => act(() => factoryApi.release(ticketId)),
-    resolve: (ticketId, outcome) => act(() => factoryApi.resolve(ticketId, outcome)),
+    resolve: (ticketId, outcome, reason) => act(() => factoryApi.resolve(ticketId, outcome, reason)),
+    setAside: (ticketId) => act(() => factoryApi.setAside(ticketId)),
+    putBack: (ticketId, outcome) => act(() => factoryApi.putBack(ticketId, outcome)),
+    power: (machineId, on) => act(() => factoryApi.power(machineId, on)),
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
     star: async (ticketId, on) => {

@@ -33,6 +33,7 @@ function reason(m: MachineSpec, inside: FactoryTicket[]): { why: string; human: 
     [n((t) => t.phase === 'review'), 'waiting for your decision', true],
     [n((t) => t.phase === 'question'), 'the agent asked a question', true],
     [n((t) => t.phase === 'failed'), 'the run failed', true],
+    [n((t) => t.phase === 'aside'), 'set aside, waiting to be put back', true],
     [n((t) => t.phase === 'wait'), 'queueing to run', false],
     [n((t) => t.phase === 'out'), 'done, but nothing takes them out', false],
     [n((t) => t.phase === 'running'), 'running', false],

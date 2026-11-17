@@ -16,7 +16,7 @@ export function stateOf(t: FactoryTicket): TicketState {
     case 'loose': return 'floor';
     case 'wait': return 'queue';
     case 'running': return 'running';
-    case 'review': case 'question': case 'failed': return 'human';
+    case 'review': case 'question': case 'failed': case 'aside': return 'human';
     case 'out': return 'done';
     default: return 'zone';
   }

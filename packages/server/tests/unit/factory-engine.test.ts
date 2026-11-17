@@ -42,7 +42,9 @@ const exit = (id: string, x: number, y: number): MachineSpec => ({ id, kind: 'ex
 let store: MemoryStore;
 let infos: Map<string, FactoryTicketInfo>;
 let statuses: [string, string][];
-let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void }[];
+let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void; started: (executionId: string) => void }[];
+let cancelled: string[];
+let decisions: [string, string, string, string][];
 let clock: number;
 let engine: FactoryEngine;
 
@@ -60,14 +62,16 @@ async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?
     store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: timing === 'real' ? undefined : timing,
     loadTicket: async (id) => infos.get(id) ?? null,
     setStatus: async (id, status) => { statuses.push([id, status]); },
-    runner: { run: (s, ticketId) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve }); }) },
+    runner: { run: (s, ticketId, _runId, _targets, started) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started }); }) },
+    cancelExecution: async (id) => { cancelled.push(id); },
+    recordDecision: async (ticketId, gate, outcome, reason) => { decisions.push([ticketId, gate, outcome, reason]); },
   });
   await engine.init();
   await engine.setLayout(layout);
 }
 
 beforeEach(() => {
-  store = new MemoryStore(); infos = new Map(); statuses = []; pending = []; clock = Date.parse('2026-11-15T10:00:00.000Z');
+  store = new MemoryStore(); infos = new Map(); statuses = []; pending = []; cancelled = []; decisions = []; clock = Date.parse('2026-11-15T10:00:00.000Z');
   for (const id of ['a', 'b', 'c']) infos.set(id, info(id));
 });
 
@@ -469,5 +473,141 @@ describe('normaliseLayout', () => {
     const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), w: 9, h: 9, outcomes: [] } as MachineSpec, { ...station('n', 6, 1, { exec: 'native' }), w: 9 } as MachineSpec] });
     expect(out.machines.map((m) => [m.w, m.h])).toEqual([[3, 3], [2, 2]]);
     expect((out.machines[0] as StationSpec).outcomes).toEqual(['ok']);
+  });
+});
+
+const ok: StationRunResult = { status: 'completed', outcome: 'ok', executionId: null, error: null };
+const note = (ticketId: string) => engine.snapshot().tickets.find((t) => t.ticketId === ticketId)?.note ?? '';
+
+describe('a station works on as many tickets as it has places', () => {
+  it('runs no more than its capacity at once, and what cannot enter stays upstream', async () => {
+    await boot([zone('in', 1, 1, { release: 'auto' }), arm('feed', 3, 1, 0), station('s', 4, 0, { cap: 2 })]);
+    for (const id of ['a', 'b', 'c']) await engine.transfer(id, { machineId: 'in' });
+    await run(6);
+    expect([where('a'), where('b')]).toEqual(['s:running', 's:running']);
+    expect(where('c')).toMatch(/^(in:zone|feed:arm)$/);
+    expect(pending).toHaveLength(2);
+  });
+
+  it('a ticket set aside frees its place: a question or a failure no longer blocks the station', async () => {
+    await boot([zone('in', 1, 1, { release: 'auto' }), arm('feed', 3, 1, 0), station('s', 4, 0, { cap: 1 })]);
+    await engine.transfer('a', { machineId: 'in' });
+    await engine.transfer('b', { machineId: 'in' });
+    await run(3);
+    pending[0]!.resolve({ status: 'question', outcome: '', executionId: null, error: null });
+    await run(4);
+    expect(where('a')).toBe('s:question');
+    expect(where('b')).toBe('s:running');
+  });
+
+  it('stops taking tickets in when what is done piles up as high as it is big', async () => {
+    await boot([zone('in', 1, 1, { release: 'auto' }), arm('feed', 3, 1, 0), station('s', 4, 0, { cap: 1 })]);   // nothing takes tickets out of the station
+    await engine.transfer('a', { machineId: 'in' });
+    await engine.transfer('b', { machineId: 'in' });
+    await run(3);
+    pending[0]!.resolve(ok);
+    await run(4);
+    expect(where('a')).toBe('s:out');
+    expect(where('b')).toMatch(/^(in:zone|feed:arm)$/);
+  });
+});
+
+describe('setting a ticket aside, and putting it back', () => {
+  it('stops the run in progress, keeps the ticket in its station and ignores what the run returns', async () => {
+    await boot([station('s', 1, 1), arm('o', 4, 2, 0), zone('next', 5, 2)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.3);
+    pending[0]!.started('exec-1');
+    await engine.setAside('a');
+    expect(where('a')).toBe('s:aside');
+    expect(cancelled).toEqual(['exec-1']);
+    expect([...store.runs.values()][0]?.status).toBe('interrupted');
+    pending[0]!.resolve(ok);
+    await run(2);
+    expect(where('a')).toBe('s:aside');                 // the arm leaves it alone, the late result changes nothing
+    expect(note('a')).toContain('stopped');
+  });
+
+  it('leaves the station by the arm of the outcome it is put back as', async () => {
+    await boot([station('triage', 1, 3, { outcomes: ['bug', 'feature'] }), arm('b', 4, 3, 0, 'outcome', ['bug']), zone('bugs', 5, 3), arm('f', 4, 5, 0, 'outcome', ['feature']), zone('features', 5, 5)]);
+    await engine.transfer('a', { machineId: 'triage' });
+    await run(0.3);
+    await engine.setAside('a');
+    await expect(engine.putBack('a', 'as', 'nope')).rejects.toThrow(/not an outcome/);
+    await engine.putBack('a', 'as', 'feature');
+    await run(3);
+    expect(where('a')).toBe('features:zone');
+  });
+
+  it('runs the station again when put back for another go, after a failure as after a stop', async () => {
+    await boot([station('s', 1, 1)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.3);
+    pending[0]!.resolve({ status: 'failed', outcome: '', executionId: null, error: 'boom' });
+    await run(0.3);
+    expect(where('a')).toBe('s:failed');
+    await engine.putBack('a', 'again');
+    await run(0.3);
+    expect(where('a')).toBe('s:running');
+    expect(pending).toHaveLength(2);
+    await engine.setAside('a');
+    await engine.retry('a');
+    await run(0.3);
+    expect(pending).toHaveLength(3);
+  });
+
+  it('refuses what is not in a station that runs something, and what is not set aside', async () => {
+    await boot([station('gate', 1, 1, { exec: 'human_gate', outcomes: ['approve', 'reject'] }), zone('z', 6, 1), station('s', 9, 1)]);
+    await engine.transfer('a', { machineId: 'gate' });
+    await engine.transfer('b', { machineId: 'z' });
+    await engine.transfer('c', { machineId: 's' });
+    await expect(engine.setAside('a')).rejects.toThrow(FactoryError);   // a gate only waits for a human: nothing to set aside
+    await expect(engine.setAside('b')).rejects.toThrow(FactoryError);
+    await expect(engine.putBack('c', 'again')).rejects.toThrow(/not set aside/);
+  });
+});
+
+describe('a station has a switch', () => {
+  it('off, it takes tickets in and starts nothing; on again, it starts them', async () => {
+    await boot([station('s', 1, 1)]);
+    await engine.setPower('s', false);
+    await engine.transfer('a', { machineId: 's' });
+    await run(1);
+    expect(where('a')).toBe('s:wait');
+    expect(note('a')).toContain('switched off');
+    expect(pending).toHaveLength(0);
+    expect((store.floor!.layout.machines[0] as StationSpec).off).toBe(true);     // kept with the floor
+    await engine.setPower('s', true);
+    await run(0.3);
+    expect(where('a')).toBe('s:running');
+    expect((store.floor!.layout.machines[0] as StationSpec).off).toBeUndefined();
+  });
+
+  it('lets what already runs finish', async () => {
+    await boot([station('s', 1, 1)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.3);
+    await engine.setPower('s', false);
+    pending[0]!.resolve(ok);
+    await run(0.3);
+    expect(where('a')).toBe('s:out');
+  });
+
+  it('exists only on a station that runs something, and survives a save of the layout only there', async () => {
+    await boot([station('gate', 1, 1, { exec: 'human_gate', outcomes: ['approve', 'reject'] })]);
+    await expect(engine.setPower('gate', false)).rejects.toThrow(/switch/);
+    const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), off: true } as MachineSpec, { ...station('g', 6, 1, { exec: 'human_gate' }), off: true } as MachineSpec] });
+    expect(out.machines.map((m) => (m as StationSpec).off)).toEqual([true, undefined]);
+  });
+});
+
+describe('a decision at a gate', () => {
+  it('goes in the thread with its reason', async () => {
+    await boot([station('gate', 1, 3, { exec: 'human_gate', name: 'Check spec', outcomes: ['approve', 'reject'] }), arm('ok', 4, 3, 0, 'outcome', ['approve']), zone('next', 5, 3)]);
+    await engine.transfer('a', { machineId: 'gate' });
+    await engine.resolveGate('a', 'approve', '  keep the mapping editable ');
+    await run(3);
+    expect(where('a')).toBe('next:zone');
+    expect(decisions).toEqual([['a', 'Check spec', 'approve', 'keep the mapping editable']]);
   });
 });

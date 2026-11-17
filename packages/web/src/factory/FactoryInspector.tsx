@@ -21,7 +21,7 @@ import { MachineFigures, PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
 import { standing } from './lens';
 import { TicketGlyphs } from './FactoryTicketMeta';
-import { byRunAt, needsHuman, QUESTION_OUTCOME, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { byRunAt, canSetAside, needsHuman, QUESTION_OUTCOME, RUNS, SET_ASIDE, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
 
@@ -31,7 +31,7 @@ export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade8
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
 const PHASE_LABEL: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for a decision',
-  question: 'agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'in a zone',
+  question: 'agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone',
 };
 
 /** A text field that saves when you leave it or press Enter, not on every keystroke. */
@@ -70,7 +70,11 @@ function TicketActions({ t, machine }: { t: FactoryTicket; machine: MachineSpec 
         <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} onClick={() => store.resolve(t.ticketId, o)}>{o}</Button>
       ))}
       {t.phase === 'zone' && !t.released && <Button size="sm" variant="primary" onClick={() => store.release(t.ticketId)}>Release</Button>}
-      {(t.phase === 'failed' || t.phase === 'question') && <Button size="sm" variant="primary" onClick={() => store.retry(t.ticketId)}>Run again</Button>}
+      {SET_ASIDE.includes(t.phase) && <Button size="sm" variant="primary" onClick={() => store.putBack(t.ticketId)}>Run again</Button>}
+      {SET_ASIDE.includes(t.phase) && machine?.kind === 'station' && machine.outcomes.map((o) => (
+        <Button key={o} size="sm" variant="secondary" title="It leaves the station by the arm of that outcome, as done by hand" onClick={() => store.putBack(t.ticketId, o)}>Leave as {o}</Button>
+      ))}
+      {canSetAside(t, machine) && <Button size="sm" title={t.phase === 'running' ? 'Stops the run and keeps the ticket in its station until you put it back' : 'Keeps the ticket in its station until you put it back'} onClick={() => store.setAside(t.ticketId)}>Set aside</Button>}
       <Button size="sm" onClick={() => openTicketInWork(t.ticketId)}>Open ticket</Button>
       <Button size="sm" variant="ghost" onClick={() => store.giveBack(t.ticketId)}>Give back to Fleex</Button>
     </div>
@@ -199,7 +203,13 @@ function MachinePanel({ m, view, tickets, onPatch, onRemove, onSelect, onOpen, b
           )}
           {m.exec === 'native' && <Select id="f-sets" label="Sets the ticket status to" value={m.sets ?? 'doing'} onChange={(e) => onPatch({ sets: e.target.value as TicketStatus } as Partial<StationSpec>)} options={STATUS_OPTIONS.slice(1)} />}
           {m.exec !== 'native' && <CommitInput id="f-outcomes" label="Outcomes, comma separated (the first is the way forward)" value={m.outcomes.join(', ')} onCommit={(v) => onPatch({ outcomes: list(v).length ? list(v) : ['ok'] } as Partial<StationSpec>)} />}
-          <CommitInput id="f-cap" label="Capacity (tickets inside at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(50, Number(v) || 8)) } as Partial<StationSpec>)} />
+          {RUNS.includes(m.exec) && (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-xs">
+              <span className="min-w-0"><b className={m.off ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'}>{m.off ? 'Off' : 'On'}</b> <span className="text-[var(--theme-text-secondary)]">{m.off ? 'It takes tickets in and starts nothing on them.' : 'It runs on what comes in.'}</span></span>
+              <Button size="sm" onClick={() => onPatch({ off: m.off ? undefined : true } as Partial<StationSpec>)}>{m.off ? 'Switch on' : 'Switch off'}</Button>
+            </div>
+          )}
+          <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(50, Number(v) || 8)) } as Partial<StationSpec>)} />
           <Section title="Where each outcome leaves">
             {m.outcomes.map((o) => {
               const arm = takers.find((a) => acceptsOutcome(a, o)) ?? takers.find((a) => !isConditional(a));

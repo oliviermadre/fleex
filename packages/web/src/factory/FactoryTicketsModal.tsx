@@ -152,7 +152,7 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
                   <span><ComplexityBadge complexity={complexityOf(info)} /></span>
                   <span className="truncate text-[var(--theme-text-primary)]">{whereOf(m)}</span>
                   <span className={cn('min-w-0 leading-snug', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-secondary)]')} title={t.note || undefined}>
-                    {t.phase === 'review' ? 'Waiting for your decision' : t.phase === 'question' ? 'The agent asked a question' : t.phase === 'failed' ? 'The run failed' : t.phase === 'zone' && t.released ? 'Released' : STATE_LABEL[state]}{t.outcome && state !== 'human' ? ` · ${t.outcome}` : ''}
+                    {t.phase === 'review' ? 'Waiting for your decision' : t.phase === 'question' ? 'The agent asked a question' : t.phase === 'failed' ? 'The run failed' : t.phase === 'aside' ? 'Set aside by you' : t.phase === 'zone' && t.released ? 'Released' : STATE_LABEL[state]}{t.outcome && state !== 'human' ? ` · ${t.outcome}` : ''}
                   </span>
                   <span className="font-mono text-[var(--theme-text-secondary)]">{now ? span(since(t.since, now)) : ''}</span>
                   <span className="truncate text-[var(--theme-text-muted)]">{info ? boards.find((b) => b.id === info.boardId)?.name ?? '' : ''}{info?.blocked ? ' · blocked' : ''}</span>

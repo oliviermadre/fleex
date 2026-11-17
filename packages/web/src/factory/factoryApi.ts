@@ -23,7 +23,12 @@ export const factoryApi = {
   transfer: (ticketId: string, target: Target) => post<FactorySnapshot>(`/tickets/${ticketId}/transfer`, target),
   move: (ticketId: string, target: Target) => post<FactorySnapshot>(`/tickets/${ticketId}/move`, target),
   release: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/release`),
-  resolve: (ticketId: string, outcome: string) => post<FactorySnapshot>(`/tickets/${ticketId}/resolve`, { outcome }),
+  resolve: (ticketId: string, outcome: string, reason = '') => post<FactorySnapshot>(`/tickets/${ticketId}/resolve`, { outcome, reason }),
+  /** Take a ticket off its station's hands (a run in progress is stopped). */
+  setAside: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/aside`),
+  /** Put back a ticket that was set aside: with an outcome it leaves the station by that arm, without one the station runs again. */
+  putBack: (ticketId: string, outcome?: string) => post<FactorySnapshot>(`/tickets/${ticketId}/put-back`, outcome ? { how: 'as', outcome } : { how: 'again' }),
+  power: (machineId: string, on: boolean) => post<FactorySnapshot>(`/machines/${machineId}/power`, { on }),
   retry: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/retry`),
   refreshTicket: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/refresh`),
   giveBack: (ticketId: string) => call<FactorySnapshot>(`/tickets/${ticketId}`, { method: 'DELETE' }),

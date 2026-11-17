@@ -73,6 +73,15 @@ export class FactoryModule {
       setStatus: async (ticketId: string, status: TicketStatus) => {
         await deps.applyTicketMutation.execute({ ticketId, move: { status }, actor: { actorType: 'agent', actorName: 'Factory' } });
       },
+      cancelExecution: (executionId) => deps.executeAgent.cancelExecution(executionId),
+      /* in the human's name, as a comment of theirs would be; it starts no agent (no mention is created from it) */
+      recordDecision: async (ticketId, gate, outcome, reason) => {
+        const { humanDisplayName, humanMentionName } = deps.config.get();
+        const authorName = humanDisplayName || humanMentionName || 'user';
+        const body = `**${gate}: ${outcome}**${reason ? `\n\n${reason.replace(/@(?=[\w-]+:?)/g, '@\u200b')}` : ''}`;
+        const { comment } = await deps.postComment.execute({ ticketId, authorType: 'user', authorName, body, visibility: 'public' });
+        deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'user', authorName, createdMentions: [], occurredAt: new Date() });
+      },
     });
   }
 

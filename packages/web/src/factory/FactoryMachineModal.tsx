@@ -15,7 +15,7 @@ import { needsHuman, type FactoryRun, type FactoryTicket, type MachineSpec } fro
 const REFRESH_MS = 4000;
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'queueing to run', running: 'running', review: 'waiting for your decision',
-  question: 'the agent asked a question', failed: 'run failed', out: 'done, waiting for an arm', zone: 'waiting',
+  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting',
 };
 const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const kindOf = (m: MachineSpec): string => (m.kind === 'station' ? (m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`)
@@ -99,7 +99,7 @@ export function FactoryMachineModal({ machineId, onClose, onOpenTicket }: { mach
                       <span className="flex flex-none gap-1">
                         {t.phase === 'review' && isStation && machine.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} onClick={() => store.resolve(t.ticketId, o)}>{o}</Button>)}
                         {t.phase === 'zone' && !t.released && <Button size="sm" variant="primary" onClick={() => store.release(t.ticketId)}>Release</Button>}
-                        {(t.phase === 'failed' || t.phase === 'question') && <Button size="sm" variant={t.phase === 'failed' ? 'primary' : 'secondary'} onClick={() => (t.phase === 'question' ? onOpenTicket(t.ticketId) : store.retry(t.ticketId))}>{t.phase === 'question' ? 'Answer' : 'Run again'}</Button>}
+                        {(t.phase === 'failed' || t.phase === 'question' || t.phase === 'aside') && <Button size="sm" variant={t.phase === 'question' ? 'secondary' : 'primary'} onClick={() => (t.phase === 'question' ? onOpenTicket(t.ticketId) : store.putBack(t.ticketId))}>{t.phase === 'question' ? 'Answer' : 'Run again'}</Button>}
                         <Button size="sm" variant="ghost" onClick={() => store.giveBack(t.ticketId)} title="Take this ticket out of the Factory">Give back</Button>
                       </span>
                     </li>

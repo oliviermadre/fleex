@@ -25,7 +25,7 @@ import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadShow, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
+import { canSetAside, humanCall, needsHuman, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -403,7 +403,7 @@ function Floor() {
   const gate = selTicket ? layout?.machines.find((q) => q.id === selTicket.machineId) : null;
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
-    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [] } : null,
+    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
@@ -429,7 +429,9 @@ function Floor() {
       giveBack: () => { if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
       resolve: (o) => { if (selTicket) void store.resolve(selTicket.ticketId, o); },
       release: () => { if (selTicket) void store.release(selTicket.ticketId); },
-      retry: () => { if (selTicket) void store.retry(selTicket.ticketId); },
+      retry: () => { if (selTicket) void store.putBack(selTicket.ticketId); },
+      setAside: () => { if (selTicket) void store.setAside(selTicket.ticketId); },
+      putBack: (o) => { if (selTicket) void store.putBack(selTicket.ticketId, o); },
       openMachine: () => { if (selMachine) setOpenMachine(selMachine.id); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },

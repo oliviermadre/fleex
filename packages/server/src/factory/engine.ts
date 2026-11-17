@@ -4,7 +4,7 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, isConditional, matches as armMatches, normaliseConditions, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
-  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY,
+  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, RUNS, SET_ASIDE,
   type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
   type FactoryTicketInfo, type FactoryTicketState, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
@@ -60,6 +60,10 @@ export interface FactoryEngineDeps {
   setStatus(ticketId: string, status: TicketStatus): Promise<void>;
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
   now?: () => number;
+  /** Stop the agent execution a run started: a human took the ticket off the station while it ran. */
+  cancelExecution?(executionId: string): Promise<unknown>;
+  /** Write a gate decision in the ticket's thread, in the human's name. */
+  recordDecision?(ticketId: string, gate: string, outcome: string, reason: string): Promise<void>;
   /** Paces of the floor, for tests that do not want to wait for them. */
   timing?: { armSwing?: number; stationRestMs?: number };
 }
@@ -102,6 +106,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.cap = Math.max(1, Math.min(50, Math.floor(m.cap || 8)));
       if (!['agent', 'skill', 'panel', 'human_gate', 'native'].includes(m.exec)) throw new FactoryError(`unknown station executor "${String(m.exec)}"`);
       m.model = m.exec === 'agent' && typeof m.model === 'string' && m.model.trim() ? m.model.trim().slice(0, 120) : undefined;
+      if (m.off === true && RUNS.includes(m.exec)) m.off = true; else delete m.off;
       if (typeof m.prompt === 'string' && m.prompt.length > 60_000) throw new FactoryError(`the instructions of ${m.name || 'a station'} are too long`);
     } else if (m.kind === 'zone') {
       m.w = Math.max(2, Math.min(30, Math.floor(m.w || 4))); m.h = Math.max(2, Math.min(30, Math.floor(m.h || 4)));
@@ -135,6 +140,8 @@ export class FactoryEngine {
   private tickets = new Map<string, Ticket>();
   private dirty = new Set<string>();
   private runStarts: number[] = [];
+  /** Runs in flight, by id: what a human stopping one needs to find its execution. */
+  private openRuns = new Map<string, FactoryRunRow>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastTick = 0;
   private lastFlush = 0;
@@ -256,7 +263,12 @@ export class FactoryEngine {
     if (!m) return false;
     if (m.spec.kind === 'belt') return !m.item;
     if (m.spec.kind === 'bridge') return dir !== undefined && !(dir % 2 === 0 ? m.item : m.item2);   // 0 and 2 cross east-west
-    if (m.spec.kind === 'station') return this.inside(m).length < m.spec.cap;
+    if (m.spec.kind === 'station') {
+      /* its places are for what it works on; what is done waits apart, and intake stops when that piles up as high */
+      let busy = 0, done = 0;
+      for (const t of this.inside(m)) { if (t.s.phase === 'out') done++; else if (!SET_ASIDE.includes(t.s.phase)) busy++; }
+      return busy < m.spec.cap && done < m.spec.cap;
+    }
     return m.spec.kind === 'zone' || m.spec.kind === 'exit';
   }
 
@@ -419,13 +431,17 @@ export class FactoryEngine {
   private updateStation(m: Machine): void {
     const spec = m.spec as StationSpec;
     if (spec.exec === 'human_gate' || spec.exec === 'native') return;
-    for (const t of this.inside(m)) {
+    const inside = this.inside(m);
+    let running = inside.filter((t) => t.s.phase === 'running').length;
+    for (const t of inside) {
       if (t.s.phase !== 'wait') continue;
       const s = this.floor.settings;
-      const note = this.runsLastHour() >= s.maxRunsPerHour ? `Limit of ${s.maxRunsPerHour} runs per hour reached: the Factory waits`
+      const note = spec.off ? `${spec.name || 'The station'} is switched off`
+        : running >= spec.cap ? `${spec.name || 'The station'} works on ${spec.cap} at once`
+        : this.runsLastHour() >= s.maxRunsPerHour ? `Limit of ${s.maxRunsPerHour} runs per hour reached: the Factory waits`
         : this.runningCount() >= s.maxConcurrentRuns ? `${s.maxConcurrentRuns} Factory runs already in flight` : '';
       if (note) { if (t.s.note !== note) { t.s.note = note; this.dirty.add(t.ticketId); } continue; }
-      this.startRun(m, t);
+      this.startRun(m, t); running++;
     }
   }
 
@@ -434,6 +450,7 @@ export class FactoryEngine {
     t.s.phase = 'running'; t.s.note = ''; this.dirty.add(t.ticketId);
     this.runStarts.push(this.now());
     const run = this.openRun(spec, t, 'running');
+    this.openRuns.set(run.id, run);
     /* where each outcome leads, so the agent is told what its answer does */
     const targets: Record<string, string> = {};
     for (const o of spec.outcomes) {
@@ -443,6 +460,7 @@ export class FactoryEngine {
     }
     void this.deps.runner.run(spec, t.ticketId, run.id, targets, (executionId) => { run.executionId = executionId; this.saveRun(run); })
       .then((res) => {
+        this.openRuns.delete(run.id);
         run.finishedAt = new Date(this.now()).toISOString(); run.executionId = res.executionId ?? run.executionId; run.error = res.error;
         const still = this.tickets.get(t.ticketId) === t && t.machineId === spec.id && t.s.runId === run.id;
         if (!still) { run.status = res.status === 'failed' ? 'failed' : 'interrupted'; this.saveRun(run); return; }
@@ -452,6 +470,7 @@ export class FactoryEngine {
         this.saveRun(run); this.dirty.add(t.ticketId);
       })
       .catch((err) => {
+        this.openRuns.delete(run.id);
         run.status = 'failed'; run.error = err instanceof Error ? err.message : String(err); run.finishedAt = new Date(this.now()).toISOString(); this.saveRun(run);
         if (this.tickets.get(t.ticketId) === t && t.s.runId === run.id) { t.s.phase = 'failed'; t.s.note = run.error; this.dirty.add(t.ticketId); }
       });
@@ -593,8 +612,8 @@ export class FactoryEngine {
     await this.flush();
   }
 
-  /** A human decides at a gate: the ticket leaves by the arm that takes this outcome. */
-  async resolveGate(ticketId: string, outcome: string): Promise<void> {
+  /** A human decides at a gate: the ticket leaves by the arm that takes this outcome. The decision, and the reason given for it, go in the ticket's thread. */
+  async resolveGate(ticketId: string, outcome: string, reason = ''): Promise<void> {
     const t = this.get(ticketId), m = t.machineId ? this.byId.get(t.machineId) : null;
     if (!m || m.spec.kind !== 'station' || t.s.phase !== 'review') throw new FactoryError('This ticket is not waiting at a gate');
     if (!m.spec.outcomes.includes(outcome)) throw new FactoryError(`"${outcome}" is not an outcome of ${m.spec.name || 'this gate'}`);
@@ -604,14 +623,62 @@ export class FactoryEngine {
       status: 'completed', outcome, executionId: null, error: null, startedAt: t.s.since, finishedAt: nowIso,
     });
     t.s.phase = 'out'; t.s.outcome = outcome; t.s.since = nowIso; this.dirty.add(ticketId);
+    if (this.deps.recordDecision) void this.deps.recordDecision(ticketId, m.spec.name || 'Gate', outcome, reason.trim().slice(0, 4000))
+      .catch((err) => this.deps.logger.warn('Factory: could not write a decision in the thread', { ticketId, error: String(err) }));
+    await this.flush();
+  }
+
+  /** The station a ticket is in, when that station runs something (an agent, a skill, a panel). */
+  private runningStation(t: Ticket): (Machine & { spec: StationSpec }) | null {
+    const m = t.machineId ? this.byId.get(t.machineId) : null;
+    return m && m.spec.kind === 'station' && RUNS.includes(m.spec.exec) ? (m as Machine & { spec: StationSpec }) : null;
+  }
+
+  /**
+   * A human takes a ticket off its station's hands: it stays in the station, set aside, and frees its place. A run in
+   * progress is stopped. Nothing happens to it until it is put back.
+   */
+  async setAside(ticketId: string): Promise<void> {
+    const t = this.get(ticketId), m = this.runningStation(t);
+    if (!m || !['wait', 'running', 'out'].includes(t.s.phase)) throw new FactoryError('Only a ticket a station is working on can be set aside');
+    const nowIso = new Date(this.now()).toISOString(), run = t.s.phase === 'running' && t.s.runId ? this.openRuns.get(t.s.runId) : null;
+    if (run) {
+      run.status = 'interrupted'; run.finishedAt = nowIso; this.saveRun(run);
+      if (run.executionId && this.deps.cancelExecution) void this.deps.cancelExecution(run.executionId)
+        .catch((err) => this.deps.logger.warn('Factory: could not stop a run', { ticketId, error: String(err) }));
+    }
+    t.s.note = t.s.phase === 'running' ? `You stopped ${m.spec.name || 'the station'}'s run` : '';
+    t.s.phase = 'aside'; t.s.outcome = ''; t.s.runId = null; t.s.since = nowIso; this.dirty.add(ticketId);
+    await this.flush();
+  }
+
+  /**
+   * Put back a ticket that was set aside (a question, a failed run, or one a human took): `again` gives it back to the
+   * station, which runs on it again with what is now in the thread; `as` sends it out by the arm of that outcome, as if
+   * the station had concluded it. Sending it to another machine is a move, as for any ticket.
+   */
+  async putBack(ticketId: string, how: 'again' | 'as', outcome = ''): Promise<void> {
+    const t = this.get(ticketId), m = this.runningStation(t);
+    if (!m || !SET_ASIDE.includes(t.s.phase)) throw new FactoryError('This ticket is not set aside in a station');
+    if (how === 'as') {
+      if (!m.spec.outcomes.includes(outcome)) throw new FactoryError(`"${outcome}" is not an outcome of ${m.spec.name || 'this station'}`);
+      t.s.phase = 'out'; t.s.outcome = outcome; t.s.since = new Date(this.now()).toISOString();
+    } else { t.s.phase = 'wait'; t.s.outcome = ''; }
+    t.s.note = ''; t.s.runId = null; this.dirty.add(ticketId);
     await this.flush();
   }
 
   /** Run the station again: after a failure, or once a question has been answered in the ticket thread. */
-  async retry(ticketId: string): Promise<void> {
-    const t = this.get(ticketId);
-    if (t.s.phase !== 'failed' && t.s.phase !== 'question') throw new FactoryError('Nothing to run again on this ticket');
-    t.s.phase = 'wait'; t.s.outcome = ''; t.s.note = ''; t.s.runId = null; this.dirty.add(ticketId);
+  retry(ticketId: string): Promise<void> { return this.putBack(ticketId, 'again'); }
+
+  /** Switch a station on or off. Off, it takes tickets in but starts nothing on them; what already runs finishes. */
+  async setPower(machineId: string, on: boolean): Promise<void> {
+    const m = this.byId.get(machineId);
+    if (!m || m.spec.kind !== 'station' || !RUNS.includes(m.spec.exec)) throw new FactoryError('Only a station that runs something has a switch');
+    if (on) delete m.spec.off; else m.spec.off = true;
+    for (const t of this.inside(m)) if (t.s.phase === 'wait' && t.s.note) { t.s.note = ''; this.dirty.add(t.ticketId); }
+    this.floor = { ...this.floor, layout: { ...this.floor.layout }, updatedAt: new Date(this.now()).toISOString() };
+    await this.deps.store.saveFloor(this.floor);
     await this.flush();
   }
 

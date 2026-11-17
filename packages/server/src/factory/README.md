@@ -32,6 +32,25 @@ new ids.
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
+## Places, set aside, and the switch
+
+A station that runs something (an agent, a skill, a panel) works on as many tickets as it has places (`cap`). Nothing
+queues inside it: full, it takes nothing more and what feeds it backs up on the belts. What is done and not yet taken
+by an arm waits apart, and intake also stops when that piles up as high as the station is big.
+
+A ticket can be **set aside** in its station, three ways: the agent asked a question, the run failed, or a human took
+it off the station's hands (`POST /api/factory/tickets/:id/aside`, which stops a run in progress through
+`ExecuteAgentUseCase.cancelExecution`). Set aside, it stays in the station, takes none of its places, and waits to be
+**put back** (`POST …/put-back`): `again` gives it back to the station for another run with what is now in the thread,
+`as` with an outcome sends it out by the arm of that outcome, as if the station had concluded it. Sending it to
+another machine is a move, as for any ticket. A gate has nothing to set aside: it only waits for a human.
+
+Such a station has a **switch** (`off` on its spec, `POST /api/factory/machines/:id/power`): off, it still takes
+tickets in but starts nothing on them; what already runs finishes.
+
+A decision at a gate (`…/resolve`, with an optional `reason`) is written in the ticket's thread in the human's name,
+as a comment that creates no mention and so starts no agent.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`

@@ -13,7 +13,7 @@
  */
 import type { Tool } from './layoutOps';
 import { BACK_SLOT, menu, type Command, type Menu } from './menu';
-import type { Dir, MachineSpec, TicketPhase } from './types';
+import { SET_ASIDE, type Dir, type MachineSpec, type TicketPhase } from './types';
 
 const ARROW = ['→', '↓', '←', '↑'];
 
@@ -21,8 +21,8 @@ export interface MenuContext {
   building: boolean;
   tool: Tool;
   dir: Dir;
-  /** The ticket selected, with the outcomes of the gate it waits at (empty elsewhere). */
-  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[] } | null;
+  /** The ticket selected, with the outcomes of the station it is in (empty elsewhere), and whether it can be set aside there. */
+  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean } | null;
   /** The machine selected; `waiting` is true for a zone that holds a ticket not yet released. */
   machine: { kind: MachineSpec['kind']; waiting: boolean } | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
@@ -43,6 +43,8 @@ export interface MenuContext {
     face(): void; undo(): void; redo(): void; copy(): void; cut(): void; paste(): void;
     turn(): void; remove(): void; deselect(): void;
     openTicket(): void; star(): void; giveBack(): void; resolve(outcome: string): void; release(): void; retry(): void;
+    /** Take the ticket off its station's hands; and put it back as one of the station's outcomes (`retry` puts it back for another run). */
+    setAside(): void; putBack(outcome: string): void;
     openMachine(): void; releaseNext(): void;
   };
 }
@@ -56,12 +58,17 @@ export function factoryMenu(c: MenuContext): Menu {
     const t = c.ticket, first: Record<number, Command> = {};
     if (t.phase === 'review') t.outcomes.slice(0, 4).forEach((o, i) => { first[i] = { id: `decide-${i}`, key: 'QWER'[i]!, label: o, icon: i ? 'loop' : 'check', tone: i ? 'ticket' : 'go', title: `Decide: ${o}`, run: () => a.resolve(o) }; });
     else if (t.phase === 'zone' && !t.released) first[0] = { id: 'release', key: 'Q', label: 'Release', icon: 'play', tone: 'go', title: 'Let an arm take this ticket out of its zone', run: a.release };
-    else if (t.phase === 'failed' || t.phase === 'question') first[0] = { id: 'retry', key: 'Q', label: 'Run again', icon: 'loop', tone: 'go', title: 'Run the station again on this ticket', run: a.retry };
+    else if (SET_ASIDE.includes(t.phase)) {
+      /* set aside in its station: back for another run, or out by the arm of an outcome, as done by hand */
+      first[0] = { id: 'retry', key: 'Q', label: 'Run again', icon: 'loop', tone: 'go', title: 'Put it back: the station runs on it again', run: a.retry };
+      t.outcomes.slice(0, 3).forEach((o, i) => { first[i + 1] = { id: `as-${i}`, key: 'WER'[i]!, label: o, icon: 'exit', tone: 'ticket', title: `Put it back as "${o}": it leaves the station by that arm, as done by hand`, run: () => a.putBack(o) }; });
+    }
     return menu('Ticket', {
       ...first,
       4: { id: 'open', key: 'V', label: 'Open', icon: 'open', tone: 'ticket', title: 'The ticket, its thread and its actions, without leaving the floor', run: a.openTicket },
       5: t.favorite === null ? null : { id: 'star', key: 'S', label: t.favorite ? 'Unstar' : 'Star', icon: 'star', tone: 'plan', active: t.favorite, title: t.favorite ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: a.star },
       6: { id: 'give', key: 'X', label: 'Give back', icon: 'give', tone: 'plain', title: 'Take this ticket out of the Factory', run: a.giveBack },
+      7: t.canAside ? { id: 'aside', key: 'H', label: 'Set aside', icon: 'person', tone: 'plan', title: t.phase === 'running' ? 'Stop the run and keep the ticket in its station until you put it back' : 'Keep the ticket in its station until you put it back', run: a.setAside } : null,
       [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
     });
   }
