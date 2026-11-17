@@ -55,7 +55,7 @@ export function FactoryPlanModal({ onPlace, onClose }: { onPlace: (clip: Clip, n
   const empty = !plan || plan.counts.stations === 0 && plan.clip.machines.filter((m) => m.kind === 'zone').length <= 1;
 
   return (
-    <Modal open onClose={onClose} maxWidth="max-w-6xl">
+    <Modal open onClose={onClose} maxWidth="max-w-6xl" variant="glass">
       <div className="flex h-[84vh] flex-col gap-3">
         <div className="flex flex-none items-start gap-3">
           <div className="min-w-0 flex-1">

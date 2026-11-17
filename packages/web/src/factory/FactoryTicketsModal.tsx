@@ -99,7 +99,7 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
   const cols = 'grid grid-cols-[30px_minmax(0,2.4fr)_92px_92px_44px_minmax(0,1.2fr)_minmax(0,1.3fr)_64px_minmax(0,0.9fr)_132px] items-center gap-x-3';
 
   return (
-    <Modal open onClose={onClose} maxWidth="max-w-[1400px]">
+    <Modal open onClose={onClose} maxWidth="max-w-[1400px]" variant="glass">
       <div className="flex h-[86vh] flex-col gap-3">
         <div className="flex flex-none items-start gap-3">
           <div className="min-w-0 flex-1">

@@ -94,7 +94,7 @@ function TransferModal({ open, onClose, onPick }: { open: boolean; onClose: () =
     return tickets.filter((t) => !t.archivedAt && t.status !== 'done' && t.status !== 'cancelled' && !managed.has(t.id) && (!needle || t.title.toLowerCase().includes(needle) || String(t.displayId).includes(needle))).slice(0, 60);
   }, [tickets, managed, q]);
   return (
-    <Modal open={open} onClose={onClose} maxWidth="max-w-xl">
+    <Modal open={open} onClose={onClose} maxWidth="max-w-xl" variant="glass">
       <div className="flex max-h-[70vh] flex-col gap-3 p-4">
         <div>
           <div className="text-sm font-semibold text-[var(--theme-text-primary)]">Hand tickets over to the Factory</div>

@@ -17,7 +17,7 @@ export function FactoryPromptEditor({ title, value, onSave, onClose }: { title: 
   const done = () => { if (draft !== value) onSave(draft); onClose(); };
   const lines = draft ? draft.split('\n').length : 0;
   return (
-    <Modal open onClose={done} maxWidth="max-w-5xl">
+    <Modal open onClose={done} maxWidth="max-w-5xl" variant="glass">
       <div className="flex h-[82vh] flex-col gap-3">
         <div className="flex flex-none items-start gap-3">
           <div className="min-w-0 flex-1">
