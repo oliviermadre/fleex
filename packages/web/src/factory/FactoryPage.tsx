@@ -26,6 +26,8 @@ import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
 import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
+import { groupOf, ticketsIn } from './pick';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
@@ -71,7 +73,9 @@ type Press =
   | { kind: 'marquee'; x0: number; y0: number }
   | { kind: 'pan' }
   | { kind: 'place' }
-  | { kind: 'ticket'; id: string; dragging: boolean }
+  | { kind: 'ticket'; id: string; dragging: boolean; group: string[] }
+  /* out of build mode: a frame dragged over the floor, which takes tickets */
+  | { kind: 'pick'; x0: number; y0: number }
   | null;
 
 function Disabled() {
@@ -169,7 +173,7 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], space: false, show });
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
@@ -203,6 +207,7 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       armAge: (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, boardName,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
+      selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
@@ -243,6 +248,11 @@ function Floor() {
     commit(update(base, id, patch));
   }, [commit]);
 
+  /** Whether several tickets can be dropped together on a target: only where there is room for many. */
+  const groupTarget = (v: FactoryView, target: Target): boolean => {
+    const m = target.machineId ? v.machine(target.machineId) : null;
+    return !!m && (m.kind === 'zone' || m.kind === 'station' || m.kind === 'exit');
+  };
   const dropTarget = (v: FactoryView, wx: number, wy: number): { target: Target; ok: boolean; can: boolean; text: string } => {
     const tx = Math.floor(wx), ty = Math.floor(wy), m = v.at(tx, ty);
     if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
@@ -288,7 +298,11 @@ function Floor() {
       } else press.current = { kind: 'place' };
     } else {
       const hit = v.pick(p.x, p.y, st, true);
-      if (hit && 'ticketId' in hit) press.current = { kind: 'ticket', id: hit.ticketId, dragging: false };
+      if (hit && 'ticketId' in hit) {
+        /* one of several tickets selected together: they are all in hand */
+        const sel = live.current.selection, group = sel && 'tickets' in sel && sel.tickets.includes(hit.ticketId) ? sel.tickets : [hit.ticketId];
+        press.current = { kind: 'ticket', id: hit.ticketId, dragging: false, group };
+      } else if (!(hit && 'lamp' in hit)) press.current = { kind: 'pick', x0: w.x, y0: w.y };   // anywhere else, a drag is a frame that takes tickets
     }
   };
 
@@ -319,8 +333,18 @@ function Floor() {
       }
     } else if (pr?.kind === 'marquee') {
       live.current.marquee = { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y };
+    } else if (pr?.kind === 'pick') {
+      /* the frame, and the tickets it would take if it were let go now: they show it at once */
+      if (moved.current > 5) {
+        const frame = { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y };
+        live.current.marquee = frame; live.current.pick = new Set(ticketsIn(v.ticketPlaces(), frame));
+      }
     } else if (pr?.kind === 'ticket') {
-      if (moved.current > 5) { pr.dragging = true; const d = dropTarget(v, w.x, w.y); live.current.drag = { ticketId: pr.id, x: w.x, y: w.y, ok: d.ok, text: d.text }; }
+      if (moved.current > 5) {
+        pr.dragging = true;
+        const d = dropTarget(v, w.x, w.y), many = pr.group.length > 1, box = many && groupTarget(v, d.target);
+        live.current.drag = { ticketId: pr.id, x: w.x, y: w.y, ok: many ? !!box : d.ok, text: many ? (box ? `${pr.group.length} tickets: ${d.text}` : `${pr.group.length} tickets go together into a zone, a station or an exit`) : d.text };
+      }
     } else if (pr?.kind === 'pan') { v.cam.x -= dx / v.cam.z; v.cam.y -= dy / v.cam.z; }
   };
 
@@ -328,6 +352,7 @@ function Floor() {
     const v = viewRef.current, st = viewState(), pr = press.current; press.current = null;
     if (!v || !st) return;
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y), click = moved.current <= 5;
+    if (pr?.kind === 'pick') { live.current.marquee = null; live.current.pick = null; }
     if (pr?.kind === 'pan') { e.currentTarget.style.cursor = live.current.space ? 'grab' : ''; return; }
     if (pr?.kind === 'paint') {
       /* a click lays one tile, or re-aims the belt that is there; on a belt of the other speed, it only changes its speed */
@@ -357,8 +382,19 @@ function Floor() {
       }
     } else if (pr?.kind === 'ticket') {
       const dr = live.current.drag; live.current.drag = null;
+      if (pr.dragging && dr && pr.group.length > 1) {
+        /* several tickets in hand go together, one after the other, where there is room for many */
+        const d = dropTarget(v, dr.x, dr.y), ids = pr.group;
+        if (groupTarget(v, d.target)) void (async () => { for (const id of ids) await store.move(id, d.target); })();
+        else toast.warning('Several tickets go together into a zone, a station or an exit');
+        return;
+      }
       if (pr.dragging && dr) { const d = dropTarget(v, dr.x, dr.y); if (d.can) void store.move(pr.id, d.target); else toast.warning(d.text); }
       setSelection({ ticket: pr.id }); setPeekOpen(!pr.dragging);
+    } else if (pr?.kind === 'pick' && !click) {
+      const ids = ticketsIn(v.ticketPlaces(), { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y });
+      setSelection(ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
+      setPeekOpen(false);
     } else if (click) {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
       if (hit && 'lamp' in hit) {
@@ -383,6 +419,14 @@ function Floor() {
   const selMachine = selection && 'machine' in selection && layout ? layout.machines.find((m) => m.id === selection.machine) ?? null : null;
   const selMany = useMemo(() => (selection && 'machines' in selection ? selection.machines : []), [selection]);
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
+  /* several tickets selected together (a frame dragged out of build mode): those of them still on the floor */
+  const selTickets = useMemo(() => {
+    if (!selection || !('tickets' in selection) || !snapshot) return [];
+    const ids = new Set(selection.tickets);
+    return snapshot.tickets.filter((t) => ids.has(t.ticketId));
+  }, [selection, snapshot]);
+  const group = useMemo(() => (selTickets.length > 0 && layout ? groupOf(selTickets, layout.machines) : null), [selTickets, layout]);
+  const [confirmGive, setConfirmGive] = useState(false);
   const closeMachine = useCallback(() => setOpenMachine(null), []);
   /* from one machine's popup to another's (a station's arm): the floor's selection follows */
   const openMachineOn = useCallback((id: string) => { setSelection({ machine: id }); setOpenMachine(id); }, []);
@@ -471,7 +515,7 @@ function Floor() {
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
     ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
-    waiting: needs.length, speed: beltSpeed,
+    waiting: needs.length, speed: beltSpeed, group,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
@@ -493,12 +537,19 @@ function Floor() {
       },
       deselect: () => setSelection(null),
       openTicket: () => { if (selTicket) setOpenTicket(selTicket.ticketId); },
-      star: () => { if (selTicket?.info) void store.star(selTicket.ticketId, !selTicket.info.favorite); },
-      giveBack: () => { if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
+      star: () => {
+        if (group) { for (const t of selTickets) if (t.info && t.info.favorite === group.starred) void store.star(t.ticketId, !group.starred); }
+        else if (selTicket?.info) void store.star(selTicket.ticketId, !selTicket.info.favorite);
+      },
+      /* one ticket leaves at once; several are asked about first */
+      giveBack: () => { if (group) setConfirmGive(true); else if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
       resolve: (o) => { if (selTicket) void store.resolve(selTicket.ticketId, o); },
-      release: () => { if (selTicket) void store.release(selTicket.ticketId); },
-      retry: () => { if (selTicket) void store.putBack(selTicket.ticketId); },
-      setAside: () => { if (selTicket) void store.setAside(selTicket.ticketId); },
+      release: () => { if (group) { for (const t of selTickets) if (t.phase === 'zone' && !t.released) void store.release(t.ticketId); } else if (selTicket) void store.release(selTicket.ticketId); },
+      retry: () => { if (group) { for (const t of selTickets) if (t.phase === 'failed' || t.phase === 'aside') void store.putBack(t.ticketId); } else if (selTicket) void store.putBack(selTicket.ticketId); },
+      setAside: () => {
+        if (group) { const byId = new Map((layout?.machines ?? []).map((m) => [m.id, m])); for (const t of selTickets) if (canSetAside(t, t.machineId ? byId.get(t.machineId) : null)) void store.setAside(t.ticketId); }
+        else if (selTicket) void store.setAside(selTicket.ticketId);
+      },
       putBack: (o) => { if (selTicket) void store.putBack(selTicket.ticketId, o); },
       openMachine: () => { if (selMachine && hasPopup(selMachine)) setOpenMachine(selMachine.id); },
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
@@ -507,7 +558,7 @@ function Floor() {
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
-  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed]);
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed, group, selTickets, layout]);
   const card = useMemo(() => menuAt(root, path), [root, path]);
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';
@@ -532,6 +583,7 @@ function Floor() {
     if (!g || !v) return;
     setSelection(g);
     if ('ticket' in g) { const p = v.ticketPos(g.ticket); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
+    else if ('tickets' in g) { const p = g.tickets.map((id) => v.ticketPos(id)).find((q) => !!q); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
     else { const id = 'machines' in g ? g.machines[0] : g.machine, m = s.layout?.machines.find((q) => q.id === id); if (m) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; } }
   }, []);
 
@@ -630,7 +682,7 @@ function Floor() {
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
@@ -638,6 +690,10 @@ function Floor() {
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}
         onGoTo={(id) => { setListOpen(false); setBuilding(false); goTo(id); }} onDetail={(id) => { setListOpen(false); setOpenTicket(id); }} />}
+      <ConfirmModal open={confirmGive} title={`Give ${selTickets.length} tickets back?`} confirmLabel="Give back" danger={false}
+        message="They leave the Factory and keep their status. Their place on the floor is lost: handed over again, they land in Inbound."
+        onCancel={() => setConfirmGive(false)}
+        onConfirm={() => { setConfirmGive(false); for (const t of selTickets) void store.giveBack(t.ticketId); setSelection(null); }} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
     </div>
   );

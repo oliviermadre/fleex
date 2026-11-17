@@ -139,8 +139,11 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
     if (!g) return '';
     if ('machines' in g) return `${g.machines.length} machines`;
     if ('ticket' in g) { const t = tickets.find((q) => q.ticketId === g.ticket); return t ? `#${t.info?.displayId ?? '?'}` : 'gone'; }
+    if ('tickets' in g) return `${g.tickets.length} tickets`;
     const m = layout?.machines.find((q) => q.id === g.machine); return m ? m.name || m.kind : 'gone';
   };
+  /* several tickets selected together: those of them still on the floor, longest there first */
+  const picked = selection && 'tickets' in selection ? ((ids) => tickets.filter((t) => ids.has(t.ticketId)).sort((a, b) => a.since.localeCompare(b.since)))(new Set(selection.tickets)) : null;
   const box = 'rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]';
 
   return (
@@ -191,7 +194,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
         <div className="flex min-h-0 flex-1 gap-2.5 border-t border-[var(--theme-border)] pt-2">
           <div className={cn('grid h-[58px] w-[58px] flex-none place-items-center rounded-lg border-2 bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)]',
             ticket && needsHuman(ticket) ? 'border-[var(--theme-warning)]' : 'border-[var(--theme-border-input)]')}>
-            {ticket ? <TicketToken info={ticket.info} size={38} /> : <FIcon name={machine ? machineIcon(machine) : 'floor'} size={30} />}
+            {ticket ? <TicketToken info={ticket.info} size={38} /> : <FIcon name={machine ? machineIcon(machine) : picked ? 'stack' : 'floor'} size={30} />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
             {ticket ? (
@@ -225,6 +228,18 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
                 )}
                 {machine.kind === 'station' && machine.exec !== 'native' && (stats ? <Did q={stats.machines.find((q) => q.machineId === machine.id) ?? null} gate={machine.exec === 'human_gate'} period={period} /> : null)}
                 <Wire tickets={inside} onSelect={onSelect} />
+              </>
+            ) : picked ? (
+              <>
+                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{picked.length} tickets selected</div>
+                <div className="text-xs text-[var(--theme-text-secondary)]">What the commands do, they do to those of them it applies to. Drag one of them into a zone, a station or an exit to move them all. Click one to select it alone.</div>
+                <div className="flex flex-wrap gap-x-3">
+                  <Stat label="waiting for you" value={picked.filter((t) => needsHuman(t)).length} tone={picked.some((t) => needsHuman(t)) ? 'warning' : undefined} />
+                  <Stat label="running" value={picked.filter((t) => t.phase === 'running').length} />
+                  <Stat label="in a zone" value={picked.filter((t) => t.phase === 'zone').length} />
+                  <Stat label="on their way" value={picked.filter((t) => t.phase === 'belt' || t.phase === 'arm').length} />
+                </div>
+                <Wire tickets={picked} onSelect={onSelect} />
               </>
             ) : (
               <>

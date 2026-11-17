@@ -32,6 +32,13 @@ keys, the minimap, and the edges of the page (`edgeScroll.ts`). Within 50 px of 
 under the top bar, at the right and at the bottom of the window, under the console) the view glides that way, faster
 the closer the pointer is, and the pointer turns into an arrowhead towards the edge; not while it is over a control.
 A plain drag never moves the view: it is for tickets and machines.
+
+Out of build mode a drag that starts anywhere but on a ticket draws a frame, and the frame takes tickets only
+(machines are selected in build mode, where the same drag takes them). While it is dragged, the tickets inside it are
+ringed in its colour: what is ringed is what will be selected (`pick.ts`). Several tickets selected together have their
+own menu on the command card, each command where a single ticket has it (Release, Run again, Star, Give back, Set
+aside), acting on those of them it applies to; giving several back is asked first. Dragging one of them moves them
+all, into a zone, a station or an exit.
 Where two belts must cross, a **bridge** tile carries each ticket straight across. A bridge has no direction of its
 own: a ticket crosses it the way it arrives, in any of the four directions, on the east-west lane or on the north-south
 one. The page draws each lane the way the belts (or the arm) that feed it send tickets across.

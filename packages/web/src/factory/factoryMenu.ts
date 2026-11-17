@@ -12,6 +12,7 @@
  * Copy, Cut, Paste and the way back. Only the first six slots change.
  */
 import type { Tool } from './layoutOps';
+import type { TicketGroup } from './pick';
 import { BACK_SLOT, menu, type Command, type Menu } from './menu';
 import { SET_ASIDE, type Dir, type MachineSpec, type TicketPhase } from './types';
 
@@ -34,6 +35,8 @@ export interface MenuContext {
   many: number;
   /** How many tickets wait for someone on the floor. */
   waiting?: number;
+  /** Several tickets selected together (a frame dragged out of build mode): how many each command would act on. */
+  group?: TicketGroup | null;
   undoable: boolean; redoable: boolean; hasClip: boolean;
   /** How the platform writes its chord key: `⌘` or `Ctrl+`. */
   mod: string;
@@ -71,6 +74,21 @@ export function factoryMenu(c: MenuContext): Menu {
 
   /* out of build mode, always at the same place: the next ticket that waits for someone */
   const next: Command = { id: 'next', key: 'N', label: 'Next', icon: 'person', tone: 'plan', disabled: !c.waiting, title: c.waiting ? 'Go to the next ticket that waits for you (Shift+N: the one before)' : 'No ticket waits for you', run: a.next };
+
+  // ---------- several tickets ----------
+  if (c.group && !c.building) {
+    /* each command where a single ticket has it; it acts on those of the group it applies to */
+    const g = c.group, of = (n: number) => (n === g.count ? `the ${n} tickets` : `${n} of the ${g.count} tickets`);
+    return menu('Tickets', {
+      0: g.release > 0 && { id: 'release', key: 'Q', label: 'Release', icon: 'play', tone: 'go', title: `Let an arm take ${of(g.release)} out of their zone`, run: a.release },
+      1: g.retry > 0 && { id: 'retry', key: 'W', label: 'Run again', icon: 'loop', tone: 'ticket', title: `Put back ${of(g.retry)}: their station runs on them again`, run: a.retry },
+      5: { id: 'star', key: 'S', label: g.starred ? 'Unstar' : 'Star', icon: 'star', tone: 'plan', active: g.starred, title: g.starred ? 'Remove them from your favourites' : 'Make them favourites: they then carry their name on the floor', run: a.star },
+      6: { id: 'give', key: 'X', label: 'Give back', icon: 'give', tone: 'plain', title: `Take the ${g.count} tickets out of the Factory (asked first)`, run: a.giveBack },
+      7: g.aside > 0 && { id: 'aside', key: 'H', label: 'Set aside', icon: 'person', tone: 'plan', title: `Keep ${of(g.aside)} in their station until you put them back; a run in progress is stopped`, run: a.setAside },
+      8: next,
+      [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
+    });
+  }
 
   // ---------- a ticket ----------
   if (c.ticket && !c.building) {

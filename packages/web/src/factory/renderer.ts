@@ -31,6 +31,10 @@ export interface ViewState {
   /** Build mode: the rectangle being dragged to select, in world units. */
   marquee: { x0: number; y0: number; x1: number; y1: number } | null;
   selTicket: string | null;
+  /** Several tickets selected together. */
+  selTickets?: ReadonlySet<string> | null;
+  /** The tickets inside the frame being dragged: what the selection will be if it is let go now. */
+  pickTickets?: ReadonlySet<string> | null;
   hoverMachine: string | null;
   edit: boolean;
   ghost: Ghost | null;
@@ -103,6 +107,8 @@ export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: nu
 const Z_MAX = 80, Z_MIN = 3;
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
+/** The colour of a frame being dragged, and of what it takes. */
+const PICK = '#60a5fa';
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
@@ -269,7 +275,7 @@ export class FactoryView {
     /* ease towards where the server last said the ticket is, so a poll does not make it jump */
     const k = cur ? 1 - Math.pow(0.0005, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
     this.shown.set(t.ticketId, { x: px, y: py });
-    const selected = st.selTicket === t.ticketId, dim = !!st.dim?.has(t.ticketId) && !selected && !dragging;
+    const picked = !!st.pickTickets?.has(t.ticketId), selected = st.selTicket === t.ticketId || !!st.selTickets?.has(t.ticketId), dim = !!st.dim?.has(t.ticketId) && !selected && !picked && !dragging;
     const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
     /*
      * A ticket is a token in the shape of its type (see `ticketToken.ts`), a little larger than the square it replaces
@@ -350,6 +356,8 @@ export class FactoryView {
     }
     if (found) { ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; rr(ctx, px - B / 2 - 0.09, py - B / 2 - 0.09, B + 0.18, B + 0.18, B * 0.3); ctx.stroke(); }
     if (selected) { ctx.strokeStyle = pal.text; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.arc(px, py, Math.max(B * 0.92, 0.3), 0, 6.3); ctx.stroke(); }
+    /* in the frame being dragged: it will be in the selection. The frame's own colour, filled, so it shows before the mouse is let go */
+    if (picked) { ctx.fillStyle = 'rgba(96,165,250,0.22)'; ctx.strokeStyle = PICK; ctx.lineWidth = 0.09; ctx.beginPath(); ctx.arc(px, py, Math.max(B * 1.02, 0.34), 0, 6.3); ctx.fill(); ctx.stroke(); }
   }
 
   /**
@@ -402,6 +410,8 @@ export class FactoryView {
   }
 
   ticketPos(ticketId: string): { x: number; y: number } | null { return this.shown.get(ticketId) ?? null; }
+  /** Where every ticket is drawn, for a frame to be laid over them. */
+  ticketPlaces(): Iterable<[string, { x: number; y: number }]> { return this.shown; }
   /** Where a ticket's machine is on screen (the ticket itself, when it stands on no box), in the canvas's own pixels: what a card about the ticket sits beside. */
   anchorOf(ticketId: string, st: ViewState): { x: number; y: number; w: number; h: number } | null {
     const t = st.tickets.find((q) => q.ticketId === ticketId); if (!t) return null;
@@ -874,7 +884,7 @@ export class FactoryView {
     for (const id of st.selMany) { const m = this.machine(id); if (m) outline(m, pal.accent, 0.08); }
     if (st.marquee) {
       const q = st.marquee, mx = Math.min(q.x0, q.x1), my = Math.min(q.y0, q.y1);
-      ctx.fillStyle = 'rgba(96,165,250,0.12)'; ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 0.05; ctx.setLineDash([0.2, 0.14]);
+      ctx.fillStyle = 'rgba(96,165,250,0.12)'; ctx.strokeStyle = PICK; ctx.lineWidth = 0.05; ctx.setLineDash([0.2, 0.14]);
       ctx.fillRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.strokeRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.setLineDash([]);
     }
     if (sel) {

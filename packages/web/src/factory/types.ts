@@ -132,8 +132,8 @@ export function canSetAside(t: { phase: TicketPhase }, machine: MachineSpec | nu
   return !!machine && machine.kind === 'station' && RUNS.includes(machine.exec) && (t.phase === 'wait' || t.phase === 'running' || t.phase === 'out');
 }
 
-/** What is selected on the floor: one machine, several (build mode), or a ticket. */
-export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
+/** What is selected on the floor: one machine, several (build mode), a ticket, or several tickets (a frame dragged out of build mode). */
+export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | { tickets: string[] } | null;
 
 /** Colours a label can take on the floor. */
 export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];

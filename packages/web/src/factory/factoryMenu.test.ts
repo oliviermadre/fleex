@@ -186,3 +186,25 @@ describe('the command card', () => {
     expect(said).toMatch(/More\.\.\. does nothing/);
   });
 });
+
+describe('several tickets selected together', () => {
+  const group = { count: 5, release: 2, retry: 1, aside: 3, starred: false };
+
+  it('have each command where a single ticket has it, and only those that apply to some of them', () => {
+    const c = ctx({ group }), m = factoryMenu(c);
+    expect(labels(m)).toEqual(['Release', 'Run again', null, null, null, 'Star', 'Give back', 'Set aside', 'Next', null, null, 'Previous']);
+    expect(m.title).toBe('Tickets');
+    byKey(m, 'Q')!.run!(); expect(c.act.release).toHaveBeenCalled();
+    byKey(m, 'H')!.run!(); expect(c.act.setAside).toHaveBeenCalled();
+    byKey(m, 'X')!.run!(); expect(c.act.giveBack).toHaveBeenCalled();
+    byKey(m, 'Escape')!.run!(); expect(c.act.deselect).toHaveBeenCalled();
+    expect(m.slots[0]!.title).toContain('2 of the 5 tickets');
+    const quiet = factoryMenu(ctx({ group: { count: 3, release: 0, retry: 0, aside: 0, starred: true } }));
+    expect(labels(quiet)).toEqual([null, null, null, null, null, 'Unstar', 'Give back', null, 'Next', null, null, 'Previous']);
+  });
+
+  it('fit the grid like every other menu, and give way to build mode', () => {
+    expect(problems(factoryMenu(ctx({ group })))).toEqual([]);
+    expect(factoryMenu(ctx({ group, building: true })).title).toBe('Build');
+  });
+});
