@@ -43,6 +43,8 @@ const PATHS: Record<string, ReactNode> = {
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>,
   person: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c0-3.8 2.8-6.3 6.5-6.3s6.5 2.5 6.5 6.3" /></>,
   stack: <><rect x="4" y="13" width="6" height="6" rx="1.5" /><rect x="14" y="13" width="6" height="6" rx="1.5" /><rect x="9" y="5" width="6" height="6" rx="1.5" /></>,
+  stop: <rect x="6.5" y="6.5" width="11" height="11" rx="2" />,
+  edit: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13 7l4 4" /></>,
   floor: <path d="M3 20V10l5 3.2V10l5 3.2V6h6v14zM3 20h18" />,
 };
 export type FactoryIconName = keyof typeof PATHS;

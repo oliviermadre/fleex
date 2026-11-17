@@ -11,7 +11,8 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
-import { FactoryInspector, type Selection } from './FactoryInspector';
+import { FactoryMachineSheet } from './FactoryMachineSheet';
+import { FactoryFloorSheet } from './FactoryFloorSheet';
 import { FactoryConsole } from './FactoryConsole';
 import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
@@ -25,12 +26,11 @@ import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
 import { FactoryWorkbench } from './FactoryWorkbench';
-import { FactoryMachineModal } from './FactoryMachineModal';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadShow, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Target } from './types';
+import { canSetAside, hasSheet, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -147,6 +147,7 @@ function Floor() {
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
+  const [floorOpen, setFloorOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   /* what the floor shows on top of the machines: kept in the browser from one visit to the next */
@@ -364,9 +365,9 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);
     if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
-    /* a station or a zone opens on what it holds; in build mode a double-click stays a click */
-    const m = hit && 'machineId' in hit && !live.current.building ? v.machine(hit.machineId) : null;
-    if (m && (m.kind === 'station' || m.kind === 'zone')) setOpenMachine(m.id);
+    /* a machine opens in its sheet: its settings, what it holds, what it did. In build mode too, with nothing in hand */
+    const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
+    if (m && hasSheet(m)) setOpenMachine(m.id);
   };
 
   // ---------- commands and their keys ----------
@@ -374,6 +375,15 @@ function Floor() {
   const selMany = useMemo(() => (selection && 'machines' in selection ? selection.machines : []), [selection]);
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const closeMachine = useCallback(() => setOpenMachine(null), []);
+  /* from one machine's sheet to another's (a station's arm): the floor's selection follows */
+  const openMachineOn = useCallback((id: string) => { setSelection({ machine: id }); setOpenMachine(id); }, []);
+  /* select a machine and bring it to the middle of the view */
+  const showMachine = useCallback((id: string) => {
+    const m = useFactoryStore.getState().layout?.machines.find((q) => q.id === id), v = viewRef.current;
+    if (!m) return;
+    setSelection({ machine: id });
+    if (v) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; }
+  }, []);
   const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
   const fit = useCallback(() => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, live.current.building || l.machines.length <= 1); }, []);
@@ -429,7 +439,7 @@ function Floor() {
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
     ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
-    machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext } : null,
+    machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, sheet: hasSheet(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
       done: () => setBuilding(false),
@@ -457,7 +467,9 @@ function Floor() {
       retry: () => { if (selTicket) void store.putBack(selTicket.ticketId); },
       setAside: () => { if (selTicket) void store.setAside(selTicket.ticketId); },
       putBack: (o) => { if (selTicket) void store.putBack(selTicket.ticketId, o); },
-      openMachine: () => { if (selMachine) setOpenMachine(selMachine.id); },
+      openMachine: () => { if (selMachine && hasSheet(selMachine)) setOpenMachine(selMachine.id); },
+      power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
+      floor: () => setFloorOpen(true),
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
   }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine]);
@@ -493,7 +505,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || openTicket || openMachine || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || openTicket || openMachine || floorOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -517,6 +529,7 @@ function Floor() {
         if (next) { e.preventDefault(); pickNeed(next); return; }
       }
       if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      if (e.key === 'Enter' && selMachine && hasSheet(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
@@ -533,7 +546,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, onGroup, copy, paste, needs, selTicket, pickNeed]);
+  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, onGroup, copy, paste, needs, selTicket, selMachine, pickNeed]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
@@ -581,13 +594,13 @@ function Floor() {
             </div>
           )}
         </div>
-        <FactoryInspector selection={selection} view={view} onSelect={setSelection} onPatch={patchMachine} onRemove={removeMachine} onTransfer={() => setTransferOpen(true)} onOpenMachine={setOpenMachine} found={found} onGoTo={goTo} building={building} />
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
-      {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
+      {openMachine && !openTicket && view && <FactoryMachineSheet machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
+      {floorOpen && <FactoryFloorSheet onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}

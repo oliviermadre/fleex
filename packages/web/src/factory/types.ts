@@ -127,3 +127,12 @@ export function needsHuman(t: FactoryTicket): string | null {
 export function canSetAside(t: { phase: TicketPhase }, machine: MachineSpec | null | undefined): boolean {
   return !!machine && machine.kind === 'station' && RUNS.includes(machine.exec) && (t.phase === 'wait' || t.phase === 'running' || t.phase === 'out');
 }
+
+/** What is selected on the floor: one machine, several (build mode), or a ticket. */
+export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | null;
+
+/** Colours a label can take on the floor. */
+export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];
+
+/** A machine that has something to set up or to show in its own sheet: everything but what only carries tickets. */
+export const hasSheet = (m: { kind: MachineSpec['kind'] }): boolean => m.kind !== 'belt' && m.kind !== 'bridge';

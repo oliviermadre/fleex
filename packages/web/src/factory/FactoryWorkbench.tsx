@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { WorkView } from '../components/work/WorkView';
 import { useWorkStore } from '../stores/workStore';
 import { Button } from '../components/ui/Button';
 import { cn } from '../lib/cn';
+import { FactorySheet, KBD } from './FactorySheet';
 import { TicketToken } from './FactoryTicketMeta';
 import type { Need } from './needs';
 import type { FactoryTicket } from './types';
@@ -18,12 +19,6 @@ export function walkSet(scope: WalkScope, current: FactoryTicket | null, needs: 
   return list.some((t) => t.ticketId === current.ticketId) ? list : [current, ...list];
 }
 
-const editable = (el: EventTarget | null): boolean => {
-  const n = el as HTMLElement | null;
-  return !!n && (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.tagName === 'SELECT' || n.isContentEditable);
-};
-const KBD = 'rounded border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-1 font-mono text-[10px] text-[var(--theme-text-secondary)]';
-
 /**
  * A ticket, opened from the floor: the Work view itself, sliding up from the bottom over the floor and its console,
  * nearly as wide and as high as the window. It is the same view as on the Work page (same modes, thread, panels and
@@ -36,7 +31,6 @@ export function FactoryWorkbench({ ticketId, needs, tickets, onNavigate, onClose
   ticketId: string; needs: readonly Need[]; tickets: readonly FactoryTicket[]; onNavigate: (ticketId: string) => void; onClose: () => void;
 }) {
   const [scope, setScope] = useState<WalkScope>('needs');
-  const sheet = useRef<HTMLElement>(null);
   const current = tickets.find((t) => t.ticketId === ticketId) ?? null;
   const set = useMemo(() => walkSet(scope, current, needs, tickets), [scope, current, needs, tickets]);
 
@@ -47,35 +41,13 @@ export function FactoryWorkbench({ ticketId, needs, tickets, onNavigate, onClose
    */
   const [armed, setArmed] = useState(false);
   useLayoutEffect(() => { const work = useWorkStore.getState(); work.openTicket(ticketId, work.modeByTicket[ticketId] ?? 'chat'); setArmed(true); }, [ticketId]);
-  useLayoutEffect(() => {
-    const n = sheet.current;
-    if (!n || typeof n.animate !== 'function' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    n.animate([{ transform: 'translateY(38%)', opacity: 0.35 }, { transform: 'none', opacity: 1 }], { duration: 240, easing: 'cubic-bezier(.2,.85,.25,1)' });
-  }, []);
-
-  useEffect(() => {
-    const step = (d: 1 | -1) => { if (set.length < 2) return; const i = set.findIndex((t) => t.ticketId === ticketId); onNavigate(set[(i + d + set.length) % set.length]!.ticketId); };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      /* a field keeps its keys (the arrows move its caret, Escape is its own), and so does anything opened over the ticket */
-      if (editable(e.target) || document.querySelector('[data-overlay-top], [data-floating-ui-portal]')) return;
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [set, ticketId, onNavigate, onClose]);
-
-  const go = (d: 1 | -1) => { if (set.length < 2) return; const i = set.findIndex((t) => t.ticketId === ticketId); onNavigate(set[(i + d + set.length) % set.length]!.ticketId); };
+  const go = useCallback((d: 1 | -1) => { if (set.length < 2) return; const i = set.findIndex((t) => t.ticketId === ticketId); onNavigate(set[(i + d + set.length) % set.length]!.ticketId); }, [set, ticketId, onNavigate]);
+  const onKey = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+  }, [go]);
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/60" style={{ top: 'var(--header-height)' }} onClick={onClose} aria-hidden="true" />
-      <section ref={sheet} aria-label="Workbench" className="fixed inset-x-2.5 bottom-0 z-40 flex flex-col overflow-hidden rounded-t-2xl border border-b-0 border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] shadow-2xl"
-        style={{ top: 'calc(var(--header-height) + 10px)' }}>
-        <div className="relative flex h-10 flex-none items-center gap-2 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2.5">
-          <span className="absolute left-1/2 top-1 h-1 w-11 -translate-x-1/2 rounded-full bg-[var(--theme-border-input)]" aria-hidden="true" />
-          <Button size="sm" variant="ghost" onClick={onClose}>Floor <kbd className={KBD}>Esc</kbd></Button>
+    <FactorySheet label="Workbench" onClose={onClose} onKey={onKey} bar={(
+      <>
           <Button size="sm" onClick={() => go(-1)} disabled={set.length < 2} aria-label="Previous ticket"><kbd className={KBD}>←</kbd></Button>
           <Button size="sm" onClick={() => go(1)} disabled={set.length < 2} aria-label="Next ticket"><kbd className={KBD}>→</kbd></Button>
           <div className="flex flex-none gap-0.5 rounded-md border border-[var(--theme-border-input)] p-0.5" role="group" aria-label="What the arrows walk">
@@ -94,9 +66,9 @@ export function FactoryWorkbench({ ticketId, needs, tickets, onNavigate, onClose
               </button>
             ))}
           </div>
-        </div>
-        <div className="min-h-0 flex-1">{armed && <WorkView embedded />}</div>
-      </section>
-    </>
+      </>
+    )}>
+      <div className="min-h-0 flex-1">{armed && <WorkView embedded />}</div>
+    </FactorySheet>
   );
 }

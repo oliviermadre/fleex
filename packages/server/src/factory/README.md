@@ -95,8 +95,7 @@ started; a panel starts one execution per persona and links only its synthesis, 
 ticket's other executions started while it ran. The route only reads, and its result is kept 20 seconds.
 
 On the page, four layers tint stations and zones (what stands there now, cost, run time, human wait; chosen next to
-the minimap), the side panel lists where tickets stand and what the floor did over the period, and a station or a zone
-opens on everything it holds (double-click, or V).
+the minimap), and the figures themselves are read in the sheets described below.
 
 ## The floor itself
 
@@ -119,6 +118,24 @@ A click on a ticket, there or on the floor, opens its thread beside its machine 
 conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:
 a gate's decision with an optional reason, an answer (which gives the ticket back to the station that asked, see
 "In the Work view"), another run after a failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
+
+## No side panel: the console, and sheets
+
+The floor takes the whole width of the page. Nothing of the Factory opens beside it.
+
+- **The console** along the bottom says what is selected, read only (`FactoryConsole.tsx`): for a station whether it
+  is running or stopped, its model and mode, its places, its outcomes and arms, and what it did over the period; for
+  the floor, the tickets on it and what it did. The command card acts on it: a station that runs something is stopped
+  and started there (Q), and **Edit** (V, at the place where a ticket has Open; also Enter or a double-click) opens
+  its sheet.
+- **A machine's sheet** (`FactoryMachineSheet.tsx`) slides up from the bottom as a ticket does: a station shows its
+  settings, the tickets it holds with what each needs, and what it did with its latest runs; a zone its settings and
+  its tickets; an arm, an exit or a label, which have only settings, a smaller sheet. Everything a machine has to be
+  set is set there, in build mode or out of it. A belt and a bridge have nothing to set and no sheet.
+- **The floor's sheet** (`FactoryFloorSheet.tsx`, **Stats** on the card when nothing is selected): what the floor did
+  machine by machine, where tickets stand, and the safety limits.
+
+The three sheets share one frame (`FactorySheet.tsx`); the workbench is the same frame around the Work view.
 
 ## The workbench
 

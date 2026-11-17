@@ -4,7 +4,6 @@ import { tintClasses, type TintHue } from '../lib/tints';
 import { SLOTS, type Command, type Menu, type Tone } from './menu';
 import { cn } from '../lib/cn';
 import { FIcon } from './icons';
-import type { Selection } from './FactoryInspector';
 import { useTicketStore } from '../stores/ticketStore';
 import { since, span } from './format';
 import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
@@ -13,7 +12,11 @@ import { conditionsOf, longCondition } from './armRules';
 import { TOGGLES, type Show } from './viewToggles';
 import { bridgeFlow, flowLabel } from './bridges';
 import type { FactoryView } from './renderer';
-import { needsHuman, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec } from './types';
+import { useAgentPersonaStore } from '../stores/agentPersonaStore';
+import { useFactoryStore } from './factoryStore';
+import { periodLabel } from './FactoryStatsBits';
+import { money } from './format';
+import { needsHuman, RUNS, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec, type MachineStats, type Selection } from './types';
 
 /** The layers of the floor, in the order they are listed next to the minimap. */
 const LAYERS: [Lens, string, string][] = [
@@ -44,7 +47,24 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'bridge') { const f = bridgeFlow((px, py) => view.at(px, py), m); return `Bridge · over ${flowLabel(f.over)}, under ${flowLabel(f.under)}`; }
   return 'Label';
 }
-const Stat = ({ label, value }: { label: string; value: string | number }) => <span className="text-[11px] text-[var(--theme-text-muted)]">{label} <b className="font-mono font-medium text-[var(--theme-text-primary)]">{value}</b></span>;
+const Stat = ({ label, value, tone }: { label: string; value: string | number; tone?: 'danger' | 'warning' | 'success' }) => (
+  <span className="whitespace-nowrap text-[11px] text-[var(--theme-text-muted)]">{label} <b className={cn('font-mono font-medium', tone === 'danger' ? 'text-[var(--theme-danger)]' : tone === 'warning' ? 'text-[var(--theme-warning)]' : tone === 'success' ? 'text-[var(--theme-success)]' : 'text-[var(--theme-text-primary)]')}>{value}</b></span>
+);
+/** What a station did over the period, read only, on one line: the figures its sheet shows in full. */
+function Did({ q, gate, period }: { q: MachineStats | null; gate: boolean; period: string }) {
+  if (!q || q.runs === 0) return <div className="text-[11px] text-[var(--theme-text-muted)]">{period}: nothing {gate ? 'decided' : 'ran'} here</div>;
+  return (
+    <div className="flex flex-wrap gap-x-3" aria-label="What it did">
+      <span className="text-[11px] text-[var(--theme-text-faint)]">{period}</span>
+      <Stat label={gate ? 'decisions' : 'runs'} value={q.runs} />
+      {!gate && <Stat label="failed" value={q.failed} tone={q.failed ? 'danger' : undefined} />}
+      {!gate && <Stat label="questions" value={q.questions} tone={q.questions ? 'warning' : undefined} />}
+      {!gate && <Stat label="avg run" value={span(q.avgRunMs)} />}
+      {gate ? <Stat label="avg decision" value={span(q.avgHumanMs)} /> : <Stat label="cost" value={money(q.costUsd)} />}
+      {(gate || q.humanWaits > 0) && <Stat label="human wait" value={span(q.humanMs)} />}
+    </div>
+  );
+}
 
 /** The tickets a machine holds, as small squares: click one to select it. */
 function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: Selection) => void }) {
@@ -97,6 +117,10 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   show: Show; onShow: (key: keyof Show) => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
+  const stats = useFactoryStore((s) => s.stats), period = periodLabel(useFactoryStore((s) => s.statsDays)).toLowerCase();
+  const personas = useAgentPersonaStore((s) => s.personas);
+  /* the page gets a fresh copy of the layout at every poll: the view must read this one before it is asked about it */
+  if (view && layout) view.use(layout);
   const down = useRef(false);
   const go = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!view || !layout) return;
@@ -168,7 +192,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
             ticket && needsHuman(ticket) ? 'border-[var(--theme-warning)]' : 'border-[var(--theme-border-input)]')}>
             {ticket ? <TicketToken info={ticket.info} size={38} /> : <FIcon name={machine ? machineIcon(machine) : 'floor'} size={30} />}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
             {ticket ? (
               <>
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-xs font-normal text-[var(--theme-text-muted)]">#{ticket.info?.displayId ?? '?'}</span>{ticket.info?.title ?? ticket.ticketId}</div>
@@ -188,15 +212,31 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
                 <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view, (id) => boards.find((b) => b.id === id)?.name ?? 'a board')}</div>
                 {(machine.kind === 'station' || machine.kind === 'zone') && (
-                  <div className="flex flex-wrap gap-x-3"><Stat label="inside" value={machine.kind === 'station' ? `${inside.length}/${machine.cap}` : inside.length} /><Stat label="waiting for you" value={inside.filter((t) => needsHuman(t)).length} /><Stat label="leaves by" value={`${view.takersOf(machine).length} arm(s)`} /></div>
+                  <div className="flex flex-wrap gap-x-3" aria-label="Settings">
+                    {machine.kind === 'station' && RUNS.includes(machine.exec) && <Stat label="switch" value={machine.off ? 'stopped' : 'running'} tone={machine.off ? 'danger' : 'success'} />}
+                    {machine.kind === 'station' && machine.exec === 'agent' && <Stat label="model" value={machine.model || personas.find((q) => q.name === machine.ref)?.model || "the persona's own"} />}
+                    {machine.kind === 'station' && machine.exec === 'agent' && <Stat label="mode" value={machine.mode ?? 'edit'} />}
+                    <Stat label="inside" value={machine.kind === 'station' ? `${inside.length}/${machine.cap}` : inside.length} />
+                    <Stat label="waiting for you" value={inside.filter((t) => needsHuman(t)).length} />
+                    {machine.kind === 'station' && machine.exec !== 'native' && machine.exec !== 'human_gate' && <Stat label="outcomes" value={machine.outcomes.join(' / ')} />}
+                    <Stat label="leaves by" value={`${view.takersOf(machine).length} arm(s)`} tone={view.takersOf(machine).length || (machine.kind === 'zone' && machine.inbound) ? undefined : 'danger'} />
+                  </div>
                 )}
+                {machine.kind === 'station' && machine.exec !== 'native' && (stats ? <Did q={stats.machines.find((q) => q.machineId === machine.id) ?? null} gate={machine.exec === 'human_gate'} period={period} /> : null)}
                 <Wire tickets={inside} onSelect={onSelect} />
               </>
             ) : (
               <>
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
                 <div className="text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
-                <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={snapshot?.running ?? 0} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} /></div>
+                <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={snapshot?.running ?? 0} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} tone={waiting.length ? 'warning' : undefined} /></div>
+                {!many && stats && (
+                  <div className="flex flex-wrap gap-x-3" aria-label="What the floor did">
+                    <span className="text-[11px] text-[var(--theme-text-faint)]">{period}</span>
+                    <Stat label="shipped" value={stats.totals.shipped} /><Stat label="lead time" value={span(stats.totals.avgLeadMs)} /><Stat label="runs" value={stats.totals.runs} />
+                    <Stat label="failed" value={stats.totals.failed} tone={stats.totals.failed ? 'danger' : undefined} /><Stat label="cost" value={money(stats.totals.costUsd)} /><Stat label="human wait" value={span(stats.totals.humanMs)} />
+                  </div>
+                )}
                 <Wire tickets={waiting} onSelect={onSelect} />
               </>
             )}

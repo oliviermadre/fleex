@@ -19,7 +19,10 @@ const everyMenu = (): [string, Menu][] => {
     ['failed ticket', factoryMenu(ctx({ ticket: { phase: 'failed', released: false, favorite: null, outcomes: [] } }))],
     ['ticket set aside', factoryMenu(ctx({ ticket: { phase: 'aside', released: false, favorite: false, outcomes: ['ok', 'redo', 'drop', 'later'] } }))],
     ['running ticket', factoryMenu(ctx({ ticket: { phase: 'running', released: false, favorite: false, outcomes: ['ok'], canAside: true } }))],
-    ['zone', factoryMenu(ctx({ machine: { kind: 'zone', waiting: true } }))],
+    ['zone', factoryMenu(ctx({ machine: { kind: 'zone', waiting: true, sheet: true } }))],
+    ['station running', factoryMenu(ctx({ machine: { kind: 'station', waiting: false, sheet: true, power: 'on' } }))],
+    ['station stopped', factoryMenu(ctx({ machine: { kind: 'station', waiting: false, sheet: true, power: 'off' } }))],
+    ['station, building', factoryMenu(ctx({ building: true, machine: { kind: 'station', waiting: false, sheet: true, power: 'on' } }))],
     ['belt, not building', factoryMenu(ctx({ machine: { kind: 'belt', waiting: false } }))],
     ['arm, building', factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false } }))],
     ['group, building', factoryMenu(ctx({ building: true, many: 7 }))],
@@ -44,9 +47,9 @@ describe('the command card', () => {
     expect(depth(factoryMenu(ctx()))).toBe(1);
   });
 
-  it('starts with Build, Intake, Fit and the list of tickets, which Tab opens', () => {
+  it('starts with Build, Intake, Fit, the list of tickets, which Tab opens, and the floor\'s figures', () => {
     const root = factoryMenu(ctx());
-    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets']);
+    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets', 'Stats']);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
   });
 
@@ -117,6 +120,27 @@ describe('the command card', () => {
     expect([0, 1, 2, 3].map((i) => at(aside, i))).toEqual(['Run again', 'ok', 'drop', null]);
     expect(at(aside, 7)).toBeNull();
     expect(at(factoryMenu(ctx({ ticket: { phase: 'running', released: false, favorite: false, outcomes: ['ok'], canAside: true } })), 7)).toBe('Set aside');
+  });
+
+  it('a machine is stopped or started from the card, and Edit opens its sheet where a ticket has Open', () => {
+    const c = ctx({ machine: { kind: 'station', waiting: false, sheet: true, power: 'on' } }), on = factoryMenu(c);
+    expect(labels(on)).toEqual(['Stop', null, null, null, 'Edit', null, null, null, null, null, null, 'Previous']);
+    byKey(on, 'Q')!.run!(); expect(c.act.power).toHaveBeenCalled();
+    byKey(on, 'V')!.run!(); expect(c.act.openMachine).toHaveBeenCalled();
+    expect(at(factoryMenu(ctx({ machine: { kind: 'station', waiting: false, sheet: true, power: 'off' } })), 0)).toBe('Start');
+    /* a gate or a status station has no switch; a zone keeps Release at that place; a belt has nothing to edit */
+    expect(labels(factoryMenu(ctx({ machine: { kind: 'station', waiting: false, sheet: true, power: null } }))).slice(0, 5)).toEqual([null, null, null, null, 'Edit']);
+    expect(labels(factoryMenu(ctx({ machine: { kind: 'zone', waiting: true, sheet: true } }))).slice(0, 5)).toEqual(['Release 1', null, null, null, 'Edit']);
+    expect(labels(factoryMenu(ctx({ machine: { kind: 'belt', waiting: false, sheet: false } }))).slice(0, 5)).toEqual([null, null, null, null, null]);
+    /* in build mode the machine selected keeps Edit at the same place, a group has none */
+    expect(at(factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false, sheet: true } })), 4)).toBe('Edit');
+    expect(at(factoryMenu(ctx({ building: true, many: 3, machine: null })), 4)).toBeNull();
+  });
+
+  it('with nothing selected, the floor itself opens from the same place', () => {
+    const c = ctx(), floor = factoryMenu(c);
+    expect(at(floor, 4)).toBe('Stats');
+    byKey(floor, 'V')!.run!(); expect(c.act.floor).toHaveBeenCalled();
   });
 
   it('a path that no longer exists stops where it breaks', () => {
