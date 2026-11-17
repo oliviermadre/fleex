@@ -12,7 +12,12 @@ export const KBD = 'rounded border border-[var(--theme-border-input)] bg-[var(--
 
 /** How much of the window a popup takes: all of it but a margin, a large part, or only what its content needs. */
 export type PopupSize = 'full' | 'large' | 'fit';
-const HEIGHT: Record<PopupSize, string> = { full: 'h-[calc(100vh-56px)]', large: 'h-[min(860px,calc(100vh-96px))]', fit: 'max-h-[calc(100vh-96px)]' };
+/* a popup never reaches under the app's top bar, which the desktop app drags the window by */
+const HEIGHT: Record<PopupSize, string> = {
+  full: 'mt-[var(--header-height)] h-[calc(100vh-var(--header-height)-24px)]',
+  large: 'mt-[var(--header-height)] h-[min(860px,calc(100vh-var(--header-height)-24px))]',
+  fit: 'max-h-[calc(100vh-2*var(--header-height)-24px)]',
+};
 
 /**
  * What the Factory opens over its floor: a popup in the middle of the window, of glass (slightly translucent, and
