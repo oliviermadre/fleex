@@ -20,6 +20,7 @@ import { TaskHeader } from './TaskHeader';
 import { TaskStream } from './TaskStream';
 import { Composer } from './Composer';
 import { useTaskConversation } from './useTaskConversation';
+import { FactoryThreadCard } from '../../../factory/FactoryThreadCard';
 
 export function TaskPane({
   task,
@@ -82,6 +83,7 @@ export function TaskPane({
         onCommentDeleted={convo.removeComment}
         onDeliverableDeleted={onDeliverableDeleted}
       />
+      <FactoryThreadCard ticketId={task.id} />
       <Composer
         ticketId={task.id}
         value={draft}

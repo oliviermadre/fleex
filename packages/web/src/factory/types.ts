@@ -102,7 +102,7 @@ export type Target = { machineId?: string; x?: number; y?: number };
 /** Mirrors `QUESTION_OUTCOME` in the engine: the outcome of a run where the agent asked instead of answering. */
 export const QUESTION_OUTCOME = 'question';
 
-/** What a human is expected to do on a ticket: answer, decide, or look at a failure. Drives the "?" on the floor and the ticket banner. */
+/** What a human is expected to do on a ticket: answer, decide, or look at a failure. Drives the "?" on the floor. */
 export type HumanCall = 'question' | 'decision' | 'failed';
 export function humanCall(t: FactoryTicket): HumanCall | null {
   if (t.phase === 'review') return 'decision';

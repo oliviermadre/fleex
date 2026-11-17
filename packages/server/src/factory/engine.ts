@@ -659,7 +659,7 @@ export class FactoryEngine {
    * A human takes a ticket off its station's hands: it stays in the station, set aside, and frees its place. A run in
    * progress is stopped. Nothing happens to it until it is put back.
    */
-  async setAside(ticketId: string): Promise<void> {
+  async setAside(ticketId: string, why = ''): Promise<void> {
     const t = this.get(ticketId), m = this.runningStation(t);
     if (!m || !['wait', 'running', 'out'].includes(t.s.phase)) throw new FactoryError('Only a ticket a station is working on can be set aside');
     const nowIso = new Date(this.now()).toISOString(), run = t.s.phase === 'running' && t.s.runId ? this.openRuns.get(t.s.runId) : null;
@@ -668,7 +668,7 @@ export class FactoryEngine {
       if (run.executionId && this.deps.cancelExecution) void this.deps.cancelExecution(run.executionId)
         .catch((err) => this.deps.logger.warn('Factory: could not stop a run', { ticketId, error: String(err) }));
     }
-    t.s.note = t.s.phase === 'running' ? `You stopped ${m.spec.name || 'the station'}'s run` : '';
+    t.s.note = [t.s.phase === 'running' ? `You stopped ${m.spec.name || 'the station'}'s run` : '', why].filter(Boolean).join(': ');
     t.s.phase = 'aside'; t.s.outcome = ''; t.s.runId = null; t.s.since = nowIso; this.dirty.add(ticketId);
     await this.flush();
   }
@@ -687,6 +687,29 @@ export class FactoryEngine {
     } else { t.s.phase = 'wait'; t.s.outcome = ''; }
     t.s.note = ''; t.s.runId = null; this.dirty.add(ticketId);
     await this.flush();
+  }
+
+  /**
+   * Someone launched an agent, a skill or a panel on this ticket by hand. A station working on it lets go: its own run
+   * is stopped and the ticket waits, set aside, for that person to put it back or send it out. Anywhere else on the
+   * floor nothing changes. True when the ticket was set aside.
+   */
+  async launchedByHand(ticketId: string): Promise<boolean> {
+    const t = this.tickets.get(ticketId);
+    if (!t || !this.runningStation(t) || !['wait', 'running', 'out'].includes(t.s.phase)) return false;
+    await this.setAside(ticketId, 'you launched something on this ticket by hand');
+    return true;
+  }
+
+  /**
+   * Someone wrote in the thread of a ticket whose station had asked a question: that is the answer, and the station
+   * runs on it again. True when the ticket was put back.
+   */
+  async answered(ticketId: string): Promise<boolean> {
+    const t = this.tickets.get(ticketId);
+    if (!t || t.s.phase !== 'question' || !this.runningStation(t)) return false;
+    await this.putBack(ticketId, 'again');
+    return true;
   }
 
   /** Run the station again: after a failure, or once a question has been answered in the ticket thread. */

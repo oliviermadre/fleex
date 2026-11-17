@@ -18,8 +18,9 @@ An agent station can run on another model than its persona's (`model` on the sta
 When a station's agent asks a question instead of answering, the ticket waits in the station, pulsing with a "?".
 It leaves only by an arm filtered on the reserved outcome `question` (an unfiltered arm leaves it alone, so an
 unanswered ticket never carries on down the normal path). A Factory run creates no mention and no workflow step run,
-so the ticket view's usual cards never see it: the Factory banner on the ticket says it waits for you and carries the
-action (Run again, the gate's outcomes). Replying in the thread alone restarts nothing.
+so the ticket view's usual cards never see it: a card at the foot of the ticket's thread says it waits for you and
+carries the action (Run again, the gate's outcomes). Replying to a question gives the ticket back to the station that
+asked it (see "In the Work view").
 
 The floor has no edge: machines can be placed anywhere, and the page draws it as far as what is built plus a margin.
 Where two belts must cross, a **bridge** tile carries each ticket straight across. A bridge has no direction of its
@@ -116,8 +117,8 @@ down still move the view, and so do left and right when nothing waits).
 
 A click on a ticket, there or on the floor, opens its thread beside its machine (`FactoryPeek.tsx`): the whole
 conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:
-a gate's decision with an optional reason, an answer that gives the ticket back to its station, another run after a
-failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
+a gate's decision with an optional reason, an answer (which gives the ticket back to the station that asked, see
+"In the Work view"), another run after a failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
 
 ## The workbench
 
@@ -128,6 +129,32 @@ app's top bar. It is `WorkView` with its queue column left out, on the ticket th
 differently. Left and right arrows go to the previous and the next ticket, of the ones that wait for someone or of
 the same machine (a switch says which, and they are listed along the top); Escape goes back to the floor. The lighter
 ticket sheet the Factory had is gone.
+
+## In the Work view
+
+A ticket of the floor carries the Factory with it wherever the Work view shows it, on the floor or not
+(`useFactoryTicket.ts`):
+
+- **Context** has a Factory group (`FactoryContextGroup.tsx`): where the ticket is and what happens to it there, and
+  the one thing done from that panel, taking it out of the line or putting it back. A ticket a station is working on
+  can be set aside; one that is set aside (by someone, by a question, by a failed run) can run its station again,
+  leave as any of the station's outcomes, or be sent to another machine.
+- **The thread** asks what the floor asks of someone, at its foot (`FactoryThreadCard.tsx`): a gate's decision with
+  its optional reason, a question, a failed run to run again. A Factory run creates no mention and no workflow step
+  run, so the thread's own "waiting for you" cards never fire for it; this is that signal. The strip the Factory used
+  to put across the top of a ticket is gone: the timeline already says what happened.
+
+What is written in the thread reaches the floor (`FactoryModule.listen`, on `comment.posted`):
+
+- **Launching an agent, a skill or a panel by hand** (a mention in a comment, or the skill's or panel's own button) on
+  a ticket a station is working on sets it aside first: the station's run is stopped, its place is freed, and the
+  ticket waits for whoever launched it to put it back or send it out. A ticket that is anywhere else on the floor (a
+  belt, a zone, a gate) is left as it is.
+- **A plain reply** to a station that asked a question gives the ticket back to that station, which runs again with
+  the answer in the thread. A reply that launches something is a launch, not an answer.
+- **A workflow cannot start** on a ticket of the floor, from a mention, the API, a routine or another workflow
+  (`refusesWorkflow`, asked by `CreateWorkflowRunUseCase`): the comment that asks for one is refused before it is
+  written, with the reason. Give the ticket back first.
 
 ## Finding a ticket
 
@@ -179,7 +206,11 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | web: `components/ui/Modal.tsx` | a dialog leaves Escape to a popover opened from it (a general fix, found with the ticket list's filters; it can stay) |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
-| web: `work/WorkView.tsx` | the "Managed by the Factory" banner on a ticket; an `embedded` prop that leaves out the queue column, for the workbench |
+| `application/use-cases/create-workflow-run.ts`, `domain/errors.ts`, `infrastructure/http/error-handler.ts`, `application/domain-event-listener.ts` | an optional `refuses(ticketId)` asked before a run is created, its `WorkflowRefusedError` (409), and the mention that asked for it closed |
+| `infrastructure/http/tickets.routes.ts` | a comment that asks for a workflow on a ticket of the floor is refused before it is written |
+| `infrastructure/http/skill.routes.ts`, `panel.routes.ts` | a skill or a panel launched by its button tells the Factory (`launchedByHand`) |
+| web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
+| web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
 
 ## Removing it
 
@@ -191,6 +222,6 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 
 ## Not covered by tests
 
-The engine, the stats and the SQLite store are tested (`factory-engine.test.ts`, `factory-stats.test.ts`,
-`factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a
+The engine, what the module hears from the rest of Fleex, the stats and the SQLite store are tested
+(`factory-engine.test.ts`, `factory-module.test.ts`, `factory-stats.test.ts`, `factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a
 live database and an API key. So the cost figures have only been checked against made-up executions.

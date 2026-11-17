@@ -32,6 +32,7 @@ import { AssigneeField } from '../../tickets/AssigneeField';
 import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
+import { FactoryContextGroup } from '../../../factory/FactoryContextGroup';
 
 /** Parse a github_pr link ref ("org/name#123") into its parts. */
 function parsePrLink(link: TicketLink): { org: string; name: string; number: number } | null {
@@ -272,6 +273,8 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* Experimental Factory: where the ticket is on the floor, set aside / put back. Nothing unless it is on it. */}
+      <FactoryContextGroup ticketId={ticket.id} />
       {/* Board / Status / Type / Priority / Complexity — Kanban-style pickers, 2 per row */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-[var(--theme-border-subtle)] px-3 py-3">
         <Field label="Board">

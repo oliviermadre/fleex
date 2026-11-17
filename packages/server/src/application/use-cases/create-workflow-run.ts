@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import {
   WorkflowRunAlreadyActiveError, WorkflowTemplateNotFoundError, RoutineRunAlreadyActiveError,
-  WorkflowRunDepthExceededError, SubworkflowExpansionFailedError,
+  WorkflowRunDepthExceededError, SubworkflowExpansionFailedError, WorkflowRefusedError,
 } from '../../domain/errors.js';
 import type { RunSubject, WorkflowTemplateSnapshot, SubworkflowSource } from '@fleex/shared';
 import { expandSubworkflows, hasSubworkflows, SubworkflowExpansionError } from '@fleex/shared';
@@ -31,6 +31,8 @@ export class CreateWorkflowRunUseCase {
     private readonly orchestrator: OrchestratorPort,
     private readonly eventBus: EventBus,
     private readonly postComment: PostCommentUseCase,
+    /** Why no workflow may start on this ticket, or null when one may (the experimental Factory routes its own tickets). */
+    private readonly refuses: (ticketId: string) => string | null = () => null,
   ) {}
 
   async execute(params: {
@@ -68,6 +70,8 @@ export class CreateWorkflowRunUseCase {
     // One active run per anchor. Two concurrent runs would race on the same
     // ticket timeline, or on the same routine workspace.
     if (params.ticketId) {
+      const refusal = this.refuses(params.ticketId);
+      if (refusal) throw new WorkflowRefusedError(refusal);
       const existing = await this.runStore.getActiveByTicket(params.ticketId);
       if (existing) throw new WorkflowRunAlreadyActiveError(params.ticketId);
     } else if (params.routineId) {

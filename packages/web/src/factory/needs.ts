@@ -22,6 +22,22 @@ export function needKind(t: FactoryTicket): NeedKind | null {
 const placeOf = (m: MachineSpec | undefined): string => !m ? 'Floor' : m.kind === 'belt' || m.kind === 'bridge' ? 'On a belt' : m.kind === 'arm' ? 'In an arm'
   : m.name || (m.kind === 'station' ? (m.exec === 'human_gate' ? 'Gate' : 'Station') : m.kind === 'zone' ? 'Zone' : 'Exit');
 
+/** Where a ticket is and what happens to it there, in words: the two lines of the Factory group in a ticket's context. */
+export function standing(t: FactoryTicket, m: MachineSpec | null | undefined): { where: string; state: string } {
+  const out = t.outcome && t.outcome !== QUESTION_OUTCOME ? ` as ${t.outcome}` : '';
+  const state = t.phase === 'review' ? 'Waiting for your decision'
+    : t.phase === 'failed' ? 'The run failed'
+    : t.phase === 'aside' ? 'Set aside by you'
+    : t.phase === 'question' ? 'Asked you a question'
+    : t.phase === 'running' ? 'Running'
+    : t.phase === 'wait' ? t.note || 'Waiting to start'
+    : t.phase === 'out' ? `Done${out}, waiting to be taken`
+    : t.phase === 'loose' ? 'Lying there until it is put on a machine'
+    : t.outcome === QUESTION_OUTCOME ? 'Carries a question for you'
+    : t.phase === 'zone' ? 'Kept there' : 'On its way';
+  return { where: placeOf(m ?? undefined), state };
+}
+
 export function needsOf(tickets: readonly FactoryTicket[], machines: readonly MachineSpec[], now: string): Need[] {
   const byId = new Map(machines.map((m) => [m.id, m])), at = Date.parse(now) || 0, out: Need[] = [];
   for (const t of tickets) {

@@ -95,6 +95,7 @@ export function skillRoutes(container: Container) {
         if (!cc) throw new SkillNotFoundError(id);
         const resolved = await container.claudeCodeSkills.resolveForTicket(cc.commandName, ticketId);
         if (!resolved || resolved.id !== cc.id) throw new ClaudeCodeSkillNotFoundError(id);
+        await container.factory?.launchedByHand(ticketId);
         container.executeAgent.executeForClaudeCodeSkill(cc.id, ticketId).catch((err) => {
           container.logger.error('Claude Code skill execution failed', {
             skillId: id, ticketId,
@@ -104,6 +105,7 @@ export function skillRoutes(container: Container) {
         return { status: 'started', skillId: id, ticketId };
       }
 
+      await container.factory?.launchedByHand(ticketId);
       emit({
         type: 'skill.executed',
         skillId: id,

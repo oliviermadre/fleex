@@ -739,7 +739,7 @@ export async function createContainer() {
     // Resolve circular dep: runWorkflowStep.deps.orchestrator = workflowOrchestrator
     (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
 
-    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
+    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment, (ticketId) => factory?.refusesWorkflow(ticketId) ?? null);
 
     // Close the lazy loop opened above. Slug → template resolution lives here
     // rather than in the operation so the operation stays a pure planner.

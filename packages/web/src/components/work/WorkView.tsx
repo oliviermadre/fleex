@@ -14,7 +14,6 @@
  * the queue too, so it spans everything between the nav rail and the tool
  * strip. The status bar spans the whole width, underneath.
  */
-import { FactoryBanner } from '../../factory/FactoryBanner';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useWorkQueue } from './useWorkQueue';
 import { useWorkKeyboard } from './keyboard';
@@ -143,7 +142,6 @@ export function WorkView({ embedded = false }: { embedded?: boolean } = {}) {
               where the panel itself renders, so the center never goes blank. */}
           {!(browserTakesCenter && view === 'task' && selectedTask) && (
             <main className="flex min-w-0 flex-1 flex-col bg-[var(--theme-bg-base)]">
-              {view === 'task' && selectedTask && <FactoryBanner ticketId={selectedTask.id} />}
               {view === 'new' ? (
                 <NewTask />
               ) : codeMode && selectedTask ? (

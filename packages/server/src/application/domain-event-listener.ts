@@ -1,5 +1,5 @@
 import type { ClaudeCodeSkillsUseCase } from './use-cases/claude-code-skills.js';
-import { SubworkflowExpansionFailedError } from '../domain/errors.js';
+import { SubworkflowExpansionFailedError, WorkflowRefusedError } from '../domain/errors.js';
 import type { EventBus } from './event-bus.js';
 import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
@@ -279,7 +279,7 @@ export class DomainEventListener {
     }).catch(async (err) => {
       // A sub-workflow that doesn't expand already explained itself on the
       // ticket: close the mention so it doesn't sit there as "pending".
-      if (err instanceof SubworkflowExpansionFailedError) {
+      if (err instanceof SubworkflowExpansionFailedError || err instanceof WorkflowRefusedError) {
         const mention = await this.deps.mentionStore.getById(event.mentionId);
         if (mention && mention.status !== 'resolved') {
           mention.resolve();

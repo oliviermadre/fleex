@@ -19,6 +19,10 @@ import { FactoryEngine } from './engine.js';
 import { StationRunner } from './station-runner.js';
 import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
 import type { FactoryTicketInfo } from './types.js';
+import type { CommentPostedEvent } from '../domain/events.js';
+
+/** What a person launches by hand from a ticket's thread. A workflow is not one: a ticket on the floor cannot run any. */
+const LAUNCHES = ['agent', 'skill', 'panel'];
 
 const DAY_MS = 86_400_000;
 const STATS_TTL_MS = 20_000;
@@ -83,9 +87,34 @@ export class FactoryModule {
         deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'user', authorName, createdMentions: [], occurredAt: new Date() });
       },
     });
+    this.listen();
   }
 
   enabled(): boolean { return isFactoryEnabled(this.deps.config.get()); }
+
+  /**
+   * What a person writes in a ticket's thread reaches the floor: launching an agent, a skill or a panel sets the ticket
+   * aside; a plain reply to a station's question gives the ticket back to that station.
+   */
+  private listen(): void {
+    this.deps.eventBus.on('comment.posted', async (e) => {
+      const event = e as CommentPostedEvent;
+      if (event.authorType !== 'user' || !this.managedTicketIds()?.has(event.ticketId)) return;
+      if (event.createdMentions.some((m) => LAUNCHES.includes(m.targetType))) await this.engine.launchedByHand(event.ticketId);
+      else await this.engine.answered(event.ticketId);
+    });
+  }
+
+  /** A skill or a panel was launched on a ticket without a comment (its own button): same as launching it from the thread. */
+  async launchedByHand(ticketId: string): Promise<void> {
+    if (!this.managedTicketIds()?.has(ticketId)) return;
+    await this.engine.launchedByHand(ticketId).catch((err) => this.deps.logger.warn('Factory: could not set a ticket aside', { ticketId, error: String(err) }));
+  }
+
+  /** Why a workflow cannot start on this ticket, or null when it can: a ticket on the floor is already being routed. */
+  refusesWorkflow(ticketId: string): string | null {
+    return this.managedTicketIds()?.has(ticketId) ? 'This ticket is on the factory floor, where the machines decide what runs on it. Give it back from the floor to run a workflow on it.' : null;
+  }
 
   /** Loads the floor on first use, so a workspace that never enables the Factory never queries its tables. */
   ensureReady(): Promise<void> {

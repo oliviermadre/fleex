@@ -13,7 +13,7 @@ interface FactoryState {
   receivedAt: number;
   /** The layout being edited: ahead of the server between a local edit and its save. */
   layout: FactoryLayout | null;
-  /** Tickets handed over to the Factory, for the banner shown on a ticket elsewhere in Fleex. */
+  /** Tickets handed over to the Factory, for what shows them elsewhere in Fleex (the Work view's context and thread). */
   managed: ReadonlySet<string>;
   /** What the floor did over the last `statsDays` days; null until first loaded. */
   stats: FactoryStats | null;

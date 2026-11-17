@@ -570,6 +570,45 @@ describe('setting a ticket aside, and putting it back', () => {
   });
 });
 
+describe('what someone does from the ticket thread', () => {
+  it('sets a ticket aside when something is launched on it by hand, and stops the run of its station', async () => {
+    await boot([station('s', 1, 1), arm('o', 4, 2, 0), zone('next', 5, 2)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.3);
+    pending[0]!.started('exec-1');
+    expect(await engine.launchedByHand('a')).toBe(true);
+    expect(where('a')).toBe('s:aside');
+    expect(cancelled).toEqual(['exec-1']);
+    expect(note('a')).toContain('by hand');
+    expect(await engine.launchedByHand('a')).toBe(false);          // already set aside: nothing more to do
+  });
+
+  it('leaves alone a ticket no station is working on', async () => {
+    await boot([station('gate', 1, 1, { exec: 'human_gate', outcomes: ['approve', 'reject'] }), zone('z', 6, 1)]);
+    await engine.transfer('a', { machineId: 'gate' });
+    await engine.transfer('b', { machineId: 'z' });
+    expect(await engine.launchedByHand('a')).toBe(false);
+    expect(await engine.launchedByHand('b')).toBe(false);
+    expect(await engine.launchedByHand('nope')).toBe(false);
+    expect(where('a')).toBe('gate:review');
+    expect(where('b')).toBe('z:zone');
+  });
+
+  it('gives a ticket back to the station that asked a question once it is answered, and only then', async () => {
+    await boot([station('s', 1, 1)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.3);
+    expect(await engine.answered('a')).toBe(false);                 // it runs: a comment is not an answer
+    pending[0]!.resolve({ status: 'question', outcome: '', executionId: null, error: null });
+    await run(0.3);
+    expect(where('a')).toBe('s:question');
+    expect(await engine.answered('a')).toBe(true);
+    await run(0.3);
+    expect(where('a')).toBe('s:running');
+    expect(pending).toHaveLength(2);
+  });
+});
+
 describe('a station has a switch', () => {
   it('off, it takes tickets in and starts nothing; on again, it starts them', async () => {
     await boot([station('s', 1, 1)]);

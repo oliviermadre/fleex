@@ -105,8 +105,8 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
           </>
         ) : (
           <>
-            <input id="factory-peek-reply" aria-label="Reply" placeholder={ft.phase === 'question' ? 'Answer: the station takes it again' : 'Reply'} value={draft} onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { escape(e); if (e.key === 'Enter' && draft.trim() && !busy) { e.preventDefault(); void (ft.phase === 'question' ? run(async () => { await api.postTicketComment(ticketId, draft.trim()); setDraft(''); await store.putBack(ticketId); }) : say()); } }}
+            <input id="factory-peek-reply" aria-label="Reply" placeholder={ft.phase === 'question' && machine?.kind === 'station' ? 'Answer: the station takes the ticket again' : 'Reply'} value={draft} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { escape(e); if (e.key === 'Enter' && draft.trim() && !busy) { e.preventDefault(); void say(); } }}
               className={cn(FIELD, 'flex-1')} />
             {ft.phase === 'failed' && <Button size="sm" disabled={busy} onClick={() => run(() => store.putBack(ticketId))}>Run again</Button>}
           </>

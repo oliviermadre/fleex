@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { needKind, needsOf, stepNeed } from './needs';
+import { needKind, needsOf, standing, stepNeed } from './needs';
 import type { FactoryTicket, MachineSpec } from './types';
 
 const now = '2026-01-01T12:00:00.000Z';
@@ -41,5 +41,22 @@ describe('the tickets that wait for someone', () => {
     expect(stepNeed(list, null, 1)).toBe('a');
     expect(stepNeed(list, 'elsewhere', -1)).toBe('c');
     expect(stepNeed([], 'a', 1)).toBeNull();
+  });
+});
+
+describe('standing', () => {
+  const build = machines[0]!, gate = machines[1]!, belt = machines[2]!;
+  it('names the machine and what happens to the ticket there', () => {
+    expect(standing(t('a', 'running', 1), build)).toEqual({ where: 'Build', state: 'Running' });
+    expect(standing(t('a', 'out', 1, { outcome: 'ok' }), build)).toEqual({ where: 'Build', state: 'Done as ok, waiting to be taken' });
+    expect(standing(t('a', 'review', 1), gate)).toEqual({ where: 'Gate', state: 'Waiting for your decision' });
+    expect(standing(t('a', 'aside', 1), build).state).toBe('Set aside by you');
+    expect(standing(t('a', 'belt', 1), belt)).toEqual({ where: 'On a belt', state: 'On its way' });
+    expect(standing(t('a', 'loose', 1), null).where).toBe('Floor');
+  });
+  it('says why a ticket waits when its station says so, and that a travelling question is still open', () => {
+    expect(standing(t('a', 'wait', 1, { note: 'Dev is switched off' }), build).state).toBe('Dev is switched off');
+    expect(standing(t('a', 'wait', 1), build).state).toBe('Waiting to start');
+    expect(standing(t('a', 'belt', 1, { outcome: 'question' }), belt).state).toBe('Carries a question for you');
   });
 });
