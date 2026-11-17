@@ -72,6 +72,9 @@ export interface FactorySnapshot {
   arms: { id: string; p: number; state?: 'rest' | 'carry' | 'back'; carrying: string | null }[];
   /** Seconds an arm takes to swing one way. */
   armSwing?: number;
+  /** Tiles a belt carries a ticket per second, and how many times faster a fast belt does. */
+  beltSpeed?: number;
+  fastBelt?: number;
   runsLastHour: number;
   running: number;
   serverTime: string;

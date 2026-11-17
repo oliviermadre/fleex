@@ -13,6 +13,11 @@ above, below, between). With no condition it takes what the arms next to it leav
 An arm takes a little over a second to swing one way, and a ticket that is done in a station rests there a second
 before an arm may take it: the floor is meant to be watched. The page draws the swing itself between two snapshots.
 
+The engine moves things four times a second and the page reads the floor every 600 ms, while it draws sixty times a
+second. So what moves is not drawn where it was last said to be, which would stand still and jump: an arm keeps turning
+at its own pace (`armMotion.ts`), and a ticket on belts follows what was last said along the belts themselves, at their
+pace, a fraction of a second behind (`ticketMotion.ts`; the snapshot carries `beltSpeed` and `fastBelt` for it).
+
 An agent station can run on another model than its persona's (`model` on the station).
 
 When a station's agent asks a question instead of answering, the ticket waits in the station, pulsing with a "?".

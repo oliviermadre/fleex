@@ -50,6 +50,9 @@ export interface FactorySnapshot {
   arms: { id: string; p: number; state: 'rest' | 'carry' | 'back'; carrying: string | null }[];
   /** Seconds an arm takes to swing one way. */
   armSwing: number;
+  /** Tiles a belt carries a ticket per second, and how many times faster a fast belt does: the page draws tickets moving at that pace between two snapshots. */
+  beltSpeed: number;
+  fastBelt: number;
   runsLastHour: number;
   running: number;
   serverTime: string;
@@ -754,7 +757,7 @@ export class FactoryEngine {
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
       tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
       arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: m.item ? m.item.ticketId : null })),
-      armSwing: this.armSwing,
+      armSwing: this.armSwing, beltSpeed: BELT_SPEED, fastBelt: FAST_BELT,
       runsLastHour: this.runsLastHour(), running: this.runningCount(), serverTime: new Date(this.now()).toISOString(),
     };
   }

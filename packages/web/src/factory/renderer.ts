@@ -9,6 +9,7 @@ import { armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
+import { follow, type Track, type TrackPos } from './ticketMotion';
 import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
@@ -23,6 +24,9 @@ export interface ViewState {
   /** Seconds since that snapshot, and seconds a swing takes: an arm keeps turning between two snapshots. */
   armAge?: number;
   armSwing?: number;
+  /** Tiles a belt carries a ticket per second, and how many times faster a fast belt does (from the server). */
+  beltSpeed?: number;
+  fastBelt?: number;
   /** Board id → name, for the tag of an arm that sorts by board. */
   boardName?: (id: string) => string;
   selMachine: string | null;
@@ -107,6 +111,8 @@ export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: nu
 const Z_MAX = 80, Z_MIN = 3;
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
+/** A ticket drawn on a belt or a bridge, and where on it. */
+interface Riding { t: FactoryTicket; pos: TrackPos }
 /** The colour of a frame being dragged, and of what it takes. */
 const PICK = '#60a5fa';
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
@@ -129,6 +135,8 @@ export class FactoryView {
   private shown = new Map<string, { x: number; y: number }>();
   /** Arm id → the swing it is drawn at (0..1). */
   private armShown = new Map<string, number>();
+  /** Ticket id → where it is drawn on the belts: it follows what the server says along them (see `ticketMotion.ts`). */
+  private drawnOn = new Map<string, TrackPos>();
   private readonly ctx: CanvasRenderingContext2D;
   /** The floor as last painted, and what it was painted for. */
   private backdrop: HTMLCanvasElement | null = null;
@@ -443,22 +451,39 @@ export class FactoryView {
     for (const b of belts) { const f = this.bendOf(b); bends.set(b.id, f); this.beltBase(b, f, pal); }
     if (z >= 8) { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of belts) this.beltChevrons(b, bends.get(b.id) ?? -1, pal); ctx.lineCap = 'butt'; }
 
-    for (const m of L.machines) if (m.kind === 'bridge') this.bridge(m, inside.get(m.id) ?? [], st, pal, dtReal);
+    /*
+     * Tickets on belts and bridges are drawn moving along them at the belts' pace, towards where the server last had
+     * them: told as it is, twice a second, a ticket would stand, jump and stand again. So a ticket may be drawn on the
+     * tile before the one the server has it on.
+     */
+    const track = this.track(st), onTrack = new Map<string, Riding[]>(), riding = new Set<string>();
+    for (const t of st.tickets) {
+      const m = t.machineId ? this.byId.get(t.machineId) : null;
+      if (!m || (m.kind !== 'belt' && m.kind !== 'bridge')) continue;
+      const told: TrackPos = { id: m.id, p: t.p, fx: t.fx, fy: t.fy };
+      let pos = follow(track, this.drawnOn.get(t.ticketId), told, dtReal);
+      const tile = this.byId.get(pos.id);
+      if (!tile || (tile.kind !== 'belt' && tile.kind !== 'bridge')) pos = told;
+      this.drawnOn.set(t.ticketId, pos); riding.add(t.ticketId);
+      const list = onTrack.get(pos.id); if (list) list.push({ t, pos }); else onTrack.set(pos.id, [{ t, pos }]);
+    }
+    for (const id of this.drawnOn.keys()) if (!riding.has(id)) this.drawnOn.delete(id);
+
+    for (const m of L.machines) if (m.kind === 'bridge') this.bridge(m, onTrack.get(m.id) ?? [], st, pal, dtReal);
     for (const m of L.machines) {
       if (m.kind === 'label') this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 });
       else if (m.kind === 'zone') this.zone(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'station') this.station(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'exit') this.exit(m, pal);
     }
-    for (const b of belts) {
-      const t = inside.get(b.id)?.[0]; if (!t) continue;
+    for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
       const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
       let x: number, y: number;
-      if (f >= 0 && t.fx === DX[f as 0] && t.fy === DY[f as 0]) {
-        const ca = Math.cos(t.p * Math.PI / 2), sa = Math.sin(t.p * Math.PI / 2);
+      if (f >= 0 && pos.fx === DX[f as 0] && pos.fy === DY[f as 0]) {
+        const ca = Math.cos(pos.p * Math.PI / 2), sa = Math.sin(pos.p * Math.PI / 2);
         x = cx - DX[f as 0] * 0.5 + DX[b.dir] * 0.5 + 0.5 * (DX[f as 0] * sa - DX[b.dir] * ca); y = cy - DY[f as 0] * 0.5 + DY[b.dir] * 0.5 + 0.5 * (DY[f as 0] * sa - DY[b.dir] * ca);
-      } else if (t.p < 0.5) { x = cx - t.fx * (0.5 - t.p); y = cy - t.fy * (0.5 - t.p); }
-      else { x = cx + DX[b.dir] * (t.p - 0.5); y = cy + DY[b.dir] * (t.p - 0.5); }
+      } else if (pos.p < 0.5) { x = cx - pos.fx * (0.5 - pos.p); y = cy - pos.fy * (0.5 - pos.p); }
+      else { x = cx + DX[b.dir] * (pos.p - 0.5); y = cy + DY[b.dir] * (pos.p - 0.5); }
       this.ticket(t, x, y, 0.46, st, '', dtReal);
     }
     for (const t of st.tickets) if (!t.machineId || !this.byId.has(t.machineId)) {
@@ -650,8 +675,27 @@ export class FactoryView {
     }
   }
 
+  /** The belts and bridges as a track a ticket is drawn along: which tile follows which, and how fast each carries. */
+  private track(st: ViewState): Track {
+    const base = st.beltSpeed || 1.2, times = st.fastBelt || 2;
+    return {
+      next: (at) => {
+        const m = this.byId.get(at.id);
+        if (!m) return null;
+        const dx = m.kind === 'belt' ? DX[m.dir] : at.fx, dy = m.kind === 'belt' ? DY[m.dir] : at.fy, n = this.at(m.x + dx, m.y + dy);
+        return n && (n.kind === 'belt' || n.kind === 'bridge') ? { id: n.id, fx: dx, fy: dy } : null;
+      },
+      pace: (at) => {
+        const m = this.byId.get(at.id);
+        if (m?.kind === 'belt') return base * (m.fast ? times : 1);
+        if (m?.kind === 'bridge') { const f = bridgeFlow((px, py) => this.at(px, py), m); return base * ((at.fx !== 0 ? f.overFast : f.underFast) ? times : 1); }
+        return base;
+      },
+    };
+  }
+
   /** Two belts crossing: the north-south one passes under, the east-west one over it. */
-  private bridge(m: MachineSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
+  private bridge(m: MachineSpec, tickets: Riding[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y } = m;
     /*
      * A bridge has no direction and no speed of its own: each lane is drawn the way the belts that feed it send
@@ -697,17 +741,17 @@ export class FactoryView {
       }
       ctx.lineCap = 'butt';
     };
-    const draw = (t: FactoryTicket) => this.ticket(t, x + 0.5 + t.fx * (t.p - 0.5), y + 0.5 + t.fy * (t.p - 0.5), 0.46, st, '', dt);
+    const draw = ({ t, pos }: Riding) => this.ticket(t, x + 0.5 + pos.fx * (pos.p - 0.5), y + 0.5 + pos.fy * (pos.p - 0.5), 0.46, st, '', dt);
     /* under: the north-south lane, between its two rails */
     ctx.strokeStyle = rail(flow.underFast, pal.edge); ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
     if (this.cam.z >= 8) lane(flow.under, false, flow.underFast);
-    for (const t of tickets) if (t.fx === 0) draw(t);
+    for (const r of tickets) if (r.pos.fx === 0) draw(r);
     /* over: the deck of the east-west lane, with a shadow on the lane below */
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + 0.1, 1, 0.8);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y + 0.16, 1.02, 0.68);
     ctx.strokeStyle = rail(flow.overFast, pal.text3); ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
     if (this.cam.z >= 8) lane(flow.over, true, flow.overFast);
-    for (const t of tickets) if (t.fx !== 0) draw(t);
+    for (const r of tickets) if (r.pos.fx !== 0) draw(r);
   }
 
   private arm(a: ArmSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
