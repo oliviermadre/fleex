@@ -1,9 +1,10 @@
 <title>Factory Workbench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-/* Layout: a one-screen app. A nav rail, then either the Factory floor (the workbench slides over it) or the Work view
-   (the queue, then the same workbench). Single dark look on purpose: it mirrors Fleex's own Ember theme
-   (packages/web/src/index.css), so what is judged here is the flow, not a new skin. */
+/* Layout: a one-screen desktop app. A window title bar (the Electron margin), a nav rail, then either the Factory
+   (header, floor with the "needs you" frames top-left, HUD along the bottom, and the workbench sliding up from the
+   bottom over all of it) or the Work view (queue, then the same workbench).
+   Single dark look on purpose: it mirrors Fleex's own Ember theme (packages/web/src/index.css). */
 :root{
   color-scheme:dark;
   --bg:#09090b;--surface:#18181b;--overlay:#27272a;--hover:rgba(63,63,70,.42);
@@ -13,9 +14,11 @@
   --ok:#22c55e;--ok-bg:rgba(34,197,94,.14);--warn:#eab308;--warn-bg:rgba(234,179,8,.14);--danger:#ef4444;--danger-bg:rgba(239,68,68,.14);
   --purple:#c084fc;--purple-bg:rgba(192,132,252,.15);--blue:#60a5fa;--blue-bg:rgba(96,165,250,.15);--teal:#2dd4bf;--teal-bg:rgba(45,212,191,.14);
   --ty-build:#4ade80;--ty-fix:#f87171;--ty-review:#facc15;--ty-ops:#2dd4bf;--ty-lead:#c084fc;--ty-think:#60a5fa;
-  --scrim:rgba(0,0,0,.55);--glass:rgba(24,24,27,.94);
+  --steel:#2b2b31;--steel-2:#34343b;--steel-edge:#4a4a54;--pit:rgba(0,0,0,.42);--hazard:#eab308;
+  --scrim:rgba(0,0,0,.6);--glass:rgba(13,13,16,.72);--toggle-on:#facc15;
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --title-h:36px;--hud-h:228px;
   --gut-l:max(16px,env(safe-area-inset-left,0px));--gut-r:max(16px,env(safe-area-inset-right,0px));
 }
 html,body{height:100%}
@@ -26,134 +29,215 @@ button{cursor:pointer;background:none;border:0;padding:0}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .cap{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--t4);font-weight:600}
-#app{height:100%;display:flex;min-width:0}
+svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#app{height:100%;display:flex;flex-direction:column;min-width:0}
+.tbar{flex:none;height:var(--title-h);display:flex;align-items:center;gap:8px;padding:0 var(--gut-r) 0 max(14px,env(safe-area-inset-left,0px));background:#0d0d10;border-bottom:1px solid var(--border);color:var(--t3);font-size:12px}
+.tbar i{width:12px;height:12px;border-radius:50%;background:#3a3a41}.tbar span{margin:0 auto;transform:translateX(-30px)}
+.shell{flex:1;min-height:0;display:flex;min-width:0}
 
 /* ---------- nav rail ---------- */
 .rail{flex:none;width:56px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:10px;padding-left:env(safe-area-inset-left,0px)}
 .rail .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:800;margin-bottom:8px}
 .rail button{width:44px;padding:6px 0;border-radius:8px;display:grid;place-items:center;gap:2px;color:var(--t3);font-size:10px}
-.rail button .mono{font-size:16px;line-height:1}
+.rail button .i{font-size:17px}
 .rail button:hover{background:var(--hover);color:var(--t1)}
 .rail button[aria-current=page]{background:var(--accent-m);color:var(--accent)}
 .rail .dim{opacity:.35;pointer-events:none}
 #main{flex:1;min-width:0;position:relative;display:flex}
 
-/* ---------- buttons ---------- */
+/* ---------- small parts ---------- */
 .btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--border-in);background:var(--surface);font-size:12px;font-weight:500;white-space:nowrap}
-.btn:hover{background:var(--overlay)}
+.btn:hover{background:var(--overlay)}.btn:disabled{opacity:.45;cursor:default}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}.btn.pri:hover{background:var(--accent-h)}
 .btn.ghost{border-color:transparent;background:none;color:var(--t2)}.btn.ghost:hover{background:var(--hover);color:var(--t1)}
 .btn.ok{background:var(--ok);border-color:var(--ok);color:#052e16;font-weight:600}
-.btn kbd,.kbd{font-family:var(--mono);font-size:10px;padding:0 4px;border-radius:4px;border:1px solid var(--border-in);color:var(--t2);background:var(--bg)}
-.btn.pri kbd{border-color:rgba(0,0,0,.25);background:rgba(0,0,0,.15);color:var(--on-accent)}
+.kbd{font-family:var(--mono);font-size:10px;padding:0 4px;border-radius:4px;border:1px solid var(--border-in);color:var(--t2);background:var(--bg)}
+.btn.pri .kbd{border-color:rgba(0,0,0,.25);background:rgba(0,0,0,.15);color:var(--on-accent)}
 .pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:500;white-space:nowrap}
 .pill.ok{background:var(--ok-bg);color:#86efac}.pill.warn{background:var(--warn-bg);color:#fde047}.pill.danger{background:var(--danger-bg);color:#fca5a5}
-.pill.hand{background:var(--accent-m);color:var(--accent-h)}.pill.gray{background:var(--overlay);color:var(--t2)}.pill.blue{background:var(--blue-bg);color:#93c5fd}.pill.purple{background:var(--purple-bg);color:#d8b4fe}
+.pill.hand{background:var(--accent-m);color:var(--accent-h)}.pill.gray{background:var(--overlay);color:var(--t2)}.pill.blue{background:var(--blue-bg);color:#93c5fd}
 
-/* ---------- tokens (a ticket on the floor) ---------- */
-.tok{position:relative;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font:700 11px var(--mono);color:#0b0b0d;flex:none;
-  box-shadow:0 2px 0 rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s}
+/* ---------- a ticket on the floor: a token in its type's colour, carrying the type's pictogram ---------- */
+.tok{position:relative;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#0b0b0d;flex:none;
+  box-shadow:0 2.5px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -2px 0 rgba(0,0,0,.18)}
+.tok svg{width:62%;height:62%;fill:currentColor;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .tok[data-ty=build]{background:var(--ty-build)}.tok[data-ty=fix]{background:var(--ty-fix)}.tok[data-ty=review]{background:var(--ty-review)}
 .tok[data-ty=ops]{background:var(--ty-ops)}.tok[data-ty=lead]{background:var(--ty-lead)}.tok[data-ty=think]{background:var(--ty-think)}
-.tok.sel{outline:2px solid var(--t1);outline-offset:2px}
-.tok .mark{position:absolute;right:-5px;bottom:-5px;width:13px;height:13px;border-radius:50%;font:700 9px var(--sans);display:grid;place-items:center;color:#0b0b0d;border:1.5px solid var(--bg)}
-.tok .mark.q{background:var(--warn)}.tok .mark.f{background:var(--danger);color:#fff}
-.tok.run::after{content:"";position:absolute;inset:-4px;border-radius:10px;border:2px solid transparent;border-top-color:var(--t1);animation:spin 1s linear infinite}
-.tok.lg{width:34px;height:34px;border-radius:9px;font-size:14px}
+.tok.sel{outline:2.5px solid var(--t1);outline-offset:2px}
+.tok .mark{position:absolute;right:-6px;bottom:-6px;width:15px;height:15px;border-radius:50%;font:800 10px var(--sans);display:grid;place-items:center;color:#0b0b0d;border:2px solid #17171a}
+.tok .mark.q{background:var(--warn)}.tok .mark.f{background:var(--danger);color:#fff}.tok .mark.h{background:var(--accent);color:var(--on-accent)}
+.tok .mark.h{width:18px;height:18px;right:-8px;bottom:-8px}
+.tok .mark svg{width:11px;height:11px;fill:none;stroke-width:2.4}
+.tok.big{width:44px;height:44px;border-radius:12px}
+.tok.sm{width:18px;height:18px;border-radius:5px;box-shadow:none}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{50%{opacity:.25}}
 
-/* ---------- factory floor ---------- */
-.factory{flex:1;min-width:0;position:relative;overflow:hidden;
-  background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.035),transparent 55%),radial-gradient(circle,rgba(255,255,255,.13) 1px,transparent 1.4px) 0 0/26px 26px,var(--surface)}
-.factory::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,0,.5))}
-.fhead{position:absolute;z-index:3;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:10px var(--gut-r) 10px 16px;background:linear-gradient(var(--glass),transparent)}
-.fhead h1{margin:0;font-size:15px;font-weight:650}
-.fhead .note{color:var(--t3);font-size:11.5px}
-.stage{position:absolute;z-index:1;left:0;top:0;transform-origin:0 0}
-.m{position:absolute;top:150px;height:150px;border-radius:14px;background:var(--overlay);border:1.5px solid var(--border-in);padding:22px 12px 10px;
-  box-shadow:5px 9px 22px rgba(0,0,0,.55);transition:left .45s cubic-bezier(.2,.8,.2,1),opacity .3s}
-.m::before{content:"";position:absolute;inset:-70px;border-radius:50%;z-index:-1;pointer-events:none;opacity:0;transition:opacity .4s}
-.m.g-run::before{opacity:1;background:radial-gradient(circle,rgba(34,197,94,.2),transparent 68%)}
-.m.g-call::before{opacity:1;background:radial-gradient(circle,rgba(234,179,8,.2),transparent 68%)}
-.m.g-fail::before{opacity:1;background:radial-gradient(circle,rgba(239,68,68,.22),transparent 68%)}
-.m .bar{position:absolute;top:9px;left:22%;right:22%;height:4px;border-radius:2px;background:var(--t4)}
-.m.g-run .bar{background:var(--ok)}.m.g-call .bar{background:var(--warn)}.m.g-fail .bar{background:var(--danger)}
-.m .nm{font-weight:650;font-size:13.5px;text-align:center}
-.m .kd{font-size:10.5px;color:var(--t3);text-align:center;margin-bottom:8px}
-.m .slots{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;background:rgba(0,0,0,.34);border-radius:9px;padding:9px 8px;min-height:58px;align-content:flex-start}
-.m.gate{border:2.5px dashed var(--warn)}
-.m.zone{background:var(--bg);top:118px;height:214px;border-color:var(--accent);border-style:dashed}
-.m.exit{border-color:var(--ok);background:var(--overlay)}.m.exit .nm{color:#4ade80;margin-top:34px}
-.m.proposed{border-color:var(--accent);animation:pulse 1.3s ease-in-out infinite}
-@keyframes pulse{50%{box-shadow:0 0 0 7px var(--accent-m),5px 9px 22px rgba(0,0,0,.55)}}
-.lifted{position:absolute;top:-52px;left:0;right:0;display:flex;gap:10px;justify-content:center}
-.lifted .tok{transform:translateY(-2px);box-shadow:0 12px 14px rgba(0,0,0,.6),0 0 0 3px var(--accent-m),0 0 0 1.5px var(--accent)}
-.lifted .lab{position:absolute;top:-17px;font-size:10px;color:var(--accent-h);font-weight:600;white-space:nowrap}
-.belt{position:absolute;top:211px;height:28px;border-radius:5px;background:#2a2a2e;border:1px solid #3a3a40;overflow:hidden;transition:left .45s cubic-bezier(.2,.8,.2,1),width .45s}
-.belt::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(161,161,170,.55) 9px 11px,transparent 11px 18px);-webkit-mask:linear-gradient(#000,#000);animation:belt 1.1s linear infinite}
-@keyframes belt{to{background-position:18px 0}}
-.arm{position:absolute;top:216px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:3.5px solid #c7c7cf;transition:left .45s cubic-bezier(.2,.8,.2,1)}
-.loop{position:absolute;border:2px dashed #55555e;border-radius:14px;pointer-events:none;transition:left .45s cubic-bezier(.2,.8,.2,1),width .45s}
-.loop.up{top:92px;height:58px;border-bottom:0;border-radius:14px 14px 0 0}
-.loop.down{top:300px;height:50px;border-top:0;border-radius:0 0 14px 14px}
+/* ---------- factory ---------- */
+.factory{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.fhead{flex:none;height:44px;display:flex;align-items:center;gap:10px;padding:0 var(--gut-r) 0 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.fhead h1{margin:0;font-size:14px;font-weight:650}
+.fhead .find{height:26px;width:220px;border:1px solid var(--border-in);border-radius:6px;background:var(--bg);color:var(--t4);display:flex;align-items:center;padding:0 9px;font-size:12px}
+.floor{flex:1;min-height:0;position:relative;overflow:hidden;
+  background:radial-gradient(circle,rgba(255,255,255,.12) 1px,transparent 1.4px) 0 0/26px 26px,radial-gradient(ellipse at 55% 45%,#1e1e22,#111114 78%)}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0;width:900px;height:556px}
+
+/* a station: a machine with a head plate, a stack light, lanes for what queues, runs and waits, and a bay for what was set aside */
+.st{position:absolute;border-radius:16px;background:linear-gradient(var(--steel-2),var(--steel));border:1.5px solid var(--steel-edge);
+  box-shadow:6px 10px 24px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.07);display:flex;flex-direction:column;padding:8px}
+.st::before{content:"";position:absolute;inset:-64px;border-radius:50%;z-index:-1;pointer-events:none;opacity:0;transition:opacity .4s}
+.st.g-run::before{opacity:1;background:radial-gradient(circle,rgba(34,197,94,.2),transparent 66%)}
+.st.g-call::before{opacity:1;background:radial-gradient(circle,rgba(234,179,8,.2),transparent 66%)}
+.st.g-fail::before{opacity:1;background:radial-gradient(circle,rgba(239,68,68,.24),transparent 66%)}
+.st.hl{outline:3px solid var(--accent);outline-offset:4px}
+.st.pick{cursor:crosshair;outline:2px dashed var(--accent);outline-offset:4px}
+.st header{display:flex;align-items:center;gap:8px;padding:0 30px 6px 2px}
+.st .badge{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;flex:none;border:1.5px solid}
+.st.k-agent .badge{background:var(--purple-bg);color:var(--purple);border-color:rgba(192,132,252,.45)}
+.st.k-gate .badge{background:var(--warn-bg);color:#fde047;border-color:rgba(234,179,8,.5)}
+.st.k-zone .badge{background:var(--accent-m);color:var(--accent-h);border-color:rgba(215,118,85,.5)}
+.st.k-exit .badge{background:var(--ok-bg);color:#4ade80;border-color:rgba(34,197,94,.5)}
+.st header b{display:block;font-size:14.5px;line-height:1.15}.st header small{color:var(--t3);font-size:10.5px}
+/* the stack light every station carries: what it is doing, read from across the floor */
+.andon{position:absolute;top:-13px;right:14px;width:15px;border-radius:5px;background:#101013;border:1.5px solid var(--steel-edge);padding:2.5px;display:grid;gap:2px}
+.andon i{height:8px;border-radius:2px;background:#2a2a2f}
+.st.g-fail .andon .r{background:var(--danger);box-shadow:0 0 10px 2px rgba(239,68,68,.8);animation:blink 1s steps(2,jump-none) infinite}
+.st.g-call .andon .a{background:var(--warn);box-shadow:0 0 10px 2px rgba(234,179,8,.8);animation:blink 1.4s ease-in-out infinite}
+.st.g-run .andon .g,.st.has-run .andon .g{background:var(--ok);box-shadow:0 0 10px 2px rgba(34,197,94,.75)}
+.lanes{flex:1;min-height:0;display:flex;gap:6px}
+.pit{background:var(--pit);border-radius:10px;border:1px solid rgba(255,255,255,.05);position:relative;padding:15px 6px 6px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-start;justify-content:center}
+.pit>label,.side>label{position:absolute;top:3px;left:7px;font:700 8px var(--sans);letter-spacing:.1em;color:var(--t4)}
+.pit.in{flex:0 0 38%}
+.pit.bay{flex:1;align-content:center;align-items:center}
+.bay .rig{position:relative;display:grid;place-items:center;width:64px;height:64px}
+.bay .rig::before,.bay .rig::after{pointer-events:none}
+.bay .rig::before{content:"";position:absolute;inset:0;border-radius:50%;border:3px dashed rgba(34,197,94,.75);animation:spin 5s linear infinite}
+.bay .rig::after{content:"";position:absolute;inset:6px;border-radius:50%;border:3px solid transparent;border-top-color:var(--ok);animation:spin 1.1s linear infinite}
+.bay .idle{color:var(--t4);font-size:26px;opacity:.6}
+.exits{display:flex;flex-direction:column;gap:4px;justify-content:center;flex:none}
+.exits span{font:600 9.5px var(--mono);padding:2px 6px;border-radius:5px;background:#2b2410;color:#fde047;white-space:nowrap}
+/* set aside, inside the station: an agent's question, a failed run, a ticket you took in hand. Hazard edge, as a hold area has */
+.side{flex:none;margin-top:6px;height:46px;border-radius:10px;position:relative;padding:13px 8px 5px 34px;display:flex;gap:9px;align-items:center;
+  background:repeating-linear-gradient(-45deg,rgba(234,179,8,.5) 0 5px,rgba(0,0,0,.5) 5px 10px) 0 0/22px 100% no-repeat,rgba(0,0,0,.5);border:1px solid rgba(234,179,8,.22)}
+.side>label{left:30px;color:#a38a2e}
+.side.vacant{opacity:.45}
+.st.k-zone{border-style:dashed;border-color:var(--accent);background:linear-gradient(#141416,#0c0c0e)}
+.st.k-exit{border-color:var(--ok)}.st.k-exit .big{flex:1;display:grid;place-items:center;color:#4ade80;font-size:44px;opacity:.85}
+.st.k-exit .cnt{text-align:center;color:var(--t3);font-size:11px;padding-bottom:6px}
+.st.k-gate{border:2.5px dashed var(--hazard)}
+.belt{position:absolute;border-radius:5px;background:#26262a;border:1px solid #3a3a40;overflow:hidden}
+.belt::before{content:"";position:absolute;inset:0;animation:belt 1.1s linear infinite}
+.belt.h::before{background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(161,161,170,.55) 9px 11px,transparent 11px 18px)}
+.belt.v::before{background:repeating-linear-gradient(180deg,transparent 0 9px,rgba(161,161,170,.55) 9px 11px,transparent 11px 18px);animation-name:beltv}
+.belt.rev::before{animation-direction:reverse}
+@keyframes belt{to{background-position:18px 0}}@keyframes beltv{to{background-position:0 18px}}
+.arm{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--bg);border:4px solid #c7c7cf;transition:box-shadow .15s,border-color .15s}
+.arm.hl{border-color:var(--accent);box-shadow:0 0 0 6px var(--accent-m),0 0 18px 4px rgba(215,118,85,.7)}
+.loop{position:absolute;border:2px dashed #55555e;pointer-events:none;transition:border-color .15s}
+.loop.up{border-bottom:0;border-radius:14px 14px 0 0}.loop.down{border-top:0;border-radius:0 0 14px 14px}
+.loop.hl{border-color:var(--accent)}
 .loop span{position:absolute;left:50%;transform:translateX(-50%);font:600 10.5px var(--mono);background:#2b2410;color:#fde047;padding:1px 7px;border-radius:5px}
 .loop.up span{top:-10px}.loop.down span{bottom:-10px}
-.dock{position:absolute;z-index:3;left:16px;right:var(--gut-r);bottom:16px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.15fr);gap:10px;align-items:end}
-.dock .card{max-height:min(236px,34vh);overflow:auto}
-.card{background:var(--glass);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-.card h2{margin:0 0 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:600;display:flex;justify-content:space-between}
-.row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:6px;width:100%;text-align:left;min-width:0}
-button.row:hover{background:var(--hover)}
-.row .tt{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .sub{color:var(--t3);font-size:11px}
-.selcard{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.selcard .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
-.propbar{position:absolute;z-index:4;left:50%;top:72px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:var(--glass);border:1px solid var(--accent);border-radius:10px;padding:8px 12px;max-width:calc(100% - 32px);flex-wrap:wrap}
+.pickbar{position:absolute;z-index:4;left:50%;bottom:12px;transform:translateX(-50%);background:var(--glass);backdrop-filter:blur(8px);border:1px solid var(--accent);border-radius:10px;padding:7px 12px;display:flex;gap:10px;align-items:center}
 
-/* ---------- workbench host inside the factory ---------- */
-.scrim{position:absolute;inset:0;z-index:5;background:var(--scrim)}
-.bench{position:absolute;z-index:6;top:0;bottom:0;right:0;width:min(1260px,calc(100% - 84px));background:var(--bg);border-left:1px solid var(--border-in);display:flex;flex-direction:column;box-shadow:-18px 0 40px rgba(0,0,0,.5)}
-.bench.in{animation:slide .22s cubic-bezier(.2,.8,.2,1)}
-@keyframes slide{from{transform:translateX(40px);opacity:.4}}
-.benchbar{flex:none;display:flex;align-items:center;gap:10px;height:38px;padding:0 var(--gut-r) 0 10px;border-bottom:1px solid var(--border);background:var(--surface)}
-.benchbar .sp{flex:1}
-@media (prefers-reduced-motion:reduce){.bench.in,.m.proposed,.belt::before,.tok.run::after{animation:none}}
+/* ---------- "needs you": the frames of a party, top-left, over the floor ---------- */
+.party{position:absolute;z-index:3;top:10px;left:10px;width:268px;max-height:calc(100% - 20px);overflow:auto;display:flex;flex-direction:column;gap:4px}
+.party h2{margin:0 0 2px 4px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--t2);font-weight:650;text-shadow:0 1px 2px #000}
+.pf{display:grid;grid-template-columns:30px 1fr;gap:1px 8px;align-items:center;width:100%;text-align:left;padding:6px 8px 7px;border-radius:9px;
+  background:var(--glass);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.07);position:relative;overflow:hidden}
+.pf:hover{border-color:var(--border-in)}.pf.on{border-color:var(--t1)}
+.pf .tok{grid-row:1/3}
+.pf .l1{display:flex;gap:6px;align-items:center;min-width:0}.pf .l1 b{font-weight:600;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf .l2{font-size:11px;display:flex;gap:5px;align-items:center;min-width:0;white-space:nowrap}
+.pf .l2 .w{margin-left:auto;color:var(--t3);font-family:var(--mono);font-size:10.5px}
+.pf .call{color:#fde047}.pf .fail{color:#fca5a5}.pf .hand{color:var(--accent-h)}
+.pf .bar{position:absolute;left:0;bottom:0;height:2.5px;background:var(--warn)}.pf.f .bar{background:var(--danger)}.pf.h .bar{background:var(--accent)}
+.prio{display:inline-flex;gap:1.5px;align-items:flex-end;height:11px;flex:none}.prio i{width:3px;border-radius:1px;background:#3f3f46}
+.prio i:nth-child(1){height:5px}.prio i:nth-child(2){height:8px}.prio i:nth-child(3){height:11px}
+.cx{flex:none;min-width:17px;height:17px;border-radius:50%;border:1.5px solid var(--border-in);font:600 9.5px var(--mono);display:grid;place-items:center;color:var(--t2);padding:0 2px}
+
+/* ---------- micro chat: the first click on a ticket ---------- */
+.peek{position:absolute;z-index:4;width:340px;max-width:calc(100% - 20px);background:rgba(18,18,21,.96);border:1px solid var(--border-in);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.65);display:flex;flex-direction:column;max-height:calc(100% - 16px)}
+.peek .ph{display:flex;gap:9px;align-items:center;padding:9px 10px 8px;border-bottom:1px solid var(--border)}
+.peek .ph b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.peek .ph small{color:var(--t3);font-size:11px}
+.peek .pt{overflow:auto;padding:10px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;min-height:60px}
+.peek .more{align-self:center;color:var(--t3);font-size:11px}
+.peek .pfoot{border-top:1px solid var(--border);padding:8px;display:flex;gap:6px;align-items:center}
+.peek input{flex:1;min-width:0;height:28px;border-radius:7px;border:1px solid var(--border-in);background:var(--surface);padding:0 9px;outline:none}
+.peek input:focus{border-color:var(--accent)}
+
+/* ---------- HUD ---------- */
+.hud{flex:none;height:var(--hud-h);display:flex;gap:8px;padding:8px var(--gut-r) 8px 8px;background:#0c0c0e;border-top:1px solid var(--border)}
+.hud>div{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:8px;min-width:0}
+.hmap{flex:none;width:320px;display:grid;grid-template-columns:1fr 104px;grid-template-rows:auto 1fr;gap:6px 8px}
+.toggles{display:flex;gap:4px}.toggles button{width:26px;height:22px;border-radius:5px;border:1px solid var(--border-in);display:grid;place-items:center;color:var(--t2);font-size:13px}
+.toggles button[aria-pressed=true]{background:var(--toggle-on);border-color:var(--toggle-on);color:#111}
+.mini{position:relative;background:#1b1b1f;border-radius:6px;overflow:hidden;min-height:0}
+.mini i{position:absolute;border-radius:1.5px;background:#6b6b75}.mini .view{position:absolute;inset:6px;border:1.5px solid #fff;border-radius:2px}
+.layers{grid-row:1/3;grid-column:2;display:flex;flex-direction:column;gap:1px;border:1px solid var(--border-in);border-radius:7px;padding:3px;align-self:start;font-size:11px}
+.layers span{padding:2.5px 7px;border-radius:5px;color:var(--t3);white-space:nowrap}.layers span:first-child{background:var(--overlay);color:var(--t1)}
+.hsel{flex:1;display:flex;flex-direction:column;gap:8px}
+.groups{display:flex;gap:4px;border-bottom:1px solid var(--border);padding-bottom:7px}.groups span{width:20px;height:20px;border:1px dashed var(--border-in);border-radius:5px;display:grid;place-items:center;font:10px var(--mono);color:var(--t4)}
+.selc{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.selc .ic{width:52px;height:52px;border-radius:10px;border:1.5px solid var(--border-in);display:grid;place-items:center;font-size:26px;color:var(--t2);flex:none}
+.selc h3{margin:0;font-size:14.5px}.selc p{margin:2px 0 0;color:var(--t2);font-size:12px}
+.selc .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;color:var(--t3);font-size:11.5px}
+.hcmd{flex:none;width:384px;display:flex;flex-direction:column;gap:6px}
+.hcmd .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:5px;min-height:0}
+.tile{position:relative;border-radius:8px;border:1px solid var(--border-in);background:#1c1c20;display:grid;place-items:center;align-content:center;gap:1px;font-size:11px;font-weight:600;min-height:0;padding:2px}
+.tile .i{font-size:17px}.tile .k{position:absolute;top:3px;left:5px;font:600 9px var(--mono);color:inherit;opacity:.75}
+.tile:hover{filter:brightness(1.2)}
+.tile.none{border-style:dashed;border-color:var(--border);background:none;pointer-events:none}
+.tile.go{background:var(--ok);border-color:var(--ok);color:#052e16}.tile.hand{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.tile.ticket{background:#1d2140;border-color:#3b4170;color:#c7d0ff}.tile.back{color:var(--t2)}.tile.danger{background:#3a1717;border-color:#6b2323;color:#fca5a5}
+
+/* ---------- the workbench: slides up from the bottom, over the floor and the HUD ---------- */
+.scrim{position:fixed;inset:var(--title-h) 0 0 0;z-index:20;background:var(--scrim)}
+.bench{position:fixed;z-index:21;left:max(10px,env(safe-area-inset-left,0px));right:max(10px,env(safe-area-inset-right,0px));bottom:0;top:calc(var(--title-h) + 26px);
+  background:var(--bg);border:1px solid var(--border-in);border-bottom:0;border-radius:14px 14px 0 0;display:flex;flex-direction:column;box-shadow:0 -22px 60px rgba(0,0,0,.65);overflow:hidden}
+.bench.in{animation:rise .26s cubic-bezier(.2,.85,.25,1)}
+@keyframes rise{from{transform:translateY(46%);opacity:.3}}
+.benchbar{flex:none;display:flex;align-items:center;gap:8px;height:40px;padding:0 10px;border-bottom:1px solid var(--border);background:var(--surface);position:relative}
+.benchbar::before{content:"";position:absolute;top:4px;left:50%;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:var(--border-in)}
+.seg{display:flex;border:1px solid var(--border-in);border-radius:7px;padding:2px;gap:2px;flex:none}
+.seg button{height:22px;padding:0 9px;border-radius:5px;font-size:12px;color:var(--t2);display:flex;gap:5px;align-items:center;white-space:nowrap}
+.seg button[aria-pressed=true]{background:var(--accent-m);color:var(--accent-h)}
+.chips{flex:1;min-width:0;display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding:2px}
+.chip{flex:none;display:flex;align-items:center;gap:6px;height:26px;padding:0 9px 0 5px;border-radius:7px;border:1px solid var(--border);font-size:11.5px;color:var(--t2);max-width:210px}
+.chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.on{border-color:var(--t1);color:var(--t1);background:var(--overlay)}
+@media (prefers-reduced-motion:reduce){.bench.in,.belt::before,.bay .rig::before,.bay .rig::after,.andon i{animation:none!important}}
 
 /* ---------- work view ---------- */
 .work{flex:1;min-width:0;display:flex}
 .queue{flex:none;width:288px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:0}
-.queue header{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--border)}
+.queue header{height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--border)}
 .queue .list{overflow:auto;padding:6px}
 .queue .sec{display:flex;gap:6px;align-items:center;padding:10px 6px 4px}
 .qrow{display:block;width:100%;text-align:left;padding:7px 8px;border-radius:6px;border-left:2px solid transparent}
 .qrow:hover{background:var(--hover)}.qrow.on{background:var(--accent-m);border-left-color:var(--accent)}
-.qrow .l1{display:flex;gap:6px;align-items:center;font-weight:500}.qrow .l1 span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qrow .l2{font-size:11px;color:var(--t3);padding-left:20px;display:flex;gap:6px;align-items:center}
+.qrow .l1{display:flex;gap:7px;align-items:center;font-weight:500}.qrow .l1 span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qrow .l2{font-size:11px;color:var(--t3);padding-left:25px}
 .dot{width:8px;height:8px;border-radius:2px;flex:none}
 
 /* ---------- the workbench surface (the same in both hosts) ---------- */
-.surface{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+.surface{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg);position:relative}
 .strip{flex:none;display:flex;align-items:center;gap:10px;padding:7px var(--gut-r) 7px 12px;border-bottom:1px solid var(--border);background:#131316;flex-wrap:wrap;position:relative}
 .strip.hand{background:linear-gradient(90deg,var(--accent-m),transparent 70%),#131316}
 .path{display:flex;align-items:center;gap:2px;font-size:11.5px;flex-wrap:wrap}
-.path .st{padding:2px 7px;border-radius:5px;color:var(--t4);white-space:nowrap}
-.path .st.done{color:var(--t2)}.path .st.done::before{content:"✓ ";color:var(--ok)}
-.path .st.cur{background:var(--overlay);color:var(--t1);font-weight:600}
-.path .st.cur.run{box-shadow:inset 0 -2px 0 var(--ok)}.path .st.cur.call{box-shadow:inset 0 -2px 0 var(--warn)}.path .st.cur.fail{box-shadow:inset 0 -2px 0 var(--danger)}.path .st.cur.hand{box-shadow:inset 0 -2px 0 var(--accent);background:var(--accent-m)}
+.path .s{padding:2px 7px;border-radius:5px;color:var(--t4);white-space:nowrap}
+.path .s.done{color:var(--t2)}.path .s.done::before{content:"✓ ";color:var(--ok)}
+.path .s.cur{background:var(--overlay);color:var(--t1);font-weight:600}
+.path .s.cur.run{box-shadow:inset 0 -2px 0 var(--ok)}.path .s.cur.call{box-shadow:inset 0 -2px 0 var(--warn)}.path .s.cur.fail{box-shadow:inset 0 -2px 0 var(--danger)}.path .s.cur.hand{box-shadow:inset 0 -2px 0 var(--accent);background:var(--accent-m)}
 .path .sep{color:var(--t4)}
 .strip .say{flex:1;min-width:160px;color:var(--t2);font-size:12px}.strip .say b{color:var(--t1);font-weight:600}
-.strip .acts{display:flex;gap:6px;flex-wrap:wrap}
-.pop{position:absolute;z-index:20;right:var(--gut-r);top:calc(100% - 2px);width:330px;max-width:calc(100% - 24px);background:var(--surface);border:1px solid var(--border-in);border-radius:10px;padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.6)}
-.pop h3{margin:6px 8px 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:600}
-.pop button{display:block;width:100%;text-align:left;padding:7px 8px;border-radius:6px}.pop button:hover{background:var(--hover)}
-.pop button small{display:block;color:var(--t3);font-size:11px}
+.strip .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pop{position:absolute;z-index:25;right:var(--gut-r);top:calc(100% - 2px);width:250px;background:var(--surface);border:1px solid var(--border-in);border-radius:10px;padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.6)}
+.pop button{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:6px}.pop button:hover{background:var(--hover)}.pop button small{color:var(--t3);margin-left:6px}
 .topbar{flex:none;height:40px;display:flex;align-items:center;gap:10px;padding:0 var(--gut-r) 0 12px;border-bottom:1px solid var(--border);overflow:hidden}
-.seg{display:flex;border:1px solid var(--border-in);border-radius:7px;padding:2px;gap:2px}
-.seg button{height:22px;padding:0 9px;border-radius:5px;font-size:12px;color:var(--t2);display:flex;gap:5px;align-items:center}
-.seg button[aria-pressed=true]{background:var(--accent-m);color:var(--accent-h)}
-.ib{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--t2);font:600 11px var(--mono);border:1px solid var(--border)}
-.ib:hover{background:var(--hover);color:var(--t1)}
-.wt{display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);font:500 11px var(--mono);color:var(--t2)}
+.ib{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--t2);font:600 11px var(--mono);border:1px solid var(--border);flex:none}
+.wt{display:flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);font:500 11px var(--mono);color:var(--t2);flex:none}
 .body{flex:1;min-height:0;display:flex}
 .center{flex:1;min-width:0;display:flex;flex-direction:column}
 .thead{flex:none;height:44px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--border)}
@@ -162,18 +246,15 @@ button.row:hover{background:var(--hover)}
 .stream .col{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .desc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--t2)}
 .me{align-self:flex-end;max-width:80%;background:var(--accent-m);border-radius:12px 12px 3px 12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
-.me .at,.ag .at{color:var(--accent-h);font-family:var(--mono);font-size:12px}
+.at{color:var(--accent-h);font-family:var(--mono);font-size:12px}
 .ag{display:flex;gap:9px;max-width:92%}.ag .av{flex:none;width:24px;height:24px;border-radius:50%;background:var(--purple-bg);color:var(--purple);display:grid;place-items:center}
 .ag .who{font-size:11px;color:var(--t3)}.ag .txt{overflow-wrap:anywhere}
 .run{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:7px 10px;flex-wrap:wrap}
 .run .p{color:var(--purple)}.run .meta{color:var(--t3);font:11px var(--mono)}.run .sp{flex:1}
 .run .state{font-weight:600}.run .state.running{color:var(--accent-h)}.run .state.failed{color:#fca5a5}.run .state.interrupted{color:#fde047}
 .run .state.running::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;animation:blink 1s ease-in-out infinite}
-@keyframes blink{50%{opacity:.3}}
 .deliv{border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:8px;padding:7px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .ev{align-self:center;color:var(--t3);font-size:11px;text-align:center}.ev::before{content:"✓ ";color:var(--ok)}.ev.hand::before{content:"◆ ";color:var(--accent)}
-.sug{border:1px solid var(--accent);background:var(--accent-m);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.sug p{margin:0;flex:1;min-width:200px}
 .composer{flex:none;border-top:1px solid var(--border);padding:10px 12px;position:relative}
 .composer .box{display:flex;gap:8px;align-items:flex-end;max-width:760px;margin:0 auto}
 .composer textarea{flex:1;min-width:0;resize:none;height:58px;background:var(--surface);border:1px solid var(--border-in);border-radius:9px;padding:8px 10px;outline:none}
@@ -209,36 +290,67 @@ button.row:hover{background:var(--hover)}
 .code{flex:1;min-height:0;display:flex}.code .tree{flex:none;width:200px;border-right:1px solid var(--border);padding:10px;font:12px var(--mono);color:var(--t2);overflow:auto}
 .code pre{flex:1;margin:0;padding:12px 16px;font:12.5px/1.6 var(--mono);overflow:auto;color:var(--t2)}
 .add{color:#86efac}.del{color:#fca5a5}
-.dlg{position:absolute;inset:0;z-index:30;background:var(--scrim);display:grid;place-items:center;padding:16px}
-.dlg>div{width:min(460px,100%);background:var(--surface);border:1px solid var(--border-in);border-radius:12px;padding:16px}
-.dlg h3{margin:0 0 6px;font-size:15px}.dlg p{margin:0 0 14px;color:var(--t2)}.dlg .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .empty{flex:1;display:grid;place-items:center;color:var(--t3)}
 
 /* ---------- toast (Fleex has one, bottom-centre) and the guide ---------- */
 #toast{position:fixed;z-index:60;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--overlay);border:1px solid var(--border-in);border-radius:10px;padding:8px 12px;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px);box-shadow:0 12px 30px rgba(0,0,0,.55)}
 #toast button{color:var(--accent-h);font-weight:600}
-#guide{position:fixed;z-index:50;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));width:316px;max-width:calc(100% - 24px);background:#101013;border:1px solid var(--border-in);border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.6);font-size:12px}
-#guide header{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer}
+#guide{position:fixed;z-index:50;right:calc(12px + env(safe-area-inset-right,0px));top:calc(var(--title-h) + 52px);width:300px;max-width:calc(100% - 24px);background:rgba(16,16,19,.94);border:1px solid var(--border-in);border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.6);font-size:12px}
+#guide.low{top:auto;bottom:calc(34px + env(safe-area-inset-bottom,0px))}
+#guide.bar{top:calc(var(--title-h) + 5px);left:560px;right:190px;width:auto;height:34px;display:flex;align-items:center;box-shadow:none;border-color:var(--border);font-size:11.5px;line-height:1.25}
+#guide.bar header{flex:none;padding:0 10px}#guide.bar header b{flex:none}
+#guide.bar ol{flex:1;min-width:0;padding:0 10px 0 0;max-height:34px;overflow:hidden}
+#guide.bar li span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#guide header{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer}
 #guide header b{flex:1}
-#guide ol{margin:0;padding:0 12px 10px 12px;list-style:none;display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto}
+#guide ol{margin:0;padding:0 12px 10px 12px;list-style:none;display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
 #guide li{display:flex;gap:8px;color:var(--t2)}#guide li::before{content:"○";color:var(--t4);flex:none}
 #guide li.done{color:var(--t4)}#guide li.done::before{content:"●";color:var(--ok)}
 #guide code{font-family:var(--mono);color:var(--accent-h);font-size:11.5px}
-#guide p{margin:0;padding:0 12px 10px;color:var(--t3);font-size:11px}
 
-@media (max-width:900px){.rpanel,.queue,.dock .card:not(.selcard){display:none}.dock{grid-template-columns:minmax(0,1fr)}.bench{width:100%}#guide{width:260px}}
-@media (max-width:560px){.tools{display:none}.rail{width:48px}.fhead .note{display:none}}
+@media (max-width:1000px){.rpanel,.queue,.hmap,.party{display:none}.hcmd{width:300px}#guide:not(.low){top:auto;bottom:calc(var(--hud-h) + 10px)}}
+@media (max-width:640px){.tools,.hsel,.fhead .find{display:none}.rail{width:48px}.hcmd{flex:1;width:auto}.benchbar .seg{display:none}#guide{width:250px}}
 </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-agent" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2.5"/><path d="M12 8V4.6"/><circle cx="12" cy="3.6" r="1"/><circle cx="9.3" cy="13" r=".9"/><circle cx="14.7" cy="13" r=".9"/><path d="M9.5 16.2h5M2.5 12v3M21.5 12v3"/></symbol>
+  <symbol id="i-gate" viewBox="0 0 24 24"><path d="M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.5-7-4.5-7-8.8V6z"/><path d="M8.8 12l2.3 2.3 4.2-4.4"/></symbol>
+  <symbol id="i-zone" viewBox="0 0 24 24"><path d="M4 13l2.6-8h10.8L20 13v6H4z"/><path d="M4 13h5l1 2.2h4l1-2.2h5"/></symbol>
+  <symbol id="i-exit" viewBox="0 0 24 24"><path d="M6 21V4M6 5h11l-2.2 4 2.2 4H6"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 13V6.2a1.4 1.4 0 012.8 0V11M10.8 11V4.6a1.4 1.4 0 012.8 0V11M13.6 11V6a1.4 1.4 0 012.8 0v3.4M16.4 9.4a1.4 1.4 0 012.8 0V14c0 4-2.6 6.6-6.4 6.6-3 0-4.6-1.3-6.1-3.9L5 13.8a1.4 1.4 0 012.4-1.4L8 13.4"/></symbol>
+  <symbol id="i-floor" viewBox="0 0 24 24"><path d="M3 20V10l5 3V10l5 3V6h4v14z"/><path d="M19 20h2"/></symbol>
+  <symbol id="i-work" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M12.5 9h5M12.5 13h5"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-again" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.5-5.8"/><path d="M20 4v5h-5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6M4 12h16"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.900 1-6.100L3.200 9.500l6.100-.900z"/></symbol>
+  <symbol id="i-build" viewBox="0 0 24 24"><path d="M4 20h16M6 20V9l6-4 6 4v11M10 20v-5h4v5"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="t-build" viewBox="0 0 16 16"><g transform="rotate(-38 8 8)"><rect x="3" y="2.2" width="10" height="4.4" rx="1.2"/><rect x="6.8" y="6" width="2.4" height="8.4" rx="1"/></g></symbol>
+  <symbol id="t-fix" viewBox="0 0 16 16"><ellipse cx="8" cy="9.4" rx="3.1" ry="3.9"/><circle cx="8" cy="4.2" r="1.7"/><path d="M4.9 8H2.2M4.9 11l-2.2 1.4M11.1 8h2.7M11.1 11l2.2 1.4" fill="none"/></symbol>
+  <symbol id="t-think" viewBox="0 0 16 16"><circle cx="8" cy="6.4" r="4"/><rect x="6.2" y="11.2" width="3.6" height="2.8" rx=".9"/></symbol>
+  <symbol id="t-lead" viewBox="0 0 16 16"><rect x="2.2" y="5.6" width="11.6" height="8" rx="1.6"/><path d="M6 5.4V4a1 1 0 011-1h2a1 1 0 011 1v1.400" fill="none"/></symbol>
+  <symbol id="t-ops" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><circle cx="8" cy="8" r="5" fill="none" stroke-width="2.6" stroke-dasharray="2.4 1.53"/></symbol>
+  <symbol id="t-review" viewBox="0 0 16 16"><path d="M1.6 8c1.900-3.300 4-4.800 6.400-4.800s4.500 1.500 6.400 4.800c-1.900 3.300-4 4.800-6.400 4.800S3.500 11.300 1.600 8z" fill="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+</defs></svg>
+
 <div id="app">
-  <nav class="rail" aria-label="Fleex">
-    <div class="logo" aria-hidden="true">F</div>
-    <button type="button" data-a="view" data-v="work" id="nav-work"><span class="mono" aria-hidden="true">▤</span>Work</button>
-    <button type="button" data-a="view" data-v="factory" id="nav-factory"><span class="mono" aria-hidden="true">▦</span>Factory</button>
-    <button type="button" class="dim" tabindex="-1"><span class="mono" aria-hidden="true">◫</span>Tasks</button>
-    <button type="button" class="dim" tabindex="-1"><span class="mono" aria-hidden="true">◔</span>Focus</button>
-  </nav>
-  <div id="main"></div>
+  <div class="tbar" aria-hidden="true"><i></i><i></i><i></i><span>Fleex</span></div>
+  <div class="shell">
+    <nav class="rail" aria-label="Fleex">
+      <div class="logo" aria-hidden="true">F</div>
+      <button type="button" data-a="view" data-v="work" id="nav-work"><svg class="i"><use href="#i-work"/></svg>Work</button>
+      <button type="button" data-a="view" data-v="factory" id="nav-factory"><svg class="i"><use href="#i-floor"/></svg>Factory</button>
+      <button type="button" class="dim" tabindex="-1"><svg class="i"><use href="#i-list"/></svg>Tasks</button>
+    </nav>
+    <div id="main"></div>
+  </div>
 </div>
 <div id="toast" role="status" hidden></div>
 <aside id="guide" aria-label="Guide de la maquette"></aside>
@@ -246,26 +358,27 @@ button.row:hover{background:var(--hover)}
 <script>
 /* ============================================================ data (all simulated) ============================================================ */
 const MACH = {
-  inbound: { name: 'Inbound', kind: 'zone', sub: 'tickets handed over land here' },
-  spec:    { name: 'Spec', kind: 'agent', ref: 'catalyst', outs: ['ok'] },
-  check:   { name: 'Check spec', kind: 'gate', outs: ['approve', 'reject'] },
-  build:   { name: 'Build', kind: 'agent', ref: 'builder', outs: ['ok'] },
-  qa:      { name: 'QA checklist', kind: 'skill', ref: 'qa-checklist', outs: ['ok'] },
-  review:  { name: 'Review', kind: 'gate', outs: ['merge', 'changes'] },
-  exit:    { name: 'Exit', kind: 'exit' },
+  inbound: { name: 'Inbound', kind: 'zone', sub: 'handed over', x: 0, y: 64, w: 176 },
+  spec:    { name: 'Spec', kind: 'agent', ref: 'catalyst', outs: ['ok'], x: 252, y: 64, w: 236 },
+  check:   { name: 'Check spec', kind: 'gate', outs: ['approve', 'reject'], x: 564, y: 64, w: 236 },
+  build:   { name: 'Build', kind: 'agent', ref: 'builder', outs: ['ok'], x: 564, y: 322, w: 236 },
+  review:  { name: 'Review', kind: 'gate', outs: ['merge', 'changes'], x: 252, y: 322, w: 236 },
+  exit:    { name: 'Exit', kind: 'exit', x: 20, y: 322, w: 156 },
 };
-const TYPE = { build: 'B', fix: 'F', think: 'T', lead: 'L', ops: 'O', review: 'R' };
+const SH = 192, ORDER = ['inbound', 'spec', 'check', 'build', 'review', 'exit'];
 let clock = 0; const uid = () => 'x' + (++clock);
 const T = [
-  { id: 't105', num: 105, title: 'Import Linear issues', ty: 'build', prio: 'high', at: 'check', phase: 'review', age: '2h 30m', board: 'Core product' },
-  { id: 't111', num: 111, title: 'Emoji picker crashes on Safari', ty: 'fix', prio: 'urgent', at: 'check', phase: 'review', age: '40m', board: 'Support' },
-  { id: 't104', num: 104, title: 'Cost budgets and alerts', ty: 'lead', prio: 'medium', at: 'spec', phase: 'question', age: '25m', board: 'Core product' },
-  { id: 't106', num: 106, title: 'SSO redirect loop', ty: 'fix', prio: 'urgent', at: 'build', phase: 'failed', age: '12m', board: 'Support', note: 'The agent returned no usable output' },
-  { id: 't131', num: 131, title: 'Implement jev as a native workflow step', ty: 'build', prio: 'medium', at: 'build', phase: 'running', eta: 150, age: '3m', board: 'Core product' },
-  { id: 't122', num: 122, title: 'Kanban card flickers', ty: 'fix', prio: 'low', at: 'build', phase: 'wait', age: '6m', board: 'Core product' },
-  { id: 't103', num: 103, title: 'Weekly agenda view', ty: 'build', prio: 'high', at: 'review', phase: 'review', age: '1h 05m', board: 'Core product', fav: true },
-  { id: 't108', num: 108, title: 'Pricing: per seat or usage?', ty: 'think', prio: 'none', at: 'inbound', phase: 'zone', age: '4h', board: 'Core product' },
-  { id: 't109', num: 109, title: 'Slack webhook received twice', ty: 'fix', prio: 'medium', at: 'inbound', phase: 'zone', age: '3h', board: 'Support' },
+  { id: 't105', num: 105, title: 'Import Linear issues', ty: 'build', prio: 'high', cx: 8, at: 'check', phase: 'review', wait: 150, board: 'Core product' },
+  { id: 't111', num: 111, title: 'Emoji picker crashes on Safari', ty: 'fix', prio: 'urgent', cx: 3, at: 'check', phase: 'review', wait: 40, board: 'Support' },
+  { id: 't104', num: 104, title: 'Cost budgets and alerts', ty: 'lead', prio: 'medium', cx: 13, at: 'spec', phase: 'question', wait: 25, board: 'Core product' },
+  { id: 't106', num: 106, title: 'SSO redirect loop', ty: 'fix', prio: 'urgent', cx: 5, at: 'build', phase: 'failed', wait: 12, board: 'Support', note: 'The agent returned no usable output' },
+  { id: 't131', num: 131, title: 'Implement jev as a native workflow step', ty: 'build', prio: 'medium', cx: 8, at: 'build', phase: 'running', eta: 240, wait: 3, board: 'Core product' },
+  { id: 't122', num: 122, title: 'Kanban card flickers', ty: 'fix', prio: 'low', cx: 2, at: 'build', phase: 'wait', wait: 6, board: 'Core product' },
+  { id: 't140', num: 140, title: 'Rotate the signing key', ty: 'ops', prio: 'high', cx: 3, at: 'build', phase: 'wait', wait: 2, board: 'Core product' },
+  { id: 't103', num: 103, title: 'Weekly agenda view', ty: 'build', prio: 'high', cx: 5, at: 'review', phase: 'review', wait: 65, board: 'Core product' },
+  { id: 't108', num: 108, title: 'Pricing: per seat or usage?', ty: 'think', prio: 'none', cx: null, at: 'inbound', phase: 'zone', wait: 240, board: 'Core product' },
+  { id: 't109', num: 109, title: 'Slack webhook received twice', ty: 'fix', prio: 'medium', cx: 2, at: 'inbound', phase: 'zone', wait: 180, board: 'Support' },
+  { id: 't142', num: 142, title: 'Review the onboarding copy', ty: 'review', prio: 'low', cx: 1, at: 'inbound', phase: 'zone', wait: 90, board: 'Core product' },
 ];
 const byId = (id) => T.find((t) => t.id === id);
 const DESC = {
@@ -275,34 +388,29 @@ const DESC = {
   t106: 'After SSO login the app bounces between /login and /callback. Started with the last auth release.',
   t131: 'A workflow step that runs jev natively instead of shelling out, with its output as a deliverable.',
   t122: 'Cards flicker when a ticket moves while the column is scrolled.',
+  t140: 'The webhook signing key is two years old. Rotate it without dropping deliveries.',
   t103: 'A week grid in the agenda, with drag to reschedule.',
   t108: 'Decide how Fleex is priced before the beta ends.',
   t109: 'The same Slack event creates two tickets when the webhook retries.',
+  t142: 'Read the three onboarding screens again now that the Factory exists.',
 };
-const ORDER = ['inbound', 'spec', 'check', 'build', 'qa', 'review', 'exit'];
 const passed = (t, m) => ORDER.indexOf(m) < ORDER.indexOf(t.at);
 function seed(t) {
   const th = [{ k: 'desc', txt: DESC[t.id] }];
-  if (passed(t, 'spec') || (t.at === 'spec' && t.phase === 'question')) th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: t.phase === 'question' && t.at === 'spec' ? 'ran' : 'ran', meta: '3m 05s · $0.42' });
-  if (passed(t, 'spec')) th.push({ k: 'deliv', type: 'spec', title: 'Spec: ' + t.title, by: 'catalyst', v: 'v2' });
+  if (passed(t, 'spec') || t.id === 't104') th.push({ k: 'run', who: 'catalyst', what: 'Spec', state: 'ran', meta: '3m 05s · $0.42' });
+  if (passed(t, 'spec')) { th.push({ k: 'deliv', type: 'spec', title: 'Spec: ' + t.title, by: 'catalyst', v: 'v2' }); th.push({ k: 'agent', who: 'catalyst', txt: 'Spec written. Two stories, five acceptance criteria. One open point left in the deliverable: what happens to items already imported.' }); }
   if (passed(t, 'check')) th.push({ k: 'ev', txt: 'Check spec: approve. Moved to Doing' });
   if (t.id === 't104') th.push({ k: 'agent', who: 'catalyst', txt: 'Before I write the spec: should a budget be set per board or for the whole workspace? Per board is more useful to leads but needs a rule for tickets that move between boards.' });
-  if (t.id === 't106') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'failed', meta: '1m 12s · $0.08' });
+  if (t.id === 't106') { th.push({ k: 'run', who: 'builder', what: 'Build', state: 'failed', meta: '1m 12s · $0.08' }); th.push({ k: 'agent', who: 'builder', txt: 'I could not reproduce the loop with the test provider, and the run ended without a patch.' }); }
   if (t.id === 't131') th.push({ k: 'run', who: 'builder', what: 'Build', state: 'running', meta: 'started 3m ago', station: true });
-  if (t.id === 't103') { th.push({ k: 'run', who: 'builder', what: 'Build', state: 'ran', meta: '14m 20s · $2.31' }); th.push({ k: 'deliv', type: 'pr', title: 'PR: Weekly agenda view', by: 'builder', v: 'v1' }); }
+  if (t.id === 't103') { th.push({ k: 'run', who: 'builder', what: 'Build', state: 'ran', meta: '14m 20s · $2.31' }); th.push({ k: 'deliv', type: 'pr', title: 'PR: Weekly agenda view', by: 'builder', v: 'v1' }); th.push({ k: 'agent', who: 'builder', txt: 'Ready for review. The drag uses the same hook as the kanban; the week starts on the workspace locale.' }); }
   t.thread = th; t.manual = []; t.hand = null; t.draft = '';
 }
 T.forEach(seed);
-/* what was done by hand this week, per (what, station): the seed of the learning loop */
-const MANUAL = [
-  { what: 'skill:qa-checklist', at: 'build', n: 5, mins: 22 },
-  { what: 'agent:builder', at: 'build', n: 3, mins: 41 },
-  { what: 'agent:catalyst', at: 'spec', n: 2, mins: 9 },
-];
 const MENTIONS = [
   { k: 'agent:builder', d: 'agent' }, { k: 'agent:catalyst', d: 'agent' }, { k: 'agent:reviewer', d: 'agent' },
   { k: 'skill:qa-checklist', d: 'skill' }, { k: 'skill:commit', d: 'skill' }, { k: 'panel:squad', d: 'panel' },
-  { k: 'workflow:deploy', d: 'workflow', off: 'on the floor, lay it as a plan' }, { k: 'ticket:378', d: 'ticket' },
+  { k: 'workflow:deploy', d: 'workflow', off: 'not on a ticket in the Factory' }, { k: 'ticket:378', d: 'ticket' },
 ];
 const REPLY = {
   'skill:qa-checklist': 'QA checklist: 7 of 8 pass. Failing: the empty state overlaps the header under 400 px. Everything else holds, keyboard navigation included.',
@@ -313,36 +421,37 @@ const REPLY = {
   'panel:squad': 'Synthesis of the panel: ship it, with the retry bound added first.',
 };
 
-const S = { view: 'factory', open: null, justOpened: false, sel: 't105', workSel: 't105', mode: 'chat', tool: 'context', timeline: false, putback: false, dialog: null,
-  qa: null /* null | 'proposed' | 'kept' */, suggested: false, mm: null, toast: null, guideOpen: false, done: {} };
+const S = { view: 'factory', open: null, justOpened: false, sel: null, peek: false, workSel: 't105', mode: 'chat', tool: 'context', timeline: false, sendpop: false,
+  scope: 'needs', sending: null, mm: null, hint: '', guideOpen: false, done: {} };
 
 /* ============================================================ rules ============================================================ */
-const line = () => ORDER.filter((m) => m !== 'qa' || S.qa);
-const nextOf = (m, out) => m === 'inbound' ? 'spec' : m === 'spec' ? 'check' : m === 'check' ? (out === 'reject' ? 'spec' : 'build')
-  : m === 'build' ? (S.qa ? 'qa' : 'review') : m === 'qa' ? 'review' : m === 'review' ? (out === 'changes' ? 'build' : 'exit') : 'exit';
-const needs = (t) => !t.hand && (t.phase === 'review' || t.phase === 'question' || t.phase === 'failed');
-const calls = () => T.filter((t) => !t.gone && needs(t));
+const nextOf = (m, out) => m === 'inbound' ? 'spec' : m === 'spec' ? 'check' : m === 'check' ? (out === 'reject' ? 'spec' : 'build') : m === 'build' ? 'review' : m === 'review' ? (out === 'changes' ? 'build' : 'exit') : 'exit';
+const manualOn = (t) => t.thread.some((x) => x.k === 'run' && x.manual && x.state === 'running');
+/* what asks for you: a decision, a question, a failure, or a ticket in your hands whose run by hand has ended */
+const needs = (t) => !t.gone && (t.hand ? !manualOn(t) : t.phase === 'review' || t.phase === 'question' || t.phase === 'failed');
+const calls = () => T.filter(needs).sort((a, b) => b.wait - a.wait);
 const cur = () => byId(S.view === 'factory' ? S.open : S.workSel);
-const stateOf = (m) => { const a = T.filter((t) => !t.gone && !t.hand && t.at === m); return a.some((t) => t.phase === 'failed') ? 'fail' : a.some((t) => t.phase === 'review' || t.phase === 'question') ? 'call' : a.some((t) => t.phase === 'running') ? 'run' : ''; };
+const callOf = (t) => t.hand ? ['hand', 'in your hands'] : t.phase === 'failed' ? ['fail', 'run failed'] : t.phase === 'question' ? ['call', 'question'] : t.phase === 'review' ? ['call', 'decision'] : ['', ''];
 const mark = (k) => { if (!S.done[k]) { S.done[k] = true; guide(); } };
+const span = (m) => m >= 60 ? Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + String(m % 60).padStart(2, '0') + 'm' : '') : m + 'm';
 
 function arrive(t, m, why) {
-  t.at = m; t.age = 'now'; t.note = ''; const k = MACH[m].kind;
-  if (k === 'exit') { t.gone = true; t.phase = 'done'; t.thread.push({ k: 'ev', txt: 'Reached Exit. Moved to Done' }); toast(`#${t.num} shipped`); if (S.open === t.id) S.open = null; if (S.sel === t.id) S.sel = null; return; }
-  t.phase = k === 'gate' ? 'review' : k === 'zone' ? 'zone' : 'wait';
+  t.at = m; t.wait = 0; t.note = ''; const k = MACH[m].kind;
   if (why) t.thread.push({ k: 'ev', txt: why });
+  if (k === 'exit') { t.gone = true; t.phase = 'done'; S.shipped = (S.shipped || 3) + 1; t.thread.push({ k: 'ev', txt: 'Reached Exit. Moved to Done' }); toast(`#${t.num} shipped`); if (S.open === t.id) S.open = null; if (S.sel === t.id) { S.sel = null; S.peek = false; } return; }
+  t.phase = k === 'gate' ? 'review' : k === 'zone' ? 'zone' : 'wait';
 }
-function startRuns() { /* one run at a time per station, as a station with a small capacity would */
-  for (const m of line()) { const k = MACH[m].kind; if (k !== 'agent' && k !== 'skill') continue;
+function startRuns() { /* one run at a time per station */
+  for (const m of ORDER) { if (MACH[m].kind !== 'agent') continue;
     const here = T.filter((t) => !t.gone && !t.hand && t.at === m);
     if (here.some((t) => t.phase === 'running')) continue;
     const w = here.find((t) => t.phase === 'wait'); if (!w) continue;
-    w.phase = 'running'; w.eta = k === 'skill' ? 5 : 9;
+    w.phase = 'running'; w.eta = 12;
     w.thread.push({ k: 'run', who: MACH[m].ref, what: MACH[m].name, state: 'running', meta: 'started just now', station: true, id: uid() });
   }
 }
 function finishStation(t) {
-  const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'ran'; r.meta = '9s · $0.31'; }
+  const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'ran'; r.meta = '12s · $0.31'; }
   const from = t.at; arrive(t, nextOf(from, 'ok'), `${MACH[from].name}: ok`);
 }
 setInterval(() => {
@@ -356,176 +465,220 @@ setInterval(() => {
   if (changed) render();
 }, 1000);
 
-/* ---------- the clutch ---------- */
+/* ---------- set aside, and put back ---------- */
 function take(t, quiet) {
   if (t.hand) return;
-  t.hand = { from: t.at, phase: t.phase, eta: t.eta, at: Date.now() }; t.phase = 'hand'; S.putback = false;
-  t.thread.push({ k: 'ev', hand: true, txt: `Taken in hand at ${MACH[t.at].name}. The machines leave it alone` });
-  if (!quiet) toast(`#${t.num} is in your hands`, 'Undo', () => undoTake(t));
-  mark('take');
+  const wasRunning = t.phase === 'running';
+  if (wasRunning) { const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'interrupted'; r.meta = 'stopped by you'; } }
+  t.hand = { from: t.at, phase: wasRunning ? 'wait' : t.phase }; t.phase = 'hand';
+  t.thread.push({ k: 'ev', hand: true, txt: `${wasRunning ? MACH[t.at].name + "'s run stopped. " : ''}Set aside in ${MACH[t.at].name}: it is in your hands` });
+  if (!quiet) toast(wasRunning ? `${MACH[t.at].name}'s run stopped. #${t.num} is set aside` : `#${t.num} is set aside in ${MACH[t.at].name}`, wasRunning ? '' : 'Undo', () => undoTake(t));
+  mark('take'); startRuns();
 }
 function undoTake(t) {
   if (!t.hand) return;
-  t.thread = t.thread.filter((x) => !(x.k === 'run' && x.manual && x.state === 'running') && !(x.k === 'ev' && x.hand && x.txt.startsWith('Taken')));
-  t.phase = t.hand.phase; t.eta = t.hand.eta; t.hand = null; render();
+  t.thread = t.thread.filter((x) => !(x.k === 'run' && x.manual && x.state === 'running') && !(x.k === 'ev' && x.hand));
+  t.phase = t.hand.phase; t.hand = null; startRuns(); render();
 }
 function putBack(t, how, arg) {
-  const from = t.hand.from; t.hand = null; S.putback = false;
-  if (how === 'resume') { arrive(t, from); t.thread.push({ k: 'ev', hand: true, txt: `Put back at ${MACH[from].name}: it takes the ticket again, with what you did` }); }
-  else if (how === 'as') { const to = nextOf(from, arg); t.thread.push({ k: 'ev', hand: true, txt: `Put back as ${MACH[from].name}: ${arg}, done by hand` }); arrive(t, to); mark('putback'); }
-  else { t.thread.push({ k: 'ev', hand: true, txt: `Put back on the line at ${MACH[arg].name}` }); arrive(t, arg); }
-  if (!t.gone) toast(`#${t.num} is back on the line at ${MACH[t.at].name}`);
-  startRuns(); render();
+  if (!t || !t.hand) return;
+  const from = t.hand.from; t.hand = null; S.sendpop = false; S.sending = null;
+  if (how === 'again') { arrive(t, from); t.thread.push({ k: 'ev', hand: true, txt: `Back in ${MACH[from].name}'s queue: it runs again, with what you did` }); mark('putback'); }
+  else if (how === 'as') { t.thread.push({ k: 'ev', hand: true, txt: `Left ${MACH[from].name} as ${arg}, done by hand` }); arrive(t, nextOf(from, arg)); mark('putback'); }
+  else { t.thread.push({ k: 'ev', hand: true, txt: `Sent to ${MACH[arg].name}` }); arrive(t, arg); }
+  if (!t.gone) toast(`#${t.num} is back on the line: ${MACH[t.at].name}`);
+  startRuns();
 }
 function manualRun(t, what, text) {
   t.thread.push({ k: 'me', txt: text });
-  t.thread.push({ k: 'run', who: what.split(':')[1], what: 'by hand', state: 'running', meta: 'started just now', manual: true, key: what, eta: 4, id: uid() });
+  t.thread.push({ k: 'run', who: what.split(':')[1], what: 'by hand', state: 'running', meta: 'started just now', manual: true, key: what, eta: 5, id: uid() });
   t.draft = ''; S.mm = null;
 }
 function endManual(t, r) {
-  r.state = 'ran'; r.meta = '4s · $0.12';
+  r.state = 'ran'; r.meta = '5s · $0.12';
   t.thread.push({ k: 'agent', who: r.who, txt: REPLY[r.key] || 'Done.' });
-  const st = t.hand ? t.hand.from : t.at; t.manual.push({ what: r.key, at: st });
-  let row = MANUAL.find((x) => x.what === r.key && x.at === st); if (!row) { row = { what: r.key, at: st, n: 0, mins: 0 }; MANUAL.push(row); }
-  row.n++; row.mins += 4;
-  if (row.n >= 5 && r.key.startsWith('skill:') && !S.qa && !S.suggested) { S.suggested = true; t.thread.push({ k: 'sug', row }); }
+  t.manual.push({ what: r.key }); t.wait = 0;
+  toast(`Your run on #${t.num} ended. Decide where the ticket goes`);
 }
-function send(t, replyOnly) {
-  const text = t.draft.trim(); if (!text) return;
-  const m = /@(agent|skill|panel):([\w-]+)/.exec(text);
-  if (/@workflow:/.test(text)) { S.hint = 'A workflow is not started from a comment on a ticket that is in the Factory. Lay it on the floor as a plan (Build › Plan), or drop the ticket where it should start.'; return render(); }
+function send(t, text, replyOnly) {
+  text = (text || '').trim(); if (!t || !text) return;
+  if (/@workflow:/.test(text)) { S.hint = 'A workflow cannot be started on a ticket that is in the Factory. Put the ticket where that work starts on the floor.'; return; }
   S.hint = '';
+  const m = /@(agent|skill|panel):([\w-]+)/.exec(text);
   if (!m) {
     t.thread.push({ k: 'me', txt: text }); t.draft = '';
     if (t.phase === 'question' && !t.hand && !replyOnly) { t.phase = 'wait'; t.thread.push({ k: 'ev', txt: `${MACH[t.at].name} takes the ticket again with your answer` }); startRuns(); mark('reply'); }
-    return render();
+    return;
   }
-  const what = m[1] + ':' + m[2];
-  if (!t.hand && t.phase === 'running') { S.dialog = { t: t.id, what, text }; return render(); }
-  if (!t.hand) { take(t, true); toast(`#${t.num} taken in hand: a run by hand and a station do not share a ticket`, 'Undo', () => undoTake(t)); mark('auto'); }
-  manualRun(t, what, text); render();
+  if (!t.hand) { const was = t.phase === 'running'; take(t, true); toast(was ? `${MACH[t.hand.from].name}'s run stopped. #${t.num} is set aside while your run goes` : `#${t.num} is set aside in ${MACH[t.hand.from].name} while your run goes`, was ? '' : 'Undo', () => undoTake(t)); mark('auto'); }
+  manualRun(t, m[1] + ':' + m[2], text);
 }
-function decide(t, out) { const from = t.at; arrive(t, nextOf(from, out), `${MACH[from].name}: ${out}`); startRuns(); mark('decide'); render(); }
-function promote() { S.qa = 'proposed'; S.view = 'factory'; S.open = null; mark('promote'); render(); }
+function decide(t, out) { const from = t.at; arrive(t, nextOf(from, out), `${MACH[from].name}: ${out}`); startRuns(); mark('decide'); }
 
 /* ============================================================ rendering ============================================================ */
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rich = (s) => esc(s).replace(/@[\w:-]+/g, (m) => `<span class="at">${m}</span>`);
-const tok = (t, cls = '') => `<button type="button" class="tok ${cls} ${!t.hand && t.phase === 'running' ? 'run' : ''} ${S.sel === t.id && S.view === 'factory' ? 'sel' : ''}" data-ty="${t.ty}" data-a="pick" data-t="${t.id}" title="#${t.num} ${esc(t.title)}" aria-label="Ticket ${t.num}: ${esc(t.title)}">${TYPE[t.ty]}${needs(t) ? `<span class="mark ${t.phase === 'failed' ? 'f' : 'q'}">${t.phase === 'failed' ? '!' : '?'}</span>` : ''}</button>`;
-const sayPhase = (t) => t.hand ? `in your hands, taken from ${MACH[t.hand.from].name}` : ({ review: 'waiting for your decision', question: 'the agent asked a question', failed: 'the run failed', running: 'running', wait: 'queueing to run', zone: 'waiting', done: 'done' })[t.phase];
+const ico = (n) => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const glyph = (ty) => `<svg aria-hidden="true"><use href="#t-${ty}"/></svg>`;
+function tok(t, cls = '', inert) {
+  const c = callOf(t)[0], m = c === 'hand' ? `<span class="mark h"><svg viewBox="0 0 24 24" stroke="currentColor"><use href="#i-hand"/></svg></span>` : c === 'fail' ? '<span class="mark f">!</span>' : c === 'call' ? '<span class="mark q">?</span>' : '';
+  const inner = glyph(t.ty) + m;
+  return inert ? `<span class="tok ${cls}" data-ty="${t.ty}" aria-hidden="true">${inner}</span>`
+    : `<button type="button" class="tok ${cls} ${S.sel === t.id && S.view === 'factory' ? 'sel' : ''}" data-ty="${t.ty}" data-a="pick" data-t="${t.id}" title="#${t.num} ${esc(t.title)}" aria-label="Ticket ${t.num}: ${esc(t.title)}">${inner}</button>`;
+}
+const prio = (p) => { const n = { urgent: 3, high: 3, medium: 2, low: 1, none: 0 }[p], c = p === 'urgent' ? 'var(--danger)' : p === 'high' ? '#fb923c' : 'var(--t2)'; return `<span class="prio" title="Priority: ${p}">${[0, 1, 2].map((i) => `<i${i < n ? ` style="background:${c}"` : ''}></i>`).join('')}</span>`; };
+const cx = (v) => `<span class="cx" title="Complexity: ${v == null ? 'not estimated' : v}">${v == null ? '·' : v}</span>`;
+const sayPhase = (t) => t.hand ? (manualOn(t) ? 'in your hands, your run is going' : 'in your hands') : ({ review: 'waiting for your decision', question: 'the agent asked a question', failed: 'the run failed', running: 'running', wait: 'queueing', zone: 'waiting', done: 'done' })[t.phase];
 const pillOf = (t) => t.hand ? '<span class="pill hand">in your hands</span>' : t.phase === 'failed' ? '<span class="pill danger">run failed</span>' : needs(t) ? '<span class="pill warn">needs you</span>' : t.phase === 'running' ? '<span class="pill ok">running</span>' : `<span class="pill gray">${t.phase === 'zone' ? 'waiting' : 'queueing'}</span>`;
+const stateOf = (m) => { const a = T.filter((t) => !t.gone && !t.hand && t.at === m); return a.some((t) => t.phase === 'failed') ? 'fail' : a.some((t) => t.phase === 'review' || t.phase === 'question') ? 'call' : a.some((t) => t.phase === 'running') ? 'run' : ''; };
 
-function floor() {
-  const order = line(); let x = 40; const pos = {};
-  for (const m of order) { const w = m === 'inbound' ? 170 : m === 'exit' ? 120 : 164; pos[m] = { x, w }; x += w + 70; }
-  const W = x - 70 + 40; let h = '';
-  order.forEach((m, i) => {
-    const M = MACH[m], p = pos[m], here = T.filter((t) => !t.gone && t.at === m), g = stateOf(m), st = g ? ' g-' + g : '';
-    const up = here.filter((t) => t.hand), down = here.filter((t) => !t.hand);
-    h += `<div class="m ${M.kind}${st}${m === 'qa' && S.qa === 'proposed' ? ' proposed' : ''}" style="left:${p.x}px;width:${p.w}px">
-      ${M.kind !== 'zone' && M.kind !== 'exit' ? '<div class="bar"></div>' : ''}
-      ${up.length ? `<div class="lifted"><span class="lab">in your hands</span>${up.map((t) => tok(t)).join('')}</div>` : ''}
-      <div class="nm">${M.name}${M.kind === 'zone' ? ' · ' + down.length : ''}</div>
-      ${M.kind === 'exit' ? '<div class="kd">done</div>' : `<div class="kd">${M.kind === 'gate' ? 'gate · ' + M.outs.join(' / ') : M.kind === 'zone' ? M.sub : M.kind + ' · ' + M.ref}</div><div class="slots">${down.map((t) => tok(t)).join('')}</div>`}
-    </div>`;
-    if (i < order.length - 1) { const a = p.x + p.w, b = pos[order[i + 1]].x; h += `<div class="arm" style="left:${a + 4}px"></div><div class="belt" style="left:${a + 28}px;width:${b - a - 56}px"></div><div class="arm" style="left:${b - 22}px"></div>`; }
-  });
-  const mid = (m) => pos[m].x + pos[m].w / 2;
-  h += `<div class="loop up" style="left:${mid('spec')}px;width:${mid('check') - mid('spec')}px"><span>reject</span></div>`;
-  h += `<div class="loop down" style="left:${mid('build')}px;width:${mid('review') - mid('build')}px"><span>changes</span></div>`;
-  return { html: h, W };
+function station(m) {
+  const M = MACH[m], here = T.filter((t) => !t.gone && t.at === m), g = stateOf(m), run = here.some((t) => !t.hand && t.phase === 'running');
+  const aside = here.filter((t) => t.hand || t.phase === 'question' || t.phase === 'failed'), cls = `st k-${M.kind}${g ? ' g-' + g : ''}${run ? ' has-run' : ''}${S.sending ? ' pick' : ''}`;
+  const frame = (inner) => `<div class="${cls}" data-m="${m}" data-key="st:${m}" ${S.sending ? `data-a="sendhere" data-m2="${m}"` : ''} style="left:${M.x}px;top:${M.y}px;width:${M.w}px;height:${SH}px">${inner}</div>`;
+  const sideBay = `<div class="side ${aside.length ? '' : 'vacant'}"><label>SET ASIDE</label>${aside.map((t) => tok(t)).join('')}</div>`;
+  if (M.kind === 'exit') return frame(`<header><span class="badge">${ico('exit')}</span><div><b>${M.name}</b><small>sets done</small></div></header><div class="big">${ico('out')}</div><div class="cnt">${S.shipped || 3} shipped today</div>`);
+  const head = `<div class="andon" aria-hidden="true"><i class="r"></i><i class="a"></i><i class="g"></i></div><header><span class="badge">${ico(M.kind)}</span><div><b>${M.name}</b><small>${M.kind === 'gate' ? 'gate · you decide' : M.kind === 'zone' ? M.sub : 'agent · ' + M.ref}</small></div></header>`;
+  if (M.kind === 'zone') return frame(`<header><span class="badge">${ico('zone')}</span><div><b>${M.name}</b><small>${M.sub}</small></div></header><div class="lanes"><div class="pit" style="flex:1"><label>WAITING · ${here.filter((t) => !t.hand).length}</label>${here.filter((t) => !t.hand).map((t) => tok(t)).join('')}</div></div>${sideBay}`);
+  if (M.kind === 'gate') return frame(`${head}<div class="lanes"><div class="pit" style="flex:1"><label>TO DECIDE · ${here.filter((t) => t.phase === 'review').length}</label>${here.filter((t) => t.phase === 'review').map((t) => tok(t)).join('')}</div><div class="exits">${M.outs.map((o) => `<span>${o} ›</span>`).join('')}</div></div>${sideBay}`);
+  const q = here.filter((t) => t.phase === 'wait'), r = here.find((t) => !t.hand && t.phase === 'running');
+  return frame(`${head}<div class="lanes"><div class="pit in"><label>QUEUE · ${q.length}</label>${q.map((t) => tok(t)).join('')}</div>
+    <div class="pit bay"><label>${r ? 'RUNNING' : 'IDLE'}</label>${r ? `<div class="rig">${tok(r, 'big')}</div>` : `<span class="idle">${ico('agent')}</span>`}</div></div>${sideBay}`);
 }
-
-function factoryView() {
-  const f = floor(), sel = byId(S.sel), cs = calls();
-  const selCard = sel && !sel.gone ? `<div class="card selcard">
-      <span class="tok lg" data-ty="${sel.ty}" aria-hidden="true">${TYPE[sel.ty]}</span>
-      <div style="min-width:0;flex:1"><div class="row" style="padding:0"><span class="tt"><span class="mono" style="color:var(--t3)">#${sel.num}</span> <b>${esc(sel.title)}</b></span></div>
-        <div class="sub" style="color:var(--t3);font-size:11.5px">${MACH[sel.hand ? sel.hand.from : sel.at].name} · ${sayPhase(sel)} · ${sel.prio} · ${sel.board}</div></div>
-      <div class="acts">${quick(sel)}<button type="button" class="btn pri" data-a="open" data-t="${sel.id}">Open <kbd>V</kbd></button></div>
-    </div>` : `<div class="card selcard"><span style="color:var(--t3)">Click a ticket on the floor. A double-click, or <span class="kbd">V</span>, opens it on the workbench.</span></div>`;
-  const prop = S.qa === 'proposed' ? `<div class="propbar"><span><b>Proposed from what you do by hand</b> · Build → QA checklist → Review. Placed like a paste: keep it, or take it back.</span><button type="button" class="btn pri" data-a="keepqa">Keep</button><button type="button" class="btn" data-a="dropqa">Discard</button></div>` : '';
-  const bench = S.open ? `<div class="scrim" data-a="close"></div><section class="bench ${S.justOpened ? 'in' : ''}" aria-label="Workbench">
-      <div class="benchbar"><button type="button" class="btn ghost" data-a="close">‹ Floor <kbd>Esc</kbd></button>
-        <span class="cap">Calls</span><button type="button" class="btn" data-a="call" data-d="-1" ${cs.length ? '' : 'disabled'}>‹ <kbd>K</kbd></button><span class="mono" style="color:var(--t2)">${cs.some((t) => t.id === S.open) ? cs.findIndex((t) => t.id === S.open) + 1 + ' of ' + cs.length : cs.length + ' waiting'}</span><button type="button" class="btn" data-a="call" data-d="1" ${cs.length ? '' : 'disabled'}><kbd>J</kbd> ›</button>
-        <span class="sp"></span><span style="color:var(--t3);font-size:11.5px">The Work view, on the floor</span></div>
-      ${surface(byId(S.open))}</section>` : '';
-  return `<div class="factory">
-    <div class="fhead"><h1>Factory</h1><span class="note">Simplified floor: one line, no build mode. The command card and the minimap stay as they are today.</span></div>
-    <div class="stage" id="stage" data-w="${f.W}">${f.html}</div>${prop}
-    <div class="dock">${selCard}
-      <div class="card"><h2><span>Waiting for you</span><span>${cs.length}</span></h2>
-        ${cs.map((t) => `<button type="button" class="row" data-a="open" data-t="${t.id}"><span class="tok" data-ty="${t.ty}" aria-hidden="true">${TYPE[t.ty]}</span><span class="tt">#${t.num} ${esc(t.title)}<br><span class="sub">${MACH[t.at].name} · ${sayPhase(t)}</span></span></button>`).join('') || '<div class="sub" style="color:var(--t3)">Nothing waits for you.</div>'}</div>
-      <div class="card"><h2><span>By hand this week</span><span>${MANUAL.reduce((a, r) => a + r.n, 0)} runs</span></h2>
-        ${MANUAL.map((r) => `<div class="row"><span class="tt"><span class="mono" style="color:var(--accent-h)">@${r.what}</span><br><span class="sub">on tickets at ${MACH[r.at].name} · ${r.n} times · ${r.mins}m</span></span>${r.what === 'skill:qa-checklist' ? (S.qa === 'kept' ? '<span class="pill ok">now a station</span>' : S.qa === 'proposed' ? '<span class="pill hand">proposed</span>' : `<button type="button" class="btn" data-a="promote">Make it a station</button>`) : ''}</div>`).join('')}
-        <div class="sub" style="color:var(--t3);font-size:11px;padding:4px">What you still do by hand, and where. Five times the same skill at the same place and the Factory offers the station.</div></div>
-    </div>
-    ${bench}</div>`;
+function floorHtml() {
+  const mid = SH / 2, c1 = MACH.spec.y + mid, c2 = MACH.build.y + mid, cxm = (m) => MACH[m].x + MACH[m].w / 2;
+  const arm = (x, y, key) => `<div class="arm" data-key="arm:${key}" style="left:${x - 10}px;top:${y - 10}px"></div>`;
+  const belt = (x, y, w, h, cls) => `<div class="belt ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`;
+  let h = ORDER.map(station).join('');
+  h += arm(190, c1, 'inbound>spec') + belt(204, c1 - 13, 20, 26, 'h') + arm(238, c1, 'inbound>spec');
+  h += arm(502, c1, 'spec>check') + belt(516, c1 - 13, 20, 26, 'h') + arm(550, c1, 'spec>check');
+  h += arm(814, c1, 'check>build') + belt(828, c1 - 13, 40, 26, 'h') + belt(854, c1 - 13, 26, c2 - c1 + 26, 'v') + belt(828, c2 - 13, 40, 26, 'h rev') + arm(814, c2, 'check>build');
+  h += arm(550, c2, 'build>review') + belt(516, c2 - 13, 20, 26, 'h rev') + arm(502, c2, 'build>review');
+  h += arm(238, c2, 'review>exit') + belt(204, c2 - 13, 20, 26, 'h rev') + arm(190, c2, 'review>exit');
+  h += `<div class="loop up" data-key="arm:check>spec" style="left:${cxm('spec')}px;width:${cxm('check') - cxm('spec')}px;top:26px;height:38px"><span>reject</span></div>`;
+  h += `<div class="loop down" data-key="arm:review>build" style="left:${cxm('review')}px;width:${cxm('build') - cxm('review')}px;top:${MACH.build.y + SH}px;height:34px"><span>changes</span></div>`;
+  return h;
 }
-function quick(t) {
-  if (t.hand) return '';
-  if (t.phase === 'review') return MACH[t.at].outs.map((o, i) => `<button type="button" class="btn ${i ? '' : 'ok'}" data-a="decide" data-t="${t.id}" data-o="${o}">${o}</button>`).join('');
-  if (t.phase === 'failed') return `<button type="button" class="btn" data-a="retry" data-t="${t.id}">Run again</button>`;
-  if (t.phase === 'zone') return `<button type="button" class="btn" data-a="release" data-t="${t.id}">Release</button>`;
+function party() {
+  const cs = calls(), max = Math.max(60, ...cs.map((t) => t.wait));
+  return `<div class="party" aria-label="Needs you"><h2>Needs you · ${cs.length}</h2>${cs.map((t) => { const [c, w] = callOf(t), at = t.hand ? t.hand.from : t.at;
+    return `<button type="button" class="pf ${c === 'fail' ? 'f' : c === 'hand' ? 'h' : ''} ${S.sel === t.id ? 'on' : ''}" data-a="pick" data-t="${t.id}">${tok(t, '', true)}
+      <span class="l1"><b>${esc(t.title)}</b>${prio(t.prio)}${cx(t.cx)}</span><span class="l2"><span>${MACH[at].name}</span><span class="${c}">· ${w}</span><span class="w">${span(t.wait)}</span></span>
+      <span class="bar" style="width:${Math.max(6, Math.round(t.wait / max * 100))}%"></span></button>`; }).join('') || '<div class="pf" style="display:block;color:var(--t3)">Nothing needs you.</div>'}</div>`;
+}
+function peek() {
+  const t = byId(S.sel); if (!t || t.gone || !S.peek) return '';
+  const items = t.thread.filter((x) => x.k !== 'desc'), tail = items.slice(-3), at = t.hand ? t.hand.from : t.at;
+  return `<div class="peek" id="peek" role="dialog" aria-label="Ticket ${t.num}">
+    <div class="ph">${tok(t, '', true)}<div style="min-width:0;flex:1"><b>${esc(t.title)}</b><small><span class="mono">#${t.num}</span> · ${MACH[at].name} · ${sayPhase(t)}</small></div>${prio(t.prio)}${cx(t.cx)}</div>
+    <div class="pt" id="peekt">${items.length > 3 ? `<span class="more">${items.length - 3} earlier in the thread</span>` : `<div class="desc" style="padding:7px 9px">${esc(t.thread[0].txt)}</div>`}${tail.map(item).join('')}</div>
+    <div class="pfoot"><input id="peekdraft" aria-label="Reply" placeholder="${t.phase === 'question' && !t.hand ? 'Answer: the station takes it again' : 'Reply'}" value="${esc(t.draft)}"><button type="button" class="btn pri" data-a="open" data-t="${t.id}">Open <span class="kbd">Space</span></button></div></div>`;
+}
+function item(x) {
+  if (x.k === 'desc') return `<div class="desc">${esc(x.txt)}</div>`;
+  if (x.k === 'me') return `<div class="me">${rich(x.txt)}</div>`;
+  if (x.k === 'agent') return `<div class="ag"><span class="av" aria-hidden="true">⌬</span><div><div class="who">${x.who}</div><div class="txt">${esc(x.txt)}</div></div></div>`;
+  if (x.k === 'run') return `<div class="run"><span class="p">⌬ ${x.who}</span><span class="state ${x.state}">${x.state}</span><span class="pill ${x.manual ? 'hand' : 'gray'}">${x.manual ? 'by hand' : 'station · ' + x.what}</span><span class="sp"></span><span class="meta">${x.meta}</span></div>`;
+  if (x.k === 'deliv') return `<div class="deliv"><span class="pill gray">${x.type}</span><b>${esc(x.title)}</b><span style="color:var(--purple)">${x.by}</span><span class="pill warn">draft</span><span style="margin-left:auto;color:var(--t3)">open ›</span></div>`;
+  if (x.k === 'ev') return `<div class="ev ${x.hand ? 'hand' : ''}">${esc(x.txt)}</div>`;
   return '';
+}
+
+/* the command card: four by three, fixed places. Q W E R on the first row are what the selection is waiting for. */
+function tiles() {
+  const t = byId(S.sel), out = Array(12).fill(null);
+  if (!t || t.gone) { out[0] = { k: 'B', l: 'Build', i: 'build', tone: 'go' }; out[1] = { k: 'T', l: 'Intake', i: 'in', tone: 'ticket' }; out[2] = { k: 'F', l: 'Fit', i: 'fit' }; out[3] = { k: 'Tab', l: 'Tickets', i: 'list', tone: 'ticket' }; return { title: 'Factory', out }; }
+  const at = t.hand ? t.hand.from : t.at, M = MACH[at];
+  if (t.hand) {
+    const busy = manualOn(t);
+    (M.outs || []).slice(0, 2).forEach((o, i) => { out[i] = { k: 'QW'[i], l: 'As ' + o, i: 'out', tone: 'hand', a: 'put', how: 'as', arg: o, off: busy, hl: `arm:${at}>${nextOf(at, o)},st:${nextOf(at, o)}`, title: `Leave ${M.name} as ${o}: it goes on to ${MACH[nextOf(at, o)].name}` }; });
+    out[2] = { k: 'E', l: 'Run again', i: 'again', a: 'put', how: 'again', off: busy, hl: `st:${at}`, title: `Back in ${M.name}: it takes the ticket again` };
+    out[3] = { k: 'R', l: 'Send to', i: 'send', a: 'sendto', off: busy, title: 'Then click the machine that takes it' };
+  } else {
+    if (t.phase === 'review') M.outs.forEach((o, i) => { out[i] = { k: 'QW'[i], l: o, i: i ? 'x' : 'check', tone: i ? '' : 'go', a: 'decide', o, hl: `arm:${at}>${nextOf(at, o)},st:${nextOf(at, o)}` }; });
+    else if (t.phase === 'failed') out[0] = { k: 'Q', l: 'Run again', i: 'again', tone: 'go', a: 'retry', hl: `st:${at}` };
+    else if (t.phase === 'zone') out[0] = { k: 'Q', l: 'Release', i: 'out', tone: 'go', a: 'release', hl: `arm:${at}>${nextOf(at)},st:${nextOf(at)}` };
+    out[3] = { k: 'H', l: t.phase === 'running' ? 'Stop, take' : 'Take', i: 'hand', tone: 'hand', a: 'take', title: 'Set it aside in its station: it is in your hands' };
+  }
+  out[4] = { k: 'V', l: 'Open', i: 'open', tone: 'ticket', a: 'open', title: 'The workbench (also Space, or a double-click)' };
+  out[5] = { k: 'S', l: 'Star', i: 'star' }; out[6] = { k: 'X', l: 'Give back', i: 'x', tone: 'danger' };
+  out[11] = { k: 'Esc', l: 'Previous', i: 'back', tone: 'back', a: 'unsel' };
+  return { title: 'Ticket', out };
+}
+function hud() {
+  const t = byId(S.sel), c = tiles(), live = T.filter((x) => !x.gone), at = t && (t.hand ? t.hand.from : t.at);
+  const mini = ORDER.map((m) => { const M = MACH[m]; return `<i style="left:${6 + M.x * 0.2}px;top:${8 + (M.y - 20) * 0.2}px;width:${M.w * 0.2}px;height:${SH * 0.2}px;${stateOf(m) === 'fail' ? 'background:var(--danger)' : stateOf(m) === 'call' ? 'background:var(--warn)' : stateOf(m) === 'run' ? 'background:var(--ok)' : ''}"></i>`; }).join('');
+  const sel = t && !t.gone ? `<div class="selc">${tok(t, 'big', true)}<div style="min-width:0"><h3><span class="mono" style="color:var(--t3);font-weight:400">#${t.num}</span> ${esc(t.title)}</h3><p>${MACH[at].name} · ${sayPhase(t)}</p>
+      <div class="meta">${prio(t.prio)}<span>${t.prio}</span>${cx(t.cx)}<span>${t.ty}</span><span>${t.board}</span><span>here for ${span(t.wait)}</span></div></div></div>`
+    : `<div class="selc"><span class="ic">${ico('floor')}</span><div><h3>Factory floor</h3><p>Click a ticket to read its thread, double-click or Space to open it. The arrows walk the tickets that need you.</p>
+      <div class="meta"><span>tickets <b class="mono">${live.length}</b></span><span>running <b class="mono">${live.filter((x) => x.phase === 'running').length}</b></span><span>waiting for you <b class="mono">${calls().length}</b></span></div></div></div>`;
+  return `<div class="hud"><div class="hmap"><div class="toggles"><button type="button" aria-pressed="false" title="Ticket names">Ab</button><button type="button" aria-pressed="true" title="Arm rules">⌐</button><button type="button" aria-pressed="false" title="Ticket numbers">#</button><button type="button" aria-pressed="true" title="Grid">▦</button></div>
+      <div class="layers"><span>Floor</span><span>Standing now</span><span>Cost</span><span>Run time</span><span>Human wait</span></div><div class="mini">${mini}<span class="view"></span></div></div>
+    <div class="hsel"><div class="groups">${'1234567890'.split('').map((n) => `<span>${n}</span>`).join('')}</div>${sel}</div>
+    <div class="hcmd"><span class="cap" style="color:var(--t2)">${c.title}</span><div class="grid">${c.out.map((x) => x ? `<button type="button" class="tile ${x.tone || ''}" ${x.a ? `data-a="${x.a}" data-t="${t ? t.id : ''}"` : ''} ${x.how ? `data-how="${x.how}"` : ''} ${x.arg ? `data-arg="${x.arg}"` : ''} ${x.o ? `data-o="${x.o}"` : ''} ${x.hl ? `data-hl="${x.hl}"` : ''} ${x.off ? 'disabled style="opacity:.4"' : ''} data-key2="${x.k}" title="${esc(x.title || x.l)}"><span class="k">${x.k}</span>${ico(x.i)}<span>${x.l}</span></button>` : '<span class="tile none"></span>').join('')}</div></div></div>`;
+}
+function navSet() { const c = cur(); if (!c) return calls(); if (S.scope === 'station') { const at = c.hand ? c.hand.from : c.at; return T.filter((t) => !t.gone && (t.hand ? t.hand.from : t.at) === at); } const cs = calls(); return cs.includes(c) ? cs : [c, ...cs]; }
+function factoryView() {
+  const set = S.open ? navSet() : [], c = byId(S.open);
+  const bench = S.open ? `<div class="scrim" data-a="close"></div><section class="bench ${S.justOpened ? 'in' : ''}" aria-label="Workbench">
+      <div class="benchbar"><button type="button" class="btn ghost" data-a="close">▾ Floor <span class="kbd">Esc</span></button>
+        <button type="button" class="btn" data-a="nav" data-d="-1" aria-label="Previous ticket"><span class="kbd">←</span></button><button type="button" class="btn" data-a="nav" data-d="1" aria-label="Next ticket"><span class="kbd">→</span></button>
+        <div class="seg" role="group" aria-label="What the arrows walk"><button type="button" data-a="scope" data-v="needs" aria-pressed="${S.scope === 'needs'}">Needs you</button><button type="button" data-a="scope" data-v="station" aria-pressed="${S.scope === 'station'}">Same station</button></div>
+        <div class="chips">${set.map((t) => `<button type="button" class="chip ${t.id === S.open ? 'on' : ''}" data-a="open" data-t="${t.id}">${tok(t, 'sm', true)}<span>#${t.num} ${esc(t.title)}</span></button>`).join('')}</div></div>
+      ${surface(c)}</section>` : '';
+  return `<div class="factory">
+    <div class="fhead"><h1>Factory</h1><span class="find">Find a ticket</span><span class="pill gray">All boards</span><span class="pill gray">All types</span><span style="flex:1"></span><span style="color:var(--t3);font-size:11.5px">runs this hour <b class="mono" style="color:var(--t2)">4/20</b></span></div>
+    <div class="floor" id="floor" data-a="bg"><div class="stage" id="stage">${floorHtml()}</div>${party()}${peek()}
+      ${S.sending ? `<div class="pickbar"><span>Click the machine that takes <b>#${byId(S.sending).num}</b></span><span class="kbd">Esc</span></div>` : ''}</div>
+    ${hud()}${bench}</div>`;
 }
 
 function workView() {
   const live = T.filter((t) => !t.gone), secs = [
-    ['IN YOUR HANDS', 'var(--accent)', live.filter((t) => t.hand)],
-    ['NEEDS YOU', 'var(--warn)', live.filter(needs)],
-    ['RUNNING', 'var(--ok)', live.filter((t) => !t.hand && (t.phase === 'running' || t.phase === 'wait'))],
+    ['NEEDS YOU', 'var(--warn)', calls()],
+    ['RUNNING', 'var(--ok)', live.filter((t) => !needs(t) && (t.hand || t.phase === 'running' || t.phase === 'wait'))],
     ['IDLE', 'var(--t4)', live.filter((t) => !t.hand && t.phase === 'zone')],
   ];
   const t = byId(S.workSel);
   return `<div class="work"><aside class="queue"><header><span class="cap" style="color:var(--t2)">Tasks</span><span class="mono" style="color:var(--t3)">${live.length}</span></header>
     <div class="list">${secs.filter((s) => s[2].length).map(([n, c, rows]) => `<div class="sec"><span class="dot" style="background:${c}"></span><span class="cap">${n}</span></div>${rows.map((r) => `<button type="button" class="qrow ${r.id === S.workSel ? 'on' : ''}" data-a="wsel" data-t="${r.id}">
-        <div class="l1"><span class="dot" style="background:var(--ty-${r.ty})"></span><span>${esc(r.title)}</span><span class="mono" style="color:var(--t4);font-size:11px">#${r.num}</span></div>
-        <div class="l2"><span class="mono" aria-hidden="true">▦</span>${MACH[r.hand ? r.hand.from : r.at].name} · ${sayPhase(r)}</div></button>`).join('')}`).join('')}</div></aside>
+        <div class="l1">${tok(r, 'sm', true)}<span>${esc(r.title)}</span><span class="mono" style="color:var(--t4);font-size:11px">#${r.num}</span></div>
+        <div class="l2">${MACH[r.hand ? r.hand.from : r.at].name} · ${sayPhase(r)}</div></button>`).join('')}`).join('')}</div></aside>
     ${t && !t.gone ? surface(t) : '<div class="empty">No task selected</div>'}</div>`;
 }
 
 function strip(t) {
-  const at = t.hand ? t.hand.from : t.at, g = t.hand ? 'hand' : t.phase === 'failed' ? 'fail' : needs(t) ? 'call' : t.phase === 'running' ? 'run' : '';
-  const path = line().map((m, i, a) => `<span class="st ${m === at ? 'cur ' + g : ORDER.indexOf(m) < ORDER.indexOf(at) ? 'done' : ''}">${MACH[m].name}</span>${i < a.length - 1 ? '<span class="sep">›</span>' : ''}`).join('');
-  let say, acts = '';
-  const takeBtn = `<button type="button" class="btn" data-a="take" data-t="${t.id}">Take in hand</button>`;
-  if (t.hand) { say = `<b>In your hands.</b> Taken from ${MACH[at].name}; the machines leave it alone until you put it back.`; acts = `<button type="button" class="btn pri" data-a="putmenu" aria-expanded="${S.putback}">Put back ▾</button>`; }
-  else if (t.phase === 'review') { say = `<b>${MACH[at].name} waits for your decision.</b>`; acts = quick(t) + takeBtn; }
-  else if (t.phase === 'question') { say = `<b>${MACH[at].name} asked you a question.</b> Answer below: the station takes the ticket again.`; acts = takeBtn; }
-  else if (t.phase === 'failed') { say = `<b>${MACH[at].name}: the run failed.</b> ${esc(t.note || '')}`; acts = quick(t) + takeBtn; }
-  else if (t.phase === 'running') { say = `<b>${MACH[at].name} is running on it.</b>`; acts = takeBtn; }
-  else if (t.phase === 'zone') { say = `<b>Waiting in ${MACH[at].name}.</b>`; acts = quick(t) + takeBtn; }
-  else { say = `<b>Queueing at ${MACH[at].name}.</b>`; acts = takeBtn; }
+  const at = t.hand ? t.hand.from : t.at, M = MACH[at], g = t.hand ? 'hand' : t.phase === 'failed' ? 'fail' : needs(t) ? 'call' : t.phase === 'running' ? 'run' : '';
+  const path = ORDER.map((m, i, a) => `<span class="s ${m === at ? 'cur ' + g : ORDER.indexOf(m) < ORDER.indexOf(at) ? 'done' : ''}">${MACH[m].name}</span>${i < a.length - 1 ? '<span class="sep">›</span>' : ''}`).join('');
+  const quick = t.phase === 'review' ? M.outs.map((o, i) => `<button type="button" class="btn ${i ? '' : 'ok'}" data-a="decide" data-t="${t.id}" data-o="${o}">${o}</button>`).join('')
+    : t.phase === 'failed' ? `<button type="button" class="btn" data-a="retry" data-t="${t.id}">Run again</button>` : t.phase === 'zone' ? `<button type="button" class="btn" data-a="release" data-t="${t.id}">Release</button>` : '';
+  const takeBtn = `<button type="button" class="btn" data-a="take" data-t="${t.id}">${ico('hand')} ${t.phase === 'running' ? 'Stop the run and take it' : 'Take in hand'}</button>`;
+  let say, acts, pop = '';
+  if (t.hand) {
+    const busy = manualOn(t);
+    say = busy ? `<b>Set aside in ${M.name}: your run is going.</b> When it ends, you decide where the ticket goes.` : `<b>Set aside in ${M.name}, in your hands.</b> Where does it go?`;
+    acts = (M.outs || []).map((o, i) => `<button type="button" class="btn ${i ? '' : 'pri'}" data-a="put" data-how="as" data-arg="${o}" ${busy ? 'disabled' : ''} title="As if ${M.name} had produced it, done by hand">Leave ${M.name} as ${o} › ${MACH[nextOf(at, o)].name}</button>`).join('')
+      + `<button type="button" class="btn" data-a="put" data-how="again" ${busy ? 'disabled' : ''}>${M.kind === 'agent' ? `Run ${M.name} again` : `Back in ${M.name}`}</button><button type="button" class="btn" data-a="sendpop" ${busy ? 'disabled' : ''} aria-expanded="${S.sendpop}">Send to ▾</button>`;
+    if (S.sendpop) pop = `<div class="pop" role="menu">${ORDER.filter((m) => m !== at && m !== 'exit').map((m) => `<button type="button" data-a="put" data-how="to" data-arg="${m}">${MACH[m].name}<small>${MACH[m].kind === 'agent' ? 'agent · ' + MACH[m].ref : MACH[m].kind}</small></button>`).join('')}</div>`;
+  }
+  else if (t.phase === 'review') { say = `<b>${M.name} waits for your decision.</b>`; acts = quick + takeBtn; }
+  else if (t.phase === 'question') { say = `<b>${M.name} asked you a question.</b> Answer below: the station takes the ticket again.`; acts = takeBtn; }
+  else if (t.phase === 'failed') { say = `<b>${M.name}: the run failed.</b> ${esc(t.note || '')}`; acts = quick + takeBtn; }
+  else if (t.phase === 'running') { say = `<b>${M.name} is running on it.</b>`; acts = takeBtn; }
+  else if (t.phase === 'zone') { say = `<b>Waiting in ${M.name}.</b>`; acts = quick + takeBtn; }
+  else { say = `<b>Queueing at ${M.name}.</b>`; acts = takeBtn; }
   if (S.view === 'work') acts += `<button type="button" class="btn ghost" data-a="showfloor" data-t="${t.id}">Show on floor</button>`;
-  const M = MACH[at], pop = t.hand && S.putback ? `<div class="pop" role="menu">
-      ${M.kind !== 'zone' ? `<h3>You did the station's job</h3>${M.outs.map((o) => `<button type="button" data-a="put" data-how="as" data-arg="${o}">Leave ${M.name} as <b>${o}</b><small>It goes on to ${MACH[nextOf(at, o)].name}, as if ${M.name} had produced it. Counted as done by hand.</small></button>`).join('')}` : ''}
-      <h3>Let the machine redo it</h3><button type="button" data-a="put" data-how="resume">Resume at ${M.name}<small>${M.kind === 'gate' ? 'It waits for a decision again.' : M.kind === 'zone' ? 'It waits there again.' : 'It runs again, with what you did in the thread.'}</small></button>
-      <h3>Send it elsewhere</h3>${line().filter((m) => m !== at && m !== 'exit').map((m) => `<button type="button" data-a="put" data-how="to" data-arg="${m}">${MACH[m].name}<small>${MACH[m].kind === 'gate' ? 'gate' : MACH[m].kind === 'zone' ? 'zone' : MACH[m].kind + ' · ' + MACH[m].ref}</small></button>`).join('')}
-    </div>` : '';
-  return `<div class="strip ${t.hand ? 'hand' : ''}"><span class="mono" style="color:var(--t3)" aria-hidden="true">▦</span><div class="path">${path}</div><div class="say">${say}</div><div class="acts">${acts}</div>${pop}</div>`;
-}
-
-function thread(t) {
-  return t.thread.map((x) => {
-    if (x.k === 'desc') return `<div class="desc">${esc(x.txt)}</div>`;
-    if (x.k === 'me') return `<div class="me">${rich(x.txt)}</div>`;
-    if (x.k === 'agent') return `<div class="ag"><span class="av" aria-hidden="true">⌬</span><div><div class="who">${x.who}</div><div class="txt">${esc(x.txt)}</div></div></div>`;
-    if (x.k === 'run') return `<div class="run"><span class="p">⌬ ${x.who}</span><span class="state ${x.state}">${x.state}</span><span class="pill ${x.manual ? 'hand' : 'gray'}">${x.manual ? 'by hand' : 'station · ' + x.what}</span><span class="sp"></span><span class="meta">${x.meta}</span><span style="color:var(--t3)">view log ›</span></div>`;
-    if (x.k === 'deliv') return `<div class="deliv"><span class="pill gray">${x.type}</span><b>${esc(x.title)}</b><span style="color:var(--purple)">${x.by}</span><span class="pill warn">draft</span><span class="mono" style="color:var(--t3)">${x.v}</span><span style="margin-left:auto;color:var(--t3)">open ›</span></div>`;
-    if (x.k === 'ev') return `<div class="ev ${x.hand ? 'hand' : ''}">${esc(x.txt)}</div>`;
-    if (x.k === 'sug') return S.qa ? '' : `<div class="sug"><p><b>That is ${x.row.n} times this week.</b> You ran <span class="mono">@${x.row.what}</span> by hand on tickets at ${MACH[x.row.at].name}. The Factory can do it for you after ${MACH[x.row.at].name}.</p><button type="button" class="btn pri" data-a="promote">Make it a station</button></div>`;
-    return '';
-  }).join('');
+  return `<div class="strip ${t.hand ? 'hand' : ''}">${ico('floor')}<div class="path">${path}</div><div class="say">${say}</div><div class="acts">${acts}</div>${pop}</div>`;
 }
 
 function composer(t) {
   const q = t.phase === 'question' && !t.hand, launch = /@(agent|skill|panel):[\w-]+/.test(t.draft);
   const mm = S.mm != null ? MENTIONS.filter((m) => m.k.includes(S.mm)) : [];
   const menu = mm.length ? `<div class="mmenu" role="listbox">${mm.map((m, i) => `<button type="button" class="${m.off ? 'off' : ''} ${i === 0 ? 'on' : ''}" data-a="mention" data-k="${m.k}"><span>@${m.k}</span><small>${m.off || m.d}</small></button>`).join('')}</div>` : '';
+  const at = MACH[t.hand ? t.hand.from : t.at].name;
   const hint = S.hint ? `<div class="hint warn">${esc(S.hint)}</div>`
-    : launch && !t.hand ? `<div class="hint"><span class="pill hand">by hand</span>Sending this takes the ticket in hand${t.phase === 'running' ? `; ${MACH[t.at].name} is running on it, so you will be asked` : ''}. The line carries on without it until you put it back.</div>`
-    : q ? `<div class="hint"><span class="pill warn">question</span>Your answer restarts ${MACH[t.at].name}. No second click.</div>` : '';
+    : launch && !t.hand ? `<div class="hint"><span class="pill hand">by hand</span>${t.phase === 'running' ? `Sending this stops ${at}'s run and sets the ticket aside in ${at}.` : `Sending this sets the ticket aside in ${at}.`} You put it back when your run ends.</div>`
+    : q ? `<div class="hint"><span class="pill warn">question</span>Your answer restarts ${at}. No second click.</div>` : '';
   return `<div class="composer">${menu}${hint}<div class="box"><textarea id="draft" aria-label="Message" placeholder="Reply, or @ to bring in agents, skills, panels, workflows, tickets…">${esc(t.draft)}</textarea>
       ${q && !launch ? `<button type="button" class="btn" style="height:36px" data-a="send" data-only="1">Reply only</button><button type="button" class="send" data-a="send">Reply &amp; run again</button>` : `<button type="button" class="send" data-a="send" title="Send (Enter)" aria-label="Send">↑</button>`}</div>
     <div class="exec"><span>Mode : <span class="pill" style="background:var(--teal-bg);color:#5eead4">Talk</span> <span class="kbd">⇧⇥</span></span><label>Model : <select id="model" aria-label="Model"><option>Auto (persona)</option><option>Largest</option><option>Fastest</option></select></label><span style="margin-left:auto;color:var(--t4)">⇧⏎ newline</span></div></div>`;
@@ -534,7 +687,7 @@ function composer(t) {
 const TOOLS = [['context', '◧', 'Context'], ['diff', '±', 'Diff'], ['docs', '▤', 'Docs'], ['todo', '☑', 'Todo'], ['mentions', '@', 'Mentions'], ['notes', '✎', 'Notes'], ['browser', '◎', 'Browser']];
 function rpanel(t) {
   const at = t.hand ? t.hand.from : t.at; let h = '';
-  if (S.tool === 'context') h = `<div class="kv"><span>Board</span><b>${t.board}</b><span>Status</span><span class="pill blue" style="justify-self:start">${passed(t, 'check') || at === 'build' || at === 'review' ? 'Doing' : 'Todo'}</span><span>Type</span><span>${t.ty}</span><span>Priority</span><span>${t.prio}</span></div>
+  if (S.tool === 'context') h = `<div class="kv"><span>Board</span><b>${t.board}</b><span>Status</span><span class="pill blue" style="justify-self:start">${ORDER.indexOf(at) >= 3 ? 'Doing' : 'Todo'}</span><span>Type</span><span>${t.ty}</span><span>Priority</span><span>${t.prio}</span><span>Complexity</span><span>${t.cx == null ? 'not estimated' : t.cx}</span></div>
       <div><div class="cap" style="margin-bottom:6px">Factory</div><div class="kv"><span>Where</span><b>${MACH[at].name}</b><span>State</span><span>${sayPhase(t)}</span><span>By hand</span><span>${t.manual.length ? t.manual.length + ' run' + (t.manual.length > 1 ? 's' : '') + ' on this ticket' : 'nothing yet'}</span></div></div>
       <div><div class="cap" style="margin-bottom:6px">Repos</div><div class="mono" style="color:var(--t2)">fleex · ticket/${t.num}</div></div>
       <div><div class="cap" style="margin-bottom:6px">Pull requests</div><div style="color:var(--t3)">${t.id === 't103' ? 'PR open · checks green' : 'None yet'}</div></div>`;
@@ -554,40 +707,43 @@ function surface(t) {
   // the worktree of ticket/${t.num}, as in Work today
   return &lt;motion.li layoutId={card.id}&gt;…&lt;/motion.li&gt;;
 }</pre></div>`;
-  else center = `<div class="thead"><b>${esc(t.title)}</b><span class="mono" style="color:var(--t4)">#${t.num}</span><span style="margin-left:auto">${pillOf(t)}</span></div>
-    <div class="stream" id="stream"><div class="col">${thread(t)}</div></div>${composer(t)}`;
-  const dlg = S.dialog && S.dialog.t === t.id ? `<div class="dlg"><div role="dialog" aria-label="One pilot at a time"><h3>${MACH[t.at].name} is running on this ticket</h3>
-      <p>One pilot at a time: a run started by hand would work on the same branch as the station's. Interrupting stops the station's run and puts the ticket in your hands.</p>
-      <div class="acts"><button type="button" class="btn" data-a="dlg" data-v="wait">Let it finish</button><button type="button" class="btn pri" data-a="dlg" data-v="cut">Interrupt and take in hand</button></div></div></div>` : '';
-  const tl = S.timeline ? `<div class="drawer"><div class="frise">${line().filter((m) => ORDER.indexOf(m) <= ORDER.indexOf(at)).map((m) => `<div class="${m === at ? (t.hand ? 'hand' : '') : ''}">${MACH[m].name}<small>${m === at ? (t.hand ? 'in your hands' : sayPhase(t)) : 'done'}</small></div>`).join('')}${t.manual.map((r) => `<div class="hand">@${r.what}<small>by hand</small></div>`).join('')}<div class="now">now</div></div></div>` : '';
-  return `<div class="surface" style="position:relative">${strip(t)}
+  else center = `<div class="thead">${tok(t, 'sm', true)}<b>${esc(t.title)}</b><span class="mono" style="color:var(--t4)">#${t.num}</span><span style="margin-left:auto">${pillOf(t)}</span></div>
+    <div class="stream" id="stream"><div class="col">${t.thread.map(item).join('')}</div></div>${composer(t)}`;
+  const tl = S.timeline ? `<div class="drawer"><div class="frise">${ORDER.filter((m) => ORDER.indexOf(m) <= ORDER.indexOf(at)).map((m) => `<div class="${m === at && t.hand ? 'hand' : ''}">${MACH[m].name}<small>${m === at ? sayPhase(t) : 'done'}</small></div>`).join('')}${t.manual.map((r) => `<div class="hand">@${r.what}<small>by hand</small></div>`).join('')}<div class="now">now</div></div></div>` : '';
+  return `<div class="surface">${strip(t)}
     <div class="topbar"><span class="cap">Mode</span><div class="seg">${[['chat', 'Chat'], ['shell', 'Shell'], ['code', 'Code']].map(([k, l]) => `<button type="button" data-a="mode" data-v="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}</div>
-      <span style="flex:1"></span><button type="button" class="ib" title="New terminal">&gt;_</button><span class="cap">Pinned</span><button type="button" class="ib" title="Boot the stack">▶</button><button type="button" class="ib" title="Logs">≡</button>
-      <span class="cap">Ticket</span><button type="button" class="ib" title="Open in editor">⌘</button><span class="cap">Worktrees</span><span class="wt"><span class="dot" style="background:var(--ok);border-radius:50%"></span>ticket/${t.num}</span></div>
+      <span style="flex:1"></span><span class="ib" title="New terminal">&gt;_</span><span class="cap">Pinned</span><span class="ib" title="Boot the stack">▶</span><span class="ib" title="Logs">≡</span>
+      <span class="cap">Ticket</span><span class="ib" title="Open in editor">⌘</span><span class="cap">Worktrees</span><span class="wt"><span class="dot" style="background:var(--ok);border-radius:50%"></span>ticket/${t.num}</span></div>
     <div class="body"><div class="center">${center}</div>${S.tool ? rpanel(t) : ''}
       <div class="tools">${TOOLS.map(([k, i, l]) => `<button type="button" data-a="tool" data-v="${k}" aria-pressed="${S.tool === k}"><span class="ico" aria-hidden="true">${i}</span>${l}${k === 'docs' && t.thread.some((x) => x.k === 'deliv') ? `<span class="bdg">${t.thread.filter((x) => x.k === 'deliv').length}</span>` : ''}${k === 'todo' ? '<span class="bdg">2</span>' : ''}</button>`).join('')}<hr><button type="button" data-a="timeline" aria-pressed="${S.timeline}"><span class="ico" aria-hidden="true">⟷</span>Timeline</button></div></div>
-    ${tl}<div class="status"><span>${t.board} › #${t.num} ${esc(t.title)} › ~/fleex-worktrees/ticket-${t.num}</span><span style="margin-left:auto">${sayPhase(t)}</span><span class="mono">$${(0.42 + t.manual.length * 0.12).toFixed(2)}</span></div>${dlg}</div>`;
+    ${tl}<div class="status"><span>${t.board} › #${t.num} ${esc(t.title)} › ~/fleex-worktrees/ticket-${t.num}</span><span style="margin-left:auto">${sayPhase(t)}</span><span class="mono">$${(0.42 + t.manual.length * 0.12).toFixed(2)}</span></div></div>`;
 }
 
 function render() {
   const main = document.getElementById('main'), ae = document.activeElement, keep = ae && ae.id ? { id: ae.id, s: ae.selectionStart, e: ae.selectionEnd } : null;
   const st = document.getElementById('stream'), stick = !st || st.scrollTop + st.clientHeight >= st.scrollHeight - 30, top = st ? st.scrollTop : 0, n = S.lastCount;
   main.innerHTML = S.view === 'factory' ? factoryView() : workView();
-  document.getElementById('nav-work').toggleAttribute('aria-current', false); document.getElementById('nav-factory').toggleAttribute('aria-current', false);
+  for (const v of ['work', 'factory']) document.getElementById('nav-' + v).removeAttribute('aria-current');
   document.getElementById('nav-' + S.view).setAttribute('aria-current', 'page');
-  S.justOpened = false; fit(); place();
+  S.justOpened = false; fit();
   const st2 = document.getElementById('stream'), t = cur();
   if (st2) { S.lastCount = t ? t.id + t.thread.length : ''; st2.scrollTop = stick || n !== S.lastCount ? st2.scrollHeight : top; }
-  const term = document.getElementById('term'); if (term) term.scrollTop = term.scrollHeight;
+  for (const id of ['term', 'peekt']) { const el = document.getElementById(id); if (el) el.scrollTop = el.scrollHeight; }
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); if (keep.s != null && el.setSelectionRange) try { el.setSelectionRange(keep.s, keep.e); } catch (e) { /* not a text field */ } } }
+  place();
 }
-function fit() { /* the line spans y 76..360 in the stage's own units; centre it in the room between the header and the dock */
-  const s = document.getElementById('stage'); if (!s) return;
-  const box = s.parentElement, dock = box.querySelector('.dock'), W = +s.dataset.w, top = 52, room = box.clientHeight - top - (dock ? dock.offsetHeight + 28 : 0);
-  const k = Math.max(0.4, Math.min(1.25, (box.clientWidth - 16) / W, room / 300));
-  s.style.transform = `translate(${Math.max(8, (box.clientWidth - W * k) / 2)}px,${top + Math.max(0, (room - 284 * k) / 2) - 76 * k}px) scale(${k})`;
+/* the line is centred in the floor, clear of the frames on the left; the micro chat sits beside the station of the ticket it shows */
+function fit() {
+  const fl = document.getElementById('floor'), s = document.getElementById('stage'); if (!fl || !s) return;
+  const pad = window.innerWidth > 1000 ? 286 : 8, W = 900, H = 556, k = Math.max(0.36, Math.min(1.2, (fl.clientWidth - pad - 16) / W, (fl.clientHeight - 8) / H));
+  const x = pad + Math.max(0, (fl.clientWidth - pad - W * k) / 2), y = Math.max(0, (fl.clientHeight - H * k) / 2);
+  s.style.transform = `translate(${x}px,${y}px) scale(${k})`;
+  const p = document.getElementById('peek'), t = byId(S.sel); if (!p || !t) return;
+  const M = MACH[t.hand ? t.hand.from : t.at], left = x + M.x * k, right = left + M.w * k, topY = y + M.y * k, pw = p.offsetWidth, ph = p.offsetHeight;
+  const px = right + 14 + pw <= fl.clientWidth - 8 ? right + 14 : left - 14 - pw >= pad ? left - 14 - pw : Math.max(8, fl.clientWidth - pw - 8);
+  p.style.left = px + 'px'; p.style.top = Math.max(8, Math.min(topY, fl.clientHeight - ph - 8)) + 'px';
 }
-function place() { const g = document.getElementById('guide'), dock = document.querySelector('.factory .dock'); if (g) g.style.bottom = dock && !S.open ? dock.offsetHeight + 28 + 'px' : ''; }
+function place() { const g = document.getElementById('guide'), deep = S.view === 'work' || !!S.open; g.classList.toggle('low', deep); g.classList.toggle('bar', !deep && !S.guideOpen && window.innerWidth > 1000); }
 window.addEventListener('resize', () => { fit(); place(); });
 
 let toastTimer = 0, toastAct = null;
@@ -598,88 +754,97 @@ function toast(msg, label, act) {
 }
 
 const STEPS = [
-  ['open', 'Sur le floor, ouvre un ticket : double-clic, ou sélection puis <code>V</code>. C\'est la vue Work, posée sur le floor.'],
-  ['calls', '<code>J</code> / <code>K</code> : passe d\'un appel au suivant sans revenir au floor.'],
-  ['decide', 'Décide un gate depuis la bande en haut (ex. #105 : approve).'],
-  ['reply', 'Sur #104 (question de l\'agent) : réponds, « Reply & run again ».'],
-  ['auto', 'Sur #122 : écris <code>@skill:qa-checklist</code> et envoie. Le ticket passe dans tes mains tout seul.'],
-  ['putback', 'Remets-le : « Put back », puis « Leave Build as ok ».'],
-  ['pilot', 'Sur #131 (Build tourne) : envoie <code>@agent:builder</code>. Un seul pilote à la fois.'],
-  ['promote', '« Make it a station » (dans le fil, ou « By hand this week » sur le floor).'],
-  ['work', 'Passe sur Work (rail de gauche) : même établi, et la bande de ligne remplace le bandeau.'],
+  ['peek', 'Clique un ticket du floor, ou une entrée de « Needs you » en haut à gauche : son fil s\'ouvre à côté du poste.'],
+  ['arrows', '<code>←</code> / <code>→</code> sur le floor : le ticket suivant qui a besoin de toi.'],
+  ['open', '<code>Espace</code> ou double-clic : la glissière monte du bas avec la vue Work.'],
+  ['nav', 'Dans la glissière, <code>←</code> / <code>→</code>, puis bascule « Needs you » / « Same station ».'],
+  ['reply', 'Sur #104 (question) : réponds, le poste repart.'],
+  ['auto', 'Sur #131 (Build tourne) : envoie <code>@agent:builder</code>. Le run est coupé, le ticket passe dans « SET ASIDE » du poste.'],
+  ['putback', 'Quand ton run finit : « Leave Build as ok », ou « Run Build again ».'],
+  ['hl', 'Sur le floor, sélectionne un ticket mis de côté et survole les tuiles du HUD : le bras de sortie s\'allume.'],
+  ['work', 'Passe sur Work (rail de gauche) : même établi, même bande de ligne.'],
 ];
 function guide() {
   const n = STEPS.filter(([k]) => S.done[k]).length;
   document.getElementById('guide').innerHTML = `<header data-a="guide"><b>À essayer</b><span class="mono" style="color:var(--t3)">${n} / ${STEPS.length}</span><span aria-hidden="true">${S.guideOpen ? '▾' : '▸'}</span></header>
-    ${S.guideOpen ? `<ol>${STEPS.map(([k, t]) => `<li class="${S.done[k] ? 'done' : ''}"><span>${t}</span></li>`).join('')}</ol><p>Données simulées. Shell, diff, browser et commentaires simples ne débrayent rien : seuls un run lancé à la main ou « Take in hand » sortent le ticket de la ligne.</p>`
-      : `<ol>${STEPS.filter(([k]) => !S.done[k]).slice(0, 1).map(([, t]) => `<li><span>${t}</span></li>`).join('') || '<li class="done"><span>Tout est vu. Le reste se juge en jouant avec.</span></li>'}</ol>`}`;
+    <ol>${(S.guideOpen ? STEPS : STEPS.filter(([k]) => !S.done[k]).slice(0, 1)).map(([k, t]) => `<li class="${S.done[k] ? 'done' : ''}"><span>${t}</span></li>`).join('') || '<li class="done"><span>Tout est vu. Le reste se juge en jouant avec.</span></li>'}</ol>`;
   place();
 }
 
 /* ============================================================ input ============================================================ */
-function openBench(id) { S.open = id; S.sel = id; S.justOpened = true; S.putback = false; S.hint = ''; S.mm = null; mark('open'); }
+function openBench(id) { S.open = id; S.sel = id; S.peek = false; S.justOpened = true; S.sendpop = false; S.hint = ''; S.mm = null; mark('open'); }
+function select(id) { S.sel = id; S.peek = true; S.sending = null; mark('peek'); }
+function stepSel(d) { const cs = calls(); if (!cs.length) return; const i = cs.findIndex((t) => t.id === S.sel); select(cs[i < 0 ? (d > 0 ? 0 : cs.length - 1) : (i + d + cs.length) % cs.length].id); mark('arrows'); }
+function stepNav(d) { const set = navSet(); if (set.length < 2) return; const i = set.findIndex((t) => t.id === S.open); openBench(set[(i + d + set.length) % set.length].id); S.justOpened = false; mark('nav'); }
 const A = {
-  view: (d) => { S.view = d.v; S.putback = false; S.mm = null; if (d.v === 'work') { if (S.open) S.workSel = S.open; mark('work'); } },
-  pick: (d) => { const now = Date.now(); if (S.sel === d.t && now - (S.pickAt || 0) < 400) openBench(d.t); S.sel = d.t; S.pickAt = now; },
-  open: (d) => openBench(d.t),
-  close: () => { S.open = null; S.putback = false; },
-  call: (d) => stepCall(+d.d),
-  wsel: (d) => { S.workSel = d.t; S.putback = false; S.hint = ''; S.mm = null; },
-  showfloor: (d) => { S.view = 'factory'; S.open = null; S.sel = d.t; },
+  view: (d) => { S.view = d.v; S.sendpop = false; S.mm = null; S.sending = null; if (d.v === 'work') { if (S.open || S.sel) S.workSel = S.open || S.sel; S.open = null; mark('work'); } },
+  pick: (d) => { const now = Date.now(); if (S.sel === d.t && now - (S.pickAt || 0) < 400) openBench(d.t); else select(d.t); S.pickAt = now; },
+  bg: () => { if (!S.sending) { S.sel = null; S.peek = false; } },
+  unsel: () => { S.sel = null; S.peek = false; },
+  open: (d) => openBench(d.t || S.sel),
+  close: () => { S.open = null; S.sendpop = false; },
+  nav: (d) => stepNav(+d.d),
+  scope: (d) => { S.scope = d.v; mark('nav'); },
+  wsel: (d) => { S.workSel = d.t; S.sendpop = false; S.hint = ''; S.mm = null; },
+  showfloor: (d) => { S.view = 'factory'; S.open = null; select(d.t); },
   mode: (d) => { S.mode = d.v; },
   tool: (d) => { S.tool = S.tool === d.v ? null : d.v; },
   timeline: () => { S.timeline = !S.timeline; },
-  take: (d) => { const t = byId(d.t); if (t.phase === 'running') S.dialog = { t: t.id }; else take(t); },
-  putmenu: () => { S.putback = !S.putback; },
-  put: (d) => putBack(cur(), d.how, d.arg),
+  take: (d) => take(byId(d.t)),
+  put: (d) => putBack(d.t ? byId(d.t) : cur(), d.how, d.arg),
+  sendpop: () => { S.sendpop = !S.sendpop; },
+  sendto: (d) => { S.sending = d.t; S.peek = false; },
+  sendhere: (d) => { const t = byId(S.sending); if (t && t.hand && d.m2 !== 'exit' && d.m2 !== t.hand.from) putBack(t, 'to', d.m2); else S.sending = null; },
   decide: (d) => decide(byId(d.t), d.o),
   retry: (d) => { const t = byId(d.t); t.phase = 'wait'; t.note = ''; t.thread.push({ k: 'ev', txt: `${MACH[t.at].name} runs again` }); startRuns(); },
   release: (d) => { const t = byId(d.t); arrive(t, nextOf(t.at), 'Released from ' + MACH[t.at].name); startRuns(); },
-  send: (d) => send(cur(), !!d.only),
-  mention: (d) => { const t = cur(), el = document.getElementById('draft'); t.draft = t.draft.replace(/@[\w:-]*$/, '@' + d.k + ' '); S.mm = null; setTimeout(() => { const e = document.getElementById('draft'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }); },
-  dlg: (d) => { const g = S.dialog, t = byId(g.t); S.dialog = null;
-    if (d.v === 'wait') return toast(`Nothing sent. ${MACH[t.at].name} keeps running`);
-    const r = [...t.thread].reverse().find((x) => x.k === 'run' && x.station && x.state === 'running'); if (r) { r.state = 'interrupted'; r.meta = 'stopped by you'; }
-    take(t, true); mark('pilot'); toast(`${MACH[t.hand.from].name} interrupted. #${t.num} is in your hands`);
-    if (g.what) manualRun(t, g.what, g.text); },
-  promote: () => promote(),
-  keepqa: () => { S.qa = 'kept'; toast('QA checklist is on the line: tickets leaving Build go through it'); },
-  dropqa: () => { S.qa = null; for (const t of T) if (t.at === 'qa') t.at = 'review'; toast('Taken back'); },
+  send: (d) => { const t = cur(); send(t, t.draft, !!d.only); },
+  mention: (d) => { const t = cur(); t.draft = t.draft.replace(/@[\w:-]*$/, '@' + d.k + ' '); S.mm = null; setTimeout(() => { const e = document.getElementById('draft'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }); },
   guide: () => { S.guideOpen = !S.guideOpen; guide(); },
   toastact: () => { document.getElementById('toast').hidden = true; if (toastAct) toastAct(); },
 };
-function stepCall(d) { const cs = calls(); if (!cs.length) return; const i = cs.findIndex((t) => t.id === S.open); openBench(cs[(i + d + cs.length) % cs.length].id); mark('calls'); }
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-a]');
-  if (!el) { if (S.putback && !e.target.closest('.pop')) { S.putback = false; render(); } return; }
-  const a = el.dataset.a; if (!A[a]) return;
-  if (a === 'pick' && S.view !== 'factory') return;
+  if (!el) { if (S.sendpop) { S.sendpop = false; render(); } return; }
+  const a = el.dataset.a; if (!A[a] || el.disabled) return;
+  if (a === 'bg' && e.target.closest('.party,.peek,.pickbar')) return;
   A[a](el.dataset); if (a !== 'guide') render();
 });
+/* pointing at a command lights what it would use on the floor: the arm the ticket would leave by, the machine it would go to */
+document.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-hl]'); if (!el) return; for (const k of el.dataset.hl.split(',')) document.querySelectorAll(`[data-key="${k}"]`).forEach((n) => n.classList.add('hl')); if (byId(S.sel) && byId(S.sel).hand) mark('hl'); });
+document.addEventListener('mouseout', (e) => { if (e.target.closest('[data-hl]')) document.querySelectorAll('.hl').forEach((n) => n.classList.remove('hl')); });
 document.addEventListener('input', (e) => {
-  if (e.target.id !== 'draft') return;
-  const t = cur(); t.draft = e.target.value; const m = /@([\w:-]*)$/.exec(e.target.value.slice(0, e.target.selectionStart));
-  const mm = m ? m[1] : null, launchBefore = S.launch; S.launch = /@(agent|skill|panel):[\w-]+/.test(t.draft);
-  if (mm !== S.mm || S.launch !== launchBefore || S.hint) { S.mm = mm; S.hint = ''; render(); }
+  const t = e.target.id === 'draft' ? cur() : e.target.id === 'peekdraft' ? byId(S.sel) : null; if (!t) return;
+  t.draft = e.target.value; if (e.target.id !== 'draft') return;
+  const m = /@([\w:-]*)$/.exec(e.target.value.slice(0, e.target.selectionStart));
+  const mm = m ? m[1] : null, before = S.launch; S.launch = /@(agent|skill|panel):[\w-]+/.test(t.draft);
+  if (mm !== S.mm || S.launch !== before || S.hint) { S.mm = mm; S.hint = ''; render(); }
 });
 document.addEventListener('keydown', (e) => {
-  const typing = /^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName);
-  if (e.target.id === 'draft') {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (S.mm != null) { const first = MENTIONS.find((m) => m.k.includes(S.mm)); if (first) { A.mention({ k: first.k }); return render(); } } send(cur()); }
-    else if (e.key === 'Escape' && S.mm != null) { S.mm = null; e.stopPropagation(); render(); }
-    return;
-  }
-  if (e.target.id === 'cmd' && e.key === 'Enter') {
-    const c = e.target.value.trim(), t = cur(); if (!c) return;
+  const el = e.target, typing = /^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName), arrow = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+  if (el.id === 'draft' || el.id === 'peekdraft') {
+    const t = el.id === 'draft' ? cur() : byId(S.sel);
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault();
+      if (el.id === 'draft' && S.mm != null) { const first = MENTIONS.find((m) => m.k.includes(S.mm)); if (first) { A.mention({ k: first.k }); return render(); } }
+      send(t, t.draft); return render(); }
+    /* an empty field lets Escape and the arrows through: they close, and walk the tickets. With text in it, Escape only leaves the field */
+    if (e.key === 'Escape' && (S.mm != null || el.value)) { if (S.mm != null) S.mm = null; else el.blur(); return render(); }
+    if (e.key === 'Escape') el.blur();
+    else if (!arrow || el.value) return;
+  } else if (el.id === 'cmd') {
+    if (e.key !== 'Enter') return;
+    const c = el.value.trim(), t = cur(); if (!c) return;
     const out = /test/.test(c) ? ' 42 pass · 0 fail' : /status/.test(c) ? ` On branch ticket/${t.num}\n nothing to commit, working tree clean` : /start/.test(c) ? ' SQLite storage initialized\n Event hub disabled\n server: http://localhost:4111' : ' done';
-    S.term = (S.term || '') + `<span class="p">ticket/${t.num} ❯</span> ${esc(c)}\n${out}\n<span style="color:var(--t4)"> the line carries on: a command does not take the ticket in hand</span>\n`; render();
-    const el = document.getElementById('cmd'); if (el) el.focus(); return;
-  }
-  if (typing) return;
-  if (e.key === 'Escape') { if (S.dialog) S.dialog = null; else if (S.putback) S.putback = false; else if (S.open) S.open = null; else return; render(); }
-  else if (S.view === 'factory' && (e.key === 'v' || e.key === 'V' || e.key === 'Enter') && !S.open && S.sel && !byId(S.sel).gone) { openBench(S.sel); render(); }
-  else if (S.view === 'factory' && S.open && (e.key === 'j' || e.key === 'J')) { stepCall(1); render(); }
-  else if (S.view === 'factory' && S.open && (e.key === 'k' || e.key === 'K')) { stepCall(-1); render(); }
+    S.term = (S.term || '') + `<span class="p">ticket/${t.num} ❯</span> ${esc(c)}\n${out}\n<span style="color:var(--t4)"> the line carries on: a command does not set the ticket aside</span>\n`; render();
+    const n = document.getElementById('cmd'); if (n) n.focus(); return;
+  } else if (typing) return;
+  if (S.view !== 'factory') return;
+  if (e.key === 'Escape') { if (S.sending) S.sending = null; else if (S.sendpop) S.sendpop = false; else if (S.open) S.open = null; else if (S.peek) S.peek = false; else if (S.sel) S.sel = null; else return; return render(); }
+  if (arrow) { e.preventDefault(); if (S.open) stepNav(arrow); else stepSel(arrow); return render(); }
+  if (S.open) return;
+  if ((e.key === ' ' || e.key === 'Enter') && S.sel) { e.preventDefault(); openBench(S.sel); return render(); }
+  const tile = document.querySelector(`.tile[data-key2="${e.key.length === 1 ? e.key.toUpperCase() : e.key}"]`);
+  if (tile && tile.dataset.a && !tile.disabled) { e.preventDefault(); tile.click(); }
 });
 
 startRuns(); render(); guide();
