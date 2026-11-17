@@ -24,7 +24,7 @@ import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
-import { FactoryTicketModal } from './FactoryTicketModal';
+import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryMachineModal } from './FactoryMachineModal';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
@@ -387,6 +387,9 @@ function Floor() {
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
   peekFor.current = peekOpen && selTicket && !building ? selTicket.ticketId : null;
+  /* the workbench: a ticket opened over the floor. Moving to another one in it selects that one on the floor too, so the floor is on it when the workbench goes down */
+  const openOn = useCallback((ticketId: string) => { setSelection({ ticket: ticketId }); setOpenTicket(ticketId); }, []);
+  const closeTicket = useCallback(() => setOpenTicket(null), []);
   /** Enter in the search box: the next ticket found, round and round. */
   const jump = useCallback(() => {
     if (!found?.length) return;
@@ -585,7 +588,7 @@ function Floor() {
         hint={toolHint ?? (building ? 'Pick a machine to place, or click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket, a station or a zone to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && <FactoryMachineModal machineId={openMachine} onClose={closeMachine} onOpenTicket={setOpenTicket} />}
-      {openTicket && <FactoryTicketModal ticketId={openTicket} onClose={() => setOpenTicket(null)} />}
+      {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}
         onGoTo={(id) => { setListOpen(false); setBuilding(false); goTo(id); }} onDetail={(id) => { setListOpen(false); setOpenTicket(id); }} />}

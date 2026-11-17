@@ -119,6 +119,16 @@ conversation, scrolled to its end, with the latest deliverables on top. What the
 a gate's decision with an optional reason, an answer that gives the ticket back to its station, another run after a
 failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
 
+## The workbench
+
+Opening a ticket from the floor (Enter, V, a second click) brings up the Work view itself (`FactoryWorkbench.tsx`):
+it slides up from the bottom over the floor and its console, nearly as wide and as high as the window, under the
+app's top bar. It is `WorkView` with its queue column left out, on the ticket that was opened (the Work store's own
+`openTicket`, pinned so the queue's filters do not hide it): same modes, thread, panels and tools, nothing done
+differently. Left and right arrows go to the previous and the next ticket, of the ones that wait for someone or of
+the same machine (a switch says which, and they are listed along the top); Escape goes back to the floor. The lighter
+ticket sheet the Factory had is gone.
+
 ## Finding a ticket
 
 The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with
@@ -169,7 +179,7 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | web: `components/ui/Modal.tsx` | a dialog leaves Escape to a popover opened from it (a general fix, found with the ticket list's filters; it can stay) |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
-| web: `work/WorkView.tsx` | the "Managed by the Factory" banner on a ticket |
+| web: `work/WorkView.tsx` | the "Managed by the Factory" banner on a ticket; an `embedded` prop that leaves out the queue column, for the workbench |
 
 ## Removing it
 
