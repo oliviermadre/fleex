@@ -39,7 +39,7 @@ function machineIcon(m: MachineSpec): string {
   return m.kind === 'zone' && m.inbound ? 'inbound' : m.kind;
 }
 function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) => string): string {
-  if (m.kind === 'belt') { const d = view.leadsTo(m); return `Belt · ${d ? `leads to ${d.name ?? d.kind}` : 'leads nowhere'}`; }
+  if (m.kind === 'belt') { const d = view.leadsTo(m); return `${m.fast ? 'Fast belt, twice as fast' : 'Belt'} · ${d ? `leads to ${d.name ?? d.kind}` : 'leads nowhere'}`; }
   if (m.kind === 'arm') { const when = conditionsOf(m); return `Arm · ${when.length ? `takes a ticket when ${when.map((c) => longCondition(c, boardName)).join(', and ')}` : 'takes anything, or what the arms next to it leave'}`; }
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;

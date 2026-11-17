@@ -12,6 +12,8 @@ import {
 
 /** Tiles per second on a belt. */
 const BELT_SPEED = 1.2;
+/** How many times faster a fast belt carries a ticket. */
+export const FAST_BELT = 2;
 /** Seconds for an arm to swing one way: slow enough for the half turn to be watched. */
 const ARM_SWING = 1.1;
 /** How long a ticket rests in a station once it is done there, before an arm may take it: long enough to be seen. */
@@ -101,6 +103,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label' || m.kind === 'bridge') {
       m.w = 1; m.h = 1;
       if (m.kind === 'arm') { m.when = normaliseConditions(m); delete m.filter; }
+      if (m.kind === 'belt') { if (m.fast === true) m.fast = true; else delete m.fast; }
     }
     else if (m.kind === 'station') {
       /* a status station is two tiles a side; the others are machines the page draws with places, a tray and a bay: 5 by 4 unless said otherwise */
@@ -411,7 +414,7 @@ export class FactoryEngine {
     if (!t) return;
     /* an arm that wants this ticket gets it: the belt holds it in the middle of the tile */
     const held = b.takers.some((a) => this.wants(a, t));
-    t.s.p = Math.min(t.s.p + BELT_SPEED * dt, held && t.s.p <= 0.5 ? 0.5 : 1);
+    t.s.p = Math.min(t.s.p + BELT_SPEED * (spec.fast ? FAST_BELT : 1) * dt, held && t.s.p <= 0.5 ? 0.5 : 1);
     if (t.s.p < 1) return;
     const n = this.at(spec.x + DX[spec.dir], spec.y + DY[spec.dir]);
     if (this.hand(n, t, DX[spec.dir], DY[spec.dir])) b.item = null;
@@ -426,12 +429,28 @@ export class FactoryEngine {
     return false;
   }
 
+  /**
+   * Whether the lane of a bridge that a ticket crosses in a direction is a fast one. A bridge has no speed of its own:
+   * a lane goes at the speed of the belt that feeds it, the one before the run of bridges the ticket is crossing; fed
+   * by an arm (no belt before it), at the speed of the belt it leads to.
+   */
+  private fastLane(m: Machine, fx: number, fy: number): boolean {
+    const end = (sx: number, sy: number): Machine | null => {
+      let x = m.spec.x + sx, y = m.spec.y + sy, n = this.at(x, y), guard = 0;
+      while (n && n.spec.kind === 'bridge' && guard++ < 2000) { x += sx; y += sy; n = this.at(x, y); }
+      return n;
+    };
+    const along = (n: Machine | null): BeltSpec | null => (n && n.spec.kind === 'belt' && DX[n.spec.dir] === fx && DY[n.spec.dir] === fy ? n.spec : null);
+    const before = along(end(-fx, -fy));
+    return before ? before.fast === true : along(end(fx, fy))?.fast === true;
+  }
+
   /** A bridge carries each of its two tickets straight across, whatever the other lane does. */
   private updateBridge(m: Machine, dt: number): void {
     for (const lane of ['item', 'item2'] as const) {
       const t = m[lane];
       if (!t) continue;
-      t.s.p = Math.min(1, t.s.p + BELT_SPEED * dt);
+      t.s.p = Math.min(1, t.s.p + BELT_SPEED * (this.fastLane(m, t.s.fx, t.s.fy) ? FAST_BELT : 1) * dt);
       if (t.s.p < 1) continue;
       const { fx, fy } = t.s;
       m[lane] = null;

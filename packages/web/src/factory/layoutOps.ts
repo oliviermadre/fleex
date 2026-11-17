@@ -1,7 +1,7 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
 
-export type Tool = 'select' | 'belt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -20,6 +20,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
   const id = newId();
   switch (tool) {
     case 'belt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir };
+    case 'fastbelt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, fast: true };
     case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [] };
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
@@ -51,20 +52,36 @@ export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout |
   return { ...layout, machines: [...kept, spec] };
 }
 
-/** Lay or re-aim one belt tile; leaves any other machine alone. */
-export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir): FactoryLayout {
+/** A belt's own fields for a speed: a fast belt carries the flag, a plain one does not. */
+const speedOf = (fast: boolean): { fast?: true } => (fast ? { fast: true } : {});
+
+/** Lay one belt tile, or re-aim the one that is there and give it this speed; leaves any other machine alone. */
+export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir, fast = false): FactoryLayout {
   const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
   if (there && there.kind !== 'belt') return layout;
-  if (there) return there.dir === dir ? layout : { ...layout, machines: layout.machines.map((m) => (m === there ? { ...there, dir } : m)) };
-  return { ...layout, machines: [...layout.machines, { id: newId(), kind: 'belt', x, y, w: 1, h: 1, dir }] };
+  if (there) {
+    if (there.dir === dir && !!there.fast === fast) return layout;
+    const { fast: _was, ...rest } = there;
+    return { ...layout, machines: layout.machines.map((m) => (m === there ? { ...rest, dir, ...speedOf(fast) } : m)) };
+  }
+  return { ...layout, machines: [...layout.machines, { id: newId(), kind: 'belt', x, y, w: 1, h: 1, dir, ...speedOf(fast) }] };
 }
 
-/** Belts from one tile to another, each pointing at the next: what a drag paints. */
-export function paintBelts(layout: FactoryLayout, from: { x: number; y: number }, to: { x: number; y: number }): { layout: FactoryLayout; dir: Dir | null } {
+/** Make belts fast, or plain again; what is not a belt is left alone. */
+export function setSpeed(layout: FactoryLayout, ids: ReadonlySet<string>, fast: boolean): FactoryLayout {
+  return { ...layout, machines: layout.machines.map((m) => {
+    if (m.kind !== 'belt' || !ids.has(m.id) || !!m.fast === fast) return m;
+    const { fast: _was, ...rest } = m;
+    return { ...rest, ...speedOf(fast) };
+  }) };
+}
+
+/** Belts from one tile to another, each pointing at the next: what a drag paints. Painted over belts, it re-aims them and gives them the speed painted with. */
+export function paintBelts(layout: FactoryLayout, from: { x: number; y: number }, to: { x: number; y: number }, fast = false): { layout: FactoryLayout; dir: Dir | null } {
   let l = layout, x = from.x, y = from.y, dir: Dir | null = null, guard = 0;
   while ((x !== to.x || y !== to.y) && guard++ < 400) {
     const d: Dir = x < to.x ? 0 : x > to.x ? 2 : y < to.y ? 1 : 3;
-    l = setBelt(l, x, y, d); x += DX[d]; y += DY[d]; l = setBelt(l, x, y, d); dir = d;
+    l = setBelt(l, x, y, d, fast); x += DX[d]; y += DY[d]; l = setBelt(l, x, y, d, fast); dir = d;
   }
   return { layout: l, dir };
 }

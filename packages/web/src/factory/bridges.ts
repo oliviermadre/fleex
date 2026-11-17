@@ -40,9 +40,25 @@ function lane(at: At, b: MachineSpec, forward: Dir, backward: Dir): LaneFlow {
   return 'none';
 }
 
-/** The flow of the two lanes of a bridge: `over` is the east-west deck, `under` the north-south lane below it. */
-export function bridgeFlow(at: At, b: MachineSpec): { over: LaneFlow; under: LaneFlow } {
-  return { over: lane(at, b, 0, 2), under: lane(at, b, 1, 3) };
+/**
+ * Whether a lane that flows `flow` is a fast one. A bridge has no speed of its own: a lane goes at the speed of the
+ * belt that feeds it, the one before the run of bridges; fed by an arm (no belt before it), at the speed of the belt
+ * it leads to. The engine reads it the same way (`fastLane`).
+ */
+function fastLane(at: At, b: MachineSpec, flow: LaneFlow): boolean {
+  if (flow === 'none' || flow === 'clash') return false;
+  const along = (m: MachineSpec | null) => (m && m.kind === 'belt' && m.dir === flow ? m : null);
+  const before = along(endOf(at, b, ((flow + 2) % 4) as Dir));
+  return before ? before.fast === true : along(endOf(at, b, flow))?.fast === true;
+}
+
+/**
+ * The flow of the two lanes of a bridge: `over` is the east-west deck, `under` the north-south lane below it; and
+ * whether each is a fast lane, which the bridge shows as its belts do.
+ */
+export function bridgeFlow(at: At, b: MachineSpec): { over: LaneFlow; under: LaneFlow; overFast: boolean; underFast: boolean } {
+  const over = lane(at, b, 0, 2), under = lane(at, b, 1, 3);
+  return { over, under, overFast: fastLane(at, b, over), underFast: fastLane(at, b, under) };
 }
 
 const NAME = ['east', 'south', 'west', 'north'];

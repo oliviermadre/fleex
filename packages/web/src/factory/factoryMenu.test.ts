@@ -11,7 +11,7 @@ const at = (m: Menu, i: number) => m.slots[i]?.label ?? null;
 
 /** Every menu a person can reach: out of build mode, in it, and with each kind of thing selected. */
 const everyMenu = (): [string, Menu][] => {
-  const tools: Tool[] = ['select', 'belt', 'agent', 'zone', 'erase', 'paste'];
+  const tools: Tool[] = ['select', 'belt', 'fastbelt', 'agent', 'zone', 'erase', 'paste'];
   const out: [string, Menu][] = [
     ['floor', factoryMenu(ctx())],
     ['gate ticket', factoryMenu(ctx({ ticket: { phase: 'review', released: false, favorite: false, outcomes: ['approve', 'rework', 'reject', 'park'] } }))],
@@ -26,6 +26,8 @@ const everyMenu = (): [string, Menu][] => {
     ['belt, not building', factoryMenu(ctx({ machine: { kind: 'belt', waiting: false } }))],
     ['arm, building', factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false } }))],
     ['group, building', factoryMenu(ctx({ building: true, many: 7 }))],
+    ['belts, building', factoryMenu(ctx({ building: true, many: 7, speed: 'up' }))],
+    ['fast belt, building', factoryMenu(ctx({ building: true, machine: { kind: 'belt', waiting: false, popup: false }, speed: 'down' }))],
   ];
   for (const tool of tools) out.push([`build with ${tool}`, factoryMenu(ctx({ building: true, tool }))]);
   return out;
@@ -56,7 +58,7 @@ describe('the command card', () => {
   it('build sorts what can be placed into Move, Station and Area', () => {
     const build = factoryMenu(ctx({ building: true }));
     expect(labels(build)).toEqual(['Move', 'Station', 'Area', 'Plan', 'Select', 'Erase', 'Undo', 'Redo', 'Copy', 'Cut', 'Paste', 'Done']);
-    expect(labels(menuAt(build, ['move']).menu).slice(0, 6)).toEqual(['Belt', 'Bridge', 'Arm', 'Face →', null, null]);
+    expect(labels(menuAt(build, ['move']).menu).slice(0, 6)).toEqual(['Belt', 'Bridge', 'Arm', 'Face →', 'Fast belt', null]);
     expect(labels(menuAt(build, ['station']).menu).slice(0, 6)).toEqual(['Agent', 'Skill', 'Panel', 'Gate', 'Status', null]);
     expect(labels(menuAt(build, ['area']).menu).slice(0, 6)).toEqual(['Zone', 'Exit', 'Label', null, null, null]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
@@ -151,6 +153,17 @@ describe('the command card', () => {
     byKey(factoryMenu(c), 'N')!.run!(); expect(c.act.next).toHaveBeenCalled();
     expect(factoryMenu(ctx()).slots[8]).toMatchObject({ label: 'Next', disabled: true });
     expect(labels(factoryMenu(ctx({ building: true, waiting: 2 })))).not.toContain('Next');
+  });
+
+  it('in build mode, the belts selected are sped up or slowed down from the card', () => {
+    const c = ctx({ building: true, machine: { kind: 'belt', waiting: false, popup: false }, speed: 'up' }), up = factoryMenu(c);
+    expect(labels(up).slice(0, 5)).toEqual(['Turn', 'Speed up', null, 'Remove', null]);
+    byKey(up, 'S')!.run!(); expect(c.act.speed).toHaveBeenCalled();
+    expect(at(factoryMenu(ctx({ building: true, machine: { kind: 'belt', waiting: false, popup: false }, speed: 'down' })), 1)).toBe('Slow down');
+    expect(at(factoryMenu(ctx({ building: true, many: 6, speed: 'up' })), 1)).toBe('Speed up');
+    /* nothing to speed up without a belt in the selection, nor out of build mode */
+    expect(at(factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false, popup: true }, speed: null })), 1)).toBeNull();
+    expect(labels(factoryMenu(ctx({ machine: { kind: 'belt', waiting: false, popup: false }, speed: 'up' })))).not.toContain('Speed up');
   });
 
   it('a path that no longer exists stops where it breaks', () => {

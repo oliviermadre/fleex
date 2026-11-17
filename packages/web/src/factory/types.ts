@@ -16,7 +16,11 @@ export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
 export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 
 interface MachineBase { id: string; x: number; y: number; w: number; h: number; name?: string }
-export interface BeltSpec extends MachineBase { kind: 'belt'; dir: Dir }
+export interface BeltSpec extends MachineBase {
+  kind: 'belt'; dir: Dir;
+  /** A fast belt: it carries a ticket across its tile in half the time. */
+  fast?: boolean;
+}
 export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;
   /** Takes a ticket when all of these hold; with none, what its neighbours' conditions leave. */

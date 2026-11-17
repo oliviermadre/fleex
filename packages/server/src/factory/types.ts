@@ -18,7 +18,11 @@ export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 
 interface MachineBase { id: string; x: number; y: number; w: number; h: number; name?: string }
 /** One tile, one ticket: pushes it to the tile it points at when that tile can take it. */
-export interface BeltSpec extends MachineBase { kind: 'belt'; dir: Dir }
+export interface BeltSpec extends MachineBase {
+  kind: 'belt'; dir: Dir;
+  /** A fast belt: it carries a ticket across its tile in half the time. */
+  fast?: boolean;
+}
 /** Takes from the tile behind it, drops on the tile in front; with conditions, only a ticket that meets them all. */
 export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;

@@ -28,6 +28,8 @@ export interface MenuContext {
    * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
    */
   machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; popup?: boolean } | null;
+  /** In build mode, what the selection's belts can be made: `up` when one of them is a plain belt, `down` when all are fast, null with no belt selected. */
+  speed?: 'up' | 'down' | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
   many: number;
   /** How many tickets wait for someone on the floor. */
@@ -58,6 +60,8 @@ export interface MenuContext {
     floor(): void;
     /** Go to the next ticket that waits for someone. */
     next(): void;
+    /** Make the belts selected fast, or plain again. */
+    speed(): void;
   };
 }
 
@@ -133,6 +137,7 @@ export function factoryMenu(c: MenuContext): Menu {
     const turns = c.many <= 1 && (c.machine?.kind === 'belt' || c.machine?.kind === 'arm');
     return frame(c.many > 1 ? 'Selection' : 'Machine', {
       0: turns && { id: 'turn', key: 'R', label: 'Turn', icon: 'rotate', tone: 'move', title: 'Quarter turn', run: a.turn },
+      1: !!c.speed && { id: 'speed', key: 'S', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts selected fast: they carry tickets twice as fast' : 'Make the belts selected plain belts again', run: a.speed },
       3: { id: 'remove', key: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : 'Remove this machine from the floor', run: a.remove },
       4: c.many <= 1 && !!c.machine?.popup && edit,
     }, back('Previous', 'Back to the build menu', a.deselect));
@@ -142,6 +147,7 @@ export function factoryMenu(c: MenuContext): Menu {
     0: place('belt', 'C', 'Belt', 'move', 'Drag to lay belts: each tile points the way you drag'),
     1: place('bridge', 'H', 'Bridge', 'move', 'Where two belts cross: each ticket goes straight across, the lines do not mix'),
     2: place('arm', 'B', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
+    4: place('fastbelt', 'V', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
     3: { id: 'face', key: 'R', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Direction of the belts and arms you place', run: a.face },
   }, previous);
   const station = frame('Station', {

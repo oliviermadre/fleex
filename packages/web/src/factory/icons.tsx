@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 /** Line icons of the Factory console, 24×24, drawn with the current colour. */
 const PATHS: Record<string, ReactNode> = {
   belt: <path d="M4 8l4 4-4 4M10.5 8l4 4-4 4M17 8l3.5 4-3.5 4" />,
+  fastbelt: <path d="M3 7l5 5-5 5M8 7l5 5-5 5M14 7l5 5-5 5M19 9.5l2.5 2.5-2.5 2.5" />,
   bridge: <path d="M3 9h18M3 15h18M9 3v4M15 3v4M9 17v4M15 17v4" />,
   arm: <><circle cx="7" cy="17" r="3" /><path d="M9.2 14.8L16 8" /><path d="M13.5 6.5H18V11" /></>,
   agent: <><rect x="5" y="8" width="14" height="10" rx="2.5" /><path d="M12 4v4M9.5 13h.01M14.5 13h.01" /></>,

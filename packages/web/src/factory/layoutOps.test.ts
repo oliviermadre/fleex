@@ -1,8 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, specFor } from './layoutOps';
+import { canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor } from './layoutOps';
 import type { FactoryLayout } from './types';
 
 const empty: FactoryLayout = { w: 20, h: 10, machines: [] };
+
+describe('fast belts', () => {
+  const speeds = (l: FactoryLayout) => l.machines.map((m) => (m.kind === 'belt' ? (m.fast ? 'fast' : 'plain') : m.kind));
+
+  it('are laid like belts, with their speed', () => {
+    expect(specFor('fastbelt', 2, 3, 1)).toMatchObject({ kind: 'belt', x: 2, y: 3, dir: 1, fast: true });
+    expect(specFor('belt', 2, 3, 1)).not.toHaveProperty('fast');
+    const { layout } = paintBelts(empty, { x: 1, y: 1 }, { x: 3, y: 1 }, true);
+    expect(speeds(layout)).toEqual(['fast', 'fast', 'fast']);
+  });
+
+  it('painted over belts, a speed replaces the other and keeps each belt (its id, its place)', () => {
+    const plain = paintBelts(empty, { x: 1, y: 1 }, { x: 4, y: 1 }).layout;
+    const upgraded = paintBelts(plain, { x: 2, y: 1 }, { x: 3, y: 1 }, true).layout;
+    expect(speeds(upgraded)).toEqual(['plain', 'fast', 'fast', 'plain']);
+    expect(upgraded.machines.map((m) => m.id)).toEqual(plain.machines.map((m) => m.id));
+    const back = paintBelts(upgraded, { x: 1, y: 1 }, { x: 4, y: 1 }).layout;
+    expect(speeds(back)).toEqual(['plain', 'plain', 'plain', 'plain']);
+    expect(back.machines.every((m) => !('fast' in m))).toBe(true);
+    /* nothing changes when the belt is already as asked */
+    expect(setBelt(upgraded, 2, 1, 0, true)).toBe(upgraded);
+  });
+
+  it('a selection is sped up or slowed down, belts only', () => {
+    let l = paintBelts(empty, { x: 1, y: 1 }, { x: 3, y: 1 }).layout;
+    l = place(l, specFor('zone', 6, 6, 0)!)!;
+    const ids = new Set(l.machines.map((m) => m.id));
+    const up = setSpeed(l, ids, true);
+    expect(speeds(up)).toEqual(['fast', 'fast', 'fast', 'zone']);
+    expect(up.machines.find((m) => m.kind === 'zone')).not.toHaveProperty('fast');
+    expect(speeds(setSpeed(up, new Set([l.machines[0]!.id]), false))).toEqual(['plain', 'fast', 'fast', 'zone']);
+    /* copied and pasted, a fast belt stays one */
+    const clip = copyOf(up, new Set(up.machines.filter((m) => m.kind === 'belt').map((m) => m.id)))!;
+    const pasted = pasteAt(empty, clip, 10, 5)!;
+    expect(speeds(pasted.layout)).toEqual(['fast', 'fast', 'fast']);
+  });
+});
 
 describe('factory layout edits', () => {
   it('paints belts along a drag, each tile pointing at the next', () => {

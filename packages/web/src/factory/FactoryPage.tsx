@@ -17,7 +17,7 @@ import { FactoryConsole } from './FactoryConsole';
 import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, specFor, update, type Clip, type Tool } from './layoutOps';
+import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool } from './layoutOps';
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
@@ -50,6 +50,7 @@ const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
+  ['fastbelt', 'V', 'Fast belt', 'Drag to lay fast belts, twice as fast as plain ones: over belts already there, it speeds them up'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
   ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. R turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
@@ -64,7 +65,7 @@ const TOOLS: [Tool, string, string, string][] = [
 ];
 
 type Press =
-  | { kind: 'paint'; last: { x: number; y: number }; did: boolean; draft: FactoryLayout }
+  | { kind: 'paint'; last: { x: number; y: number }; did: boolean; draft: FactoryLayout; fast: boolean }
   | { kind: 'erase'; draft: FactoryLayout }
   | { kind: 'machine'; id: string; sx: number; sy: number; dragging: boolean; group: string[] }
   | { kind: 'marquee'; x0: number; y0: number }
@@ -278,7 +279,7 @@ function Floor() {
     if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; e.currentTarget.style.cursor = 'grabbing'; return; }
     if (live.current.building) {
       const t = live.current.tool;
-      if (t === 'belt') { store.beginEdit(); press.current = { kind: 'paint', last: { x: tx, y: ty }, did: false, draft: st.layout }; }
+      if (t === 'belt' || t === 'fastbelt') { store.beginEdit(); press.current = { kind: 'paint', last: { x: tx, y: ty }, did: false, draft: st.layout, fast: t === 'fastbelt' }; }
       else if (t === 'erase') { store.beginEdit(); const m = machineAt(st.layout, tx, ty); const draft = m ? erase(st.layout, m.id) : st.layout; store.previewLayout(draft); press.current = { kind: 'erase', draft }; }
       else if (t === 'select') {
         const hit = v.pick(p.x, p.y, st, false), m = hit && 'machineId' in hit ? v.machine(hit.machineId) : null;
@@ -307,7 +308,7 @@ function Floor() {
     }
     const dx = p.x - lastPt.current.x, dy = p.y - lastPt.current.y; moved.current += Math.abs(dx) + Math.abs(dy); lastPt.current = p;
     if (pr?.kind === 'paint') {
-      if (tx !== pr.last.x || ty !== pr.last.y) { const r = paintBelts(pr.draft, pr.last, { x: tx, y: ty }); pr.draft = r.layout; pr.last = { x: tx, y: ty }; pr.did = true; if (r.dir != null) setDir(r.dir); store.previewLayout(pr.draft); }
+      if (tx !== pr.last.x || ty !== pr.last.y) { const r = paintBelts(pr.draft, pr.last, { x: tx, y: ty }, pr.fast); pr.draft = r.layout; pr.last = { x: tx, y: ty }; pr.did = true; if (r.dir != null) setDir(r.dir); store.previewLayout(pr.draft); }
     } else if (pr?.kind === 'erase') {
       const m = machineAt(pr.draft, tx, ty); if (m) { pr.draft = erase(pr.draft, m.id); store.previewLayout(pr.draft); }
     } else if (pr?.kind === 'machine') {
@@ -329,7 +330,11 @@ function Floor() {
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y), click = moved.current <= 5;
     if (pr?.kind === 'pan') { e.currentTarget.style.cursor = live.current.space ? 'grab' : ''; return; }
     if (pr?.kind === 'paint') {
-      const final = !pr.did && click ? place(pr.draft, specFor('belt', tx, ty, live.current.dir)!) ?? paintBelts(pr.draft, { x: tx, y: ty }, { x: tx, y: ty }).layout : pr.draft;
+      /* a click lays one tile, or re-aims the belt that is there; on a belt of the other speed, it only changes its speed */
+      const there = machineAt(pr.draft, tx, ty);
+      const final = pr.did || !click ? pr.draft
+        : there?.kind === 'belt' && !!there.fast !== pr.fast ? setBelt(pr.draft, tx, ty, there.dir, pr.fast)
+        : place(pr.draft, specFor(pr.fast ? 'fastbelt' : 'belt', tx, ty, live.current.dir)!) ?? pr.draft;
       void store.setLayout(final).finally(() => store.endEdit());
     } else if (pr?.kind === 'erase') { void store.setLayout(pr.draft).finally(() => store.endEdit()); }
     else if (pr?.kind === 'machine') {
@@ -457,10 +462,16 @@ function Floor() {
   const [path, setPath] = useState<string[]>([]);
   const zoneNext = selMachine?.kind === 'zone' ? snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0] ?? null : null;
   const gate = selTicket ? layout?.machines.find((q) => q.id === selTicket.machineId) : null;
+  /* what the belts of the selection can be made: fast when one of them is not yet, plain when all are */
+  const beltSpeed = useMemo<'up' | 'down' | null>(() => {
+    const ids = selMany.length > 1 ? new Set(selMany) : selMachine ? new Set([selMachine.id]) : null;
+    const belts = ids && layout ? layout.machines.filter((m) => m.kind === 'belt' && ids.has(m.id)) : [];
+    return belts.length === 0 ? null : belts.some((m) => m.kind === 'belt' && !m.fast) ? 'up' : 'down';
+  }, [selMany, selMachine, layout]);
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
     ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
-    waiting: needs.length,
+    waiting: needs.length, speed: beltSpeed,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
@@ -493,9 +504,10 @@ function Floor() {
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
       next: () => stepWaiting(1),
+      speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
-  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting]);
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed]);
   const card = useMemo(() => menuAt(root, path), [root, path]);
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';

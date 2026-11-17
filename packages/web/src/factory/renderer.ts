@@ -67,7 +67,7 @@ const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb92
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
-interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
+interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
 type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -103,6 +103,8 @@ export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: nu
 const Z_MAX = 80, Z_MIN = 3;
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
+/** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
+const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
 
 
@@ -181,7 +183,7 @@ export class FactoryView {
     this.palAt = now;
     this.pal = {
       bg: v('--theme-bg-base', '#09090b'), floor: v('--theme-bg-surface', '#18181b'), grid: v('--theme-border', '#27272a'), belt: v('--theme-bg-overlay', '#27272a'),
-      edge: v('--theme-border-input', '#3f3f46'), chev: v('--theme-text-muted', '#71717a'), body: v('--theme-bg-overlay', '#27272a'),
+      edge: v('--theme-border-input', '#3f3f46'), chev: v('--theme-text-muted', '#71717a'), fast: v('--tint-blue-solid', '#60a5fa'), body: v('--theme-bg-overlay', '#27272a'),
       text: v('--theme-text-primary', '#fafafa'), text2: v('--theme-text-secondary', '#a1a1aa'), text3: v('--theme-text-muted', '#71717a'),
       ok: v('--theme-success', '#22c55e'), warn: v('--theme-warning', '#eab308'), danger: v('--theme-danger', '#ef4444'), accent: v('--theme-accent', '#D77655'),
     };
@@ -429,7 +431,7 @@ export class FactoryView {
     const belts = L.machines.filter((m): m is BeltSpec => m.kind === 'belt');
     const bends = new Map<string, number>();
     for (const b of belts) { const f = this.bendOf(b); bends.set(b.id, f); this.beltBase(b, f, pal); }
-    if (z >= 8) { ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of belts) this.beltChevrons(b, bends.get(b.id) ?? -1); ctx.lineCap = 'butt'; }
+    if (z >= 8) { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of belts) this.beltChevrons(b, bends.get(b.id) ?? -1, pal); ctx.lineCap = 'butt'; }
 
     for (const m of L.machines) if (m.kind === 'bridge') this.bridge(m, inside.get(m.id) ?? [], st, pal, dtReal);
     for (const m of L.machines) {
@@ -587,7 +589,8 @@ export class FactoryView {
 
   private beltBase(b: BeltSpec, f: number, pal: Palette): void {
     const ctx = this.ctx, { x, y } = b, dx = DX[b.dir], dy = DY[b.dir];
-    ctx.strokeStyle = pal.edge; ctx.lineWidth = 0.09;
+    /* a fast belt has its rails in the fast colour: it reads from far, where chevrons are no longer drawn */
+    ctx.strokeStyle = b.fast ? mix(pal.fast, pal.belt, 0.35) : pal.edge; ctx.lineWidth = 0.09;
     if (f >= 0) {
       const fx = DX[f as 0], fy = DY[f as 0], px = x + 0.5 - fx * 0.5 + dx * 0.5, py = y + 0.5 - fy * 0.5 + dy * 0.5;
       const a0 = Math.atan2(-dy, -dx), cw = -dx * fy + dy * fx > 0, a1 = a0 + (cw ? 1 : -1) * Math.PI / 2;
@@ -613,29 +616,47 @@ export class FactoryView {
     }
   }
 
-  private beltChevrons(b: BeltSpec, f: number): void {
+  /**
+   * The chevrons that run along a belt. A fast belt says it is one three ways: its chevrons come in pairs, in the fast
+   * colour, and they run twice as fast.
+   */
+  private beltChevrons(b: BeltSpec, f: number, pal: Palette): void {
     const ctx = this.ctx, dx = DX[b.dir], dy = DY[b.dir], fx = f >= 0 ? DX[f as 0] : 0, fy = f >= 0 ? DY[f as 0] : 0;
-    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * 0.6) % 0.5;
-    for (let k = 0; k < 2; k++) {
-      const u = off + k * 0.5;
+    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
+    ctx.strokeStyle = b.fast ? pal.fast : pal.chev;
+    const one = (u: number) => {
       let cx: number, cy: number, tx: number = dx, ty: number = dy;
       if (f >= 0) { const ca = Math.cos(u * Math.PI / 2), sa = Math.sin(u * Math.PI / 2); cx = px + 0.5 * (fx * sa - dx * ca); cy = py + 0.5 * (fy * sa - dy * ca); tx = dx * sa + fx * ca; ty = dy * sa + fy * ca; }
       else { cx = b.x + 0.5 + dx * (u - 0.5); cy = b.y + 0.5 + dy * (u - 0.5); }
       ctx.beginPath(); ctx.moveTo(cx - tx * 0.09 + ty * 0.19, cy - ty * 0.09 - tx * 0.19); ctx.lineTo(cx + tx * 0.09, cy + ty * 0.09); ctx.lineTo(cx - tx * 0.09 - ty * 0.19, cy - ty * 0.09 + tx * 0.19); ctx.stroke();
+    };
+    /* where a line starts, nothing comes in from behind: the half of a pair that would be drawn before the tile is left out */
+    const fed = f >= 0 || (() => { const n = this.at(b.x - dx, b.y - dy); return !!n && (n.kind === 'bridge' || this.feeds(n, b.x, b.y)); })();
+    for (let k = 0; k < 2; k++) {
+      const u = off + k * 0.5;
+      if (!b.fast) { one(u); continue; }
+      if (fed || u - CHEVRON_PAIR / 2 >= 0) one(u - CHEVRON_PAIR / 2);
+      one(u + CHEVRON_PAIR / 2);
     }
   }
 
   /** Two belts crossing: the north-south one passes under, the east-west one over it. */
   private bridge(m: MachineSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y } = m, off = (this.clock * 0.6) % 0.5;
-    /* a bridge has no direction of its own: each lane is drawn the way the belts that feed it send tickets across */
+    const ctx = this.ctx, { x, y } = m;
+    /*
+     * A bridge has no direction and no speed of its own: each lane is drawn the way the belts that feed it send
+     * tickets across, and as fast as they do. A fast lane looks like a fast belt (paired chevrons in the fast colour,
+     * running twice as fast, coloured rails), whichever lane it is, and the other lane keeps its own look.
+     */
     const flow = bridgeFlow((px, py) => this.at(px, py), m);
+    const rail = (fast: boolean, plain: string) => (fast ? mix(pal.fast, pal.belt, 0.35) : plain);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
-    const lane = (f: LaneFlow, horizontal: boolean) => {
-      const cx0 = x + 0.5, cy0 = y + 0.5;
+    const lane = (f: LaneFlow, horizontal: boolean, fast: boolean) => {
+      const cx0 = x + 0.5, cy0 = y + 0.5, off = (this.clock * (fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
       ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      /* one chevron at `u` along the lane, pointing the way `s` says (+1 east or south, -1 west or north) */
-      const chevron = (u: number, s: number) => {
+      /* one chevron at `u` along the lane, pointing the way `s` says (+1 east or south, -1 west or north); a pair of them on a fast lane */
+      const chevron = (u: number, s: number) => { if (fast) { single(u - s * CHEVRON_PAIR / 2, s); single(u + s * CHEVRON_PAIR / 2, s); } else single(u, s); };
+      const single = (u: number, s: number) => {
         const cx = cx0 + (horizontal ? u : 0), cy = cy0 + (horizontal ? 0 : u);
         ctx.beginPath();
         if (horizontal) { ctx.moveTo(cx - 0.09 * s, cy - 0.19); ctx.lineTo(cx + 0.09 * s, cy); ctx.lineTo(cx - 0.09 * s, cy + 0.19); }
@@ -652,7 +673,7 @@ export class FactoryView {
         ctx.strokeStyle = pal.danger; chevron(-0.2, 1); chevron(0.2, -1);
       } else {
         const s = f === 0 || f === 1 ? 1 : -1;
-        ctx.strokeStyle = pal.chev;
+        ctx.strokeStyle = fast ? pal.fast : pal.chev;
         for (let k = 0; k < 2; k++) chevron(s * (off + k * 0.5 - 0.5), s);
         /*
          * Chevrons run in step along the whole lane, belts and bridge alike, so the one about to come in and the one
@@ -668,14 +689,14 @@ export class FactoryView {
     };
     const draw = (t: FactoryTicket) => this.ticket(t, x + 0.5 + t.fx * (t.p - 0.5), y + 0.5 + t.fy * (t.p - 0.5), 0.46, st, '', dt);
     /* under: the north-south lane, between its two rails */
-    ctx.strokeStyle = pal.edge; ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
-    if (this.cam.z >= 8) lane(flow.under, false);
+    ctx.strokeStyle = rail(flow.underFast, pal.edge); ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
+    if (this.cam.z >= 8) lane(flow.under, false, flow.underFast);
     for (const t of tickets) if (t.fx === 0) draw(t);
     /* over: the deck of the east-west lane, with a shadow on the lane below */
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + 0.1, 1, 0.8);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y + 0.16, 1.02, 0.68);
-    ctx.strokeStyle = pal.text3; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
-    if (this.cam.z >= 8) lane(flow.over, true);
+    ctx.strokeStyle = rail(flow.overFast, pal.text3); ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
+    if (this.cam.z >= 8) lane(flow.over, true, flow.overFast);
     for (const t of tickets) if (t.fx !== 0) draw(t);
   }
 
@@ -910,7 +931,7 @@ export class FactoryView {
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     for (const t of st.tickets) {

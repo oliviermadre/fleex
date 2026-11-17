@@ -133,6 +133,31 @@ describe('FactoryEngine', () => {
     await expect(engine.transfer('c', { machineId: 'x' })).rejects.toBeInstanceOf(FactoryError);
   });
 
+  it('a fast belt carries a ticket twice as fast, and a bridge lane goes at the speed of the belt that feeds it', async () => {
+    const fast = (id: string, x: number, y: number): MachineSpec => ({ ...belt(id, x, y), fast: true } as MachineSpec);
+    /* two lines of the same length, side by side: plain belts above, fast ones below; each crosses a bridge fed by its own kind */
+    await boot([
+      belt('p0', 0, 1), belt('p1', 1, 1), { id: 'pb', kind: 'bridge', x: 2, y: 1, w: 1, h: 1 }, belt('p3', 3, 1), belt('p4', 4, 1), zone('slow', 5, 1, { w: 1, h: 1 }),
+      fast('f0', 0, 4), fast('f1', 1, 4), { id: 'fb', kind: 'bridge', x: 2, y: 4, w: 1, h: 1 }, fast('f3', 3, 4), fast('f4', 4, 4), zone('quick', 5, 4, { w: 1, h: 1 }),
+    ]);
+    await engine.transfer('a', { machineId: 'p0' });
+    await engine.transfer('b', { machineId: 'f0' });
+    let slowAt = 0, quickAt = 0;
+    for (let i = 1; i <= 80 && !(slowAt && quickAt); i++) {
+      await run(0.1);
+      if (!quickAt && where('b') === 'quick:zone') quickAt = i;
+      if (!slowAt && where('a') === 'slow:zone') slowAt = i;
+    }
+    expect(quickAt).toBeGreaterThan(0);
+    expect(slowAt).toBeGreaterThan(quickAt);
+    expect(slowAt / quickAt).toBeGreaterThan(1.7);            // twice as fast, give or take a tick
+    expect(slowAt / quickAt).toBeLessThan(2.3);
+    /* the flag is kept on belts, and on nothing else */
+    const saved = store.floor!.layout.machines;
+    expect(saved.filter((m) => (m as { fast?: boolean }).fast).map((m) => m.id)).toEqual(['f0', 'f1', 'f3', 'f4']);
+    expect(normaliseLayout({ w: 9, h: 9, machines: [{ ...belt('x', 0, 0), fast: 'yes' } as unknown as MachineSpec, { ...zone('z', 3, 3), fast: true } as unknown as MachineSpec] }).machines.some((m) => 'fast' in m && m.kind === 'belt')).toBe(false);
+  });
+
   it('a bridge has no direction of its own: a ticket crosses it the way it arrives, west and north as well', async () => {
     const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 5, y: 5, w: 1, h: 1 };
     await boot([

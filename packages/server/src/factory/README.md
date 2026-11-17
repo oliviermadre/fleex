@@ -34,7 +34,16 @@ the closer the pointer is, and the pointer turns into an arrowhead towards the e
 A plain drag never moves the view: it is for tickets and machines.
 Where two belts must cross, a **bridge** tile carries each ticket straight across. A bridge has no direction of its
 own: a ticket crosses it the way it arrives, in any of the four directions, on the east-west lane or on the north-south
-one. The page draws each lane the way the belts (or the arm) that feed it send tickets across. In build mode every change to the
+one. The page draws each lane the way the belts (or the arm) that feed it send tickets across.
+
+A **fast belt** (`fast` on a belt) carries a ticket twice as fast (`FAST_BELT`). It is laid like a belt (Build › Move ›
+Fast belt); laid over belts already there, it speeds them up, and belts selected in build mode are sped up or slowed
+down from the command card. It shows its speed three ways: its chevrons come in pairs, in blue, and run twice as
+fast; its rails are blue too, which reads from far and on the minimap. A bridge has no speed of its own either: each
+lane goes at the speed of the belt that feeds it (fed by an arm, of the belt it leads to), in the engine (`fastLane`)
+and on the page (`bridges.ts`), where that lane then looks like a fast belt while the other keeps its own look.
+
+In build mode every change to the
 floor can be taken back and put back (Ctrl+Z, Ctrl+Shift+Z); that history lives in the page and is gone on reload. A selection of
 machines can be copied, cut and pasted (Ctrl+C, Ctrl+X, Ctrl+V, then a click): the copies keep their settings and get
 new ids.
