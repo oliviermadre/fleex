@@ -3,7 +3,7 @@ import { WorkView } from '../components/work/WorkView';
 import { useWorkStore } from '../stores/workStore';
 import { Button } from '../components/ui/Button';
 import { cn } from '../lib/cn';
-import { FactorySheet, KBD } from './FactorySheet';
+import { FactoryPopup, KBD } from './FactoryPopup';
 import { TicketToken } from './FactoryTicketMeta';
 import type { Need } from './needs';
 import type { FactoryTicket } from './types';
@@ -20,9 +20,9 @@ export function walkSet(scope: WalkScope, current: FactoryTicket | null, needs: 
 }
 
 /**
- * A ticket, opened from the floor: the Work view itself, sliding up from the bottom over the floor and its console,
- * nearly as wide and as high as the window. It is the same view as on the Work page (same modes, thread, panels and
- * tools), on the ticket that was opened: nothing about a ticket is done differently here.
+ * A ticket, opened from the floor: the Work view itself, in a popup over the floor that takes nearly the whole window.
+ * It is the same view as on the Work page (same modes, thread, panels and tools), on the ticket that was opened:
+ * nothing about a ticket is done differently here.
  *
  * Left and right arrows go to the previous and the next ticket; a switch says which tickets those are, and they are
  * listed along the top. Escape goes back to the floor.
@@ -46,7 +46,7 @@ export function FactoryWorkbench({ ticketId, needs, tickets, onNavigate, onClose
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
   }, [go]);
   return (
-    <FactorySheet label="Workbench" onClose={onClose} onKey={onKey} bar={(
+    <FactoryPopup label="Workbench" onClose={onClose} onKey={onKey} size="full" maxWidth="max-w-[1760px]" bar={(
       <>
           <Button size="sm" onClick={() => go(-1)} disabled={set.length < 2} aria-label="Previous ticket"><kbd className={KBD}>←</kbd></Button>
           <Button size="sm" onClick={() => go(1)} disabled={set.length < 2} aria-label="Next ticket"><kbd className={KBD}>→</kbd></Button>
@@ -69,6 +69,6 @@ export function FactoryWorkbench({ ticketId, needs, tickets, onNavigate, onClose
       </>
     )}>
       <div className="min-h-0 flex-1">{armed && <WorkView embedded />}</div>
-    </FactorySheet>
+    </FactoryPopup>
   );
 }

@@ -29,7 +29,7 @@ const whereOf = (m: MachineSpec | null): string => (!m ? 'On the floor' : m.kind
 /**
  * Every ticket on the floor, as a list: what it is, where it is and what it
  * waits for, with the same filters as the floor's own. "Go to" closes the list
- * and centres the floor on the ticket; "Detail" opens its sheet. Tab opens the
+ * and centres the floor on the ticket; "Detail" opens its popup. Tab opens the
  * list and Tab closes it.
  *
  * The filters are the page's: what is set here fades the same tickets on the

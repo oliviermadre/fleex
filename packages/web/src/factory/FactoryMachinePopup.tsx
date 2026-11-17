@@ -16,7 +16,7 @@ import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRule
 import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
-import { FactorySheet } from './FactorySheet';
+import { FactoryPopup } from './FactoryPopup';
 import { MachineFigures, PeriodSelect } from './FactoryStatsBits';
 import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
@@ -277,12 +277,12 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
 }
 
 /**
- * A machine, opened from the floor (a double-click, Enter, or Edit on the command card): a sheet that slides up from
- * the bottom, as a ticket does. A station shows its settings, the tickets it holds and what it did; a zone its
- * settings and its tickets; an arm, an exit or a label, which have only settings, a smaller sheet. Everything a
- * machine has to be set is set here: the floor has no side panel.
+ * A machine, opened from the floor (a double-click, Enter, or Edit on the command card): a popup over the floor, as
+ * for a ticket. A station shows its settings, the tickets it holds and what it did; a zone its settings and its
+ * tickets; an arm, an exit or a label, which have only settings, a small popup. Everything a machine has to be set
+ * is set here: the floor has no side panel.
  */
-export function FactoryMachineSheet({ machineId, view, onClose, onPatch, onRemove, onOpenTicket, onOpenMachine }: {
+export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemove, onOpenTicket, onOpenMachine }: {
   machineId: string; view: FactoryView; onClose: () => void; onPatch: (id: string, patch: Partial<MachineSpec>) => void; onRemove: (id: string) => void;
   onOpenTicket: (ticketId: string) => void; onOpenMachine: (machineId: string) => void;
 }) {
@@ -312,15 +312,15 @@ export function FactoryMachineSheet({ machineId, view, onClose, onPatch, onRemov
     </>
   );
   const settings = <Settings m={m} view={view} onPatch={(p) => onPatch(m.id, p)} onSelect={onOpenMachine} />;
-  if (!box) return <FactorySheet label="Machine" onClose={onClose} bar={bar} fit={680}><Column>{settings}</Column></FactorySheet>;
+  if (!box) return <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="fit" maxWidth="max-w-2xl"><Column>{settings}</Column></FactoryPopup>;
   return (
-    <FactorySheet label="Machine" onClose={onClose} bar={bar}>
+    <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="large" maxWidth={station ? 'max-w-[1400px]' : 'max-w-5xl'}>
       <div className={cn('grid min-h-0 flex-1 grid-cols-1 divide-y divide-[var(--theme-border)] overflow-y-auto lg:divide-x lg:divide-y-0 lg:overflow-hidden',
         station ? 'lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)_minmax(300px,400px)]' : 'lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]')}>
         <Column className="max-lg:overflow-visible"><Head>Settings</Head>{settings}</Column>
         <Column className="max-lg:overflow-visible"><Inside m={m} onOpenTicket={onOpenTicket} /></Column>
         {station && <Column className="max-lg:overflow-visible"><Did m={station} onOpenTicket={onOpenTicket} /></Column>}
       </div>
-    </FactorySheet>
+    </FactoryPopup>
   );
 }

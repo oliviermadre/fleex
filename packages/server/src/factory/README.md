@@ -119,7 +119,7 @@ conversation, scrolled to its end, with the latest deliverables on top. What the
 a gate's decision with an optional reason, an answer (which gives the ticket back to the station that asked, see
 "In the Work view"), another run after a failure. Enter, V or a second click opens the whole ticket; Escape closes the card.
 
-## No side panel: the console, and sheets
+## No side panel: the console, and popups
 
 The floor takes the whole width of the page. Nothing of the Factory opens beside it.
 
@@ -127,21 +127,23 @@ The floor takes the whole width of the page. Nothing of the Factory opens beside
   is running or stopped, its model and mode, its places, its outcomes and arms, and what it did over the period; for
   the floor, the tickets on it and what it did. The command card acts on it: a station that runs something is stopped
   and started there (Q), and **Edit** (V, at the place where a ticket has Open; also Enter or a double-click) opens
-  its sheet.
-- **A machine's sheet** (`FactoryMachineSheet.tsx`) slides up from the bottom as a ticket does: a station shows its
-  settings, the tickets it holds with what each needs, and what it did with its latest runs; a zone its settings and
-  its tickets; an arm, an exit or a label, which have only settings, a smaller sheet. Everything a machine has to be
-  set is set there, in build mode or out of it. A belt and a bridge have nothing to set and no sheet.
-- **The floor's sheet** (`FactoryFloorSheet.tsx`, **Stats** on the card when nothing is selected): what the floor did
+  its popup.
+- **A machine's popup** (`FactoryMachinePopup.tsx`): a station shows its settings, the tickets it holds with what each
+  needs, and what it did with its latest runs; a zone its settings and its tickets; an arm, an exit or a label, which
+  have only settings, a small popup. Everything a machine has to be set is set there, in build mode or out of it. A
+  belt and a bridge have nothing to set and no popup.
+- **The floor's popup** (`FactoryFloorPopup.tsx`, **Stats** on the card when nothing is selected): what the floor did
   machine by machine, where tickets stand, and the safety limits.
 
-The three sheets share one frame (`FactorySheet.tsx`); the workbench is the same frame around the Work view.
+The three popups and the workbench share one frame (`FactoryPopup.tsx`): Fleex's `Modal`, in the middle of the
+window, with a bar along its top. It is of glass: slightly translucent, blurring what is behind it, over a backdrop
+lighter than a dialog's and that blurs nothing, so the floor stays in sight around and under it. `Modal` got three
+opt-in props for it (`variant="glass"`, `flush`, `guardEscape`); a dialog that sets none of them is unchanged.
 
 ## The workbench
 
 Opening a ticket from the floor (Enter, V, a second click) brings up the Work view itself (`FactoryWorkbench.tsx`):
-it slides up from the bottom over the floor and its console, nearly as wide and as high as the window, under the
-app's top bar. It is `WorkView` with its queue column left out, on the ticket that was opened (the Work store's own
+a popup over the floor, nearly as wide and as high as the window. It is `WorkView` with its queue column left out, on the ticket that was opened (the Work store's own
 `openTicket`, pinned so the queue's filters do not hide it): same modes, thread, panels and tools, nothing done
 differently. Left and right arrows go to the previous and the next ticket, of the ones that wait for someone or of
 the same machine (a switch says which, and they are listed along the top); Escape goes back to the floor. The lighter
@@ -221,6 +223,7 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
 | `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor}.ts` | an optional model for one workflow-step execution (`model`, `modelOverride`): unset by workflows, set by an agent station |
 | web: `components/ui/Modal.tsx` | a dialog leaves Escape to a popover opened from it (a general fix, found with the ticket list's filters; it can stay) |
+| web: `components/ui/Modal.tsx` | three opt-in props for the Factory's popups: `variant="glass"`, `flush` (no padding), `guardEscape` (Escape stays in a field, and is left to what is opened over the dialog). Unset, a dialog is unchanged; they can stay |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
 | `application/use-cases/create-workflow-run.ts`, `domain/errors.ts`, `infrastructure/http/error-handler.ts`, `application/domain-event-listener.ts` | an optional `refuses(ticketId)` asked before a run is created, its `WorkflowRefusedError` (409), and the mention that asked for it closed |

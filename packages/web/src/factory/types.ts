@@ -134,5 +134,5 @@ export type Selection = { machine: string } | { machines: string[] } | { ticket:
 /** Colours a label can take on the floor. */
 export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];
 
-/** A machine that has something to set up or to show in its own sheet: everything but what only carries tickets. */
-export const hasSheet = (m: { kind: MachineSpec['kind'] }): boolean => m.kind !== 'belt' && m.kind !== 'bridge';
+/** A machine that has something to set up or to show in its own popup: everything but what only carries tickets. */
+export const hasPopup = (m: { kind: MachineSpec['kind'] }): boolean => m.kind !== 'belt' && m.kind !== 'bridge';

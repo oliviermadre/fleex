@@ -1,13 +1,13 @@
 /**
- * What the Factory opens over its floor instead of a side panel: a machine's sheet (settings, what it holds, what it
+ * What the Factory opens over its floor instead of a side panel: a machine's popup (settings, what it holds, what it
  * did) and the floor's own (figures, where tickets stand, safety limits).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
-import { FactoryMachineSheet, machineKind } from './FactoryMachineSheet';
-import { FactoryFloorSheet } from './FactoryFloorSheet';
+import { FactoryMachinePopup, machineKind } from './FactoryMachinePopup';
+import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { useFactoryStore } from './factoryStore';
-import { hasSheet } from './types';
+import { hasPopup } from './types';
 import type { FactoryView } from './renderer';
 import type { FactorySnapshot, FactoryStats, FactoryTicket, MachineSpec, MachineStats, TicketPhase } from './types';
 
@@ -34,35 +34,35 @@ function seed(tickets: FactoryTicket[], list: MachineSpec[] = machines) {
   useFactoryStore.setState({ enabled: true, snapshot, layout, stats, statsDays: 7, ...acts });
   return acts;
 }
-/** What the sheet asks the floor's view: who takes from a machine, and what stands where. */
+/** What the popup asks the floor's view: who takes from a machine, and what stands where. */
 const view = { use: () => {}, takersOf: (m: MachineSpec) => (m.id === 'dev' ? [arm] : []), leadsTo: () => gate, at: () => belt } as unknown as FactoryView;
 const open = (machineId: string) => {
   const on = { onClose: vi.fn(), onPatch: vi.fn(), onRemove: vi.fn(), onOpenTicket: vi.fn(), onOpenMachine: vi.fn() };
-  render(<FactoryMachineSheet machineId={machineId} view={view} {...on} />);
+  render(<FactoryMachinePopup machineId={machineId} view={view} {...on} />);
   return on;
 };
 
 afterEach(() => { cleanup(); });
 beforeEach(() => { vi.clearAllMocks(); });
 
-describe('which machines open in a sheet', () => {
+describe('which machines open in a popup', () => {
   it('everything that has something to set or to show, so not a belt nor a bridge', () => {
-    expect(machines.filter(hasSheet).map((m) => m.id)).toEqual(['dev', 'qa', 'parked', 'a1']);
+    expect(machines.filter(hasPopup).map((m) => m.id)).toEqual(['dev', 'qa', 'parked', 'a1']);
     expect([dev, gate, zone, arm].map(machineKind)).toEqual(['Agent station', 'Gate', 'Zone', 'Arm']);
   });
 });
 
-describe('<FactoryMachineSheet/>', () => {
+describe('<FactoryMachinePopup/>', () => {
   it('shows a station whole: its settings, the tickets it holds with what each needs, and what it did', async () => {
     const acts = seed([ticket('t1', 'dev', 'running'), ticket('t2', 'dev', 'failed', { note: 'boom' })]);
     const on = open('dev');
-    const sheet = screen.getByRole('region', { name: 'Machine' });
-    expect(sheet.textContent).toContain('Agent station');
+    const popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Agent station');
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Dev');
     expect((screen.getByLabelText('Persona') as HTMLSelectElement).value).toBe('builder');
     expect(screen.getByLabelText('Model this station runs on').textContent).toBe('some-model');
-    expect(sheet.textContent).toContain('2 tickets inside of 2');
-    expect(sheet.textContent).toContain('What it did');
+    expect(popup.textContent).toContain('2 tickets inside of 2');
+    expect(popup.textContent).toContain('What it did');
     expect(await screen.findByText(/boom/, { selector: 'span' })).toBeTruthy();      // the latest runs, with why one failed
     fireEvent.click(screen.getByRole('button', { name: 'Set aside' }));
     expect(acts.setAside).toHaveBeenCalledWith('t1');
@@ -117,9 +117,9 @@ describe('<FactoryMachineSheet/>', () => {
     expect(acts.release).toHaveBeenCalledWith('t2');
     cleanup();
     open('a1');
-    const sheet = screen.getByRole('region', { name: 'Machine' });
-    expect(sheet.textContent).not.toContain('tickets inside');
-    expect(sheet.textContent).toContain('Takes a ticket from the tile behind it');
+    const popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).not.toContain('tickets inside');
+    expect(popup.textContent).toContain('Takes a ticket from the tile behind it');
   });
 
   it('closes when its machine is no longer on the floor', () => {
@@ -129,20 +129,20 @@ describe('<FactoryMachineSheet/>', () => {
   });
 });
 
-describe('<FactoryFloorSheet/>', () => {
+describe('<FactoryFloorPopup/>', () => {
   it('shows what the floor did machine by machine, where tickets stand, and saves the safety limits', () => {
     const acts = seed([ticket('t1', 'qa', 'review')]);
     const onGoTo = vi.fn(), onClose = vi.fn();
-    render(<FactoryFloorSheet onClose={onClose} onGoTo={onGoTo} />);
-    const sheet = screen.getByRole('region', { name: 'Factory floor' });
-    expect(sheet.textContent).toContain('Shipped');
-    const rows = within(sheet).getAllByRole('row').map((r) => r.textContent);
+    render(<FactoryFloorPopup onClose={onClose} onGoTo={onGoTo} />);
+    const popup = screen.getByRole('region', { name: 'Factory floor' });
+    expect(popup.textContent).toContain('Shipped');
+    const rows = within(popup).getAllByRole('row').map((r) => r.textContent);
     expect(rows[1]).toContain('Dev');
     expect(rows[2]).toContain('Old reviewer (removed)');
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Dev' }));
+    fireEvent.click(within(popup).getByRole('button', { name: 'Dev' }));
     expect(onGoTo).toHaveBeenCalledWith('dev');
     expect(onClose).toHaveBeenCalled();
-    expect(sheet.textContent).toContain('Check spec');                              // a ticket stands there, waiting for a decision
+    expect(popup.textContent).toContain('Check spec');                              // a ticket stands there, waiting for a decision
     const perHour = screen.getByLabelText('Runs started per hour');
     fireEvent.change(perHour, { target: { value: '40' } });
     fireEvent.blur(perHour);

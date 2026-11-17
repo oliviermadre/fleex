@@ -5,7 +5,7 @@
  *                    ├─ Station   (agent, skill, panel, gate, status)
  *                    ├─ Area      (zone, exit, label)
  *                    └─ a selection (turn, remove)
- *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its sheet)
+ *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its popup)
  *
  * A command keeps its place from one menu to the next: in every build menu the
  * last two slots of the middle row are Undo and Redo, and the bottom row is
@@ -25,9 +25,9 @@ export interface MenuContext {
   ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean } | null;
   /**
    * The machine selected. `waiting` is true for a zone that holds a ticket not yet released; `power` says whether a
-   * station that runs something is switched on (null for what has no switch); `sheet` whether it opens in a sheet.
+   * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
    */
-  machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; sheet?: boolean } | null;
+  machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; popup?: boolean } | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
   many: number;
   undoable: boolean; redoable: boolean; hasClip: boolean;
@@ -48,11 +48,11 @@ export interface MenuContext {
     openTicket(): void; star(): void; giveBack(): void; resolve(outcome: string): void; release(): void; retry(): void;
     /** Take the ticket off its station's hands; and put it back as one of the station's outcomes (`retry` puts it back for another run). */
     setAside(): void; putBack(outcome: string): void;
-    /** Open the sheet of the machine selected: its settings, what it holds, what it did. */
+    /** Open the popup of the machine selected: its settings, what it holds, what it did. */
     openMachine(): void; releaseNext(): void;
     /** Stop the station selected, or start it again. */
     power(): void;
-    /** Open the sheet of the floor itself: its figures and its limits. */
+    /** Open the popup of the floor itself: its figures and its limits. */
     floor(): void;
   };
 }
@@ -81,8 +81,8 @@ export function factoryMenu(c: MenuContext): Menu {
     });
   }
 
-  /* at the place where a ticket has Open: the sheet of what is selected */
-  const edit: Command = { id: 'edit', key: 'V', label: 'Edit', icon: 'edit', tone: 'station', title: 'Its settings, the tickets it holds and what it did, in a sheet over the floor (also Enter, or a double-click)', run: a.openMachine };
+  /* at the place where a ticket has Open: the popup of what is selected */
+  const edit: Command = { id: 'edit', key: 'V', label: 'Edit', icon: 'edit', tone: 'station', title: 'Its settings, the tickets it holds and what it did, in a popup over the floor (also Enter, or a double-click)', run: a.openMachine };
 
   // ---------- the floor, out of build mode ----------
   if (!c.building) {
@@ -92,7 +92,7 @@ export function factoryMenu(c: MenuContext): Menu {
         0: c.machine.kind === 'zone' ? { id: 'release-next', key: 'Q', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
           : c.machine.power ? { id: 'power', key: 'Q', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
-        4: c.machine.sheet && edit,
+        4: c.machine.popup && edit,
         [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
       });
     }
@@ -124,7 +124,7 @@ export function factoryMenu(c: MenuContext): Menu {
     return frame(c.many > 1 ? 'Selection' : 'Machine', {
       0: turns && { id: 'turn', key: 'R', label: 'Turn', icon: 'rotate', tone: 'move', title: 'Quarter turn', run: a.turn },
       3: { id: 'remove', key: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : 'Remove this machine from the floor', run: a.remove },
-      4: c.many <= 1 && !!c.machine?.sheet && edit,
+      4: c.many <= 1 && !!c.machine?.popup && edit,
     }, back('Previous', 'Back to the build menu', a.deselect));
   }
 

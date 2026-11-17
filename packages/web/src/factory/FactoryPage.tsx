@@ -11,8 +11,8 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
-import { FactoryMachineSheet } from './FactoryMachineSheet';
-import { FactoryFloorSheet } from './FactoryFloorSheet';
+import { FactoryMachinePopup } from './FactoryMachinePopup';
+import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryConsole } from './FactoryConsole';
 import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
@@ -30,7 +30,7 @@ import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadShow, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, hasSheet, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type Target } from './types';
+import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -365,9 +365,9 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);
     if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
-    /* a machine opens in its sheet: its settings, what it holds, what it did. In build mode too, with nothing in hand */
+    /* a machine opens in its popup: its settings, what it holds, what it did. In build mode too, with nothing in hand */
     const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
-    if (m && hasSheet(m)) setOpenMachine(m.id);
+    if (m && hasPopup(m)) setOpenMachine(m.id);
   };
 
   // ---------- commands and their keys ----------
@@ -375,7 +375,7 @@ function Floor() {
   const selMany = useMemo(() => (selection && 'machines' in selection ? selection.machines : []), [selection]);
   const selTicket = selection && 'ticket' in selection && snapshot ? snapshot.tickets.find((t) => t.ticketId === selection.ticket) ?? null : null;
   const closeMachine = useCallback(() => setOpenMachine(null), []);
-  /* from one machine's sheet to another's (a station's arm): the floor's selection follows */
+  /* from one machine's popup to another's (a station's arm): the floor's selection follows */
   const openMachineOn = useCallback((id: string) => { setSelection({ machine: id }); setOpenMachine(id); }, []);
   /* select a machine and bring it to the middle of the view */
   const showMachine = useCallback((id: string) => {
@@ -439,7 +439,7 @@ function Floor() {
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
     ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
-    machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, sheet: hasSheet(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
+    machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
       done: () => setBuilding(false),
@@ -467,7 +467,7 @@ function Floor() {
       retry: () => { if (selTicket) void store.putBack(selTicket.ticketId); },
       setAside: () => { if (selTicket) void store.setAside(selTicket.ticketId); },
       putBack: (o) => { if (selTicket) void store.putBack(selTicket.ticketId, o); },
-      openMachine: () => { if (selMachine && hasSheet(selMachine)) setOpenMachine(selMachine.id); },
+      openMachine: () => { if (selMachine && hasPopup(selMachine)) setOpenMachine(selMachine.id); },
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
@@ -529,7 +529,7 @@ function Floor() {
         if (next) { e.preventDefault(); pickNeed(next); return; }
       }
       if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
-      if (e.key === 'Enter' && selMachine && hasSheet(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
+      if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
@@ -599,8 +599,8 @@ function Floor() {
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Right-drag, Space+drag or the arrow keys move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
-      {openMachine && !openTicket && view && <FactoryMachineSheet machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
-      {floorOpen && <FactoryFloorSheet onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
+      {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
+      {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}

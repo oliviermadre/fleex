@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
-import { CommitInput } from './FactoryMachineSheet';
-import { FactorySheet } from './FactorySheet';
+import { CommitInput } from './FactoryMachinePopup';
+import { FactoryPopup } from './FactoryPopup';
 import { PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
 import { standing } from './lens';
@@ -16,7 +16,7 @@ const Hint = ({ children }: { children: React.ReactNode }) => <p className="text
  * The floor as a whole, opened from the command card when nothing is selected: what it did over the period, machine
  * by machine, where tickets stand right now, and its safety limits. A row leads to its machine on the floor.
  */
-export function FactoryFloorSheet({ onClose, onGoTo }: { onClose: () => void; onGoTo: (machineId: string) => void }) {
+export function FactoryFloorPopup({ onClose, onGoTo }: { onClose: () => void; onGoTo: (machineId: string) => void }) {
   const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), stats = useFactoryStore((s) => s.stats), setSettings = useFactoryStore((s) => s.setSettings);
   useEffect(() => { if (!useFactoryStore.getState().stats) void useFactoryStore.getState().loadStats(); }, []);
   if (!snapshot || !layout) return null;
@@ -24,7 +24,7 @@ export function FactoryFloorSheet({ onClose, onGoTo }: { onClose: () => void; on
   const ran = stats ? stats.machines.filter((q) => q.runs > 0).sort((a, b) => b.costUsd - a.costUsd || b.runs - a.runs) : [];
   const go = (machineId: string) => { onGoTo(machineId); onClose(); };
   return (
-    <FactorySheet label="Factory floor" onClose={onClose} fit={1180} bar={<b className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">Factory floor</b>}>
+    <FactoryPopup label="Factory floor" onClose={onClose} size="fit" maxWidth="max-w-6xl" bar={<b className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">Factory floor</b>}>
       <div className="grid min-h-0 grid-cols-1 divide-y divide-[var(--theme-border)] overflow-y-auto lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:divide-x lg:divide-y-0">
         <div className="flex min-w-0 flex-col gap-3 p-4">
           <Head right={<PeriodSelect id="factory-floor-period" />}>What the floor did</Head>
@@ -84,6 +84,6 @@ export function FactoryFloorSheet({ onClose, onGoTo }: { onClose: () => void; on
           <Hint>On top of the global agent concurrency. Past the hourly limit, tickets wait in their station.</Hint>
         </div>
       </div>
-    </FactorySheet>
+    </FactoryPopup>
   );
 }

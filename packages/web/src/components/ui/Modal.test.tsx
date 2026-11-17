@@ -98,6 +98,37 @@ describe('Modal dismissal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('guarded: Escape typed in a field stays in the field, and closes from anywhere else', () => {
+    const onClose = vi.fn();
+    const { getByRole } = render(<Modal open onClose={onClose} guardEscape><input aria-label="Name" /><button type="button">Go</button></Modal>);
+    fireEvent.keyDown(getByRole('textbox'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(getByRole('button'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('guarded: Escape is for what is opened over the dialog, not for the dialog under it', () => {
+    const under = vi.fn(), over = vi.fn();
+    render(<Modal open onClose={under} guardEscape><p>A working surface</p><Modal open onClose={over}><p>Opened over it</p></Modal></Modal>);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(under).not.toHaveBeenCalled();
+    expect(over).toHaveBeenCalledTimes(1);
+  });
+
+  it('glass: a translucent dialog that blurs what is behind it, over a backdrop that blurs nothing; flush: no padding', () => {
+    const { baseElement } = render(<Modal open onClose={vi.fn()} variant="glass" flush><p>Over the floor</p></Modal>);
+    const backdrop = baseElement.querySelector('[data-overlay-top]') as HTMLElement, panel = backdrop.firstElementChild as HTMLElement;
+    expect(backdrop.className).not.toContain('backdrop-blur');
+    expect(panel.style.backdropFilter).toContain('blur');
+    expect(panel.style.background).toContain('transparent');
+    expect(panel.className).not.toContain('p-6');
+    cleanup();
+    const solid = setup();
+    expect(solid.backdrop.className).toContain('backdrop-blur-sm');
+    expect(solid.panel.className).toContain('p-6');
+    expect(solid.panel.style.background).toBe('');
+  });
+
   it('renders nothing when closed', () => {
     const { baseElement } = render(
       <Modal open={false} onClose={vi.fn()}><p>hidden</p></Modal>,

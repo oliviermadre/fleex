@@ -50,7 +50,7 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
 const Stat = ({ label, value, tone }: { label: string; value: string | number; tone?: 'danger' | 'warning' | 'success' }) => (
   <span className="whitespace-nowrap text-[11px] text-[var(--theme-text-muted)]">{label} <b className={cn('font-mono font-medium', tone === 'danger' ? 'text-[var(--theme-danger)]' : tone === 'warning' ? 'text-[var(--theme-warning)]' : tone === 'success' ? 'text-[var(--theme-success)]' : 'text-[var(--theme-text-primary)]')}>{value}</b></span>
 );
-/** What a station did over the period, read only, on one line: the figures its sheet shows in full. */
+/** What a station did over the period, read only, on one line: the figures its popup shows in full. */
 function Did({ q, gate, period }: { q: MachineStats | null; gate: boolean; period: string }) {
   if (!q || q.runs === 0) return <div className="text-[11px] text-[var(--theme-text-muted)]">{period}: nothing {gate ? 'decided' : 'ran'} here</div>;
   return (
