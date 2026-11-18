@@ -122,6 +122,23 @@ describe('<FactoryMachinePopup/>', () => {
     expect(popup.textContent).toContain('Takes a ticket from the tile behind it');
   });
 
+  it('gives an arm a colour: its own unless one of the sixteen is picked', () => {
+    seed([]);
+    const on = open('a1'), colours = screen.getByRole('radiogroup', { name: 'Arm colour' });
+    expect(within(colours).getAllByRole('radio')).toHaveLength(17);          // automatic, and the palette
+    expect(within(colours).getByRole('radio', { name: /Automatic/ }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(colours).getByRole('radio', { name: 'Red' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('a1', { color: '#ef4444' });
+    cleanup();
+    /* one that has a colour says which, and goes back to its own */
+    seed([], [dev, { ...arm, color: '#ef4444' } as MachineSpec]);
+    const again = open('a1'), picked = screen.getByRole('radiogroup', { name: 'Arm colour' });
+    expect(within(picked).getByRole('radio', { name: 'Red' }).getAttribute('aria-checked')).toBe('true');
+    expect(within(picked).getByRole('radio', { name: /Automatic/ }).getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(within(picked).getByRole('radio', { name: /Automatic/ }));
+    expect(again.onPatch).toHaveBeenLastCalledWith('a1', { color: undefined });
+  });
+
   it('closes when its machine is no longer on the floor', () => {
     seed([]);
     const on = open('gone');

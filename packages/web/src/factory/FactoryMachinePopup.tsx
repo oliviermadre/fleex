@@ -22,7 +22,7 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, QUESTION_OUTCOME, RUNS, SET_ASIDE, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -55,6 +55,31 @@ const Head = ({ children, right }: { children: React.ReactNode; right?: React.Re
   <div className="flex items-center justify-between gap-2"><h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{children}</h3>{right}</div>
 );
 const Hint = ({ children }: { children: React.ReactNode }) => <p className="text-xs text-[var(--theme-text-muted)]">{children}</p>;
+
+/**
+ * The colour of an arm. Left to itself it is grey, and amber once it has a condition; one of the sixteen can be
+ * picked instead, to tell at a glance the arm that takes what failed from the one that takes what passed.
+ */
+function ArmColour({ arm, onChange }: { arm: ArmSpec; onChange: (color: string | undefined) => void }) {
+  const auto = !arm.color, ring = (on: boolean) => (on ? 'border-[var(--theme-text-primary)]' : 'border-transparent');
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Colour</span>
+      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Arm colour">
+        <button type="button" role="radio" aria-checked={auto} title="Grey, and amber once the arm has a condition" onClick={() => onChange(undefined)}
+          className={cn('flex h-6 items-center gap-1.5 rounded-full border-2 bg-[var(--theme-bg-overlay)] px-2 text-[11px] text-[var(--theme-text-secondary)]', ring(auto))}>
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: isConditional(arm) ? 'var(--theme-warning)' : 'var(--theme-text-secondary)' }} />
+          Automatic
+        </button>
+        {PALETTE.map((c) => (
+          <button key={c.hex} type="button" role="radio" aria-checked={arm.color === c.hex} aria-label={c.name} title={c.name} onClick={() => onChange(c.hex)}
+            className={cn('h-6 w-6 rounded-full border-2', ring(arm.color === c.hex))} style={{ background: c.hex }} />
+        ))}
+      </div>
+      <Hint>Its quay, the arrow under it and its tag take the same colour.</Hint>
+    </div>
+  );
+}
 const Column = ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={cn('flex min-h-0 flex-col gap-3 overflow-y-auto p-4', className)}>{children}</div>;
 
 /** Everything that is set on a machine. The same fields whatever opens them; they save as they are left. */
@@ -94,6 +119,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
         <>
           <Hint>Takes a ticket from the tile behind it and drops it on the tile in front, if that one is free. Leads to: {beyond(m)?.name ?? 'the next tile'}.</Hint>
           <FactoryArmForm key={m.id} arm={m} view={view} layout={layout} onChange={(cond) => onPatch({ when: cond, filter: null })} />
+          <ArmColour arm={m} onChange={(color) => onPatch({ color })} />
         </>
       )}
 

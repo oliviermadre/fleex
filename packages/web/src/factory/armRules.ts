@@ -16,6 +16,11 @@ export function conditionsOf(arm: ArmSpec): ArmCondition[] {
   return f && Array.isArray(f.values) && f.values.length ? [{ field: f.field as ArmField, op: 'is', values: f.values }] : [];
 }
 export const isConditional = (arm: ArmSpec): boolean => conditionsOf(arm).length > 0;
+/**
+ * The colour of an arm, of its quay and of the arrow under it: the one it was given by hand, or its own, which says
+ * whether it sorts (`sorts`, amber) or takes whatever comes (`plain`, grey).
+ */
+export const armColor = (arm: ArmSpec, own: { plain: string; sorts: string }): string => (arm.color && /^#[0-9a-f]{6}$/i.test(arm.color) ? arm.color : isConditional(arm) ? own.sorts : own.plain);
 
 /** Whether an arm is the way out for an outcome of its station: it asks about the outcome, and accepts this one. */
 export function acceptsOutcome(arm: ArmSpec, outcome: string): boolean {

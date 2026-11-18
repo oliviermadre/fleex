@@ -25,6 +25,8 @@ export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;
   /** Takes a ticket when all of these hold; with none, what its neighbours' conditions leave. */
   when?: ArmCondition[];
+  /** The colour it was given by hand (one of `PALETTE`). Without one it has its own: grey, or amber when it has conditions. */
+  color?: string;
   /** The single condition of floors saved before `when`: still read, rewritten at the next save. */
   filter?: { field: string; values: string[] } | null;
 }
@@ -141,6 +143,13 @@ export function canSetAside(t: { phase: TicketPhase }, machine: MachineSpec | nu
 export type Selection = { machine: string } | { machines: string[] } | { ticket: string } | { tickets: string[] } | null;
 
 /** Colours a label can take on the floor. */
+/** The colours a machine can be given by hand: sixteen, each bright enough to read on the floor of a dark or a light theme. */
+export const PALETTE: readonly { name: string; hex: string }[] = [
+  { name: 'Grey', hex: '#a1a1aa' }, { name: 'White', hex: '#f4f4f5' }, { name: 'Red', hex: '#ef4444' }, { name: 'Rose', hex: '#fb7185' },
+  { name: 'Orange', hex: '#fb923c' }, { name: 'Amber', hex: '#f59e0b' }, { name: 'Yellow', hex: '#facc15' }, { name: 'Lime', hex: '#a3e635' },
+  { name: 'Green', hex: '#22c55e' }, { name: 'Teal', hex: '#2dd4bf' }, { name: 'Cyan', hex: '#22d3ee' }, { name: 'Sky', hex: '#38bdf8' },
+  { name: 'Blue', hex: '#60a5fa' }, { name: 'Indigo', hex: '#818cf8' }, { name: 'Purple', hex: '#c084fc' }, { name: 'Pink', hex: '#f472b6' },
+];
 export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];
 
 /** A machine that has something to set up or to show in its own popup: everything but what only carries tickets. */

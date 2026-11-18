@@ -105,7 +105,11 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     if (!Number.isFinite(m.x) || !Number.isFinite(m.y) || Math.abs(m.x) > 100_000 || Math.abs(m.y) > 100_000) throw new FactoryError(`machine ${m.id} has no usable position`);
     if (m.kind === 'belt' || m.kind === 'arm' || m.kind === 'label' || m.kind === 'bridge') {
       m.w = 1; m.h = 1;
-      if (m.kind === 'arm') { m.when = normaliseConditions(m); delete m.filter; }
+      if (m.kind === 'arm') {
+        m.when = normaliseConditions(m); delete m.filter;
+        /* a colour is paint, nothing more: kept when it is one, dropped otherwise */
+        if (typeof m.color === 'string' && /^#[0-9a-f]{6}$/i.test(m.color)) m.color = m.color.toLowerCase(); else delete m.color;
+      }
       if (m.kind === 'belt') { if (m.fast === true) m.fast = true; else delete m.fast; }
     }
     else if (m.kind === 'station') {

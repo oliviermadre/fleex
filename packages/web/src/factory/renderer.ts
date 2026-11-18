@@ -5,7 +5,7 @@
  */
 import type { LensLayer } from './lens';
 import { layoutNames, tie, type NamedTicket } from './nameTags';
-import { armTag, isConditional } from './armRules';
+import { armColor, armTag, isConditional } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
@@ -817,7 +817,7 @@ export class FactoryView {
      * zone (see `quays.ts`). So its reach changes while it turns, and it lifts what it is on.
      */
     const th = Math.atan2(dy, dx) + Math.PI * (1 - e), reach = R.from + (R.to - R.from) * e, hx = bx + Math.cos(th) * reach, hy = by + Math.sin(th) * reach;
-    const filtered = isConditional(a), col = filtered ? pal.warn : pal.text2, steel = mix(pal.body, pal.text2, 0.38);
+    const filtered = isConditional(a), col = armColor(a, { plain: pal.text2, sorts: pal.warn }), steel = mix(pal.body, pal.text2, 0.38);
     const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
     this.wayMark(bx, by, dx, dy, col, st.edit ? 1 : 0.62);
     ctx.lineCap = 'round';
@@ -849,7 +849,8 @@ export class FactoryView {
      * sideways, in its own column otherwise. Arms stacked against a station then each carry their own tag, where a
      * tag above the arm read as belonging to the one before.
      */
-    const o = { min: 9, max: 12, mono: true, plate: filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = filtered ? '#fde68a' : pal.text2;
+    /* the tag is in the arm's colour: a dark plate tinted with it, and the colour lightened for the ink */
+    const o = { min: 9, max: 12, mono: true, plate: a.color ? mix('#09090b', col, 0.2) : filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = a.color ? mix(col, '#ffffff', 0.45) : filtered ? '#fde68a' : pal.text2;
     if (isBox(dst) && isBox(src)) {
       /* squeezed between two machines, there is no room on its own line: beside it, as a last resort */
       if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, ink, { ...o, align: 'center' });
@@ -891,7 +892,7 @@ export class FactoryView {
       const q = quayRect(a), line = D.byArm.get(a.id) ?? [];
       rr(ctx, q.x, q.y, q.w, q.h, 0.11);
       if (painted) { ctx.globalAlpha = 0.75; ctx.setLineDash([0.09, 0.07]); } else { ctx.fillStyle = pal.floor; ctx.fill(); }
-      ctx.strokeStyle = isConditional(a) ? pal.warn : pal.text2; ctx.lineWidth = 0.045; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.strokeStyle = armColor(a, { plain: pal.text2, sorts: pal.warn }); ctx.lineWidth = 0.045; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
       /* the last in line first: the one that leaves next is on top */
       for (let i = line.length - 1; i >= 0; i--) {
         const at = quaySpot(a, i);
@@ -1220,7 +1221,7 @@ export class FactoryView {
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? pal.text2 : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     for (const t of st.tickets) {

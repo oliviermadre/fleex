@@ -496,6 +496,14 @@ describe('normaliseLayout', () => {
     expect(() => normaliseLayout({ w: 10, h: 10, machines: [belt('a', 1, 1), belt('a', 2, 1)] })).toThrow(/unique id/);
   });
 
+  it('keeps the colour an arm was given when it is one, on arms only', () => {
+    const out = normaliseLayout({ w: 20, h: 20, machines: [
+      { ...arm('a', 1, 1, 0), color: '#EF4444' } as MachineSpec, { ...arm('b', 3, 1, 0), color: 'red' } as MachineSpec, { ...arm('c', 5, 1, 0), color: 12 } as unknown as MachineSpec, arm('d', 7, 1, 0),
+    ] });
+    expect(out.machines.map((m) => (m as { color?: string }).color)).toEqual(['#ef4444', undefined, undefined, undefined]);
+    expect(out.machines.filter((m) => 'color' in m).map((m) => m.id)).toEqual(['a']);
+  });
+
   it('gives each kind its footprint and a station at least one outcome', () => {
     const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), w: 9, h: 9, outcomes: [] } as MachineSpec, { ...station('n', 12, 1, { exec: 'native' }), w: 9 } as MachineSpec] });
     expect(out.machines.map((m) => [m.w, m.h])).toEqual([[8, 6], [2, 2]]);          // a machine is 3 by 3 to 8 by 6, a status station 2 by 2

@@ -153,8 +153,10 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   stands at the quay of its arm, a dashed square painted on the zone's edge.
 - **An arm** is a base, a flat link and a suction cup. The cup goes where the ticket is: over the middle of a belt's
   tile, over the quay of a station or a zone, so its reach changes while it turns and it lifts what it is on; what it
-  carries moves with it. Its colour is its band and its base: amber when it has conditions, grey when it has none.
-  Under it, painted on its own tile, an arrow in that colour says which way it works: narrow where it takes, wide
+  carries moves with it. Its colour is its band and its base: grey when it has no condition, amber when it has some,
+  or one of sixteen picked in its popup (`color` on the arm, `#rrggbb`, kept by the engine as paint and nothing
+  more; `PALETTE` in the web `types.ts`), so that the arm that takes what failed can be red. Its quay, its tag and
+  the arrow under it take the same colour. Under it, painted on its own tile, an arrow in that colour says which way it works: narrow where it takes, wide
   where it drops, its head at the edge. In build mode, an arm that is selected, or in hand before it is put down,
   shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
   ON"), and that R turns it.

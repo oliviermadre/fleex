@@ -27,6 +27,8 @@ export interface BeltSpec extends MachineBase {
 export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;
   when?: ArmCondition[];
+  /** The colour it was given by hand, as `#rrggbb`. Without one the page gives it its own: grey, or amber when it has conditions. */
+  color?: string;
   /** How floors saved before `when` wrote a single condition. Still read; rewritten as `when` at the next save. */
   filter?: { field: string; values: string[] } | null;
 }

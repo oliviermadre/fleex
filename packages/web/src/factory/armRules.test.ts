@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { acceptsOutcome, arity, armTag, blank, conditionsOf, incomplete, isConditional, longCondition, optionsFor, OPS_BY_FIELD, shortCondition, takesQuestions, wants, withOp } from './armRules';
-import type { ArmCondition, ArmSpec, FactoryLayout, MachineSpec } from './types';
+import { acceptsOutcome, arity, armColor, armTag, blank, conditionsOf, incomplete, isConditional, longCondition, optionsFor, OPS_BY_FIELD, shortCondition, takesQuestions, wants, withOp } from './armRules';
+import { PALETTE, type ArmCondition, type ArmSpec, type FactoryLayout, type MachineSpec } from './types';
 
 const arm = (when?: ArmCondition[], filter?: ArmSpec['filter'], id = 'a'): ArmSpec => ({ id, kind: 'arm', x: 0, y: 0, w: 1, h: 1, dir: 0, when, filter });
 const c = (field: ArmCondition['field'], op: ArmCondition['op'], ...values: string[]): ArmCondition => ({ field, op, values });
@@ -99,5 +99,24 @@ describe('which tickets an arm takes, as the engine decides it', () => {
     const other = arm(undefined, undefined, 'other');
     expect(wants(plain, [plain, other], info, 'ok')).toBe(true);
     expect(wants(other, [plain, other], info, 'ok')).toBe(true);
+  });
+});
+
+describe('the colour of an arm', () => {
+  const own = { plain: '#888888', sorts: '#ffcc00' };
+  it('is its own while none is picked: grey, and amber once it has a condition', () => {
+    expect(armColor(arm(), own)).toBe('#888888');
+    expect(armColor(arm([c('outcome', 'is', 'ok')]), own)).toBe('#ffcc00');
+  });
+  it('is the one picked, with or without conditions; what is not a colour is not taken for one', () => {
+    expect(armColor({ ...arm([c('outcome', 'is', 'ko')]), color: '#ef4444' }, own)).toBe('#ef4444');
+    expect(armColor({ ...arm(), color: '#ef4444' }, own)).toBe('#ef4444');
+    expect(armColor({ ...arm(), color: 'url(x)' }, own)).toBe('#888888');
+  });
+  it('is picked among sixteen, all different, all plain hex', () => {
+    expect(PALETTE).toHaveLength(16);
+    expect(new Set(PALETTE.map((p) => p.hex)).size).toBe(16);
+    expect(new Set(PALETTE.map((p) => p.name)).size).toBe(16);
+    for (const p of PALETTE) expect(p.hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
