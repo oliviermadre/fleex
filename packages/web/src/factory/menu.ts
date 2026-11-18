@@ -1,13 +1,17 @@
 /**
- * The command card: a grid of four columns by three rows, where a command is
+ * The command card: a grid of five columns by three rows, where a command is
  * found by its place. A command either does something or opens a sub-menu, to
  * any depth; the card shows one menu at a time and its last slot leads back.
+ *
+ * A command's key is its place: the grid lies on the keyboard, the top row of
+ * letters for the first row and so on (`keys.ts`). A command may also answer
+ * to a named key (`also`): Escape for the way back, Delete to remove.
  *
  * Nothing here knows about the Factory: the menus themselves are built in
  * `factoryMenu.ts`.
  */
 
-export const COLS = 4, ROWS = 3, SLOTS = COLS * ROWS;
+export const COLS = 5, ROWS = 3, SLOTS = COLS * ROWS;
 /** The slot that always leads back (or out): bottom right. */
 export const BACK_SLOT = SLOTS - 1;
 
@@ -17,10 +21,8 @@ export type Tone = 'go' | 'move' | 'station' | 'area' | 'plan' | 'ticket' | 'dan
 export interface Command {
   /** Stable within its menu: the path of open sub-menus is made of these. */
   id: string;
-  /** The key that runs it while its menu is shown. Empty when it only has a chord, shown through `keyText`. */
-  key: string;
-  /** What to print as its shortcut when it is not a single key. */
-  keyText?: string;
+  /** A named key that runs it too, on top of the key of its place: `Escape`, `Delete`, `Tab`, `N`. */
+  also?: string;
   /** One or two short words: a label is never cut. */
   label: string;
   icon: string;
@@ -61,9 +63,9 @@ export function menuAt(root: Menu, path: readonly string[]): { menu: Menu; path:
   return { menu: cur, path: taken, titles };
 }
 
-/** The command a key runs in a menu. Disabled commands keep their key, so it does nothing rather than something else. */
+/** The command a named key runs in a menu, on top of the keys of the grid. Disabled commands keep their key, so it does nothing rather than something else. */
 export function byKey(m: Menu, key: string): Command | null {
-  return m.slots.find((c) => !!c && !!c.key && c.key === key) ?? null;
+  return m.slots.find((c) => !!c && !!c.also && c.also === key) ?? null;
 }
 
 /** How many menus deep the deepest command is: 1 for a menu with no sub-menu. */
@@ -84,7 +86,7 @@ export function problems(m: Menu, maxLabel = 10, trail: string[] = []): string[]
     if (!c) continue;
     if (ids.has(c.id)) out.push(`${here}: two commands are called ${c.id}`);
     ids.add(c.id);
-    if (c.key) { const other = keys.get(c.key); if (other) out.push(`${here}: ${other} and ${c.label} share the key ${c.key}`); keys.set(c.key, c.label); }
+    if (c.also) { const other = keys.get(c.also); if (other) out.push(`${here}: ${other} and ${c.label} share the key ${c.also}`); keys.set(c.also, c.label); }
     if (c.label.length > maxLabel) out.push(`${here}: “${c.label}” is too long to be shown whole`);
     if (/\.\.\.|…/.test(c.label)) out.push(`${here}: “${c.label}” trails off`);
     if (!c.run && !c.menu && !c.disabled) out.push(`${here}: ${c.label} does nothing`);

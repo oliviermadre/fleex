@@ -5,6 +5,7 @@ import { useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import { tintClasses, type TintHue } from '../lib/tints';
 import { SLOTS, type Command, type Menu, type Tone } from './menu';
+import { useKeyLabels } from './keys';
 import { cn } from '../lib/cn';
 import { FIcon } from './icons';
 import { useTicketStore } from '../stores/ticketStore';
@@ -35,7 +36,7 @@ const PHASE: Record<FactoryTicket['phase'], string> = {
   question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone', port: 'in a teleporter',
 };
 const YELLOW = tintClasses('yellow');
-const keyLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
+const alsoLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
 
 function machineIcon(m: MachineSpec): string {
   if (m.kind === 'belt' && m.toll) return 'toll';
@@ -97,20 +98,20 @@ function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: S
 /** The colour of each family of commands. `null`: the app's own neutral, accent or outline. */
 const HUE: Record<Tone, TintHue | null> = { go: null, move: 'blue', station: 'purple', area: 'teal', plan: 'yellow', ticket: 'indigo', danger: 'red', back: null, plain: null };
 
-/** One command of the card: its key, a large icon, its label whole. */
-function Tile({ c, onRun }: { c: Command; onRun: (c: Command) => void }) {
+/** One command of the card: the key of its place, a large icon, its label whole. */
+function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: Command) => void }) {
   const tone = c.tone ?? 'plain', hue = HUE[tone], t = hue ? tintClasses(hue) : null;
   const look = t ? (c.active ? cn(t.solid, t.onSolid, 'border-transparent') : cn(t.bg, t.text, t.borderColor, t.hoverBg))
     : tone === 'go' ? 'border-transparent bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]'
     : tone === 'back' ? 'border-[var(--theme-border-input)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]'
     : c.active ? 'border-transparent bg-[var(--theme-text-primary)] text-[var(--theme-bg-base)]'
     : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-border-input)]';
-  const shortcut = c.keyText ?? keyLabel(c.key);
+  const shortcut = c.also ? `${slotKey}, ${alsoLabel(c.also)}` : slotKey;
   return (
     <button type="button" disabled={c.disabled} onClick={() => onRun(c)} aria-pressed={c.active} aria-haspopup={c.menu ? 'menu' : undefined} title={`${c.title ?? c.label}${shortcut ? ` (${shortcut})` : ''}`}
-      className={cn('relative flex h-[64px] w-[88px] flex-col items-center justify-end gap-[3px] rounded-lg border px-1 pb-[5px] transition-colors', look,
+      className={cn('relative flex h-[64px] w-[72px] flex-col items-center justify-end gap-[3px] rounded-lg border px-0.5 pb-[5px] transition-colors', look,
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-35')}>
-      <kbd className="absolute left-1.5 top-1 font-mono text-[9.5px] font-bold opacity-75">{shortcut}</kbd>
+      <kbd className="absolute left-1.5 top-1 font-mono text-[9.5px] font-bold opacity-75">{slotKey}{c.also === 'Escape' ? ' Esc' : ''}</kbd>
       {c.menu && <span className="absolute right-1.5 top-0.5 text-[11px] font-bold opacity-75" aria-hidden="true">›</span>}
       <FIcon name={c.icon} size={24} />
       {/* a label is shown whole: it wraps before it is ever cut */}
@@ -130,7 +131,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   /** The console is put away to give the floor the whole page; its handle stays, and the card's keys still work. */
   hidden?: boolean; onHide?: () => void;
 }) {
-  const boards = useTicketStore((s) => s.boards);
+  const boards = useTicketStore((s) => s.boards), keys = useKeyLabels();
   const stats = useFactoryStore((s) => s.stats), period = periodLabel(useFactoryStore((s) => s.statsDays)).toLowerCase();
   const personas = useAgentPersonaStore((s) => s.personas);
   /* the page gets a fresh copy of the layout at every poll: the view must read this one before it is asked about it */
@@ -286,15 +287,17 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
         </div>
       </div>
 
-      {/* command card: four by three, one menu at a time */}
+      {/* command card: five by three, one menu at a time; a command's key is its place on the keyboard */}
       <div className={cn(box, 'flex flex-none flex-col gap-1 p-1.5')}>
-        <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]" aria-label="Menu">
-          {trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}
+        <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">
+          <span className="min-w-0 flex-1 truncate" aria-label="Menu">{trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}</span>
+          <button type="button" onClick={keys.flip} aria-label={`Keyboard: ${keys.name}`} title={`The keys of the card follow your keyboard, read as ${keys.name}${keys.forced ? ' because you said so' : ''}. Click ${keys.forced ? 'to let Fleex find out again' : 'if it is the other one'}.`}
+            className={cn('flex-none rounded px-1 font-mono text-[9px] hover:text-[var(--theme-text-primary)]', keys.forced && 'text-[var(--theme-text-secondary)] underline')}>{keys.name}</button>
         </div>
-        <div className="grid grid-cols-4 gap-1.5" role="toolbar" aria-label="Factory commands">
+        <div className="grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Factory commands">
           {Array.from({ length: SLOTS }, (_, i) => {
             const c = menu.slots[i];
-            return c ? <Tile key={`${i}-${c.id}`} c={c} onRun={onRun} /> : <span key={i} className="h-[64px] w-[88px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
+            return c ? <Tile key={`${i}-${c.id}`} c={c} slotKey={keys.labels[i] ?? ''} onRun={onRun} /> : <span key={i} className="h-[64px] w-[72px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
           })}
         </div>
       </div>

@@ -19,6 +19,7 @@ import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
 import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
+import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { find, NO_FINDER, type Finder } from './finder';
@@ -655,10 +656,10 @@ function Floor() {
       if (arrow && viewRef.current) { e.preventDefault(); viewRef.current.cam.x += arrow[0]! * 3; viewRef.current.cam.y += arrow[1]! * 3; return; }
       const digit = /^Digit([0-9])$/.exec(e.code);
       if (digit) { e.preventDefault(); onGroup((Number(digit[1]) + GROUPS - 1) % GROUPS, e.shiftKey); return; }
-      const key = e.key === 'Backspace' ? 'Delete' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      const cmd = byKey(card.menu, key);
-      if (cmd) { e.preventDefault(); runCommand(cmd); }
-      else if (key === 'F') { e.preventDefault(); fit(); }
+      /* the card's keys: the one of a command's place on the keyboard, whatever it types; then the named keys (Escape, Delete) */
+      const slot = slotOfCode(e.code), key = e.key === 'Backspace' ? 'Delete' : e.key;
+      const cmd = (slot >= 0 ? card.menu.slots[slot] : null) ?? byKey(card.menu, key);
+      if (cmd) { e.preventDefault(); if (!cmd.disabled) runCommand(cmd); }
       else if (key === 'Escape' && selection) setSelection(null);
     };
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') { live.current.space = false; if (canvasRef.current && !press.current) canvasRef.current.style.cursor = ''; } };

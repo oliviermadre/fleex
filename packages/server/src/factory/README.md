@@ -119,13 +119,23 @@ steps and native actions other than a status change have no equivalent yet.
 
 ## The command card
 
-The commands of the page are a grid of four columns by three rows (`packages/web/src/factory/menu.ts`), organised as
+The commands of the page are a grid of five columns by three rows (`packages/web/src/factory/menu.ts`), organised as
 menus that open sub-menus: Factory, then Build, then Move, Station or Area. Three levels at most. A command is found
-by its place: in every build menu Undo, Redo and the way back sit in the same slots. Copy, cut and paste are on the keyboard
-only, and a click or a drag selects: none of them takes a place on the card. A
-label is one or two short words and is never cut. `factoryMenu.test.ts` holds every menu to these rules.
+by its place, and its key is its place: the grid lies on the keyboard, the top row of letters for the first row, the
+home row for the second, the bottom row for the third (`keys.ts`). A key is bound to where it is, not to what it
+types, so the command at the top left is under the same finger on any keyboard; the tile prints what that key types
+(A Z E R T on a French keyboard, Q W E R T on an English one). The layout is read from the browser when it says,
+else seen in the first letter typed on a key the two disagree on, else guessed from the language; a click on its name
+in the card's header forces the other one.
 
-With nothing selected the card has **Limits** (L) next to Stats: the floor's two run limits, runs started per hour
+The bottom row never moves: Undo and Redo first in build mode, Next fourth on the floor, and last the way in and
+out (Build, Done, Previous, Cancel), so one key enters build mode and leaves it. Fit is fourth in the middle row of
+every menu, which is F on any keyboard. Some commands also answer to a named key: Escape for the way back, Delete to
+remove, Tab for the list of tickets, N for Next. Copy, cut and paste are on the keyboard only, and a click or a drag
+selects: none of them takes a place on the card. A label is one or two short words and is never cut.
+`factoryMenu.test.ts` holds every menu to these rules.
+
+With nothing selected the card has **Limits** next to Stats: the floor's two run limits, runs started per hour
 and runs in flight at once, in a popup of their own (`FactoryLimits.tsx`; the same fields close the Stats popup). The
 console shows where the floor stands against each ("running 1/3", "runs this hour 4/20").
 
