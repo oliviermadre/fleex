@@ -1,0 +1,557 @@
+<title>Téléporteurs Factory</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the concept running in one large scene, then its states, its settings (a form that drives a preview), two things to pick, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  /* the settings: the app's own popup, dark like the floor it opens over */
+  .setup { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .setup { grid-template-columns: minmax(0, 1fr); } }
+  .popup { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; }
+  .popup .bar-top { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.9rem; padding-bottom: 10px; border-bottom: 1px solid #2f2f35; }
+  .popup .kind { font-family: var(--mono); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; color: #a1a1aa; margin-left: auto; }
+  .popup label, .popup .lab { display: flex; flex-direction: column; gap: 4px; font-size: 0.74rem; font-weight: 500; color: #a1a1aa; }
+  .popup input, .popup select { font: inherit; font-size: 0.86rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 6px 8px; min-width: 0; width: 100%; box-sizing: border-box; }
+  .popup .seg { display: flex; gap: 6px; }
+  .popup button { color: #fafafa; border-color: #3f3f46; font-size: 0.82rem; }
+  .popup button[aria-pressed="true"], .popup button[aria-checked="true"].auto { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .popup .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .popup .sw { width: 24px; height: 24px; padding: 0; border-radius: 999px; border: 2px solid transparent; }
+  .popup .sw[aria-checked="true"] { border-color: #fafafa; }
+  .popup .auto { height: 24px; padding: 0 10px; border-radius: 999px; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 6px; }
+  .popup .dot { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+  .popup .hint { font-size: 0.74rem; color: #71717a; }
+  .popup .hint.bad { color: #f87171; }
+  .popup .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .popup .chip { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 2px 8px; color: #e4e4e7; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Téléporteurs : sauter d'un bout à l'autre du plancher</h1>
+    <p class="lede">Un bras dépose un ticket dans un départ ; il ressort par l'arrivée que ce départ vise, où un autre bras le reprend. Plus besoin de tirer un convoyeur à travers tout le plancher pour renvoyer un ticket vers une autre ligne. Rien dans le code pour l'instant : cette page sert à valider le concept, les règles et le dessin.</p>
+    <div class="tools">
+      <button type="button" id="anim" aria-pressed="true">Animations</button>
+      <span class="said">Les scènes tournent en boucle. Coupe l'animation pour regarder les dessins à l'arrêt.</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-live">
+    <h2 id="h-live">Le concept en marche</h2>
+    <p class="brief">Deux postes renvoient leurs tickets vers la ligne « Bugfix » par deux départs différents, qui visent la même arrivée. En haut à droite, un bras essaie de déposer dans l'arrivée : c'est refusé.</p>
+    <div class="scene" id="live"></div>
+    <p class="now" id="now" role="status"></p>
+  </section>
+
+  <section aria-labelledby="h-states">
+    <h2 id="h-states">Ce qu'un téléporteur peut dire</h2>
+    <p class="brief">Un départ a ses chevrons qui rentrent, une arrivée ses chevrons qui sortent. Un départ a aussi son cadre fermé, une arrivée un cadre ouvert au milieu de chaque côté. Le reste se lit sur l'anneau (plein, en pointillé ambre quand ça patiente, rouge quand ça ne peut pas marcher) et sur la plaque à côté de la case.</p>
+    <div class="grid small" id="states"></div>
+  </section>
+
+  <section aria-labelledby="h-setup">
+    <h2 id="h-setup">Régler un téléporteur</h2>
+    <p class="brief">Sa popup, comme celle des autres machines. Essaie : change le nom, passe-le en arrivée, retire sa destination, choisis une couleur. L'aperçu suit.</p>
+    <div class="setup">
+      <div class="popup" id="popup" role="group" aria-label="Réglages du téléporteur (maquette)"></div>
+      <div class="card">
+        <div class="scene" id="preview"></div>
+        <p id="preview-says"></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-form">
+    <h2 id="h-form">À trancher : sa forme</h2>
+    <p class="brief">Même situation des deux côtés : un bras dépose dans le départ, le ticket ressort par l'arrivée, un bras le pose sur un convoyeur.</p>
+    <div class="grid" id="forms"></div>
+  </section>
+
+  <section aria-labelledby="h-link">
+    <h2 id="h-link">À trancher : montrer le lien entre un départ et son arrivée</h2>
+    <p class="brief">Deux départs, une arrivée. La question : quand voit-on le trait qui les relie ? Dans tous les cas le trait s'allume le temps d'un transfert, et la plaque du départ nomme sa destination.</p>
+    <div class="grid" id="links"></div>
+  </section>
+
+  <section aria-labelledby="h-rules">
+    <h2 id="h-rules">Les règles, telles que je les ai comprises</h2>
+    <div class="rules">
+      <div class="card">
+        <h3>Ce que tu as dit</h3>
+        <ol>
+          <li>Un téléporteur est soit un <b>départ</b>, soit une <b>arrivée</b>. Il a un nom et une couleur.</li>
+          <li>Un départ reçoit un ticket d'un bras, <b>un seul à la fois</b>. Il a une destination : une arrivée.</li>
+          <li>Une arrivée ne reçoit rien du plancher : un ticket amené par un bras, ou par tout autre moyen, <b>n'y entre pas</b>. Elle ne reçoit que de ses départs.</li>
+          <li><b>Plusieurs départs</b> peuvent viser la même arrivée.</li>
+          <li>Une arrivée tient <b>un seul ticket</b>. Tant qu'elle n'est pas déchargée, les tickets patientent dans leur départ.</li>
+          <li>Un bras sort le ticket de l'arrivée pour le déposer ailleurs.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>Ce que j'ai dû supposer, à confirmer</h3>
+        <ul>
+          <li><b>Qui passe en premier</b> quand plusieurs départs attendent la même arrivée ? <span class="mineline">Proposé : le ticket entré le plus tôt dans son départ.</span></li>
+          <li><b>Un convoyeur peut-il alimenter un départ</b> directement, comme il alimente un poste ? <span class="mineline">Proposé : oui, bras ou convoyeur. Seule l'arrivée refuse.</span></li>
+          <li><b>Durée du saut.</b> <span class="mineline">Proposé : immédiat pour le moteur, une demi-seconde d'animation à l'écran.</span></li>
+          <li><b>Couleur par défaut.</b> <span class="mineline">Proposé : un départ prend la couleur de sa destination tant qu'on ne lui en choisit pas une ; la palette est celle des bras (16 couleurs).</span></li>
+          <li><b>Départ sans destination</b>, ou dont l'arrivée a été retirée. <span class="mineline">Proposé : il garde son ticket et le dit en rouge (« no destination »).</span></li>
+          <li><b>Arrivée qu'aucun bras ne décharge.</b> <span class="mineline">Proposé : en rouge (« no arm »), comme le bac d'un poste sans bras. Elle bloque ses départs.</span></li>
+          <li><b>Glisser un ticket à la main.</b> <span class="mineline">Proposé : dans un départ oui ; dans une arrivée non, comme pour un bras.</span></li>
+          <li><b>Effet sur le ticket.</b> <span class="mineline">Proposé : aucun (ni statut, ni run), et rien dans la timeline de Work.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- the floor's own look (the app's dark theme) ----------
+  const T = 44;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#202024', panel: '#131316', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', steel: '#52525b' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', think: '#60a5fa', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc' };
+  /* the sixteen colours an arm can already be given: a teleporter picks among the same */
+  const PALETTE = [['Grey', '#a1a1aa'], ['White', '#f4f4f5'], ['Red', '#ef4444'], ['Rose', '#fb7185'], ['Orange', '#fb923c'], ['Amber', '#f59e0b'], ['Yellow', '#facc15'], ['Lime', '#a3e635'], ['Green', '#22c55e'], ['Teal', '#2dd4bf'], ['Cyan', '#22d3ee'], ['Sky', '#38bdf8'], ['Blue', '#60a5fa'], ['Indigo', '#818cf8'], ['Purple', '#c084fc'], ['Pink', '#f472b6']];
+  const PINK = '#f472b6', SKY = '#38bdf8', PLAIN = '#22d3ee';
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"";
+  const SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10, r2 = (n) => Math.round(n * 100) / 100;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function floor(w, h) {
+    let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`;
+    for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    return s;
+  }
+  const svg = (w, h, label, inner) => `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${floor(w, h)}${inner}</svg>`;
+  const chevron = (cx, cy, rot = 0) => `<path transform="rotate(${rot} ${cx} ${cy})" d="M${cx - 4} ${cy - 8} L${cx + 4} ${cy} L${cx - 4} ${cy + 8}" fill="none" stroke="${C.chev}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt going east: `n` tiles from tile (x, y). */
+  function belt(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${n * T}" height="${T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T} ${y * T + 2} H${(x + n) * T} M${x * T} ${(y + 1) * T - 2} H${(x + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron((x + i) * T + 12, y * T + T / 2) + chevron((x + i) * T + 34, y * T + T / 2);
+    return s;
+  }
+  /** A belt going south: `n` tiles down from tile (x, y). */
+  function beltV(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${T}" height="${n * T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T + 2} ${y * T} V${(y + n) * T} M${(x + 1) * T - 2} ${y * T} V${(y + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron(x * T + T / 2, (y + i) * T + 12, 90) + chevron(x * T + T / 2, (y + i) * T + 34, 90);
+    return s;
+  }
+  /** A ticket: an object with some thickness, its shape and colour saying its type. */
+  function token(cx, cy, type, s = 16, opacity = 1) {
+    const col = TYPE[type], h = s / 2, dark = 'rgba(0,0,0,0.45)';
+    const shape = (dy, fill) => type === 'think' ? `<circle cx="${r1(cx)}" cy="${r1(cy + dy)}" r="${r1(h)}" fill="${fill}"/>`
+      : type === 'fix' ? `<path d="M${r1(cx - h)} ${r1(cy - h * 0.5 + dy)} L${r1(cx - h * 0.45)} ${r1(cy - h + dy)} H${r1(cx + h * 0.45)} L${r1(cx + h)} ${r1(cy - h * 0.5 + dy)} V${r1(cy + h * 0.5 + dy)} L${r1(cx + h * 0.45)} ${r1(cy + h + dy)} H${r1(cx - h * 0.45)} L${r1(cx - h)} ${r1(cy + h * 0.5 + dy)} Z" fill="${fill}"/>`
+      : `<rect x="${r1(cx - h)}" y="${r1(cy - h + dy)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.26)}" fill="${fill}"/>`;
+    return `<g opacity="${r2(opacity)}">${shape(2.5, dark)}${shape(0, col)}<circle cx="${r1(cx - h * 0.3)}" cy="${r1(cy - h * 0.3)}" r="${r1(s * 0.11)}" fill="rgba(255,255,255,0.55)"/></g>`;
+  }
+  const text = (x, y, str, o = {}) => `<text x="${r1(x)}" y="${r1(y)}" ${o.sans ? SANS : MONO} font-size="${o.size ?? 10}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''}>${esc(str)}</text>`;
+  /** The plate under a teleporter: its name in its colour, and a smaller line under it (where it leads, or what is wrong). */
+  function plate(cx, y, name, sub, col, subFill = C.ink2, fromLeft = false) {
+    const w = Math.max(name.length * 6.1, (sub || '').length * 5.2) + 14, h = sub ? 28 : 17;
+    if (fromLeft) cx += w / 2;
+    let s = `<rect x="${r1(cx - w / 2)}" y="${y}" width="${r1(w)}" height="${h}" rx="4" fill="rgba(9,9,11,0.9)" stroke="${col}" stroke-opacity="0.5"/>`;
+    s += text(cx, y + 12, name, { weight: 700, fill: col, anchor: 'middle' });
+    if (sub) s += text(cx, y + 23, sub, { size: 8.5, fill: subFill, anchor: 'middle' });
+    return s;
+  }
+
+  // ---------- the teleporter ----------
+  /** Four chevrons round the ring, one per side: they point in on a departure (a ticket goes in), out on an arrival. */
+  const signs = (cx, cy, d, inward, col) => [0, 90, 180, 270].map((a) => {
+    const px = cx + Math.cos(a * Math.PI / 180) * d, py = cy + Math.sin(a * Math.PI / 180) * d;
+    return `<path transform="translate(${r1(px)} ${r1(py)}) rotate(${a + (inward ? 180 : 0)})" d="M-2 -4.6 L2.2 0 L-2 4.6" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+  /** The frame of a pad: closed on a departure; on an arrival, four corners only, open in the middle of each side, where its chevrons come out. */
+  function frame(x, y, role, col) {
+    const a = x + 3, b = y + 3, e = T - 6, leg = 12;
+    let s = `<rect x="${a}" y="${b}" width="${e}" height="${e}" rx="9" fill="${C.panel}" ${role === 'dep' ? `stroke="${col}" stroke-width="2.5"` : ''}/>`;
+    if (role !== 'dep') for (const [px, py, sx, sy] of [[a, b, 1, 1], [a + e, b, -1, 1], [a + e, b + e, -1, -1], [a, b + e, 1, -1]])
+      s += `<path d="M${px} ${py + sy * leg} V${py + sy * 9} Q${px} ${py} ${px + sx * 9} ${py} H${px + sx * leg}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+    return s;
+  }
+  /** The ring where the ticket stands, with what it says: dashed amber while it waits, a burst as a ticket goes or comes. */
+  function ring(cx, cy, r, o) {
+    const col = o.bad ? C.danger : o.col, k = o.k ?? 1;
+    let s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}" fill-opacity="${r2(0.1 + 0.3 * (o.burst ?? 0))}"/>`;
+    s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${o.wait ? C.warn : col}" stroke-width="2" ${o.wait ? `stroke-dasharray="5 4" transform="rotate(${r1(((o.t ?? 0) * 50) % 360)} ${cx} ${cy})"` : ''}/>`;
+    if (o.burst) s += `<circle cx="${cx}" cy="${cy}" r="${r1(r + 13 * o.burst)}" fill="none" stroke="${col}" stroke-width="2" opacity="${r2(1 - o.burst)}"/>`;
+    if (o.ticket && k > 0.03) s += `<g transform="translate(${cx} ${cy}) scale(${r2(k)}) translate(${-cx} ${-cy})">${token(cx, cy, o.ticket, 14, Math.min(1, k * 1.5))}</g>`;
+    return s;
+  }
+  /** A mark on the corner of a pad: "!" when it cannot work, a pause sign while it holds its ticket back. */
+  const badge = (x, y, col, sign) => `<circle cx="${x}" cy="${y}" r="6.5" fill="${col}" stroke="#09090b" stroke-width="1.5"/>`
+    + (sign === 'pause' ? `<path d="M${x - 2} ${y - 3} V${y + 3} M${x + 2} ${y - 3} V${y + 3}" stroke="#09090b" stroke-width="2" stroke-linecap="round"/>` : text(x, y + 3.4, sign, { size: 9, weight: 700, fill: '#09090b', anchor: 'middle' }));
+  /**
+   * A teleporter on one tile. `role` is 'dep' (chevrons going in) or 'arr' (chevrons coming out); `ticket` the type of
+   * the ticket it holds, `k` how much of it is there (it shrinks as it goes), `wait` it holds its ticket because the
+   * arrival is taken, `bad` it cannot work as it is.
+   */
+  function pad(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T / 2, cy = y + T / 2, col = o.bad ? C.danger : o.col;
+    let s = frame(x, y, o.role, col);
+    s += ring(cx, cy, 11.5, o) + signs(cx, cy, 16.3, o.role === 'dep', col);
+    if (o.wait) s += badge(x + T - 6, y + 6, C.warn, 'pause');
+    if (o.bad) s += badge(x + T - 6, y + 6, C.danger, '!');
+    if (o.selected) s += `<rect x="${x - 1}" y="${y - 1}" width="${T + 2}" height="${T + 2}" rx="11" fill="none" stroke="${C.ink}" stroke-width="2.5"/>`;
+    return s;
+  }
+  /** The same, as a cabin of two tiles by two that carries its own name. */
+  function cabin(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T, cy = y + T + 13, col = o.bad ? C.danger : o.col;
+    let s = `<rect x="${x + 3}" y="${y + 3}" width="${2 * T - 6}" height="${2 * T - 6}" rx="12" fill="${C.body}" stroke="${col}" stroke-width="2.5"/>`;
+    s += text(x + 10, y + 16, o.role === 'dep' ? 'DEPARTURE' : 'ARRIVAL', { size: 7.5, weight: 700, fill: col });
+    const name = o.name.length > 12 ? `${o.name.slice(0, 11)}…` : o.name;
+    s += text(x + 10, y + 28, name, { weight: 700, fill: C.ink });
+    s += `<rect x="${cx - 23}" y="${cy - 23}" width="46" height="46" rx="10" fill="${C.panel}"/>` + ring(cx, cy, 14, o) + signs(cx, cy, 19.5, o.role === 'dep', col);
+    return s;
+  }
+  /**
+   * The link from a departure to its arrival: a dashed arc in the teleporter's colour, that bends away from the
+   * straight line so two of them do not lie on each other. `packet` (0 to 1) is a ticket on its way.
+   */
+  function link(a, b, col, o = {}) {
+    const x1 = a[0] * T, y1 = a[1] * T, x2 = b[0] * T, y2 = b[1] * T, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), bend = (o.bend ?? 0.2) * L;
+    const qx = (x1 + x2) / 2 + dy / L * bend, qy = (y1 + y2) / 2 - dx / L * bend;
+    const at = (u) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
+    const hot = o.packet != null;
+    let s = `<path d="M${r1(x1)} ${r1(y1)} Q${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}" fill="none" stroke="${col}" stroke-width="${hot ? 2.6 : 1.8}" stroke-dasharray="3 7" stroke-dashoffset="${r1(-(o.t ?? 0) * 22)}" stroke-linecap="round" opacity="${hot ? 1 : o.opacity ?? 0.6}"/>`;
+    if (hot) { const p = at(o.packet); s += `<circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="10" fill="${col}" fill-opacity="0.28"/><circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="4.5" fill="${col}"/>`; }
+    return s;
+  }
+  /** A transfer `w` of the way done (0 to 1): the ticket shrinks in the departure, crosses, and grows in the arrival. */
+  const sending = (w) => ({ out: 1 - clamp(w / 0.4), packet: w > 0.15 && w < 0.85 ? (w - 0.15) / 0.7 : null, into: clamp((w - 0.6) / 0.4), burstOut: w < 0.5 ? clamp(w / 0.5) : 0, burstIn: w > 0.5 ? 1 - clamp((w - 0.5) / 0.5) : 0 });
+
+  // ---------- arms and stations, as on the floor since lot 28 ----------
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  /** The arm from its base to its cup, with its shadow, its band and the ticket under the cup. */
+  function robot(bx, by, hx, hy, carry, col) {
+    let s = `<path d="M${r1(bx + 3)} ${r1(by + 5)} L${r1(hx + 3)} ${r1(hy + 5)}" stroke="rgba(0,0,0,0.42)" stroke-width="14" stroke-linecap="round"/>`;
+    if (carry) s += token(hx, hy, carry, 16);
+    s += `<path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${C.steel}" stroke-width="13" stroke-linecap="round"/><path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${col}" stroke-width="3.5" stroke-linecap="round"/>`;
+    s += `<circle cx="${r1(hx)}" cy="${r1(hy)}" r="9" fill="rgba(24,24,27,0.3)" stroke="${C.ink}" stroke-width="2.4"/><circle cx="${r1(hx)}" cy="${r1(hy)}" r="2.5" fill="${C.ink}"/>`;
+    s += `<circle cx="${bx}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${bx}" cy="${by}" r="4" fill="${C.steel}"/>`;
+    return s;
+  }
+  /**
+   * An arm on tile (tx, ty) pointing `dir`, `e` of its half turn done (0 where it takes, 1 where it drops). `from`
+   * and `to` are how far its cup reaches on each side, in tiles: 1 over the middle of a tile, 0.76 over a quay.
+   */
+  function arm(tx, ty, dir, col, e, carry, from = 1, to = 1) {
+    const [dx, dy] = DIRS[dir], bx = (tx + 0.5) * T, by = (ty + 0.5) * T, a = Math.atan2(dy, dx) + Math.PI * (1 - e), r = lerp(from, to, e) * T;
+    const way = [[-21, -8.5], [6, -11.5], [6, -18.5], [22, 0], [6, 18.5], [6, 11.5], [-21, 8.5]].map(([u, v]) => `${r1(bx + u * dx - v * dy)} ${r1(by + u * dy + v * dx)}`).join(' L');
+    return `<path d="M${way} Z" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"/>` + robot(bx, by, bx + Math.cos(a) * r, by + Math.sin(a) * r, carry, col);
+  }
+  function station(x, y, w, h, name, sub) {
+    let s = `<rect x="${x * T + 3}" y="${y * T + 3}" width="${w * T - 6}" height="${h * T - 6}" rx="12" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${x * T + 12}" y="${y * T + 12}" width="22" height="22" rx="6" fill="rgba(192,132,252,0.16)" stroke="rgba(192,132,252,0.55)"/>`;
+    s += text(x * T + 42, y * T + 22, name, { sans: true, size: 12, weight: 600 }) + text(x * T + 42, y * T + 34, sub, { sans: true, size: 9, fill: C.ink3 });
+    s += `<rect x="${x * T + 12}" y="${y * T + 46}" width="${w * T - 24}" height="${h * T - 58}" rx="7" fill="rgba(0,0,0,0.38)"/>`;
+    return s;
+  }
+  /** The quay of an arm that takes from a box: a notch in its edge, on the tile behind the arm. */
+  const quay = (tx, ty, dir, col) => { const [dx, dy] = DIRS[dir], cx = (tx + 0.5 - dx * 0.76) * T, cy = (ty + 0.5 - dy * 0.76) * T; return `<rect x="${r1(cx - 11)}" y="${r1(cy - 11)}" width="22" height="22" rx="5" fill="${C.floor}" stroke="${col}" stroke-width="2"/>`; };
+  const noEntry = (x, y) => `<circle cx="${x}" cy="${y}" r="8" fill="${C.danger}" stroke="#09090b" stroke-width="1.5"/><path d="M${x - 4.5} ${y} H${x + 4.5}" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>`;
+
+  // ---------- the concept running ----------
+  const LW = 16 * T, LH = 9 * T, LOOP = 12;
+  const D1 = [4, 2], D2 = [4, 6], R = [9, 4], mid = ([x, y]) => [x + 0.5, y + 0.5];
+  /* when things happen, in seconds: each arm takes a second to turn one way */
+  const A1 = [0.6, 1.6], SEND1 = [2.0, 2.9], A2 = [2.6, 3.6], TAKE1 = [5.2, 6.2], SEND2 = [5.5, 6.4], TAKE2 = [7.7, 8.7];
+  const STEPS = [
+    [0, '1', 'Le bras rouge prend le ticket « ko » du poste Review et le dépose dans le départ « goto bugfix ».'],
+    [SEND1[0], '2', 'Le départ vise l\'arrivée « entrypoint bugfix ». Elle est libre : le ticket saute tout de suite.'],
+    [A2[1], '3', 'Un deuxième ticket arrive par l\'autre départ. L\'arrivée est encore occupée : il patiente dans son départ.'],
+    [TAKE1[0], '4', 'Le bras décharge l\'arrivée. Elle est libre : le ticket qui patientait saute à son tour.'],
+    [TAKE2[0], '5', 'Le bras revient décharger l\'arrivée. Pendant tout ce temps, le bras du haut n\'a rien pu déposer : on n\'entre pas par une arrivée.'],
+  ];
+  const stepAt = (t) => { const u = t % LOOP; let cur = STEPS[0]; for (const s of STEPS) if (u >= s[0]) cur = s; return cur; };
+  function live(t) {
+    const u = t % LOOP, win = ([a, b]) => clamp((u - a) / (b - a));
+    /* an arm: e of its way, and whether it is carrying; it comes back in a second */
+    const swing = (go) => (u < go[0] ? 0 : u < go[1] ? ease(win(go)) : 1 - ease(clamp(u - go[1])));
+    const carries = (go) => u >= go[0] && u < go[1];
+    const s1 = u >= SEND1[0] && u < SEND1[1] ? sending(win(SEND1)) : null, s2 = u >= SEND2[0] && u < SEND2[1] ? sending(win(SEND2)) : null;
+    const back = clamp((u - (LOOP - 1.2)) / 0.8);                          // the next two tickets come out of their stations as the loop ends
+    let s = station(0, 1, 3, 3, 'Review', 'agent · reviewer') + station(0, 5, 3, 3, 'QA', 'skill · qa-checklist') + station(13, 3, 3, 3, 'Bugfix', 'agent · fixer');
+    s += belt(11, 4, 2) + beltV(9, 1, 2);
+    /* the links: lit while a ticket crosses */
+    s += link(mid(D1), mid(R), PINK, { t, packet: s1?.packet, opacity: 0.35 }) + link(mid(D2), mid(R), PINK, { t, bend: -0.2, packet: s2?.packet, opacity: 0.35 });
+    /* the departures */
+    const in1 = u >= A1[1] && u < SEND1[1], in2 = u >= A2[1] && u < SEND2[1];
+    s += pad(...D1, { role: 'dep', col: PINK, ticket: in1 ? 'fix' : null, k: s1 ? s1.out : 1, burst: s1?.burstOut, t });
+    s += pad(...D2, { role: 'dep', col: PINK, ticket: in2 ? 'build' : null, k: s2 ? s2.out : 1, burst: s2?.burstOut, wait: in2 && !s2 && u < TAKE1[0] + 0.25, t });  // held until the arm has lifted the first ticket out of the arrival
+    /* the arrival: the first ticket until the arm takes it, then the second */
+    const r1in = (s1 && s1.into > 0) || (u >= SEND1[1] && u < TAKE1[0]), r2in = (s2 && s2.into > 0) || (u >= SEND2[1] && u < TAKE2[0]);
+    s += pad(...R, { role: 'arr', col: PINK, ticket: r1in ? 'fix' : r2in ? 'build' : null, k: s1 ? s1.into : s2 ? s2.into : 1, burst: s1?.burstIn || s2?.burstIn, t });
+    /* the plates stand clear of where the arms swing: over the departures, under the arrival */
+    const held = in2 && !s2 && u < TAKE1[0] + 0.25;
+    s += plate(4 * T + 3, T + 12, 'goto bugfix', '→ entrypoint bugfix', PINK, C.ink2, true) + plate(4 * T + 3, 5 * T + 12, 'qa to bugfix', held ? 'waits · arrival busy' : '→ entrypoint bugfix', PINK, held ? C.warn : C.ink2, true);
+    s += plate(9.5 * T, 6 * T - 2, 'entrypoint bugfix', '← 2 departures', PINK);
+    /* what waits at the quays, and what rides the belt into Bugfix */
+    s += quay(3, 2, 0, C.danger) + quay(3, 6, 0, C.warn);
+    if (u < A1[0]) s += token(2.74 * T, 2.5 * T, 'fix'); else if (back > 0) s += token(lerp(2.2, 2.74, ease(back)) * T, 2.5 * T, 'fix', 16, back);
+    if (u < A2[0]) s += token(2.74 * T, 6.5 * T, 'build'); else if (back > 0) s += token(lerp(2.2, 2.74, ease(back)) * T, 6.5 * T, 'build', 16, back);
+    for (const [take, type] of [[TAKE1, 'fix'], [TAKE2, 'build']]) { const d = (u - take[1]) * 1.3; if (d >= 0 && d < 1.9) s += token((11.5 + d) * T, 4.5 * T, type, 16, d > 1.5 ? 1 - (d - 1.5) / 0.4 : 1); }
+    /* the ticket that will never get in, held on its belt, and the sign that says why */
+    s += token(9.5 * T, 2.5 * T, 'ops');
+    /* the arms */
+    s += arm(3, 2, 0, C.danger, swing(A1), carries(A1) ? 'fix' : null, 0.76, 1) + arm(3, 6, 0, C.warn, swing(A2), carries(A2) ? 'build' : null, 0.76, 1);
+    const third = u < TAKE2[0] - 0.2 ? TAKE1 : TAKE2;
+    s += arm(10, 4, 0, C.ink2, swing(third), carries(third) ? (third === TAKE1 ? 'fix' : 'build') : null, 1, 1);
+    s += arm(9, 3, 1, C.ink2, 0, null, 1, 1) + noEntry(9.5 * T, 4 * T);
+    s += `<rect x="${10 * T + 6}" y="${3 * T + 12}" width="118" height="18" rx="4" fill="rgba(69,10,10,0.95)" stroke="${C.danger}" stroke-opacity="0.6"/>` + text(10 * T + 13, 3 * T + 24.5, 'arrival: no entry', { weight: 700, fill: '#fecaca' });
+    s += `<rect x="${3.5 * T - 9}" y="${1 * T + 10}" width="18" height="16" rx="4" fill="rgba(69,10,10,0.95)"/>` + text(3.5 * T, 1 * T + 21.5, 'ko', { weight: 700, fill: '#fecaca', anchor: 'middle' });
+    s += `<rect x="${3.5 * T - 9}" y="${5 * T + 10}" width="18" height="16" rx="4" fill="rgba(40,32,4,0.95)"/>` + text(3.5 * T, 5 * T + 21.5, 'ko', { weight: 700, fill: '#fde68a', anchor: 'middle' });
+    return s;
+  }
+
+  // ---------- what a teleporter can say ----------
+  const SW = 5 * T, SH = 3.2 * T;
+  const states = [
+    { id: 'dep-idle', name: 'Départ, vide', says: 'Prêt à recevoir un ticket. Sa plaque dit où il mène.',
+      draw: () => pad(2, 0.5, { role: 'dep', col: PINK }) + plate(2.5 * T, 1.5 * T + 5, 'goto bugfix', '→ entrypoint bugfix', PINK) },
+    { id: 'dep-send', name: 'Départ, envoi', says: 'L\'arrivée est libre : le ticket rétrécit et part, l\'anneau s\'ouvre.', moves: true,
+      draw: (t) => { const w = clamp(((t % 2.4) - 0.7) / 0.9), v = sending(w); return pad(2, 0.5, { role: 'dep', col: PINK, ticket: w < 1 ? 'fix' : null, k: v.out, burst: v.burstOut }) + plate(2.5 * T, 1.5 * T + 5, 'goto bugfix', '→ entrypoint bugfix', PINK); } },
+    { id: 'dep-wait', name: 'Départ, en attente', says: 'L\'arrivée est occupée. Le ticket patiente ici ; anneau en pointillé ambre qui tourne.', moves: true,
+      draw: (t) => pad(2, 0.5, { role: 'dep', col: PINK, ticket: 'build', wait: true, t }) + plate(2.5 * T, 1.5 * T + 5, 'goto bugfix', 'waits · arrival busy', PINK, C.warn) },
+    { id: 'dep-nodest', name: 'Départ sans destination', says: 'Aucune arrivée choisie, ou elle a été retirée. Il garde son ticket et le dit en rouge.',
+      draw: () => pad(2, 0.5, { role: 'dep', col: PINK, ticket: 'think', bad: true }) + plate(2.5 * T, 1.5 * T + 5, 'goto bugfix', 'no destination', C.danger, '#fca5a5') },
+    { id: 'arr-idle', name: 'Arrivée, vide', says: 'Chevrons vers l\'extérieur, cadre ouvert. Sa plaque dit combien de départs mènent ici.',
+      draw: () => pad(2, 0.5, { role: 'arr', col: PINK }) + plate(2.5 * T, 1.5 * T + 5, 'entrypoint bugfix', '← 2 departures', PINK) },
+    { id: 'arr-full', name: 'Arrivée, chargée', says: 'Un ticket attend son bras. Tant qu\'il est là, rien d\'autre n\'arrive.',
+      draw: () => pad(1.5, 0.5, { role: 'arr', col: PINK, ticket: 'fix' }) + arm(2.5, 0.5, 0, C.ink2, 0, null) + plate(2 * T, 1.5 * T + 5, 'entrypoint bugfix', '← 2 departures', PINK) },
+    { id: 'arr-noarm', name: 'Arrivée sans bras', says: 'Personne ne la décharge : le ticket n\'en sortira pas seul, et ses départs se bloquent. En rouge, comme un poste sans bras.',
+      draw: () => pad(2, 0.5, { role: 'arr', col: PINK, ticket: 'fix', bad: true }) + plate(2.5 * T, 1.5 * T + 5, 'entrypoint bugfix', 'no arm takes from it', C.danger, '#fca5a5') },
+    { id: 'arr-refuse', name: 'Arrivée, entrée refusée', says: 'Un bras pointé vers une arrivée ne prend rien : le ticket reste sur son convoyeur.',
+      draw: () => belt(0.5, 0.5, 1) + token(1 * T, 1 * T, 'ops') + pad(2.5, 0.5, { role: 'arr', col: PINK }) + arm(1.5, 0.5, 0, C.ink2, 0, null) + noEntry(2.5 * T, 1 * T) + plate(3 * T, 1.5 * T + 5, 'entrypoint bugfix', 'no entry', PINK, '#fca5a5') },
+  ];
+
+  // ---------- its settings ----------
+  const ARRIVALS = { bugfix: { name: 'entrypoint bugfix', col: PINK }, review: { name: 'entrypoint review', col: SKY } };
+  const cfg = { name: 'goto bugfix', role: 'dep', dest: 'bugfix', color: '' };
+  const ownColour = () => (cfg.role === 'dep' && ARRIVALS[cfg.dest] ? ARRIVALS[cfg.dest].col : PLAIN);
+  const colourOf = () => cfg.color || ownColour();
+  function popup() {
+    const dep = cfg.role === 'dep';
+    return `
+      <div class="bar-top"><span class="dot" style="background:${colourOf()}"></span>${esc(cfg.name || 'Teleporter')}<span class="kind">TELEPORTER</span></div>
+      <label>Name<input id="c-name" value="${esc(cfg.name)}" maxlength="28"></label>
+      <div class="lab">Role
+        <div class="seg"><button type="button" data-role="dep" aria-pressed="${dep}">Departure</button><button type="button" data-role="arr" aria-pressed="${!dep}">Arrival</button></div>
+        <span class="hint">${dep ? 'Takes one ticket at a time and sends it to its destination.' : 'Receives from its departures only, one ticket at a time. Nothing on the floor can drop a ticket here.'}</span>
+      </div>
+      ${dep ? `<label>Destination
+        <select id="c-dest"><option value=""${cfg.dest ? '' : ' selected'}>choose an arrival</option>${Object.entries(ARRIVALS).map(([k, a]) => `<option value="${k}"${cfg.dest === k ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+        <span class="hint${cfg.dest ? '' : ' bad'}">${cfg.dest ? 'While that arrival holds a ticket, this one keeps its own and waits.' : 'No destination: it keeps the ticket it is given, and says so in red.'}</span></label>`
+      : `<div class="lab">Departures that lead here<div class="chips"><span class="chip">goto bugfix</span><span class="chip">qa to bugfix</span></div><span class="hint">Set on each departure. An arm takes the ticket out of here.</span></div>`}
+      <div class="lab">Colour
+        <div class="swatches" role="radiogroup" aria-label="Teleporter colour">
+          <button type="button" class="auto" role="radio" aria-checked="${!cfg.color}" data-colour=""><span class="dot" style="background:${ownColour()}"></span>Automatic</button>
+          ${PALETTE.map(([n, h]) => `<button type="button" class="sw" role="radio" aria-checked="${cfg.color === h}" aria-label="${n}" title="${n}" data-colour="${h}" style="background:${h}"></button>`).join('')}
+        </div>
+        <span class="hint">${dep ? 'Automatic: the colour of its destination, so the two read as a pair.' : 'Automatic: cyan. Its departures follow it unless they have their own.'}</span>
+      </div>`;
+  }
+  const PW = 9 * T, PH = 3.4 * T;
+  function preview(t) {
+    const col = colourOf(), dep = cfg.role === 'dep', dest = dep ? ARRIVALS[cfg.dest] : null, name = cfg.name || 'teleporter';
+    if (!dep) return pad(4, 0.6, { role: 'arr', col }) + plate(4.5 * T, 1.6 * T + 5, name, '← 2 departures', col);
+    if (!dest) return pad(4, 0.6, { role: 'dep', col, bad: true }) + plate(4.5 * T, 1.6 * T + 5, name, 'no destination', C.danger, '#fca5a5');
+    const w = clamp(((t % 3.2) - 1) / 0.9), v = sending(w), there = (t % 3.2) > 1.9 && (t % 3.2) < 2.9;
+    return link([2, 1.1], [7, 1.1], col, { t, packet: v.packet, opacity: 0.4 })
+      + pad(1.5, 0.6, { role: 'dep', col, ticket: w < 1 ? 'fix' : null, k: v.out, burst: v.burstOut }) + pad(6.5, 0.6, { role: 'arr', col: dest.col, ticket: v.into > 0 && (w < 1 || there) ? 'fix' : null, k: w < 1 ? v.into : 1, burst: v.burstIn })
+      + plate(2 * T, 1.6 * T + 5, name, `→ ${dest.name}`, col) + plate(7 * T, 1.6 * T + 5, dest.name, '← 2 departures', dest.col);
+  }
+  const previewSays = () => (cfg.role !== 'dep' ? 'Une arrivée : rien à régler d\'autre que son nom et sa couleur. Ce sont les départs qui la désignent.'
+    : !ARRIVALS[cfg.dest] ? 'Sans destination, le départ accepte quand même un ticket, le garde, et s\'affiche en rouge jusqu\'à ce qu\'on lui donne une arrivée.'
+    : cfg.color && cfg.color !== ARRIVALS[cfg.dest].col ? 'Avec sa propre couleur, le départ ne ressemble plus à son arrivée : il reste sa plaque, et le trait, pour dire où il mène.'
+    : 'Départ et arrivée de la même couleur : on voit au premier coup d\'œil qu\'ils vont ensemble.');
+
+  // ---------- to pick: its shape ----------
+  const FW = 9.5 * T, FH = 4.4 * T;
+  const forms = [
+    { id: 'T1', name: 'Pastille, une case', mine: true,
+      idea: 'Le téléporteur tient sur une case, comme un bras ou un convoyeur. Le bras y dépose comme sur une case de convoyeur. Son nom est sur une plaque dessous.',
+      reads: 'Se glisse partout, au bout d\'une ligne comme au pied d\'un poste. Départ et arrivée se distinguent par le sens des chevrons et par le cadre, fermé ou ouvert.',
+      limit: 'Petit : de loin, c\'est surtout sa couleur qu\'on voit. Le nom est hors de la case, il peut passer sur ce qu\'il y a dessous.',
+      draw: () => belt(0, 1, 1) + token(0.5 * T, 1.5 * T, 'think') + link([2.5, 1.5], [5.5, 1.5], PINK, { opacity: 0.45, bend: 0.3 }) + pad(2, 1, { role: 'dep', col: PINK, ticket: 'fix', wait: true }) + pad(5, 1, { role: 'arr', col: PINK, ticket: 'build' }) + belt(7, 1, 2)
+        + arm(1, 1, 0, C.ink2, 0, null) + arm(6, 1, 0, C.ink2, 0, null) + plate(2.5 * T, 2 * T + 5, 'goto bugfix', 'waits · arrival busy', PINK, C.warn) + plate(5.6 * T, 2 * T + 5, 'entrypoint bugfix', '← 2 departures', PINK) },
+    { id: 'T2', name: 'Cabine, deux cases sur deux',
+      idea: 'Une vraie machine, de la taille d\'un poste de statut. Son rôle et son nom sont écrits dedans ; les bras y prennent et y déposent par un quai, comme pour un poste.',
+      reads: 'Se repère de loin, et se lit sans plaque. Cohérent avec les postes et leurs quais.',
+      limit: 'Quatre cases pour tenir un seul ticket. Un nom long est coupé (« entrypoint bugfix » ne tient pas).',
+      draw: () => belt(0, 2, 1) + token(0.5 * T, 2.5 * T, 'think') + link([3, 2.3], [6, 2.3], PINK, { opacity: 0.45, bend: -0.25 }) + cabin(2, 1, { role: 'dep', col: PINK, name: 'goto bugfix', ticket: 'fix', wait: true }) + cabin(5, 1, { role: 'arr', col: PINK, name: 'entrypoint bugfix', ticket: 'build' }) + belt(8, 2, 1.5)
+        + quay(7, 2, 0, C.ink2) + arm(1, 2, 0, C.ink2, 0, null, 1, 0.76) + arm(7, 2, 0, C.ink2, 0, null, 0.76, 1) + plate(3 * T, 3 * T + 5, 'waits · arrival busy', '', C.warn) },
+  ];
+  // ---------- to pick: the link ----------
+  const KW = 9 * T, KH = 5.4 * T;
+  const trio = (sel) => pad(1, 0.4, { role: 'dep', col: PINK, selected: sel }) + pad(1, 3, { role: 'dep', col: PINK }) + pad(6.5, 1.6, { role: 'arr', col: PINK })
+    + plate(1.5 * T + 14, 1.4 * T + 5, 'goto bugfix', '→ entrypoint bugfix', PINK) + plate(1.5 * T + 14, 4 * T + 5, 'qa to bugfix', '→ entrypoint bugfix', PINK) + plate(7 * T, 2.6 * T + 5, 'entrypoint bugfix', '← 2 departures', PINK);
+  const links = [
+    { id: 'L1', name: 'Au survol ou à la sélection', mine: true,
+      idea: 'Au repos, pas de trait : la couleur et la plaque suffisent. On pointe ou on sélectionne un téléporteur, et son lien apparaît (pour une arrivée : tous ceux qui y mènent).',
+      reads: 'Le plancher reste propre, même avec dix téléporteurs. L\'information est là quand on la demande.',
+      limit: 'Il faut un geste pour voir le lien. Deux paires de la même couleur ne se distinguent qu\'à la plaque.',
+      draw: (t) => link([1.5, 0.9], [7, 2.1], PINK, { t, opacity: 0.85 }) + trio(true) },
+    { id: 'L2', name: 'Toujours, en filigrane',
+      idea: 'Chaque départ est relié en permanence à son arrivée par un trait pointillé discret, qui s\'anime dans le sens du trajet.',
+      reads: 'On voit d\'un coup d\'œil toute la carte des sauts, sans rien toucher.',
+      limit: 'Des traits qui traversent tout le plancher, par-dessus les postes : vite chargé dès qu\'il y a plusieurs paires.',
+      draw: (t) => link([1.5, 0.9], [7, 2.1], PINK, { t, opacity: 0.4 }) + link([1.5, 3.5], [7, 2.1], PINK, { t, opacity: 0.4, bend: -0.2 }) + trio(false) },
+    { id: 'L3', name: 'Jamais, sauf pendant un saut',
+      idea: 'Aucun trait au repos ni au survol. Le lien se lit sur la couleur et sur la plaque ; le trait n\'apparaît que le temps d\'un transfert.',
+      reads: 'Le plus sobre. Rien de nouveau à apprendre.',
+      limit: 'Pour savoir où est l\'arrivée, il faut la chercher par son nom sur le plancher.',
+      draw: () => trio(false) },
+  ];
+
+  // ---------- the page ----------
+  const STILL = 1.2;
+  document.getElementById('live').innerHTML = svg(LW, LH, 'Deux départs envoient leurs tickets vers la même arrivée', live(STILL));
+  const says = (t) => { const s = stepAt(t); document.getElementById('now').innerHTML = `<b>${s[1]}/5</b>${esc(s[2])}`; };
+  says(STILL);
+  document.getElementById('states').innerHTML = states.map((s) => `
+    <article class="card"><div class="scene" data-state="${s.id}">${svg(SW, SH, s.name, s.draw(STILL))}</div><h3>${esc(s.name)}</h3><p>${esc(s.says)}</p></article>`).join('');
+
+  const KEY = 'factory-teleport-picks';
+  let picks = { form: '', link: '' };
+  try { picks = { ...picks, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* no storage here: the picks live for the visit */ }
+  const families = [
+    { key: 'form', host: 'forms', list: forms, label: 'Forme', w: FW, h: FH },
+    { key: 'link', host: 'links', list: links, label: 'Lien', w: KW, h: KH, moves: true },
+  ];
+  for (const f of families) {
+    document.getElementById(f.host).innerHTML = f.list.map((it) => `
+      <article class="card" data-family="${f.key}" data-id="${it.id}">
+        <div class="card-head"><span class="letter">${it.id}</span><h3>${esc(it.name)}</h3>${it.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+        <div class="scene" data-scene="${it.id}">${svg(f.w, f.h, `${f.label}, variante ${it.name}`, it.draw(STILL))}</div>
+        <dl><dt>Idée</dt><dd>${esc(it.idea)}</dd><dt>Se lit</dt><dd>${esc(it.reads)}</dd><dt>Limite</dt><dd>${esc(it.limit)}</dd></dl>
+        <button type="button" aria-pressed="false">Choisir ${it.id}</button>
+      </article>`).join('');
+  }
+  const nameOf = (f) => f.list.find((x) => x.id === picks[f.key])?.name;
+  const summary = () => `Téléporteur — ${families.map((f) => `${f.label} : ${picks[f.key] ? `${picks[f.key]} (${nameOf(f) ?? '?'})` : 'pas encore choisi'}`).join(' · ')}`;
+  function paint() {
+    for (const card of document.querySelectorAll('.card[data-family]')) {
+      const b = card.querySelector(':scope > button'), on = picks[card.dataset.family] === card.dataset.id;
+      card.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    document.getElementById('picks').innerHTML = families.map((f) => `${f.label} <b>${picks[f.key] || '–'}</b>`).join(' &nbsp;·&nbsp; ');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card[data-family] > button'); if (!b) return;
+    const card = b.closest('.card'), k = card.dataset.family;
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    document.getElementById('said').textContent = '';
+    paint();
+  });
+  document.getElementById('copy').addEventListener('click', () => {
+    const said = document.getElementById('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint();
+
+  // the settings drive the preview
+  const host = document.getElementById('popup');
+  let now = STILL;
+  const showPreview = () => { document.getElementById('preview').innerHTML = svg(PW, PH, 'Aperçu du téléporteur réglé', preview(now)); document.getElementById('preview-says').textContent = previewSays(); };
+  const showPopup = (keep) => { host.innerHTML = popup(); if (keep) { const i = document.getElementById('c-name'); i.focus(); i.setSelectionRange(keep, keep); } showPreview(); };
+  host.addEventListener('input', (e) => {
+    if (e.target.id === 'c-name') { cfg.name = e.target.value; host.querySelector('.bar-top').childNodes[1].textContent = cfg.name || 'Teleporter'; showPreview(); }
+  });
+  host.addEventListener('change', (e) => { if (e.target.id === 'c-dest') { cfg.dest = e.target.value; showPopup(); } });
+  host.addEventListener('click', (e) => {
+    const role = e.target.closest('[data-role]'), colour = e.target.closest('[data-colour]');
+    if (role) { cfg.role = role.dataset.role; showPopup(); host.querySelector(`[data-role="${cfg.role}"]`).focus(); }
+    else if (colour) { cfg.color = colour.dataset.colour; showPopup(); host.querySelector(`[data-colour="${cfg.color}"]`).focus(); }
+  });
+  showPopup();
+
+  // what moves
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let playing = !still, t0 = performance.now();
+  const anim = document.getElementById('anim');
+  anim.setAttribute('aria-pressed', String(playing));
+  anim.addEventListener('click', () => { playing = !playing; anim.setAttribute('aria-pressed', String(playing)); if (playing) { t0 = performance.now() - now * 1000; requestAnimationFrame(tick); } });
+  const liveHost = document.getElementById('live'), previewHost = document.getElementById('preview');
+  const movingStates = states.filter((s) => s.moves).map((s) => [s, document.querySelector(`[data-state="${s.id}"]`)]);
+  const movingCards = families.filter((f) => f.moves).flatMap((f) => f.list.map((it) => [f, it, document.querySelector(`[data-scene="${it.id}"]`)]));
+  let lastStep = '';
+  function tick(t) {
+    if (!playing) return;
+    now = (t - t0) / 1000;
+    liveHost.innerHTML = svg(LW, LH, 'Deux départs envoient leurs tickets vers la même arrivée', live(now));
+    const step = stepAt(now)[1]; if (step !== lastStep) { lastStep = step; says(now); }
+    for (const [s, el] of movingStates) el.innerHTML = svg(SW, SH, s.name, s.draw(now));
+    for (const [f, it, el] of movingCards) el.innerHTML = svg(f.w, f.h, `${f.label}, variante ${it.name}`, it.draw(now));
+    previewHost.innerHTML = svg(PW, PH, 'Aperçu du téléporteur réglé', preview(now));
+    requestAnimationFrame(tick);
+  }
+  if (playing) requestAnimationFrame(tick);
+})();
+</script>
