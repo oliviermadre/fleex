@@ -133,6 +133,10 @@ The console can be put away to give the floor the whole page: a handle in the mi
 is all that stays, at the foot of the floor; the keys of the command card still work. The choice is kept in the
 browser (`viewToggles.ts`).
 
+Build mode says so all round the view (`FactoryBuildFrame.tsx`): hazard tape, yellow and black on the diagonal like
+the bay of what is set aside, and a plate in the corner, "BUILD MODE, the floor keeps running" (or "the floor is
+stopped" under the emergency stop). It is laid over the floor and takes no pointer event.
+
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from

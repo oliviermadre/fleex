@@ -13,6 +13,7 @@ import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
+import { FactoryBuildFrame } from './FactoryBuildFrame';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
@@ -667,7 +668,6 @@ function Floor() {
       <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
         <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
-        {building && !halted && <span className="text-xs text-[var(--theme-accent)]">Building — the floor keeps running</span>}
         {snapshot && <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} />}
         <span className="flex-1" />
         {snapshot && (halted
@@ -682,6 +682,8 @@ function Floor() {
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
+          {/* build mode says so all round the view: tape, and a plate in its corner */}
+          {building && <FactoryBuildFrame halted={halted} />}
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
