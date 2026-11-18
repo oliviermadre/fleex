@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FactoryEngine, FactoryError, normaliseLayout } from '../../src/factory/engine.js';
+import type { SetOp, TicketChange } from '../../src/factory/set-ops.js';
 import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
 import type { StationRunResult } from '../../src/factory/station-runner.js';
@@ -48,6 +49,9 @@ let pending: { station: string; ticketId: string; resolve: (r: StationRunResult)
 let cancelled: string[];
 let decisions: [string, string, string, string][];
 let clock: number;
+/** What gantries wrote on tickets, and how the write behaves: at once, held until released, or failing. */
+let changes: [string, TicketChange][];
+let writes: { hold: boolean; fail: boolean; release: (() => void)[] };
 let engine: FactoryEngine;
 
 const info = (id: string, over: Partial<FactoryTicketInfo> = {}): FactoryTicketInfo => ({ id, displayId: 1, title: id, type: 'build', priority: 'medium', status: 'todo', tags: [], boardId: 'b1', complexity: null, favorite: false, blocked: false, ...over });
@@ -66,6 +70,13 @@ async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?
     setStatus: async (id, status) => { statuses.push([id, status]); },
     runner: { run: (s, ticketId, _runId, _targets, started) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started }); }) },
     cancelExecution: async (id) => { cancelled.push(id); },
+    applyChange: async (id, change) => {
+      if (writes.hold) await new Promise<void>((resolve) => { writes.release.push(resolve); });
+      if (writes.fail) throw new Error('database is away');
+      changes.push([id, change]);
+      const was = infos.get(id)!;
+      infos.set(id, { ...was, ...(change.status ? { status: change.status } : {}), ...change.fields } as FactoryTicketInfo);
+    },
     recordDecision: async (ticketId, gate, outcome, reason) => { decisions.push([ticketId, gate, outcome, reason]); },
   });
   await engine.init();
@@ -73,7 +84,7 @@ async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?
 }
 
 beforeEach(() => {
-  store = new MemoryStore(); infos = new Map(); statuses = []; pending = []; cancelled = []; decisions = []; clock = Date.parse('2026-11-15T10:00:00.000Z');
+  store = new MemoryStore(); infos = new Map(); statuses = []; pending = []; cancelled = []; decisions = []; changes = []; writes = { hold: false, fail: false, release: [] }; clock = Date.parse('2026-11-15T10:00:00.000Z');
   for (const id of ['a', 'b', 'c']) infos.set(id, info(id));
 });
 
@@ -789,6 +800,95 @@ describe('a station has a switch', () => {
     await expect(engine.setPower('gate', false)).rejects.toThrow(/switch/);
     const out = normaliseLayout({ w: 20, h: 20, machines: [{ ...station('s', 1, 1), off: true } as MachineSpec, { ...station('g', 6, 1, { exec: 'human_gate' }), off: true } as MachineSpec] });
     expect(out.machines.map((m) => (m as StationSpec).off)).toEqual([true, undefined]);
+  });
+});
+
+describe('a Set gantry over a belt', () => {
+  const gantry = (id: string, x: number, y: number, set: SetOp[]): MachineSpec => ({ ...belt(id, x, y), set } as MachineSpec);
+  const inc: SetOp = { field: 'tag', op: 'inc', value: 'passes' };
+  const info1 = () => engine.snapshot().tickets.find((t) => t.ticketId === 'a')!.info!;
+
+  it('changes the ticket that goes under it, in order, and lets it go on once that is written', async () => {
+    await boot([belt('b1', 0, 0), gantry('g', 1, 0, [{ field: 'priority', value: 'high' }, { field: 'board', value: 'bugfix' }, { field: 'tag', op: 'set', value: 'type:major' }, inc]), belt('b2', 2, 0), belt('b3', 3, 0)]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('b3:belt');
+    expect(changes).toEqual([['a', { fields: { priority: 'high', boardId: 'bugfix', tags: ['type:major', 'passes:1'] } }]]);
+    expect(info1()).toMatchObject({ priority: 'high', boardId: 'bugfix', tags: ['type:major', 'passes:1'] });
+    expect(statuses).toEqual([]);                                       // nothing but what was asked
+  });
+
+  it('a status goes by the ordinary move, and a ticket that already has everything is not written at all', async () => {
+    await boot([belt('b1', 0, 0), gantry('g', 1, 0, [{ field: 'status', value: 'doing' }, { field: 'priority', value: 'medium' }]), belt('b2', 2, 0)]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(2);
+    expect(changes).toEqual([['a', { status: 'doing', fields: {} }]]);  // its priority was medium already
+    await engine.giveBack('a');
+    infos.set('b', info('b', { status: 'doing' }));
+    await engine.transfer('b', { machineId: 'b1' });
+    await run(2);
+    expect(changes).toHaveLength(1);
+    expect(where('b')).toBe('b2:belt');
+  });
+
+  it('holds the ticket in the middle of its tile until the write is confirmed', async () => {
+    await boot([belt('b1', 0, 0), gantry('g', 1, 0, [inc]), belt('b2', 2, 0)]);
+    writes.hold = true;
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('g:belt');
+    expect(engine.snapshot().tickets.find((t) => t.ticketId === 'a')!.p).toBe(0.5);
+    expect(changes).toEqual([]);                                        // asked once, not at every tick
+    expect(writes.release).toHaveLength(1);
+    writes.hold = false; writes.release[0]!();
+    await run(1);
+    expect(where('a')).toBe('b2:belt');
+    expect(info1().tags).toEqual(['passes:1']);                         // read again from what was written
+  });
+
+  it('keeps the ticket and tries again when the write fails, without counting twice', async () => {
+    await boot([belt('b1', 0, 0), gantry('g', 1, 0, [inc]), belt('b2', 2, 0)]);
+    writes.fail = true;
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(2);
+    const t = engine.snapshot().tickets.find((x) => x.ticketId === 'a')!;
+    expect(where('a')).toBe('g:belt');
+    expect(t.note).toMatch(/could not write/);
+    expect(t.info!.tags).toEqual([]);                                   // what the engine knows went back to what it was
+    writes.fail = false;
+    await run(6);                                                       // it tries again after a moment
+    expect(where('a')).toBe('b2:belt');
+    expect(changes).toEqual([['a', { fields: { tags: ['passes:1'] } }]]);
+    expect(engine.snapshot().tickets.find((x) => x.ticketId === 'a')!.note).toBe('');
+  });
+
+  it('does not count a ticket twice when the server restarts while it is under the gantry', async () => {
+    const floor = [belt('b1', 0, 0), gantry('g', 1, 0, [inc]), arm('stop', 1, 1, 1, 'tag', ['never'])];
+    await boot(floor);
+    await engine.transfer('a', { machineId: 'g' });                     // dropped right on it: it counts there too
+    await run(1);
+    expect(changes).toHaveLength(1);
+    await engine.flush();
+    await boot(floor);
+    await run(2);
+    expect(changes).toHaveLength(1);
+    expect(where('a')).toBe('g:belt');                                  // the belt leads nowhere: it waits at its end
+  });
+
+  it('counts again each time the ticket comes back under it', async () => {
+    await boot([gantry('g', 0, 0, [inc]), belt('b2', 1, 0)]);
+    for (let i = 0; i < 3; i++) { await engine.move('a', { machineId: 'g' }).catch(() => engine.transfer('a', { machineId: 'g' })); await run(2); }
+    expect(info1().tags).toEqual(['passes:3']);
+  });
+
+  it('keeps of a gantry the operations that can be applied, on belts only', () => {
+    const out = normaliseLayout({ w: 9, h: 9, machines: [
+      { ...belt('g', 0, 0), set: [{ field: 'priority', value: 'high' }, { field: 'priority', value: 'enormous' }, { field: 'status', value: 'done' }, { field: 'tag', op: 'inc', value: ' passes ' }, { field: 'tag', op: 'shout', value: 'x' }, { field: 'colour', value: 'red' }] } as unknown as MachineSpec,
+      { ...belt('e', 1, 0), set: [] } as MachineSpec, belt('p', 2, 0),
+    ] }).machines as (MachineSpec & { set?: SetOp[] })[];
+    expect(out[0]!.set).toEqual([{ field: 'priority', value: 'high' }, { field: 'tag', op: 'inc', value: 'passes' }]);
+    expect(out[1]!.set).toEqual([]);                                    // a gantry with nothing to do yet is still a gantry
+    expect('set' in out[2]!).toBe(false);
   });
 });
 

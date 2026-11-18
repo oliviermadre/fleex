@@ -2,7 +2,7 @@
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
 import { relink } from './teleport';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'set' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -32,6 +32,8 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'exit': return { id, kind: 'exit', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Exit' };
     case 'label': return { id, kind: 'label', x, y, w: 1, h: 1, text: 'Zone' };
     /* a departure until its popup says otherwise: that is the one that has something to set */
+    /* a gantry is carried by a belt: on bare floor it comes with its own, see `gantryAt` for a belt that is already there */
+    case 'set': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, set: [] };
     case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
     default: return null;
   }
@@ -53,6 +55,17 @@ export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout |
   if (!canPlace(layout, spec)) return null;
   const kept = spec.kind === 'label' ? layout.machines : layout.machines.filter((m) => !(m.kind === 'belt' && overlaps(m, spec)));
   return { ...layout, machines: [...kept, spec] };
+}
+
+/**
+ * Put a Set gantry on a tile: on the belt that is there, which keeps its direction and its speed, or on bare floor
+ * with a belt of its own. Null where something else stands, or where the belt already has one.
+ */
+export function gantryAt(layout: FactoryLayout, x: number, y: number, dir: Dir): { layout: FactoryLayout; id: string } | null {
+  const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
+  if (!there) { const spec = specFor('set', x, y, dir)!; return { layout: { ...layout, machines: [...layout.machines, spec] }, id: spec.id }; }
+  if (there.kind !== 'belt' || there.set !== undefined) return null;
+  return { layout: { ...layout, machines: layout.machines.map((m) => (m === there ? { ...there, set: [] } : m)) }, id: there.id };
 }
 
 /** A belt's own fields for a speed: a fast belt carries the flag, a plain one does not. */

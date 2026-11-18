@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 const PATHS: Record<string, ReactNode> = {
   belt: <path d="M4 8l4 4-4 4M10.5 8l4 4-4 4M17 8l3.5 4-3.5 4" />,
   teleporter: <><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" /><circle cx="12" cy="12" r="3.4" /><path d="M12 6.2l-1.6-1.4M12 6.2l1.6-1.4M12 17.8l-1.6 1.4M12 17.8l1.6 1.4" /></>,
+  set: <><path d="M3 12h18" /><rect x="9.5" y="4" width="5" height="16" rx="2" /><path d="M6.5 4h11M6.5 20h11" /></>,
   fastbelt: <path d="M3 7l5 5-5 5M8 7l5 5-5 5M14 7l5 5-5 5M19 9.5l2.5 2.5-2.5 2.5" />,
   bridge: <path d="M3 9h18M3 15h18M9 3v4M15 3v4M9 17v4M15 17v4" />,
   arm: <><circle cx="7" cy="17" r="3" /><path d="M9.2 14.8L16 8" /><path d="M13.5 6.5H18V11" /></>,

@@ -1,3 +1,4 @@
+import { applyOps, normaliseOps, type TicketChange } from './set-ops.js';
 import { randomUUID } from 'node:crypto';
 import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
 import type { TicketStatus } from '@fleex/shared';
@@ -36,6 +37,9 @@ interface Machine {
   item2: Ticket | null;
   armState: 'rest' | 'carry' | 'back';
   armP: number;
+  /** A belt with a gantry: whether what it changed on the ticket it holds is being written, or could not be. */
+  gate: 'idle' | 'writing' | 'failed';
+  gateRetryAt: number;
 }
 interface Ticket {
   ticketId: string;
@@ -68,6 +72,8 @@ export interface FactoryEngineDeps {
   /** Null when the ticket is gone or archived: the Factory lets go of it. */
   loadTicket(ticketId: string): Promise<FactoryTicketInfo | null>;
   setStatus(ticketId: string, status: TicketStatus): Promise<void>;
+  /** Write on a ticket what a Set gantry changed. The gantry holds the ticket until this resolves. */
+  applyChange?(ticketId: string, change: TicketChange): Promise<void>;
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
   now?: () => number;
   /** Stop the agent execution a run started: a human took the ticket off the station while it ran. */
@@ -112,7 +118,10 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
         /* a colour is paint, nothing more: kept when it is one, dropped otherwise */
         if (typeof m.color === 'string' && /^#[0-9a-f]{6}$/i.test(m.color)) m.color = m.color.toLowerCase(); else delete m.color;
       }
-      if (m.kind === 'belt') { if (m.fast === true) m.fast = true; else delete m.fast; }
+      if (m.kind === 'belt') {
+        if (m.fast === true) m.fast = true; else delete m.fast;
+        if (m.set !== undefined) m.set = normaliseOps(m.set);
+      }
     }
     else if (m.kind === 'teleporter') {
       m.w = 1; m.h = 1;
@@ -248,7 +257,7 @@ export class FactoryEngine {
   private at(x: number, y: number): Machine | null { return this.grid.get(`${x},${y}`) ?? null; }
 
   private build(layout: FactoryLayout): void {
-    this.machines = layout.machines.map((spec) => ({ spec, takers: [], src: null, dst: null, item: null, item2: null, armState: 'rest' as const, armP: 0 }));
+    this.machines = layout.machines.map((spec) => ({ spec, takers: [], src: null, dst: null, item: null, item2: null, armState: 'rest' as const, armP: 0, gate: 'idle' as const, gateRetryAt: 0 }));
     this.byId = new Map(this.machines.map((m) => [m.spec.id, m]));
     this.grid = new Map();
     for (const m of this.machines) {
@@ -322,7 +331,7 @@ export class FactoryEngine {
 
   private detach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) : null;
-    if (m && m.item === t) { m.item = null; if (m.spec.kind === 'arm') m.armState = 'back'; }
+    if (m && m.item === t) { m.item = null; if (m.spec.kind === 'arm') m.armState = 'back'; if (m.gate === 'failed') m.gate = 'idle'; }
     if (m && m.item2 === t) m.item2 = null;
     t.machineId = null;
   }
@@ -439,12 +448,49 @@ export class FactoryEngine {
   private updateBelt(b: Machine, dt: number): void {
     const t = b.item, spec = b.spec as BeltSpec;
     if (!t) return;
+    /* under a gantry it stops in the middle of the tile until what the gantry changes is written on it */
+    const gated = spec.set !== undefined && !this.underGantry(b, t);
     /* an arm that wants this ticket gets it: the belt holds it in the middle of the tile */
-    const held = b.takers.some((a) => this.wants(a, t));
+    const held = gated || b.takers.some((a) => this.wants(a, t));
     t.s.p = Math.min(t.s.p + BELT_SPEED * (spec.fast ? FAST_BELT : 1) * dt, held && t.s.p <= 0.5 ? 0.5 : 1);
     if (t.s.p < 1) return;
     const n = this.at(spec.x + DX[spec.dir], spec.y + DY[spec.dir]);
     if (this.hand(n, t, DX[spec.dir], DY[spec.dir])) b.item = null;
+  }
+
+  /** How long a gantry waits before it tries again to write what it could not. */
+  private static readonly GATE_RETRY_MS = 5000;
+
+  /**
+   * A ticket under a Set gantry. Returns true once the gantry is done with it. What the gantry changes is applied
+   * to the engine's own copy and written on the ticket; the ticket only goes on once that write is confirmed, and
+   * what the engine knows of it is then read again, so that whatever looks at the ticket next (an arm, a toll) sees
+   * what was written and nothing older. `released` marks a ticket the gantry has already dealt with: a restart of
+   * the server does not count it twice.
+   */
+  private underGantry(b: Machine, t: Ticket): boolean {
+    if (t.s.released) return true;
+    if (t.s.p < 0.5 || b.gate === 'writing') return false;
+    if (b.gate === 'failed' && this.now() < b.gateRetryAt) return false;
+    const done = () => { b.gate = 'idle'; t.s.released = true; if (t.s.note) t.s.note = ''; this.dirty.add(t.ticketId); };
+    const spec = b.spec as BeltSpec, ops = spec.set ?? [];
+    if (!t.info || !ops.length) { done(); return true; }
+    const before = t.info, { info, change } = applyOps(before, ops);
+    if (!change) { done(); return true; }
+    if (!this.deps.applyChange) { t.info = info; done(); return true; }
+    b.gate = 'writing'; t.info = info;
+    const here = () => b.item === t && this.tickets.get(t.ticketId) === t;
+    void this.deps.applyChange(t.ticketId, change)
+      .then(async () => { const fresh = await this.deps.loadTicket(t.ticketId).catch(() => null); if (fresh) t.info = fresh; if (here()) done(); else b.gate = 'idle'; })
+      .catch((err) => {
+        /* nothing was written: what the engine knows goes back to what it was, and the gantry tries again in a moment */
+        if (t.info === info) t.info = before;
+        if (!here()) { b.gate = 'idle'; return; }
+        b.gate = 'failed'; b.gateRetryAt = this.now() + FactoryEngine.GATE_RETRY_MS;
+        t.s.note = 'The gantry could not write on the ticket: it tries again'; this.dirty.add(t.ticketId);
+        this.deps.logger.warn('Factory: a gantry could not write on a ticket', { ticketId: t.ticketId, error: err instanceof Error ? err.message : String(err) });
+      });
+    return false;
   }
 
   /** Pass a ticket travelling in a direction to the next tile, if that tile can take it now. */

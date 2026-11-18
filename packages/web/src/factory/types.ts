@@ -3,6 +3,8 @@
  * and stay here, not in `@fleex/shared`, so the experiment can be removed by
  * deleting two folders.
  */
+import type { SetOp } from './setOps';
+export type { SetOp } from './setOps';
 import type { TicketStatus } from '@fleex/shared';
 
 export type Dir = 0 | 1 | 2 | 3;
@@ -20,6 +22,7 @@ export interface BeltSpec extends MachineBase {
   kind: 'belt'; dir: Dir;
   /** A fast belt: it carries a ticket across its tile in half the time. */
   fast?: boolean;
+  /** A Set gantry over the tile: what it does to every ticket that goes under it (see `setOps.ts`). Present, even empty, the belt carries a gantry. */ set?: SetOp[];
 }
 export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;
@@ -158,4 +161,6 @@ export const PALETTE: readonly { name: string; hex: string }[] = [
 export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade80', '#facc15', '#fb923c', '#f87171'];
 
 /** A machine that has something to set up or to show in its own popup: everything but what only carries tickets. */
-export const hasPopup = (m: { kind: MachineSpec['kind'] }): boolean => m.kind !== 'belt' && m.kind !== 'bridge';
+export const hasPopup = (m: { kind: MachineSpec['kind']; set?: unknown }): boolean => (m.kind !== 'belt' || m.set !== undefined) && m.kind !== 'bridge';
+/** A belt that carries a Set gantry. */
+export const isGantry = (m: MachineSpec | null | undefined): m is BeltSpec & { set: SetOp[] } => !!m && m.kind === 'belt' && m.set !== undefined;

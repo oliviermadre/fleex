@@ -59,7 +59,7 @@ describe('the command card', () => {
     const build = factoryMenu(ctx({ building: true }));
     expect(labels(build)).toEqual(['Move', 'Station', 'Area', 'Plan', 'Erase', null, 'Undo', 'Redo', null, null, null, 'Done']);
     expect(labels(menuAt(build, ['move']).menu).slice(0, 6)).toEqual(['Belt', 'Bridge', 'Arm', 'Face →', 'Fast belt', 'Teleporter']);
-    expect(labels(menuAt(build, ['station']).menu).slice(0, 6)).toEqual(['Agent', 'Skill', 'Panel', 'Gate', 'Status', null]);
+    expect(labels(menuAt(build, ['station']).menu).slice(0, 6)).toEqual(['Agent', 'Skill', 'Panel', 'Gate', 'Status', 'Set']);
     expect(labels(menuAt(build, ['area']).menu).slice(0, 6)).toEqual(['Zone', 'Exit', 'Label', null, null, null]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });

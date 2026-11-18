@@ -1,4 +1,6 @@
 import type { TicketStatus } from '@fleex/shared';
+import type { SetOp } from './set-ops.js';
+export type { SetOp } from './set-ops.js';
 
 /** 0 east, 1 south, 2 west, 3 north. */
 export type Dir = 0 | 1 | 2 | 3;
@@ -23,6 +25,12 @@ export interface BeltSpec extends MachineBase {
   kind: 'belt'; dir: Dir;
   /** A fast belt: it carries a ticket across its tile in half the time. */
   fast?: boolean;
+  /**
+   * A Set gantry over the tile: what it does to every ticket that goes under it (see `set-ops.ts`). The ticket stops
+   * in the middle of the tile until what was changed is written on it, then goes on. Present, even empty, the belt
+   * carries a gantry.
+   */
+  set?: SetOp[];
 }
 /** Takes from the tile behind it, drops on the tile in front; with conditions, only a ticket that meets them all. */
 export interface ArmSpec extends MachineBase {

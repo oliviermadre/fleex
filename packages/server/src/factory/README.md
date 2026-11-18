@@ -184,6 +184,28 @@ counter that has not started is. Otherwise they are compared as text, where only
 
 Nothing is stored anywhere else: these are the ticket's own tags, seen and filtered as such in the rest of Fleex.
 
+## The Set gantry
+
+A gantry over a belt tile that sets things on every ticket that goes under it, with no agent: status, priority,
+type, complexity, board, favourite, blocked, and tags (add, remove, set a `key:value`, add 1 to a key, remove a key).
+It is not a machine of its own: it is `set` on a belt (`set-ops.ts`), so a ticket never leaves the line for it, and
+everything that is true of a belt (direction, speed, bends, bridges) stays true.
+
+The order matters, and is kept by the engine (`underGantry`): the ticket stops in the middle of the tile, the changes
+are applied to the engine's own copy and written on the ticket by the ordinary path (`applyChange`, which is
+`ApplyTicketMutationUseCase`: a status is a move, the rest are fields), and **the ticket only goes on once that write
+is confirmed**; what the engine knows of the ticket is then read again. So whatever looks at the ticket next sees what
+was written, and the engine's periodic re-read cannot bring an older value back. A write that fails keeps the ticket
+under the gantry, which says so in red and tries again every few seconds. A ticket the gantry has dealt with is
+marked (`released`), so a restart of the server does not count it twice.
+
+On the page it is two posts and a beam, with a plate beside it that lists what it does, one operation a line: its
+setting is read from the floor. It is placed from Build › Station › Set, on a belt that is there or with a belt of
+its own, and its popup edits the list.
+
+Only what cannot fail is here. Attaching a worktree or a pull request can fail, so it needs a station with two ways
+out: that is not built.
+
 ## The emergency stop
 
 One button, always in the page's header: **Emergency stop**. It is `halted` in the floor's settings

@@ -15,6 +15,8 @@ import type { FactoryView } from './renderer';
 import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRules';
 import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
+import { blankOp, choicesFor, incompleteOp, SET_FIELD_LABEL, SET_FIELDS, TAG_OP_HINT, TAG_OP_LABEL, type AnyField, type SetOp } from './setOps';
+import { TAG_OPS, type TagOp } from './tags';
 import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { FactoryPopup } from './FactoryPopup';
@@ -37,11 +39,12 @@ const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 /** What a machine is, in a word or two. */
 export function machineKind(m: MachineSpec): string {
+  if (m.kind === 'belt' && m.set !== undefined) return 'Set gantry';
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'Gate' : m.exec === 'native' ? 'Status station' : `${m.exec[0]!.toUpperCase()}${m.exec.slice(1)} station`;
   if (m.kind === 'teleporter') return m.role === 'arrival' ? 'Arrival teleporter' : 'Departure teleporter';
   return m.kind === 'zone' && m.inbound ? 'Inbound zone' : `${m.kind[0]!.toUpperCase()}${m.kind.slice(1)}`;
 }
-export const machineIcon = (m: MachineSpec): string => (m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
+export const machineIcon = (m: MachineSpec): string => (m.kind === 'belt' && m.set !== undefined ? 'set' : m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
 
 /** A text field that saves when you leave it or press Enter, not on every keystroke. Escape takes back what was typed. */
 export function CommitInput({ id, label, value, onCommit, placeholder }: { id: string; label: string; value: string; onCommit: (v: string) => void; placeholder?: string }) {
@@ -90,6 +93,50 @@ const ArmColour = ({ arm, onChange }: { arm: ArmSpec; onChange: (color: string |
   <ColourPicker label="Arm colour" value={arm.color} own={isConditional(arm) ? 'var(--theme-warning)' : 'var(--theme-text-secondary)'} ownTitle="Grey, and amber once the arm has a condition"
     hint="Its quay, the arrow under it and its tag take the same colour." onChange={onChange} />
 );
+
+/**
+ * A Set gantry: the list of what it does to every ticket that goes under it, in order. An operation that has nothing
+ * to set yet stays in this form only: the floor is saved with the complete ones.
+ */
+function GantrySettings({ ops, onChange, onRemove }: { ops: SetOp[]; onChange: (ops: SetOp[]) => void; onRemove: () => void }) {
+  const boards = useTicketStore((s) => s.boards), list = useMemo(() => boards.map((b) => ({ id: b.id, name: b.name })), [boards]);
+  const savedKey = JSON.stringify(ops);
+  const [rows, setRows] = useState<SetOp[]>(ops), [adding, setAdding] = useState<AnyField>('tag');
+  useEffect(() => { setRows((cur) => (JSON.stringify(cur.filter((o) => !incompleteOp(o))) === savedKey ? cur : (JSON.parse(savedKey) as SetOp[]))); }, [savedKey]);
+  const commit = (next: SetOp[]) => { setRows(next); const complete = next.filter((o) => !incompleteOp(o)); if (JSON.stringify(complete) !== savedKey) onChange(complete); };
+  const patch = (i: number, o: SetOp) => commit(rows.map((r, k) => (k === i ? o : r)));
+  return (
+    <>
+      <Hint>A gantry over a belt. A ticket goes under it without leaving the line: it stops the time it takes to write these changes on it, then goes on. No agent runs here.</Hint>
+      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">On every ticket, in this order</div>
+      {rows.length === 0 && <Hint>Nothing yet: tickets go under it unchanged.</Hint>}
+      {rows.map((o, i) => {
+        const choices = choicesFor(o.field, list);
+        return (
+          <div key={i} className="flex items-center gap-1.5" role="group" aria-label={`Operation ${i + 1}`}>
+            <span className="w-20 flex-none text-xs text-[var(--theme-text-primary)]">{SET_FIELD_LABEL[o.field]}</span>
+            {o.field === 'tag' && (
+              <div className="w-36 flex-none"><Select id={`f-set-op-${i}`} aria-label="What to do with the tag" value={o.op} onChange={(e) => patch(i, { ...o, op: e.target.value as TagOp })} options={TAG_OPS.map((t) => ({ value: t, label: TAG_OP_LABEL[t] }))} /></div>
+            )}
+            <div className="min-w-0 flex-1">
+              {choices
+                ? <Select id={`f-set-value-${i}`} aria-label={`${SET_FIELD_LABEL[o.field]} to set`} value={o.value} onChange={(e) => patch(i, { ...o, value: e.target.value })} options={[...choices, ...(o.value && !choices.some((c) => c.value === o.value) ? [{ value: o.value, label: o.value }] : [])]} />
+                : <CommitInput id={`f-set-value-${i}`} label="" value={o.value} placeholder={o.field === 'tag' ? TAG_OP_HINT[o.op] : ''} onCommit={(v) => patch(i, { ...o, value: v.trim() })} />}
+            </div>
+            <Button size="sm" variant="ghost" aria-label={`Remove operation ${i + 1}`} title="Remove this operation" onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
+          </div>
+        );
+      })}
+      {rows.some((o) => incompleteOp(o)) && <p className="text-xs text-[var(--theme-warning)]">An operation with nothing to set is not applied. A value to set on a key is written key:value.</p>}
+      <div className="flex items-center gap-1.5">
+        <div className="w-36"><Select id="f-set-add" aria-label="Field to set" value={adding} onChange={(e) => setAdding(e.target.value as AnyField)} options={SET_FIELDS.map((f) => ({ value: f, label: SET_FIELD_LABEL[f] }))} /></div>
+        <Button size="sm" onClick={() => commit([...rows, blankOp(adding, list)])}>Add an operation</Button>
+      </div>
+      <Hint>A tag written key:value has one value per key: "set" replaces it, "add 1" counts on it from nothing, "remove key" clears it. An arm can then sort on that value.</Hint>
+      <div><Button size="sm" variant="ghost" onClick={onRemove} title="The belt stays, without its gantry">Remove the gantry</Button></div>
+    </>
+  );
+}
 
 /**
  * A teleporter: its name, which of the two it is, and for a departure the arrival it leads to. An arrival has nothing
@@ -164,7 +211,8 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
           </div>
         </>
       )}
-      {m.kind === 'belt' && <Hint>One tile, one ticket. It pushes it to the tile it points at when that tile is free. Leads to: {view.leadsTo(m)?.name ?? 'nowhere'}.</Hint>}
+      {m.kind === 'belt' && m.set !== undefined && <GantrySettings key={m.id} ops={m.set} onChange={(set) => onPatch({ set })} onRemove={() => onPatch({ set: undefined })} />}
+      {m.kind === 'belt' && m.set === undefined && <Hint>One tile, one ticket. It pushes it to the tile it points at when that tile is free. Leads to: {view.leadsTo(m)?.name ?? 'nowhere'}.</Hint>}
       {m.kind === 'bridge' && (() => {
         const flow = bridgeFlow((px, py) => view.at(px, py), m);
         return <Hint>Where two belts cross: a ticket crosses it the way it arrives. Over (east-west): {flowLabel(flow.over)}. Under (north-south): {flowLabel(flow.under)}.</Hint>;

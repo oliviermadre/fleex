@@ -13,6 +13,7 @@ import { follow, type Track, type TrackPos } from './ticketMotion';
 import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
+import { opText, plateLines } from './setOps';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
@@ -84,6 +85,10 @@ const ZONE_PAINT: Record<string, string> = { backlog: '#a1a1aa', todo: '#fb923c'
 const PAINT = '#60a5fa';
 /** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
 const SNAP = 0.0005, SLIDE = 0.03;
+/** The colour of a Set gantry, and of everything that says what it does. */
+const SET = '#f472b6';
+/** A plate of several lines beside a machine: what it is set to do, readable from the floor. */
+interface Board { lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
 /** Seconds a ticket takes to fade once it is past an exit's frame. */
 const FADE_S = 0.75;
 /** Seconds a ticket is drawn jumping from a departure to its arrival. The engine moves it at once; this is for the eye. */
@@ -148,6 +153,7 @@ export class FactoryView {
   private dpr = 1;
   private clock = 0;
   private labels: Label[] = [];
+  private boards: Board[] = [];
   private pal: Palette | null = null;
   private palAt = 0;
   private gridFor: FactoryLayout | null = null;
@@ -297,7 +303,17 @@ export class FactoryView {
     const ctx = this.ctx;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const l of this.labels) this.write(l);
-    ctx.restore(); this.labels.length = 0;
+    /* plates of several lines: one box as wide as its longest line, standing off the side of its machine it was given */
+    const z = this.cam.z, px = clamp(0.22 * z, 9, 11), lh = px * 1.3, pad = px * 0.55;
+    ctx.font = `700 ${px.toFixed(1)}px ${MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    for (const b of this.boards) {
+      const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - this.cam.y) * z + this.h / 2;
+      const x0 = b.side === 'right' ? sx + 6 : b.side === 'left' ? sx - 6 - w : sx - w / 2, y0 = b.side === 'above' ? sy - 6 - h : b.side === 'below' ? sy + 6 : sy - h / 2;
+      if (x0 > this.w || x0 + w < 0 || y0 > this.h || y0 + h < 0) continue;
+      rr(ctx, x0, y0, w, h, 4); ctx.fillStyle = 'rgba(9,9,11,0.92)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = b.col; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+      b.lines.forEach((l, i) => { ctx.fillStyle = b.inks[i] ?? b.col; ctx.fillText(l, x0 + pad, y0 + pad / 2 + lh * (i + 0.5)); });
+    }
+    ctx.restore(); this.labels.length = 0; this.boards.length = 0;
   }
   /** Text painted on the floor itself, now, so that what is drawn after it goes over it: a stencil, not a label. */
   private stencil(text: string, wx: number, wy: number, size: number, color: string, alpha: number, opts: Label[5] = {}): void {
@@ -548,6 +564,8 @@ export class FactoryView {
       else { x = cx + DX[b.dir] * (pos.p - 0.5); y = cy + DY[b.dir] * (pos.p - 0.5); }
       this.ticket(t, x, y, 0.46, st, '', dtReal);
     }
+    /* gantries stand over their belt: a ticket goes under the beam */
+    for (const b of belts) if (b.set !== undefined) this.gantry(b, onTrack.get(b.id) ?? [], st, pal);
     for (const t of st.tickets) if (!t.machineId || !this.byId.has(t.machineId)) {
       ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(t.x + 0.5, t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
       this.ticket(t, t.x + 0.5, t.y + 0.5, 0.5, st, '', dtReal);
@@ -738,6 +756,32 @@ export class FactoryView {
       if (fed || u - CHEVRON_PAIR / 2 >= 0) one(u - CHEVRON_PAIR / 2);
       one(u + CHEVRON_PAIR / 2);
     }
+  }
+
+  /** The side of a tile a plate can stand on without covering what is next to it: the sides across the belt first. */
+  private freeSide(x: number, y: number, across: boolean): Board['side'] {
+    const order: Board['side'][] = across ? ['above', 'below', 'right', 'left'] : ['right', 'left', 'above', 'below'];
+    const free = (s: Board['side']) => !this.at(x + (s === 'right' ? 1 : s === 'left' ? -1 : 0), y + (s === 'below' ? 1 : s === 'above' ? -1 : 0));
+    return order.find(free) ?? order[0]!;
+  }
+  /**
+   * A Set gantry: two posts either side of the belt and a beam across it. A ticket goes under the beam, stops there
+   * the time it takes to write what the gantry changes, and goes on. What the gantry does is written on a plate
+   * beside it, one operation a line, so its setting is read from the floor; red when it could not write.
+   */
+  private gantry(b: BeltSpec, riding: Riding[], st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { x, y } = b, across = b.dir % 2 === 0;
+    const under = riding.some((r) => Math.abs(r.pos.p - 0.5) < 0.18), failed = riding.some((r) => !!r.t.note), col = failed ? pal.danger : SET;
+    /* laid out for a belt that runs east-west; turned a quarter for one that runs north-south */
+    const box = (rx: number, ry: number, rw: number, rh: number, r: number) => { if (across) rr(ctx, x + rx, y + ry, rw, rh, r); else rr(ctx, x + ry, y + rx, rh, rw, r); };
+    ctx.strokeStyle = col; ctx.lineWidth = 0.045;
+    for (const off of [-0.11, 0.89]) { box(0.09, off, 0.82, 0.22, 0.07); ctx.fillStyle = pal.body; ctx.fill(); ctx.stroke(); }
+    box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
+    const asked = st.selMachine === b.id || st.hoverMachine === b.id;
+    if (this.cam.z < 13 && !asked) return;
+    const ops = b.set ?? [], lines = ops.length ? plateLines(ops.map((o) => opText(o, st.boardName)), asked ? 12 : 4) : ['nothing set yet'];
+    const side = this.freeSide(b.x, b.y, across);
+    this.boards.push({ lines, inks: lines.map((l) => (ops.length && !l.endsWith(' more') ? col : pal.text3)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
   }
 
   /** The belts and bridges as a track a ticket is drawn along: which tile follows which, and how fast each carries. */

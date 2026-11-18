@@ -77,6 +77,14 @@ export class FactoryModule {
       setStatus: async (ticketId: string, status: TicketStatus) => {
         await deps.applyTicketMutation.execute({ ticketId, move: { status }, actor: { actorType: 'agent', actorName: 'Factory' } });
       },
+      /* by the ordinary path, as any automation would: a status is a move, the rest are fields */
+      applyChange: async (ticketId, change) => {
+        await deps.applyTicketMutation.execute({
+          ticketId, ...(change.status ? { move: { status: change.status } } : {}),
+          ...(Object.keys(change.fields).length ? { fields: change.fields as NonNullable<Parameters<typeof deps.applyTicketMutation.execute>[0]['fields']> } : {}),
+          actor: { actorType: 'agent', actorName: 'Factory' },
+        });
+      },
       cancelExecution: (executionId) => deps.executeAgent.cancelExecution(executionId),
       /* in the human's name, as a comment of theirs would be; it starts no agent (no mention is created from it) */
       recordDecision: async (ticketId, gate, outcome, reason) => {

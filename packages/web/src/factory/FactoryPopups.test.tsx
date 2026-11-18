@@ -173,6 +173,25 @@ describe('<FactoryMachinePopup/>', () => {
     expect(there.onOpenMachine).toHaveBeenCalledWith('go');
   });
 
+  it('sets up a gantry: the list of what it does to a ticket, saved once an operation is complete', () => {
+    const g: MachineSpec = { id: 'g', kind: 'belt', x: 20, y: 1, w: 1, h: 1, dir: 0, set: [{ field: 'priority', value: 'high' }] };
+    seed([], [dev, g]);
+    const on = open('g'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Set gantry');
+    expect((screen.getByLabelText('Priority to set') as HTMLSelectElement).value).toBe('high');
+    /* a tag operation has nothing to set at first: it is not saved until it has */
+    fireEvent.click(screen.getByRole('button', { name: 'Add an operation' }));
+    expect(on.onPatch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('What to do with the tag'), { target: { value: 'inc' } });
+    const value = within(screen.getByRole('group', { name: 'Operation 2' })).getByRole('textbox');
+    fireEvent.change(value, { target: { value: 'passes' } }); fireEvent.blur(value);
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: [{ field: 'priority', value: 'high' }, { field: 'tag', op: 'inc', value: 'passes' }] });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove operation 1' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: [{ field: 'tag', op: 'inc', value: 'passes' }] });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the gantry' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined });
+  });
+
   it('closes when its machine is no longer on the floor', () => {
     seed([]);
     const on = open('gone');
