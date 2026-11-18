@@ -11,10 +11,11 @@ import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
 import { follow, type Track, type TrackPos } from './ticketMotion';
 import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
+import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
 
-export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number }[]; ok: boolean; erase?: boolean; text?: string }
+export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number; /** An arm about to be placed: where it would take from and drop on is shown. */ arm?: boolean }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
 export interface ViewState {
   layout: FactoryLayout;
@@ -61,6 +62,9 @@ export interface ViewState {
   grid?: boolean;
   /** The machine whose light the pointer is on. */
   hoverLamp?: string | null;
+  /** Exit id → how many tickets left by it over the last `exitDays` days. */
+  exits?: Readonly<Record<string, number>> | null;
+  exitDays?: number;
 }
 /** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */
 export type Hit = { ticketId: string } | { machineId: string } | { lamp: string } | null;
@@ -72,6 +76,15 @@ const STAR = '#facc15';
 const NO_TYPE = '#8b949e', GHOST = '#71717a';
 const PRIORITY_PIP: Record<string, string> = { urgent: '#ef4444', high: '#fb923c' };
 const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
+/** The paint of a zone: the colour of the status it sets, lifted where that one is too dark to read on the floor; and the paint of a zone that sets none. */
+const ZONE_PAINT: Record<string, string> = { backlog: '#a1a1aa', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
+const PAINT = '#60a5fa';
+/** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
+const SNAP = 0.0005, SLIDE = 0.03;
+/** Seconds a ticket takes to fade once it is past an exit's frame. */
+const FADE_S = 0.75;
+/** A ticket that has just left by an exit, drawn a moment longer: up to the frame as it was, then as an outline that fades. */
+interface Leaving { type: string; from: { x: number; y: number }; edge: EdgePoint; exit: MachineSpec; age: number; travel: number }
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
@@ -115,6 +128,8 @@ const SHADOW_PAD = 1.2;
 interface Riding { t: FactoryTicket; pos: TrackPos }
 /** The colour of a frame being dragged, and of what it takes. */
 const PICK = '#60a5fa';
+/** The arrow painted under an arm, pointing east, round the middle of its tile: narrow where it takes, wide where it drops. */
+const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
@@ -137,6 +152,18 @@ export class FactoryView {
   private armShown = new Map<string, number>();
   /** Ticket id → where it is drawn on the belts: it follows what the server says along them (see `ticketMotion.ts`). */
   private drawnOn = new Map<string, TrackPos>();
+  /** Ticket id → the arm whose quay it was last sent to: it does not change quay while that arm still takes it. */
+  private quayFor = new Map<string, string>();
+  /** Ticket id → where it was at the last frame, to tell one that left by an exit from one that was taken back. */
+  private lastOn = new Map<string, { m: string | null; fx: number; fy: number; type: string }>();
+  /** Arm id → where its cup was drawn at the last frame. */
+  private handAt = new Map<string, { x: number; y: number }>();
+  private leaving: Leaving[] = [];
+  /** Exit id → tickets seen leaving by it since the counts were last given. */
+  private passed = new Map<string, number>();
+  private countsFrom: unknown = null;
+  /** Tickets on the floor that are being worked on or reviewed: what a zone's limit is about. */
+  private wip = 0;
   private readonly ctx: CanvasRenderingContext2D;
   /** The floor as last painted, and what it was painted for. */
   private backdrop: HTMLCanvasElement | null = null;
@@ -255,33 +282,42 @@ export class FactoryView {
 
   private label(text: string, wx: number, wy: number, size: number, color: string, opts: Label[5] = {}): void { this.labels.push([text, wx, wy, size, color, opts]); }
   private flushLabels(): void {
-    const ctx = this.ctx, z = this.cam.z;
+    const ctx = this.ctx;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    for (const [raw, wx, wy, size, color, o] of this.labels) {
-      let px = size * z;
-      if (px < 3.6) continue;
-      if (o.min) px = Math.max(px, o.min);
-      if (o.max) px = Math.min(px, o.max);
-      const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2;
-      if (sx < -300 || sx > this.w + 300 || sy < -40 || sy > this.h + 40) continue;
-      ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
-      ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
-      let text = raw;
-      if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
-      if (o.plate) {
-        const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
-        const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
-        ctx.fillStyle = o.plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
-      }
-      ctx.fillStyle = color; ctx.fillText(text, sx, sy);
-    }
+    for (const l of this.labels) this.write(l);
     ctx.restore(); this.labels.length = 0;
   }
+  /** Text painted on the floor itself, now, so that what is drawn after it goes over it: a stencil, not a label. */
+  private stencil(text: string, wx: number, wy: number, size: number, color: string, alpha: number, opts: Label[5] = {}): void {
+    const ctx = this.ctx;
+    ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.globalAlpha = alpha;
+    this.write([text, wx, wy, size, color, opts]);
+    ctx.restore();
+  }
+  private write([raw, wx, wy, size, color, o]: Label): void {
+    const ctx = this.ctx, z = this.cam.z;
+    let px = size * z;
+    if (px < 3.6) return;
+    if (o.min) px = Math.max(px, o.min);
+    if (o.max) px = Math.min(px, o.max);
+    const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2;
+    if (sx < -300 || sx > this.w + 300 || sy < -40 || sy > this.h + 40) return;
+    ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
+    ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
+    let text = raw;
+    if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
+    if (o.plate) {
+      const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
+      const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
+      ctx.fillStyle = o.plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
+    }
+    ctx.fillStyle = color; ctx.fillText(text, sx, sy);
+  }
 
-  private ticket(t: FactoryTicket, x: number, y: number, s: number, st: ViewState, mark: 'run' | 'human' | 'fail' | 'out' | 'wait' | '', dt: number): void {
+  private ticket(t: FactoryTicket, x: number, y: number, s: number, st: ViewState, mark: 'run' | 'human' | 'fail' | 'out' | 'wait' | '', dt: number, rate = SNAP): void {
     const ctx = this.ctx, pal = this.palette(), cur = this.shown.get(t.ticketId), dragging = st.drag?.ticketId === t.ticketId;
     /* ease towards where the server last said the ticket is, so a poll does not make it jump */
-    const k = cur ? 1 - Math.pow(0.0005, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
+    const k = cur ? 1 - Math.pow(rate, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
     this.shown.set(t.ticketId, { x: px, y: py });
     const picked = !!st.pickTickets?.has(t.ticketId), selected = st.selTicket === t.ticketId || !!st.selTickets?.has(t.ticketId), dim = !!st.dim?.has(t.ticketId) && !selected && !picked && !dragging;
     const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
@@ -444,7 +480,14 @@ export class FactoryView {
     this.shadows(st, pal);
 
     const live = new Set(st.tickets.map((t) => t.ticketId));
-    for (const id of this.shown.keys()) if (!live.has(id)) this.shown.delete(id);
+    if (st.exits !== this.countsFrom) { this.countsFrom = st.exits; this.passed.clear(); }
+    for (const id of this.shown.keys()) if (!live.has(id)) { this.left(id, st); this.shown.delete(id); }
+    for (const id of this.lastOn.keys()) if (!live.has(id)) { this.lastOn.delete(id); this.quayFor.delete(id); }
+    this.wip = 0;
+    for (const t of st.tickets) {
+      this.lastOn.set(t.ticketId, { m: t.machineId, fx: t.fx, fy: t.fy, type: t.info?.type ?? '' });
+      if (t.info && (t.info.status === 'doing' || t.info.status === 'reviewing')) this.wip++;
+    }
 
     const belts = L.machines.filter((m): m is BeltSpec => m.kind === 'belt');
     const bends = new Map<string, number>();
@@ -474,7 +517,7 @@ export class FactoryView {
       if (m.kind === 'label') this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 });
       else if (m.kind === 'zone') this.zone(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'station') this.station(m, inside.get(m.id) ?? [], st, pal, dtReal);
-      else if (m.kind === 'exit') this.exit(m, pal);
+      else if (m.kind === 'exit') this.exit(m, st, pal);
     }
     for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
       const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
@@ -491,6 +534,7 @@ export class FactoryView {
       this.ticket(t, t.x + 0.5, t.y + 0.5, 0.5, st, '', dtReal);
     }
     for (const m of L.machines) if (m.kind === 'arm') this.arm(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
+    this.departures(pal, dtReal);
 
     if (st.lens) this.lens(st.lens, L, pal);
     this.overlay(st, pal);
@@ -565,12 +609,13 @@ export class FactoryView {
     this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0);
   }
 
-  /** Whatever stands on the floor casts a shadow on it (not in build mode, which is a plain drawing). A picture made once per size, and stamped. */
+  /** A machine that stands on the floor casts a shadow on it (not in build mode, which is a plain drawing). A picture made once per size, and stamped. */
   private shadows(st: ViewState, pal: Palette): void {
     if (st.edit) return;
     const look = floorLook(pal.floor), a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h);
     for (const m of st.layout.machines) {
-      if (!isBox(m) || m.x + m.w + SHADOW_PAD < a.x || m.x - SHADOW_PAD > b.x || m.y + m.h + SHADOW_PAD < a.y || m.y - SHADOW_PAD > b.y) continue;
+      /* a zone is paint on the floor and an exit a frame of light: only a machine stands on it */
+      if (m.kind !== 'station' || m.x + m.w + SHADOW_PAD < a.x || m.x - SHADOW_PAD > b.x || m.y + m.h + SHADOW_PAD < a.y || m.y - SHADOW_PAD > b.y) continue;
       this.ctx.drawImage(this.shadowSprite(m.w, m.h, look.shadow), m.x - SHADOW_PAD, m.y - SHADOW_PAD, m.w + SHADOW_PAD * 2, m.h + SHADOW_PAD * 2);
     }
   }
@@ -754,6 +799,11 @@ export class FactoryView {
     for (const r of tickets) if (r.pos.fx !== 0) draw(r);
   }
 
+  /**
+   * An arm: a base on its tile, a flat link, and a suction cup that holds the ticket. Under it, painted on its tile,
+   * an arrow in its colour says which way it works: narrow where it takes, wide where it drops, its head at the edge.
+   * It is there when the arm is at rest or turned the other way, which is when one needs it.
+   */
   private arm(a: ArmSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir];
     /*
@@ -761,18 +811,37 @@ export class FactoryView {
      */
     const swing = st.armSwing || 1.1, p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), dt, swing);
     this.armShown.set(a.id, p);
-    const e = easeSwing(p);
-    const th = Math.atan2(dy, dx) + Math.PI * (1 - e), hx = bx + Math.cos(th) * 0.92, hy = by + Math.sin(th) * 0.92;
-    const filtered = isConditional(a), col = filtered ? pal.warn : pal.text2;
-    ctx.fillStyle = col; ctx.globalAlpha = 0.55; ctx.beginPath();
-    ctx.moveTo(bx + dx * 0.48, by + dy * 0.48); ctx.lineTo(bx + dx * 0.3 - dy * 0.16, by + dy * 0.3 - dx * 0.16); ctx.lineTo(bx + dx * 0.3 + dy * 0.16, by + dy * 0.3 + dx * 0.16); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = pal.bg; ctx.beginPath(); ctx.arc(bx, by, 0.3, 0, 6.3); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.07; ctx.stroke();
-    ctx.lineCap = 'round'; ctx.strokeStyle = pal.bg; ctx.lineWidth = 0.2; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke();
-    ctx.strokeStyle = col; ctx.lineWidth = 0.11; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke(); ctx.lineCap = 'butt';
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(bx, by, 0.13, 0, 6.3); ctx.fill();
-    if (carried) this.ticket(carried, hx, hy, 0.44, st, '', dt);
-    ctx.strokeStyle = col; ctx.lineWidth = 0.06; ctx.beginPath(); ctx.arc(hx, hy, 0.17, th - 1.9, th + 1.9); ctx.stroke();
-    const src = this.at(a.x - dx, a.y - dy), tag = armTag(a, src ? this.takersOf(src) : [], st.boardName);
+    const e = easeSwing(p), src = this.at(a.x - dx, a.y - dy), dst = this.at(a.x + dx, a.y + dy), R = reachOf(src, dst);
+    /*
+     * The cup goes where the ticket is: over the middle of a belt's tile, over its quay on the edge of a station or a
+     * zone (see `quays.ts`). So its reach changes while it turns, and it lifts what it is on.
+     */
+    const th = Math.atan2(dy, dx) + Math.PI * (1 - e), reach = R.from + (R.to - R.from) * e, hx = bx + Math.cos(th) * reach, hy = by + Math.sin(th) * reach;
+    const filtered = isConditional(a), col = filtered ? pal.warn : pal.text2, steel = mix(pal.body, pal.text2, 0.38);
+    const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
+    this.wayMark(bx, by, dx, dy, col, st.edit ? 1 : 0.62);
+    ctx.lineCap = 'round';
+    if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.31; link(0.06, 0.1); }
+    /*
+     * What it carries is held: it moves with the cup. Only what was between the two when it was lifted is closed in on,
+     * so a ticket never trails behind the arm that turns.
+     */
+    const hand = this.handAt.get(a.id);
+    this.handAt.set(a.id, { x: hx, y: hy });
+    if (carried) {
+      const cur = this.shown.get(carried.ticketId);
+      if (cur && hand) this.shown.set(carried.ticketId, { x: cur.x + hx - hand.x, y: cur.y + hy - hand.y });
+      ctx.lineCap = 'butt'; this.ticket(carried, hx, hy, 0.42, st, '', dt); ctx.lineCap = 'round';
+    }
+    ctx.strokeStyle = steel; ctx.lineWidth = 0.29; link(0, 0);
+    ctx.strokeStyle = col; ctx.lineWidth = 0.08; link(0, 0);
+    ctx.lineCap = 'butt';
+    /* the cup: a ring, through which the ticket shows, the one it holds as the one that waits for it on the quay */
+    ctx.beginPath(); ctx.arc(hx, hy, 0.2, 0, 6.3); ctx.fillStyle = 'rgba(24,24,27,0.3)'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.055; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx, hy, 0.055, 0, 6.3); ctx.fillStyle = pal.text; ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, 0.25, 0, 6.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.068; ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, by, 0.09, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
+    const tag = armTag(a, src ? this.takersOf(src) : [], st.boardName);
     const asked = st.selMachine === a.id || st.hoverMachine === a.id;
     if (!tag || (!asked && (st.armTags === false || this.cam.z < 11))) return;
     /*
@@ -781,7 +850,6 @@ export class FactoryView {
      * tag above the arm read as belonging to the one before.
      */
     const o = { min: 9, max: 12, mono: true, plate: filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = filtered ? '#fde68a' : pal.text2;
-    const dst = this.at(a.x + dx, a.y + dy);
     if (isBox(dst) && isBox(src)) {
       /* squeezed between two machines, there is no room on its own line: beside it, as a last resort */
       if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, ink, { ...o, align: 'center' });
@@ -795,13 +863,54 @@ export class FactoryView {
     else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
   }
 
+  /** The arrow painted under an arm, from where it takes to where it drops. */
+  private wayMark(bx: number, by: number, dx: number, dy: number, col: string, strength: number): void {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    WAY.forEach(([u, v], i) => { const X = bx + u * dx - v * dy, Y = by + u * dy + v * dx; if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
+    ctx.closePath();
+    ctx.fillStyle = col; ctx.globalAlpha = 0.26 * strength; ctx.fill();
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.7 * strength; ctx.lineWidth = 0.034; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.globalAlpha = 1; ctx.lineJoin = 'miter';
+  }
+
+  /** Which arm takes each ticket that is ready to leave a box; a ticket keeps the quay it was sent to. */
+  private leavers(m: MachineSpec, takers: ArmSpec[], tickets: FactoryTicket[], st: ViewState): Dispatch {
+    const D = dispatch(m, takers, tickets, { keep: this.quayFor, busy: (id) => { const a = st.arms.get(id); return !!a && a.state !== 'rest'; } });
+    for (const [ticketId, armId] of D.quay) this.quayFor.set(ticketId, armId);
+    return D;
+  }
   /**
-   * A station as a machine (see `machineArt.ts`): head plate, light, places, a tray for what is done, a bay for what
-   * was set aside. A status station stays the small box it was: it holds nothing.
+   * The quay of each arm that takes from a box: a notch in its edge, in the arm's colour (a painted square on a
+   * zone, which is paint itself), and the tickets on their way out, in line at the quay of the arm that will take
+   * them. They slide there, slowly enough to be seen going.
+   */
+  private quays(takers: ArmSpec[], D: Dispatch, st: ViewState, pal: Palette, dt: number, painted: boolean): void {
+    const ctx = this.ctx;
+    for (const a of takers) {
+      const q = quayRect(a), line = D.byArm.get(a.id) ?? [];
+      rr(ctx, q.x, q.y, q.w, q.h, 0.11);
+      if (painted) { ctx.globalAlpha = 0.75; ctx.setLineDash([0.09, 0.07]); } else { ctx.fillStyle = pal.floor; ctx.fill(); }
+      ctx.strokeStyle = isConditional(a) ? pal.warn : pal.text2; ctx.lineWidth = 0.045; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      /* the last in line first: the one that leaves next is on top */
+      for (let i = line.length - 1; i >= 0; i--) {
+        const at = quaySpot(a, i);
+        if (i < QUAY_ROOM) this.ticket(line[i]!, at.x, at.y, i ? 0.34 : 0.4, st, '', dt, SLIDE); else this.shown.set(line[i]!.ticketId, at);
+      }
+      if (line.length > QUAY_ROOM) { const at = quaySpot(a, QUAY_ROOM - 1); this.label(`+${line.length - QUAY_ROOM}`, at.x, at.y + 0.3, 0.2, pal.text2, { mono: true, align: 'center', plate: 'rgba(9,9,11,0.84)' }); }
+    }
+  }
+
+  /**
+   * A station as a machine (see `machineArt.ts`): head plate, light, places, a bay for what was set aside, and a quay
+   * in front of each arm for what is done. A status station stays the small box it was: it holds nothing.
    */
   private station(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     if (m.exec === 'native') { this.statusStation(m, tickets, st, pal, dt); return; }
-    const ctx = this.ctx, z = this.cam.z, { x, y, w, h } = m, gate = m.exec === 'human_gate', P = machineParts(m), S = sortInto(m, tickets), L = lampOf(m, tickets);
+    const ctx = this.ctx, z = this.cam.z, { x, y, w, h } = m, gate = m.exec === 'human_gate', takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st);
+    const P = machineParts(m, D.stuck.length > 0), S = sortInto(m, tickets), L = lampOf(m, tickets);
+    /* a question an arm takes is on its way out: it stands at that arm's quay, not in the bay */
+    const aside = S.aside.filter((t) => !D.quay.has(t.ticketId));
     const tint = gate ? pal.warn : '#c084fc', tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
     const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke(); };
     /* the body: a plate lit from above; a gate keeps its dashed amber edge */
@@ -848,32 +957,37 @@ export class FactoryView {
       S.extra.forEach((t) => this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + 0.3 }));
       if (S.extra.length) this.label(`+${S.extra.length}`, P.work.x + P.work.w - 0.1, P.work.y + 0.2, 0.22, pal.text2, { mono: true, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
-    /* the tray: what is done and not yet taken by an arm */
-    pit(P.out); tiny('OUT', P.out);
-    const os = Math.min(0.42, P.out.w * 0.56), room = Math.max(1, Math.floor((P.out.h - 0.36) / (os + 0.12)));
-    S.out.forEach((t, i) => { if (i < room) this.ticket(t, P.out.x + P.out.w / 2, P.out.y + 0.36 + os / 2 + i * (os + 0.12), os, st, 'out', dt); else this.shown.set(t.ticketId, { x: P.out.x + P.out.w / 2, y: P.out.y + P.out.h - 0.2 }); });
-    if (S.out.length > room) this.label(`+${S.out.length - room}`, P.out.x + P.out.w / 2, P.out.y + P.out.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
+    /* what is done and that no arm takes: it will not leave by itself, and says so in red */
+    if (P.out) {
+      const o = P.out;
+      pit(o); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); tiny('NO ARM', o, pal.danger);
+      const os = Math.min(0.42, o.w * 0.56), room = Math.max(1, Math.floor((o.h - 0.36) / (os + 0.12)));
+      D.stuck.forEach((t, i) => { if (i < room) this.ticket(t, o.x + o.w / 2, o.y + 0.36 + os / 2 + i * (os + 0.12), os, st, 'fail', dt); else this.shown.set(t.ticketId, { x: o.x + o.w / 2, y: o.y + o.h - 0.2 }); });
+      if (D.stuck.length > room) this.label(`+${D.stuck.length - room}`, o.x + o.w / 2, o.y + o.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
+    }
     /* the bay: what was set aside. Hazard stripes on its edge, as a hold area has. */
     if (P.aside) {
       const a = P.aside, band = 0.42;
       pit(a);
       ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
-      ctx.strokeStyle = veil(pal.warn, S.aside.length ? 0.75 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
+      ctx.strokeStyle = veil(pal.warn, aside.length ? 0.75 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
       for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
       ctx.stroke(); ctx.restore();
-      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, veil(pal.warn, S.aside.length ? 0.9 : 0.45), { weight: 700 });
+      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, veil(pal.warn, aside.length ? 0.9 : 0.45), { weight: 700 });
       /* the tickets stand to the right of the bay's name, apart enough for their signs not to cover one another */
       const as = Math.min(0.44, a.h * 0.56), step = as + 0.4, x0 = a.x + band + 1.2, fit = Math.max(1, Math.floor((a.x + a.w - 0.1 - x0) / step));
-      S.aside.forEach((t, i) => { if (i < fit) this.ticket(t, x0 + as / 2 + i * step, a.y + a.h / 2, as, st, t.phase === 'failed' ? 'fail' : 'human', dt); else this.shown.set(t.ticketId, { x: a.x + a.w - 0.3, y: a.y + a.h / 2 }); });
-      if (S.aside.length > fit) this.label(`+${S.aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
+      aside.forEach((t, i) => { if (i < fit) this.ticket(t, x0 + as / 2 + i * step, a.y + a.h / 2, as, st, t.phase === 'failed' ? 'fail' : 'human', dt); else this.shown.set(t.ticketId, { x: a.x + a.w - 0.3, y: a.y + a.h / 2 }); });
+      if (aside.length > fit) this.label(`+${aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
     }
+    this.quays(takers, D, st, pal, dt, false);
     if (L === 'off') { ctx.globalAlpha = 0.28; rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
   }
 
   private statusStation(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y, w, h } = m, big = w >= 3, gate = false, nat = true;
-    const waiting = tickets.filter((t) => t.phase !== 'out'), out = tickets.filter((t) => t.phase === 'out');
+    const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st);
+    const waiting = tickets.filter((t) => t.phase !== 'out'), out = D.stuck;
     const state = tickets.length ? pal.ok : pal.text3;
     rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.28); ctx.fillStyle = pal.body; ctx.fill();
     ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : nat ? pal.ok : pal.edge;
@@ -892,33 +1006,123 @@ export class FactoryView {
     for (let i = n; i < waiting.length; i++) this.shown.set(waiting[i]!.ticketId, { x: x + w / 2, y: y + h / 2 });
     if (waiting.length > n) this.label(`+${waiting.length - n}`, x + w - 0.3, y0 - 0.12, 0.24, pal.text2, { mono: true, align: 'right' });
     const ty = y + h - (big ? 0.86 : 0.64), th = big ? 0.56 : 0.44, ts = big ? 0.38 : 0.3, max = Math.floor((w - 0.7) / (ts + 0.08));
-    rr(ctx, x + 0.28, ty, w - 0.56, th, 0.1); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
-    out.forEach((t, i) => { if (i < max) this.ticket(t, x + 0.4 + ts / 2 + i * (ts + 0.08), ty + th / 2, ts, st, 'out', dt); else this.shown.set(t.ticketId, { x: x + w - 0.5, y: ty + th / 2 }); });
+    /* what no arm takes stays here, in red; the rest is at the quay of its arm */
+    if (out.length) { rr(ctx, x + 0.28, ty, w - 0.56, th, 0.1); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); }
+    out.forEach((t, i) => { if (i < max) this.ticket(t, x + 0.4 + ts / 2 + i * (ts + 0.08), ty + th / 2, ts, st, 'fail', dt); else this.shown.set(t.ticketId, { x: x + w - 0.5, y: ty + th / 2 }); });
+    this.quays(takers, D, st, pal, dt, false);
     if (tickets.length >= m.cap) this.label('full', x + w / 2, y + h + 0.26, 0.26, '#fdba74', { align: 'center', plate: 'rgba(9,9,11,0.84)', min: 9, max: 12 });
   }
 
+  /**
+   * A zone is paint on the floor: a faint fill, a dashed line round it, three corners. Everything it says is
+   * stencilled: its name, a padlock (shut, nothing leaves without you; open with chevrons, it lets tickets out by
+   * itself), how many tickets it holds as a large figure on the ground, and, where it stops releasing above a number
+   * of tickets in work, that number as a line that fills.
+   */
   private zone(m: ZoneSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y, w, h } = m;
-    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.22); ctx.fillStyle = pal.bg; ctx.fill(); ctx.strokeStyle = m.inbound ? pal.accent : pal.edge; ctx.lineWidth = 0.08;
-    if (m.inbound) ctx.setLineDash([0.35, 0.18]);
-    ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = m.inbound ? pal.accent : STATUS_COLORS[m.status ?? ''] ?? pal.text3; rr(ctx, x + 0.3, y + 0.24, 0.14, 0.4, 0.05); ctx.fill();
-    this.label(`${m.name || 'Zone'} · ${tickets.filter((t) => !t.released).length}`, x + 0.58, y + 0.45, 0.34, pal.text, { weight: 600, min: 9, max: 15, fit: w - 0.8 });
-    if (m.release === 'auto' && w >= 4) this.label('auto', x + w - 0.3, y + 0.45, 0.24, pal.ok, { align: 'right', mono: true });
+    const ctx = this.ctx, { x, y, w, h } = m, auto = m.release === 'auto', c = m.inbound ? pal.accent : ZONE_PAINT[m.status ?? ''] ?? PAINT;
+    const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st), held = tickets.filter((t) => !D.quay.has(t.ticketId)), stock = tickets.filter((t) => !t.released).length;
+    ctx.fillStyle = c; ctx.globalAlpha = 0.055; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = c; ctx.globalAlpha = 0.45; ctx.lineWidth = 0.045; ctx.setLineDash([0.2, 0.16]); ctx.strokeRect(x + 0.035, y + 0.035, w - 0.07, h - 0.07); ctx.setLineDash([]);
+    /* three corners: the fourth is the padlock's */
+    ctx.globalAlpha = 1; ctx.lineWidth = 0.11; ctx.lineCap = 'square'; ctx.beginPath();
+    for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]] as const) { ctx.moveTo(cx + sx * 0.4, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.4); }
+    ctx.stroke(); ctx.lineCap = 'butt';
+    this.label((m.name || 'Zone').toUpperCase(), x + 0.26, y + 0.42, 0.26, c, { mono: true, weight: 700, min: 9, max: 15, fit: w - (auto ? 1.25 : 0.95) });
+    this.padlock(x + w - (auto ? 0.86 : 0.52), y + 0.2, auto, c);
+    /* the stock, on the ground: tickets stand on it */
+    if (w >= 2 && h >= 2) this.stencil(String(stock).padStart(2, '0'), x + 0.2, y + h - 0.56, 0.9, c, stock ? 0.3 : 0.14, { mono: true, weight: 700 });
+    if (auto && m.status === 'todo') {
+      /* it stops releasing while that many tickets are in work on the floor: the line is how close that is */
+      const limit = m.limit ?? 12, k = clamp(this.wip / limit, 0, 1), cc = k >= 0.8 ? pal.warn : c, x0 = x + 0.24, x1 = x + w - 0.24, ly = y + h - 0.17;
+      ctx.lineCap = 'round'; ctx.lineWidth = 0.09;
+      ctx.strokeStyle = c; ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.moveTo(x0, ly); ctx.lineTo(x1, ly); ctx.stroke(); ctx.globalAlpha = 1;
+      if (k > 0) { ctx.strokeStyle = cc; ctx.beginPath(); ctx.moveTo(x0, ly); ctx.lineTo(x0 + (x1 - x0) * k, ly); ctx.stroke(); }
+      ctx.lineCap = 'butt';
+      if (w >= 3) this.label(`IN WORK ${this.wip}/${limit}`, x1 + 0.04, y + h - 0.42, 0.19, cc, { mono: true, weight: 700, align: 'right', min: 8, max: 11 });
+    }
     const pitch = 0.5, cols = Math.max(1, Math.floor((w - 0.5) / pitch)), rows = Math.max(1, Math.floor((h - 1.05) / pitch)), n = cols * rows;
     const ox = x + (w - cols * pitch) / 2 + pitch / 2, oy = y + 0.85 + pitch / 2;
-    tickets.forEach((t, i) => {
+    held.forEach((t, i) => {
+      /* released and no arm takes it: it is marked as on its way out, and stays */
       if (i < n) this.ticket(t, ox + (i % cols) * pitch, oy + Math.floor(i / cols) * pitch, 0.38, st, t.released ? 'out' : '', dt);
       else this.shown.set(t.ticketId, { x: x + w - 0.5, y: y + h - 0.4 });
     });
-    if (tickets.length > n) this.label(`+${tickets.length - n}`, x + w - 0.28, y + h - 0.32, 0.26, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
+    if (held.length > n) this.label(`+${held.length - n}`, x + w - 0.28, y + h - 0.72, 0.26, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
+    this.quays(takers, D, st, pal, dt, true);
   }
 
-  private exit(m: MachineSpec, pal: Palette): void {
-    const ctx = this.ctx, { x, y, w, h } = m;
-    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = pal.ok; ctx.lineWidth = 0.08; ctx.stroke();
-    this.label(m.name || 'Exit', x + w / 2, y + 0.55, 0.32, pal.ok, { align: 'center', weight: 600, min: 9, max: 14, fit: Math.max(w, 3) });
-    if (h >= 2) this.label('done', x + w / 2, y + 1.05, 0.24, pal.text2, { align: 'center' });
+  /** A padlock, stencilled: shut, or open with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
+  private padlock(x: number, y: number, open: boolean, col: string): void {
+    const ctx = this.ctx, k = 1 / 40, top = y + (open ? 0.5 : 2.5) * k;
+    ctx.fillStyle = col; rr(ctx, x, y + 5 * k, 11 * k, 9 * k, 2 * k); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8 * k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x + 2.5 * k, y + 5 * k); ctx.lineTo(x + 2.5 * k, top); ctx.arc(x + 5.5 * k, top, 3 * k, Math.PI, 0); ctx.lineTo(x + 8.5 * k, top + (open ? 1 : 2.5) * k); ctx.stroke();
+    if (open) {
+      ctx.beginPath();
+      for (const cx of [15, 20]) { ctx.moveTo(x + cx * k, y + 5.5 * k); ctx.lineTo(x + (cx + 4) * k, y + 9.5 * k); ctx.lineTo(x + cx * k, y + 13.5 * k); }
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+  }
+
+  /**
+   * An exit is a frame of light: it keeps its tiles, and holds nothing. A ticket that reaches it is handed back to
+   * Fleex, so it is not kept there: it fades as it crosses the frame (see `departures`). What stays is how many left
+   * by it over the period the floor's figures cover.
+   */
+  private exit(m: MachineSpec, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
+    ctx.strokeStyle = ok;
+    for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', 0.3); ctx.fill(); ctx.lineWidth = 0.055; ctx.stroke();
+    const R = Math.min(w, h) * 0.46;
+    ctx.globalAlpha = 0.24; ctx.drawImage(this.glowSprite(ok), x + w / 2 - R, y + h / 2 - R, R * 2, R * 2); ctx.globalAlpha = 1;
+    const plate = { mono: true, weight: 700, min: 9, max: 12 } as const;
+    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6) });
+    if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
+    if (!st.exits) return;
+    /* how many left by it: on the top line too when there is room beside the name, under the frame otherwise */
+    const count = `${(st.exits[m.id] ?? 0) + (this.passed.get(m.id) ?? 0)} · ${st.exitDays ?? 7} d`, o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
+    if (w * z >= 125) this.label(count, x + w - 0.3, y + 0.06, 0.24, ok, { ...o, align: 'right' });
+    else this.label(count, x + w / 2, y + h - 0.04, 0.24, ok, { ...o, align: 'center' });
+  }
+
+  /** A ticket that was on its way into an exit when it left the floor: it is seen crossing the frame. Anything else that goes was taken back, and just goes. */
+  private left(ticketId: string, st: ViewState): void {
+    const was = this.lastOn.get(ticketId), from = this.shown.get(ticketId), m = was?.m ? this.byId.get(was.m) : null;
+    if (!was || !from || !m) return;
+    const to = m.kind === 'arm' || m.kind === 'belt' ? this.at(m.x + DX[m.dir], m.y + DY[m.dir]) : m.kind === 'bridge' ? this.at(m.x + was.fx, m.y + was.fy) : null;
+    if (!to || to.kind !== 'exit') return;
+    const edge = entryOf(to, from);
+    this.leaving.push({ type: was.type, from: { ...from }, edge, exit: to, age: 0, travel: Math.min(0.5, Math.hypot(edge.x - from.x, edge.y - from.y) / (st.beltSpeed || 1.2)) });
+    this.passed.set(to.id, (this.passed.get(to.id) ?? 0) + 1);
+  }
+  /**
+   * What leaves by an exit: the ticket goes on to the frame as it was, then it is an outline with a tick that fades
+   * towards the middle, while the side it came in by lights up where it passed.
+   */
+  private departures(pal: Palette, dt: number): void {
+    const ctx = this.ctx, z = this.cam.z;
+    this.leaving = this.leaving.filter((l) => { l.age += dt; return l.age < l.travel + FADE_S && this.byId.has(l.exit.id); });
+    for (const l of this.leaving) {
+      const { exit: m, edge, from } = l;
+      if (l.age < l.travel) {
+        const k = l.age / l.travel, px = from.x + (edge.x - from.x) * k, py = from.y + (edge.y - from.y) * k, sprite = tokenSprite(l.type, TYPE_COLORS[l.type] ?? NO_TYPE, 0.53 * z * this.dpr);
+        if (sprite) { const s = sprite.width / (z * this.dpr); ctx.drawImage(sprite, px - s / 2, py - s / 2, s, s); }
+        else { rr(ctx, px - 0.23, py - 0.23, 0.46, 0.46, 0.1); ctx.fillStyle = TYPE_COLORS[l.type] ?? NO_TYPE; ctx.fill(); }
+        continue;
+      }
+      const k = (l.age - l.travel) / FADE_S, e = k * k * (3 - 2 * k), px = edge.x + (m.x + m.w / 2 - edge.x) * e, py = edge.y + (m.y + m.h / 2 - edge.y) * e;
+      ctx.globalAlpha = 1 - k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      /* the side lights up where it passed, no further than the side goes */
+      const a0 = Math.max(-0.45, edge.ax ? m.x + 0.2 - edge.x : m.y + 0.2 - edge.y), a1 = Math.min(0.45, edge.ax ? m.x + m.w - 0.2 - edge.x : m.y + m.h - 0.2 - edge.y);
+      ctx.strokeStyle = mix(pal.ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
+      ctx.strokeStyle = pal.ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
+      ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(px - 0.09, py); ctx.lineTo(px - 0.02, py + 0.07); ctx.lineTo(px + 0.1, py - 0.07); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    }
   }
 
   private overlay(st: ViewState, pal: Palette): void {
@@ -943,7 +1147,10 @@ export class FactoryView {
         for (const a of this.takersOf(sel)) outline(a, '#fb923c', 0.07);
       }
     }
+    /* in build mode, an arm that is selected or about to be placed says where it takes from and where it drops */
+    if (st.edit && sel?.kind === 'arm' && !st.selMany.length) this.armWay(sel.x, sel.y, sel.dir, pal, true);
     const g = st.ghost;
+    if (g && !g.erase) for (const c of g.cells) if (c.arm && c.dir != null) this.armWay(c.x, c.y, c.dir, pal, g.cells.length === 1);
     if (g) {
       for (const c of g.cells) {
         ctx.fillStyle = g.erase || !g.ok ? 'rgba(239,68,68,0.28)' : 'rgba(96,165,250,0.26)'; ctx.strokeStyle = g.erase || !g.ok ? pal.danger : '#60a5fa'; ctx.lineWidth = 0.06;
@@ -969,6 +1176,34 @@ export class FactoryView {
       if (sprite) { const w = sprite.width / (this.cam.z * this.dpr); ctx.drawImage(sprite, dr.x - w / 2, dr.y - w / 2, w, w); }
       else { rr(ctx, dr.x - 0.3, dr.y - 0.3, 0.6, 0.6, 0.13); ctx.fillStyle = TYPE_COLORS[held] ?? NO_TYPE; ctx.fill(); }
       this.label(dr.text, dr.x, dr.y - 0.75, 0.3, pal.text, { align: 'center', plate: dr.ok ? 'rgba(20,83,45,0.95)' : 'rgba(120,53,15,0.95)', min: 10, max: 13 });
+    }
+  }
+
+  /**
+   * Where an arm on that tile, pointing that way, takes from and drops on: the tile behind it in the frame's blue,
+   * dashed, the tile in front of it in green, each with its name. So an arm is not put down the wrong way round.
+   */
+  private armWay(x: number, y: number, dir: number, pal: Palette, turn: boolean): void {
+    const ctx = this.ctx, dx = DX[dir as 0], dy = DY[dir as 0];
+    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
+    const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
+      ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
+    };
+    const sx = x - dx, sy = y - dy, tx = x + dx, ty = y + dy, src = this.at(sx, sy), dst = this.at(tx, ty);
+    tile(sx, sy, PICK, true); tile(tx, ty, pal.ok, false);
+    const o = { mono: true, weight: 700, min: 9, max: 11 } as const, takes = `TAKES FROM · ${nameOf(src)}`, drops = `DROPS ON · ${nameOf(dst)}`;
+    const blue = { ...o, plate: 'rgba(23,37,84,0.95)' }, green = { ...o, plate: 'rgba(5,46,22,0.95)' };
+    if (dy === 0) {
+      /* side by side over the arm, each on its own side of it */
+      this.label(takes, x + 0.5 - dx * 0.1, y - 0.34, 0.22, '#bfdbfe', { ...blue, align: dx > 0 ? 'right' : 'left' });
+      this.label(drops, x + 0.5 + dx * 0.1, y - 0.34, 0.22, '#bbf7d0', { ...green, align: dx > 0 ? 'left' : 'right' });
+      if (turn) this.label('R · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
+    } else {
+      /* one above the other, to the right of the tiles they name */
+      this.label(takes, x + 1.16, sy + 0.5, 0.22, '#bfdbfe', blue);
+      this.label(drops, x + 1.16, ty + 0.5, 0.22, '#bbf7d0', green);
+      if (turn) this.label('R · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
   }
 

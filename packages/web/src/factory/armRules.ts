@@ -5,7 +5,7 @@
  * and describes.
  */
 import { TICKET_COMPLEXITIES, TICKET_PRIORITIES, TICKET_TYPE_LABELS, TICKET_TYPES } from '@fleex/shared';
-import { QUESTION_OUTCOME, type ArmCondition, type ArmField, type ArmOp, type ArmSpec, type FactoryLayout } from './types';
+import { QUESTION_OUTCOME, type ArmCondition, type ArmField, type ArmOp, type ArmSpec, type FactoryLayout, type FactoryTicketInfo } from './types';
 
 export const NONE = 'none';
 
@@ -23,6 +23,33 @@ export function acceptsOutcome(arm: ArmSpec, outcome: string): boolean {
   return on.length > 0 && on.every((c) => c.values.includes(outcome) !== (c.op === 'is_not'));
 }
 export const takesQuestions = (arm: ArmSpec): boolean => conditionsOf(arm).some((c) => c.field === 'outcome' && c.op === 'is' && c.values.includes(QUESTION_OUTCOME));
+
+const SCALES: Partial<Record<ArmField, readonly string[]>> = { priority: TICKET_PRIORITIES, complexity: TICKET_COMPLEXITIES };
+/**
+ * Whether one condition holds for a ticket and the outcome it carries. The engine decides (`conditions.ts` on the
+ * server, which this mirrors); the page only needs it to show, before the arm moves, which arm a ticket will leave by.
+ */
+export function holds(c: ArmCondition, info: FactoryTicketInfo | null, outcome: string): boolean {
+  const not = c.op === 'is_not';
+  if (c.field === 'outcome') return c.values.includes(outcome) !== not;
+  if (!info) return false;
+  if (c.field === 'favorite') return info.favorite !== not;
+  if (c.field === 'tag') return info.tags.some((tag) => c.values.includes(tag)) !== not;
+  if (c.field === 'board') return c.values.includes(info.boardId) !== not;
+  const value = c.field === 'type' ? info.type || NONE : c.field === 'priority' ? info.priority || NONE : info.complexity ?? NONE;
+  if (c.op === 'is' || c.op === 'is_not') return c.values.includes(value) !== not;
+  /* "no priority" is the bottom of its scale; "not estimated" is on no scale, so neither above nor below anything */
+  const scale = SCALES[c.field] ?? [], at = scale.indexOf(value), a = scale.indexOf(c.values[0] ?? ''), b = scale.indexOf(c.values[1] ?? '');
+  if (at < 0 || a < 0) return false;
+  return c.op === 'gte' ? at >= a : c.op === 'lte' ? at <= a : c.op === 'gt' ? at > a : c.op === 'lt' ? at < a : c.op === 'between' ? b >= 0 && at >= Math.min(a, b) && at <= Math.max(a, b) : false;
+}
+/** True when every condition of the arm holds. An arm with no condition matches everything. */
+export const matches = (arm: ArmSpec, info: FactoryTicketInfo | null, outcome: string): boolean => conditionsOf(arm).every((c) => holds(c, info, outcome));
+/** Whether an arm takes a ticket, among the arms that take from the same place: one with no condition takes only what the conditions of the others leave. */
+export function wants(arm: ArmSpec, takers: readonly ArmSpec[], info: FactoryTicketInfo | null, outcome: string): boolean {
+  if (!matches(arm, info, outcome)) return false;
+  return isConditional(arm) || !takers.some((o) => o !== arm && isConditional(o) && matches(o, info, outcome));
+}
 
 export const FIELD_LABEL: Record<ArmField, string> = {
   outcome: 'Outcome of the station', type: 'Type', priority: 'Priority', complexity: 'Complexity', board: 'Board', favorite: 'Favourite', tag: 'Tag',

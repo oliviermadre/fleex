@@ -92,4 +92,12 @@ describe('computeStats', () => {
     expect(s.totals).toMatchObject({ shipped: 2, avgLeadMs: 3 * 3_600_000, runs: 1 });
     expect(s.machines.map((m) => m.machineId)).toEqual(['spec']);
   });
+
+  it('says how many tickets left by each exit: the counter an exit carries on the floor', () => {
+    const ship = (id: string, machineId: string) => run(id, { ticketId: id, machineId, machineName: 'Exit', executor: 'exit', outcome: 'shipped' });
+    const s = stats([ship('x1', 'out'), ship('x2', 'out'), ship('x3', 'archive'), run('r1')]);
+    expect(s.exits).toEqual({ out: 2, archive: 1 });
+    expect(s.totals.shipped).toBe(3);
+    expect(stats([run('r1')]).exits).toEqual({});
+  });
 });

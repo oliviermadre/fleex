@@ -9,13 +9,23 @@ const apart = (a: Rect, b: Rect) => a.x + a.w <= b.x + 1e-9 || b.x + b.w <= a.x 
 
 describe('the parts of a machine', () => {
   it('fit inside it and keep clear of one another, whatever its size and its places', () => {
-    for (const [w, h] of [[5, 4], [3, 3], [8, 6]] as const) for (const cap of [1, 2, 3, 4, 6]) for (const exec of ['agent', 'human_gate'] as const) {
-      const m = station({ w, h, cap, exec }), p = machineParts(m), box: Rect = { x: m.x, y: m.y, w, h };
-      const parts = [p.badge, p.lamp, p.out, ...(p.aside ? [p.aside] : []), ...(p.places.length ? p.places : [p.work])];
+    for (const [w, h] of [[5, 4], [3, 3], [8, 6]] as const) for (const cap of [1, 2, 3, 4, 6]) for (const exec of ['agent', 'human_gate'] as const) for (const tray of [false, true]) {
+      const m = station({ w, h, cap, exec }), p = machineParts(m, tray), box: Rect = { x: m.x, y: m.y, w, h };
+      const parts = [p.badge, p.lamp, ...(p.out ? [p.out] : []), ...(p.aside ? [p.aside] : []), ...(p.places.length ? p.places : [p.work])];
       for (const r of parts) { expect(inside(r, box), `${exec} ${w}x${h} cap ${cap}`).toBe(true); expect(r.w > 0 && r.h > 0).toBe(true); }
       for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) expect(apart(parts[i]!, parts[j]!), `${exec} ${w}x${h} cap ${cap}: ${i} over ${j}`).toBe(true);
       for (const l of p.lights) expect(inRect(p.lamp, l.x, l.y)).toBe(true);
     }
+  });
+
+  it('has a tray only for what no arm takes: without one, the places take the whole width', () => {
+    const m = station(), plain = machineParts(m), stuck = machineParts(m, true);
+    expect(plain.out).toBeNull();
+    expect(stuck.out).not.toBeNull();
+    expect(plain.work.w).toBeGreaterThan(stuck.work.w);
+    expect(plain.work.x + plain.work.w).toBeCloseTo(m.x + m.w - 0.22);
+    /* the light is where it was whether there is a tray or not: it is a switch, it does not move under the pointer */
+    expect(stuck.lamp).toEqual(plain.lamp);
   });
 
   it('a machine that runs something has as many places as it works on tickets, and a bay; a gate has neither', () => {

@@ -98,6 +98,8 @@ export interface MachineStats {
 export interface FactoryStats {
   since: string; until: string; days: number; machines: MachineStats[];
   totals: { runs: number; failed: number; questions: number; costUsd: number; shipped: number; avgLeadMs: number | null; humanMs: number };
+  /** How many tickets left by each exit, by machine id. */
+  exits?: Record<string, number>;
 }
 /** What the floor is tinted by: nothing, money spent, run time, time waiting for a human, or what stands there now. */
 export type Lens = 'none' | 'cost' | 'time' | 'human' | 'load';

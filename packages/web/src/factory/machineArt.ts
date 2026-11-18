@@ -1,8 +1,10 @@
 /**
  * A station, drawn as a machine: a head plate with what it is, a light, as many places as it works on tickets at
- * once, a tray for what is done and not yet taken, and a bay for what was set aside. This file says where each part
- * goes and which ticket goes in which, in tiles; the renderer paints, and the same geometry answers "is the pointer on
- * the light".
+ * once, and a bay for what was set aside. This file says where each part goes and which ticket goes in which, in
+ * tiles; the renderer paints, and the same geometry answers "is the pointer on the light".
+ *
+ * What is done has no tray of its own: it goes to the quay of the arm that will take it, on the machine's edge (see
+ * `quays.ts`). Only what no arm takes is kept in a tray, which is there only then.
  *
  * Nothing queues in a machine: what cannot enter waits on the belt that feeds it.
  */
@@ -20,22 +22,27 @@ export interface MachineParts {
   /** What the places share (a gate has no places: this is where what it decides on stands). */
   work: Rect;
   places: Rect[];
-  out: Rect;
+  /** The tray of what is done and that no arm takes; null while there is nothing of the kind. */
+  out: Rect | null;
   /** Machines that run something only: a gate has nothing to set aside. */
   aside: Rect | null;
 }
 
 const EDGE = 0.22, HEAD = 1.14;
 
-export function machineParts(m: StationSpec): MachineParts {
+/** Room kept between the light and the machine's right edge: a quay there, on the top row, does not cover it. */
+const LAMP_IN = 0.56;
+
+/** The parts of a machine; `tray` when it holds something done that no arm takes, which then gets a tray on the right. */
+export function machineParts(m: StationSpec, tray = false): MachineParts {
   const { x, y, w, h } = m, runs = RUNS.includes(m.exec);
-  const lamp: Rect = { x: x + w - EDGE - 0.44, y: y + 0.2, w: 0.44, h: 0.9 };
+  const lamp: Rect = { x: x + w - LAMP_IN - 0.44, y: y + 0.2, w: 0.44, h: 0.9 };
   const top = y + HEAD, asideH = runs ? Math.min(0.78, (h - HEAD) * 0.36) : 0;
   const aside = runs ? { x: x + EDGE, y: y + h - EDGE - asideH, w: w - EDGE * 2, h: asideH } : null;
   const bottom = aside ? aside.y - 0.1 : y + h - EDGE;
   const outW = Math.min(0.86, w * 0.2);
-  const out: Rect = { x: x + w - EDGE - outW, y: top, w: outW, h: bottom - top };
-  const work: Rect = { x: x + EDGE, y: top, w: out.x - 0.1 - (x + EDGE), h: bottom - top };
+  const out: Rect | null = tray ? { x: x + w - EDGE - outW, y: top, w: outW, h: bottom - top } : null;
+  const work: Rect = { x: x + EDGE, y: top, w: (out ? out.x - 0.1 : x + w - EDGE) - (x + EDGE), h: bottom - top };
   const places: Rect[] = [];
   if (runs) {
     const n = placesOf(m), rows = n > 3 ? 2 : 1, cols = Math.ceil(n / rows), gap = 0.08;

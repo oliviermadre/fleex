@@ -211,6 +211,7 @@ function Floor() {
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
+      exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
     };
   }, [boardName]);
 
@@ -277,7 +278,7 @@ function Floor() {
       return { cells, ok: canPaste(l, clipboard, x, y), text: cells.length > 1 ? `Paste ${cells.length} machines` : 'Paste' };
     }
     const spec = specFor(t, x, y, live.current.dir); if (!spec) return null;
-    return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined }], ok: canPlace(l, spec) };
+    return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined, arm: spec.kind === 'arm' }], ok: canPlace(l, spec) };
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {

@@ -41,6 +41,8 @@ export interface FactoryStats {
     avgLeadMs: number | null;
     humanMs: number;
   };
+  /** How many tickets left by each exit, by machine id: what an exit shows on the floor. */
+  exits: Record<string, number>;
 }
 
 const ms = (a: string, b: string): number => Math.max(0, new Date(b).getTime() - new Date(a).getTime());
@@ -78,8 +80,9 @@ export function computeStats(input: { runs: FactoryRunRow[]; executions: Executi
     return execById.get(id)?.costUsd ?? 0;
   };
 
+  const exits: Record<string, number> = {};
   for (const r of runs) {
-    if (r.executor === 'exit') { totals.shipped++; if (r.finishedAt) leadMs += ms(r.startedAt, r.finishedAt); continue; }
+    if (r.executor === 'exit') { totals.shipped++; exits[r.machineId] = (exits[r.machineId] ?? 0) + 1; if (r.finishedAt) leadMs += ms(r.startedAt, r.finishedAt); continue; }
     let m = machines.get(r.machineId);
     if (!m) {
       const spec = onFloor.get(r.machineId);
@@ -119,5 +122,5 @@ export function computeStats(input: { runs: FactoryRunRow[]; executions: Executi
   totals.costUsd = Math.round(totals.costUsd * 10_000) / 10_000;
   totals.avgLeadMs = totals.shipped ? Math.round(leadMs / totals.shipped) : null;
   out.sort((a, b) => b.costUsd - a.costUsd || b.runs - a.runs);
-  return { since, until, days, machines: out, totals };
+  return { since, until, days, machines: out, totals, exits };
 }

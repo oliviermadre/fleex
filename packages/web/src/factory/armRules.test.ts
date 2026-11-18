@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { acceptsOutcome, arity, armTag, blank, conditionsOf, incomplete, isConditional, longCondition, optionsFor, OPS_BY_FIELD, shortCondition, takesQuestions, withOp } from './armRules';
+import { acceptsOutcome, arity, armTag, blank, conditionsOf, incomplete, isConditional, longCondition, optionsFor, OPS_BY_FIELD, shortCondition, takesQuestions, wants, withOp } from './armRules';
 import type { ArmCondition, ArmSpec, FactoryLayout, MachineSpec } from './types';
 
 const arm = (when?: ArmCondition[], filter?: ArmSpec['filter'], id = 'a'): ArmSpec => ({ id, kind: 'arm', x: 0, y: 0, w: 1, h: 1, dir: 0, when, filter });
@@ -77,5 +77,27 @@ describe('arm rules', () => {
     expect(withOp(c('complexity', 'is', 'none', '5'), 'lte')).toEqual(c('complexity', 'lte', '5'));
     expect(incomplete(withOp(c('priority', 'gte', 'high'), 'between'))).toBe(true);
     expect(incomplete(c('priority', 'between', 'low', 'high'))).toBe(false);
+  });
+});
+
+describe('which tickets an arm takes, as the engine decides it', () => {
+  const info = { id: 't', displayId: 1, title: 'T', type: 'fix', priority: 'high', status: 'todo', tags: [], boardId: 'b1', complexity: null, favorite: false } as never;
+  const ok = arm([c('outcome', 'is', 'ok')], undefined, 'ok'), fixes = arm([c('type', 'is', 'fix')], undefined, 'fixes'), plain = arm(undefined, undefined, 'plain');
+
+  it('a conditional arm takes what all its conditions hold for', () => {
+    expect(wants(ok, [ok, plain], info, 'ok')).toBe(true);
+    expect(wants(ok, [ok, plain], info, 'ko')).toBe(false);
+    expect(wants(fixes, [fixes], info, '')).toBe(true);
+    expect(wants(arm([c('outcome', 'is', 'ok'), c('type', 'is', 'build')]), [], info, 'ok')).toBe(false);
+  });
+
+  it('a plain arm is the "otherwise" of its source: it leaves alone what a conditional neighbour is after', () => {
+    expect(wants(plain, [ok, plain], info, 'ok')).toBe(false);
+    expect(wants(plain, [ok, plain], info, 'ko')).toBe(true);
+    expect(wants(plain, [plain], info, 'ok')).toBe(true);
+    /* two plain arms both take it: whichever is free first */
+    const other = arm(undefined, undefined, 'other');
+    expect(wants(plain, [plain, other], info, 'ok')).toBe(true);
+    expect(wants(other, [plain, other], info, 'ok')).toBe(true);
   });
 });

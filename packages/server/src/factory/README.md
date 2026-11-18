@@ -85,8 +85,9 @@ as a comment that creates no mention and so starts no agent.
 ## Machines, and the version of a layout
 
 A station that is not a status station is drawn as a machine (`packages/web/src/factory/machineArt.ts`): a head plate
-with an icon for what it is, a light, as many places as it works on tickets at once (six at most), a tray for what is
-done and not yet taken, and a hatched bay for what is set aside. It takes 5 by 4 tiles (the engine accepts 3 by 3 to
+with an icon for what it is, a light, as many places as it works on tickets at once (six at most), and a hatched bay
+for what is set aside. What is done has no tray: it goes to a quay (see "Quays, arms, zones and exits" below). It takes
+5 by 4 tiles (the engine accepts 3 by 3 to
 8 by 6). The light says: red the machine is off, green it is on, amber it is on and something in it is set aside; on a
 gate, amber while something is to decide. On a machine that runs something it is the switch: a click turns it off or
 on, and pointing at it says what runs, what is set aside and whether the exit is clear. The floor's glow follows the
@@ -130,12 +131,45 @@ the minimap), and the figures themselves are read in the sheets described below.
 ## The floor itself
 
 Out of build mode the floor is dressed (`packages/web/src/factory/floorLook.ts`): a dot where tiles meet instead of
-lines, a soft light over the middle, a shadow under each station, zone and exit, and around a station the glow of its
+lines, a soft light over the middle, a shadow under each station, and around a station the glow of its
 lamp while it works (green), waits for a decision or an answer (amber) or has a failed run (red). The glow is the
 station's own state bar shining on the floor, nothing more; under a layer it is off, since colour there is the layer's
 reading. Build mode keeps plain lines and no light: that is the drawing one places machines against. The Grid toggle
 hides the dots as it hid the lines. Light and glows are painted on a canvas of their own, redone only when the view,
 the floor, the theme or a station's state changes, so their cost does not grow with the number of stations lit.
+
+## Quays, arms, zones and exits
+
+How these four are drawn was chosen on mock-ups first (`docs/factory/looks.html`, then `docs/factory/looks-2.html`).
+Nothing of it is in the engine or in the layout: it is the web renderer reading the same snapshot.
+
+- **A quay per arm** (`packages/web/src/factory/quays.ts`). Arms stand anywhere round a station, so what is done is
+  not kept in one tray for all of them. Each arm that takes from a station has a quay, a notch in the station's edge
+  on the tile the arm reaches; a ticket that is done slides to the quay of the arm that will take it, and waits in
+  line there. Which arm that is, is decided as the engine decides it (`wants` in `armRules.ts` mirrors the engine: a
+  conditional arm takes what its conditions hold for, a plain arm what the others leave). A ticket no arm takes will
+  not leave by itself: it goes to a tray marked "NO ARM", in red, which is there only then. A question taken by an
+  arm that asks for questions stands at that arm's quay, not in the bay. The same holds for a zone: a released ticket
+  stands at the quay of its arm, a dashed square painted on the zone's edge.
+- **An arm** is a base, a flat link and a suction cup. The cup goes where the ticket is: over the middle of a belt's
+  tile, over the quay of a station or a zone, so its reach changes while it turns and it lifts what it is on; what it
+  carries moves with it. Its colour is its band and its base: amber when it has conditions, grey when it has none.
+  Under it, painted on its own tile, an arrow in that colour says which way it works: narrow where it takes, wide
+  where it drops, its head at the edge. In build mode, an arm that is selected, or in hand before it is put down,
+  shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
+  ON"), and that R turns it.
+- **A zone** is paint on the floor, in the colour of the status it sets (the accent for the intake): a faint fill, a
+  dashed line, three corners. What it says is stencilled: its name, a padlock (shut: nothing leaves without you; open,
+  with chevrons: it lets tickets out by itself), and how many tickets it holds as a large figure on the ground, under
+  them. A zone that releases by itself and sets "todo" stops while too many tickets are in work on the floor: that
+  limit is the line along its bottom, which fills with the tickets in doing or reviewing (not with what the zone
+  holds), amber from four fifths, and says "IN WORK 4/5".
+- **An exit** is a frame of light that holds nothing: a ticket that reaches it is handed back to Fleex. So it is seen
+  leaving: when a ticket that was on a belt or in an arm leading into an exit is gone from the snapshot, it is drawn
+  a moment longer, up to the frame as it was, then as an outline with a tick that fades towards the middle while the
+  side it came in by lights up. (A ticket that goes from anywhere else was taken back, and just goes.) The exit carries
+  how many tickets left by it over the period of the floor's figures: `exits` in `GET /api/factory/stats`, a count
+  per exit, to which the page adds what it has seen leave since it last asked.
 
 ## What waits for someone
 
@@ -272,6 +306,9 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
    execution does not; it can stay, since it changes nothing while unset.
 
 ## Not covered by tests
+
+How the floor is painted (`renderer.ts`) is checked by eye, in a browser against a made-up server: what is tested is
+the geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
 
 The engine, what the module hears from the rest of Fleex, the stats and the SQLite store are tested
 (`factory-engine.test.ts`, `factory-module.test.ts`, `factory-stats.test.ts`, `factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a
