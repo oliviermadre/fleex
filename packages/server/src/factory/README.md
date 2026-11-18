@@ -145,7 +145,8 @@ the console the height of its middle; the two side blocks rise over the foot of 
 
 - **Over the minimap**, the time it is, to the second.
 - **In the notch**, the saved selections (`Groups` in `FactoryHudBits.tsx`): ten places that never move, Shift+1 to
-  Shift+0 to save, the digit to recall. A place shows only once something is saved in it and is always the same
+  Shift+0 to save. The digit selects what was saved; pressed again while it is the selection, it centres the view
+  on it, as in a strategy game. A place shows only once something is saved in it and is always the same
   size: its key, an icon, and a ticket's number or how many things it holds. Pointing at one says what it holds.
 - **In the middle**, what is selected. Several things show as one icon each (`Units`): pointing at one says what it
   is, a click keeps only it, Shift and a click take it out. Twenty-four at once, the rest as pages.

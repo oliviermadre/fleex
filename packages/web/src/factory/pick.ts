@@ -20,6 +20,9 @@ export const ticketIds = (s: Selection): string[] => (s && 'tickets' in s ? s.ti
 export const machinesSel = (ids: string[]): Selection => (ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
 export const ticketsSel = (ids: string[]): Selection => (ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
 
+/** Whether two selections hold the same things, in the same order. */
+export const sameSelection = (a: Selection, b: Selection): boolean => JSON.stringify(a) === JSON.stringify(b);
+
 /**
  * What a selection becomes when something is picked. Without Shift the pick replaces it. With Shift it adds to it:
  * what was not there joins, in the order picked; and one thing clicked that was already there is taken out

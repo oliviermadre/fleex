@@ -90,8 +90,8 @@ export function Groups({ groups, selection, tickets, layout, onGroup }: {
         const n = ts.length + ms.length, of = ticketIds(g).length ? 'tickets' : 'machines';
         const names = [...ts.map(ticketName), ...ms.map(machineName)];
         const tip = n === 0 ? <Tip name="Nothing left" lines={[`What was saved here is no longer on the floor`]} foot={`Shift+${key} replaces`} />
-          : n === 1 ? <Tip name={names[0]!} lines={[ts[0] ? typeLabel(ts[0].info) : machineKind(ms[0]!)]} foot={`${key} recalls · Shift+${key} replaces`} />
-          : <Tip name={`${n} ${of}`} lines={[...names.slice(0, 4), ...(n > 4 ? [`and ${n - 4} more`] : [])]} foot={`${key} recalls · Shift+${key} replaces`} />;
+          : n === 1 ? <Tip name={names[0]!} lines={[ts[0] ? typeLabel(ts[0].info) : machineKind(ms[0]!)]} foot={`${key} selects, again goes there · Shift+${key} replaces`} />
+          : <Tip name={`${n} ${of}`} lines={[...names.slice(0, 4), ...(n > 4 ? [`and ${n - 4} more`] : [])]} foot={`${key} selects, again goes there · Shift+${key} replaces`} />;
         return (
           <Tooltip key={i} placement="top" label={tip}>
             <button type="button" onClick={(e) => onGroup(i, e.shiftKey)} aria-label={`Group ${key}: ${n === 1 ? names[0] : `${n} ${of}`}`}

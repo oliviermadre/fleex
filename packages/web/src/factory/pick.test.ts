@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addTo } from './pick';
+import { addTo, sameSelection } from './pick';
 import { groupOf, ticketsIn } from './pick';
 import type { FactoryTicket, MachineSpec, TicketPhase } from './types';
 
@@ -21,6 +21,16 @@ describe('a frame dragged over the floor', () => {
   it('takes none when none is in it, and one on its edge', () => {
     expect(ticketsIn(places, { x0: 6, y0: 0, x1: 8, y1: 5 })).toEqual([]);
     expect(ticketsIn(places, { x0: 1, y0: 1, x1: 1, y1: 1 })).toEqual(['a']);
+  });
+});
+
+describe('a saved selection recalled', () => {
+  it('is the current selection only when it holds the same things: its key then goes there instead of selecting', () => {
+    expect(sameSelection({ ticket: 'a' }, { ticket: 'a' })).toBe(true);
+    expect(sameSelection({ tickets: ['a', 'b'] }, { tickets: ['a', 'b'] })).toBe(true);
+    expect(sameSelection({ tickets: ['a', 'b'] }, { tickets: ['a'] })).toBe(false);
+    expect(sameSelection({ ticket: 'a' }, { machine: 'a' })).toBe(false);
+    expect(sameSelection({ machine: 'm' }, null)).toBe(false);
   });
 });
 

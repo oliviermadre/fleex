@@ -31,7 +31,7 @@ import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
 import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
-import { addTo, groupOf, machineIds, machinesSel, ticketIds, ticketsIn, ticketsSel } from './pick';
+import { addTo, groupOf, machineIds, machinesSel, sameSelection, ticketIds, ticketsIn, ticketsSel } from './pick';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
@@ -602,7 +602,7 @@ function Floor() {
     if (c.menu) setPath([...card.path, c.id]);
   }, [card.path]);
 
-  // Saved selections, RTS style: Shift+1…9 and Shift+0 save, the digit alone recalls and centres the view on it.
+  // Saved selections, RTS style: Shift+1…9 and Shift+0 save; the digit alone selects, and pressed again on what is already selected it centres the view on it.
   const onGroup = useCallback((i: number, save: boolean) => {
     if (save) {
       const cur = live.current.selection;
@@ -612,10 +612,11 @@ function Floor() {
     }
     const g = groupsRef.current[i], s = useFactoryStore.getState(), v = viewRef.current;
     if (!g || !v) return;
-    setSelection(g);
-    if ('ticket' in g) { const p = v.ticketPos(g.ticket); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
-    else if ('tickets' in g) { const p = g.tickets.map((id) => v.ticketPos(id)).find((q) => !!q); if (p) { v.cam.x = p.x; v.cam.y = p.y; } }
-    else { const id = 'machines' in g ? g.machines[0] : g.machine, m = s.layout?.machines.find((q) => q.id === id); if (m) { v.cam.x = m.x + m.w / 2; v.cam.y = m.y + m.h / 2; } }
+    /* as in a strategy game: the key selects, and pressed again on what is already selected it goes there */
+    if (!sameSelection(g, live.current.selection)) { setSelection(g); return; }
+    const at = [...ticketIds(g).map((id) => v.ticketPos(id)), ...machineIds(g).map((id) => { const m = s.layout?.machines.find((q) => q.id === id); return m ? { x: m.x + m.w / 2, y: m.y + m.h / 2 } : null; })].filter((p): p is { x: number; y: number } => !!p);
+    /* the middle of what it holds: several things are framed around their centre */
+    if (at.length) { v.cam.x = (Math.min(...at.map((p) => p.x)) + Math.max(...at.map((p) => p.x))) / 2; v.cam.y = (Math.min(...at.map((p) => p.y)) + Math.max(...at.map((p) => p.y))) / 2; }
   }, []);
 
   useEffect(() => {
