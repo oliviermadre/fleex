@@ -1,0 +1,289 @@
+<title>Factory, les postes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: what is there today, then one proposal per row (the five machines side by side, and the same row seen from far), each with a pick button. A bar at the bottom keeps the pick. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* one proposal per row: the five machines need the width; under each, the same row seen from far */
+  .grid.one { grid-template-columns: minmax(0, 1fr); }
+  .scene.far { opacity: 0.96; }
+  .far-note { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Reconnaître un poste d'un coup d'œil</h1>
+    <p class="lede">Aujourd'hui un poste agent, skill, panel ou script ne se distingue que par une petite icône, de la même couleur pour tous. Cinq pistes, chacune avec les quatre postes côte à côte (et la porte humaine pour repère), puis la même rangée vue de loin : c'est là que ça se joue.</p>
+  </header>
+
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Aujourd'hui</h2>
+    <div class="card"><div class="scene" id="now"></div><div class="far-note">Vu de loin</div><div class="scene far" id="now-far"></div></div>
+  </section>
+
+  <section aria-labelledby="h-props">
+    <h2 id="h-props">Les propositions</h2>
+    <div class="grid one" id="props"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', body: '#27272a', body2: '#2f2f34', pit: 'rgba(0,0,0,0.4)', edge: '#3f3f46', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', violet: '#c084fc' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"", SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const text = (x, y, str, o = {}) => `<text x="${x}" y="${y}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.spacing ? `letter-spacing="${o.spacing}"` : ''} ${o.opacity ? `opacity="${o.opacity}"` : ''}>${esc(str)}</text>`;
+  /* the icons the stations carry today, in a 24 by 24 box */
+  const ICON = {
+    script: ['M4.5 5h15a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5z', 'M7.5 9.5l3 2.5-3 2.5', 'M12.5 15h4'],
+    agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5v-6A2.5 2.5 0 0 1 7.5 8z', 'M12 8V4.6', 'M11 3.6a1 1 0 1 0 2 0a1 1 0 1 0-2 0', 'M8.4 13a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0', 'M13.8 13a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0', 'M9.5 16.2h5', 'M2.5 12v3', 'M21.5 12v3'],
+    skill: ['M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.3-.7-.7-2.3z'],
+    panel: ['M5 9a2.4 2.4 0 1 0 4.8 0A2.4 2.4 0 1 0 5 9', 'M14.2 9a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0', 'M9.6 16a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0'],
+    gate: ['M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.800-4.1-1.500-7-4.500-7-8.800V6z', 'M8.8 12l2.3 2.3 4.2-4.4'],
+  };
+  const icon = (kind, x, y, size, col, w = 2) => `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${ICON[kind].map((d) => `<path d="${d}"/>`).join('')}</g>`;
+
+  /* the four kinds: a hue of their own, picked away from what the floor already uses (amber is the gate's, green is "ok", pink the Set gantry's) */
+  const KIND = {
+    agent: { hue: '#a78bfa', label: 'AGENT', name: 'Build', sub: 'builder', line: 'agent · builder' },
+    skill: { hue: '#38bdf8', label: 'SKILL', name: 'Review', sub: 'pr-review', line: 'skill · pr-review' },
+    panel: { hue: '#fb923c', label: 'PANEL', name: 'Debate', sub: 'architects', line: 'panel · architects' },
+    script: { hue: '#a3e635', label: 'SCRIPT', name: 'Tests', sub: 'default "test"', line: 'script · default "test"' },
+  };
+  const ORDER = ['agent', 'skill', 'panel', 'script'];
+  const W = 220, H = 176, GAP = 26;
+
+  const lamp = (x, y) => `<rect x="${x}" y="${y}" width="19" height="40" rx="5" fill="#0d0d10" stroke="${C.edge}"/><circle cx="${x + 9.5}" cy="${y + 9}" r="4" fill="#2a2a2f"/><circle cx="${x + 9.5}" cy="${y + 20}" r="4" fill="#2a2a2f"/><circle cx="${x + 9.5}" cy="${y + 31}" r="4" fill="${C.ok}"/>`;
+  const aside = (x, y, w) => `<rect x="${x}" y="${y}" width="${w}" height="30" rx="6" fill="${C.pit}"/><path d="M${x + 3} ${y + 27} l14 -24 M${x + 11} ${y + 27} l14 -24 M${x - 3} ${y + 20} l10 -17" stroke="${C.warn}" stroke-opacity="0.4" stroke-width="4"/>` + text(x + 34, y + 12, 'SET ASIDE', { size: 6.500, weight: 700, fill: C.warn, opacity: 0.55 });
+  const pits = (x, y, w, h, inner = () => '') => { const pw = (w - 6) / 2; return [0, 1].map((i) => `<rect x="${x + i * (pw + 6)}" y="${y}" width="${pw}" height="${h}" rx="6" fill="${C.pit}"/>` + text(x + i * (pw + 6) + 6, y + 11, 'FREE', { size: 6.500, weight: 700, fill: C.ink3 }) + inner(x + i * (pw + 6), y, pw, h, i)).join(''); };
+
+  /**
+   * One station, drawn as a proposal says. `v` is the proposal: 'now' (what is there today), 'hue', 'band', 'shape',
+   * 'inside', 'all'.
+   */
+  function machine(x, y, kind, v) {
+    const K = KIND[kind], hue = v === 'now' ? C.violet : K.hue, shaped = v === 'shape' || v === 'all';
+    let s = '', bx = x + 3, by = y + 3, bw = W - 6, bh = H - 6;
+    /* the body */
+    if (shaped && kind === 'panel') {
+      /* several around a table: the machine is a stack of three */
+      s += `<rect x="${bx + 12}" y="${by}" width="${bw - 12}" height="${bh - 12}" rx="12" fill="${C.body}" stroke="${hue}" stroke-opacity="0.35" stroke-width="2"/><rect x="${bx + 6}" y="${by + 6}" width="${bw - 12}" height="${bh - 12}" rx="12" fill="${C.body}" stroke="${hue}" stroke-opacity="0.6" stroke-width="2"/>`;
+      by += 12; bw -= 12; bh -= 12;
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="12" fill="${C.body2}" stroke="${hue}" stroke-width="2"/>`;
+    } else if (shaped && kind === 'skill') {
+      /* a tool: cut corners */
+      const c = 16; s += `<path d="M${bx + c} ${by} H${bx + bw - c} L${bx + bw} ${by + c} V${by + bh - c} L${bx + bw - c} ${by + bh} H${bx + c} L${bx} ${by + bh - c} V${by + c} Z" fill="${C.body2}" stroke="${hue}" stroke-width="2"/>`;
+    } else if (shaped && kind === 'script') {
+      /* a terminal window: square, with its title bar */
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="#101012" stroke="${hue}" stroke-width="2"/><rect x="${bx + 1}" y="${by + 1}" width="${bw - 2}" height="15" fill="${hue}" fill-opacity="0.22"/>`;
+      s += [0, 1, 2].map((i) => `<circle cx="${bx + 10 + i * 9}" cy="${by + 8.500}" r="2.6" fill="${hue}" fill-opacity="${0.9 - i * 0.25}"/>`).join('');
+      by += 14; bh -= 14;
+    } else if (shaped && kind === 'agent') {
+      /* a head: round shoulders and an antenna */
+      s += `<path d="M${bx + 34} ${by + 2} v-9" stroke="${hue}" stroke-width="2.500" stroke-linecap="round"/><circle cx="${bx + 34}" cy="${by - 9}" r="3.500" fill="${hue}"/>`;
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="26" fill="${C.body2}" stroke="${hue}" stroke-width="2"/>`;
+    } else {
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="14" fill="${C.body2}" stroke="${v === 'now' ? C.edge : hue}" stroke-opacity="${v === 'now' ? 1 : 0.75}" stroke-width="2"/>`;
+    }
+    /* the head */
+    const pad = shaped && kind === 'agent' ? 16 : 10, hx = bx + pad, hy = by + 9;
+    if (v === 'band' || v === 'all') {
+      const r = shaped && kind === 'script' ? 0 : shaped && kind === 'agent' ? 22 : 11;
+      if (v === 'band') s += `<path d="M${bx + 1} ${by + 48} V${by + 14} a13 13 0 0 1 13 -13 H${bx + bw - 14} a13 13 0 0 1 13 13 V${by + 48} Z" fill="${hue}" fill-opacity="0.2"/><path d="M${bx + 1} ${by + 48} H${bx + bw - 1}" stroke="${hue}" stroke-opacity="0.5"/>`;
+      s += `<rect x="${hx}" y="${hy}" width="30" height="30" rx="${Math.min(8, r || 3)}" fill="${hue}"/>` + icon(kind, hx + 4, hy + 4, 22, '#09090b', 2.200);
+      s += text(hx + 38, hy + 9, K.label, { mono: true, size: 7.500, weight: 700, fill: hue, spacing: 1.500 }) + text(hx + 38, hy + 23, K.name, { size: 14, weight: 650 });
+      s += text(hx + 38, hy + 34, K.sub, { size: 8.500, fill: C.ink3 });
+    } else {
+      s += `<rect x="${hx}" y="${hy}" width="30" height="30" rx="8" fill="${hue}" fill-opacity="0.16" stroke="${hue}" stroke-opacity="0.55"/>` + icon(kind, hx + 4, hy + 4, 22, hue);
+      s += text(hx + 38, hy + 14, K.name, { size: 14, weight: 650 }) + text(hx + 38, hy + 27, K.line, { size: 8.500, fill: v === 'hue' || v === 'inside' ? hue : C.ink3 });
+    }
+    s += lamp(bx + bw - pad - 21, hy - 2);
+    /* the places */
+    const top = v === 'band' ? 54 : 50, px = bx + pad, py = by + top, pw = bw - pad * 2, ph = bh - top - 44;
+    const inner = (v === 'inside' || v === 'all') ? (qx, qy, qw, qh) => {
+      const cx = qx + qw / 2, cy = qy + qh / 2 + 4;
+      if (kind === 'agent') return icon('agent', cx - 15, cy - 15, 30, hue, 1.600).replace('<g ', '<g opacity="0.3" ');
+      if (kind === 'skill') return `<circle cx="${cx}" cy="${cy}" r="13" fill="none" stroke="${hue}" stroke-opacity="0.3" stroke-width="2" stroke-dasharray="4 4"/>` + icon('skill', cx - 9, cy - 9, 18, hue, 1.800).replace('<g ', '<g opacity="0.4" ');
+      if (kind === 'panel') return [[-11, -6], [11, -6], [0, 9]].map(([dx, dy]) => `<circle cx="${cx + dx}" cy="${cy + dy}" r="6.500" fill="${hue}" fill-opacity="0.22" stroke="${hue}" stroke-opacity="0.5"/>`).join('');
+      return `<rect x="${qx + 6}" y="${qy + 16}" width="${qw - 12}" height="${qh - 22}" rx="2" fill="#0b0b0d"/>` + text(qx + 10, qy + 28, '$ ▍', { mono: true, size: 9, weight: 700, fill: hue, opacity: 0.8 }) + `<path d="M${qx + 10} ${qy + qh - 12} h${qw - 34}" stroke="${hue}" stroke-opacity="0.35" stroke-width="2.500" stroke-linecap="round"/>`;
+    } : undefined;
+    s += pits(px, py, pw, ph, inner) + aside(px, by + bh - 38, pw);
+    return s;
+  }
+  /** The human gate, as it is: the one that is already told apart. */
+  function gate(x, y) {
+    let s = `<rect x="${x + 3}" y="${y + 3}" width="${W - 6}" height="${H - 6}" rx="14" fill="${C.body2}" stroke="${C.warn}" stroke-width="4" stroke-dasharray="13 9"/>`;
+    s += `<rect x="${x + 13}" y="${y + 12}" width="30" height="30" rx="8" fill="${C.warn}" fill-opacity="0.16" stroke="${C.warn}" stroke-opacity="0.55"/>` + icon('gate', x + 17, y + 16, 22, C.warn);
+    s += text(x + 51, y + 26, 'Check spec', { size: 14, weight: 650 }) + text(x + 51, y + 39, 'gate · you decide', { size: 8.500, fill: C.ink3 }) + lamp(x + W - 34, y + 10);
+    return s + `<rect x="${x + 13}" y="${y + 53}" width="${W - 26}" height="${H - 66}" rx="6" fill="${C.pit}"/>` + text(x + 19, y + 64, 'TO DECIDE · 0', { size: 6.500, weight: 700, fill: C.ink3 });
+  }
+  const floor = (w, h, step) => { let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`; for (let x = 0; x <= w; x += step) for (let y = 0; y <= h; y += step) s += `<circle cx="${x}" cy="${y}" r="${step / 36}" fill="${C.dot}"/>`; return s; };
+  const row = (v) => ORDER.map((k, i) => machine(20 + i * (W + GAP), 24, k, v)).join('') + gate(20 + 4 * (W + GAP), 24);
+  const RW = 20 * 2 + 5 * W + 4 * GAP, RH = H + 44;
+  const near = (v) => `<svg viewBox="0 0 ${RW} ${RH}" role="img" aria-label="Les quatre postes et la porte, de près">${floor(RW, RH, 44)}${row(v)}</svg>`;
+  /* from far: the same row, on a floor three times as wide */
+  const far = (v) => `<svg viewBox="0 0 ${RW * 3} ${RH * 1.500}" role="img" aria-label="Les mêmes, vus de loin">${floor(RW * 3, RH * 1.500, 132)}<g transform="translate(${RW} ${RH * 0.25})">${row(v)}</g></svg>`;
+
+  const props = [
+    { id: 'S1', key: 'hue', name: 'Une couleur par type',
+      idea: 'Même machine pour tous, mais chaque type a sa teinte : violet pour l\'agent, bleu pour le skill, orange pour le panel, vert acide pour le script. Elle colore le contour, la pastille et la ligne sous le nom.',
+      reads: 'Le moins de changement. De loin, la couleur du contour suffit à dire le type.',
+      limit: 'Tout repose sur la couleur : quatre teintes de plus sur un plancher qui en a déjà beaucoup (tickets, bras, zones). Rien pour qui distingue mal les couleurs.' },
+    { id: 'S2', key: 'band', name: 'Un bandeau qui dit le type',
+      idea: 'L\'en-tête devient un bandeau teinté. La pastille est pleine, l\'icône en négatif, et le type est écrit en toutes lettres au-dessus du nom.',
+      reads: 'Le type se lit, il ne se devine pas : « SKILL », « PANEL ». La pastille pleine se repère de loin.',
+      limit: 'Un mot de plus dans l\'en-tête, qui laisse moins de place au nom. La silhouette reste la même.' },
+    { id: 'S3', key: 'shape', name: 'Une silhouette par type', mine: false,
+      idea: 'La forme du poste change : épaules rondes et antenne pour l\'agent, coins coupés pour le skill (un outil), trois plaques empilées pour le panel (plusieurs personas), fenêtre de terminal à coins droits pour le script.',
+      reads: 'Se reconnaît de loin et sans couleur, comme la porte humaine avec son contour en pointillé.',
+      limit: 'Quatre dessins de corps à tenir à jour (ombres, quais des bras sur le bord, sélection). Les coins coupés et la pile mangent un peu de place.' },
+    { id: 'S4', key: 'inside', name: 'L\'intérieur dit ce qui tourne',
+      idea: 'Ce sont les places qui changent : une tête de robot en filigrane pour l\'agent, un outil pour le skill, trois sièges pour le panel, une ligne de commande pour le script. Avec la teinte du type.',
+      reads: 'La différence est là où on regarde quand un ticket travaille.',
+      limit: 'Invisible de loin, et caché dès qu\'une place est occupée par un ticket.' },
+    { id: 'S5', key: 'all', name: 'Silhouette, couleur et nom du type', mine: true,
+      idea: 'Les trois ensemble : la forme de S3, la teinte de S1, la pastille pleine et le type écrit de S2, et le filigrane de S4 dans les places libres.',
+      reads: 'Trois indices qui se recoupent : de loin la forme et la couleur, de près le mot. C\'est le niveau de différence qu\'a déjà la porte humaine.',
+      limit: 'Le plus de travail, et le plus chargé : à alléger si le plancher devient bruyant (par exemple sans le filigrane).' },
+  ];
+
+  $('now').innerHTML = near('now'); $('now-far').innerHTML = far('now');
+  $('props').innerHTML = props.map((p) => `
+    <article class="card" data-id="${p.id}">
+      <div class="card-head"><span class="letter">${p.id}</span><h3>${esc(p.name)}</h3>${p.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+      <div class="scene">${near(p.key)}</div>
+      <div class="far-note">Vu de loin</div><div class="scene far">${far(p.key)}</div>
+      <dl><dt>Idée</dt><dd>${esc(p.idea)}</dd><dt>Atout</dt><dd>${esc(p.reads)}</dd><dt>Limite</dt><dd>${esc(p.limit)}</dd></dl>
+      <button type="button" aria-pressed="false">Choisir ${p.id}</button>
+    </article>`).join('');
+
+  const KEY = 'factory-stations-pick';
+  let pick = '';
+  try { pick = localStorage.getItem(KEY) || ''; } catch { /* no storage here: the pick lives for the visit */ }
+  const summary = () => { const p = props.find((x) => x.id === pick); return `Postes : ${p ? `${p.id} (${p.name})` : 'pas encore choisi'}`; };
+  function paint() {
+    for (const card of document.querySelectorAll('.card[data-id]')) {
+      const b = card.querySelector(':scope > button'), on = pick === card.dataset.id;
+      card.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    $('picks').innerHTML = `Postes <b>${pick || '–'}</b>`;
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card[data-id] > button'); if (!b) return;
+    const id = b.closest('.card').dataset.id;
+    pick = pick === id ? '' : id;
+    try { localStorage.setItem(KEY, pick); } catch { /* not kept, that is all */ }
+    $('said').textContent = '';
+    paint();
+  });
+  $('copy').addEventListener('click', () => {
+    const said = $('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint();
+})();
+</script>
