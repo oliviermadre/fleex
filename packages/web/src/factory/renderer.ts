@@ -1208,7 +1208,7 @@ export class FactoryView {
     for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]] as const) { ctx.moveTo(cx + sx * 0.4, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.4); }
     ctx.stroke(); ctx.lineCap = 'butt';
     this.label((m.name || 'Zone').toUpperCase(), x + 0.26, y + 0.42, 0.26, c, { mono: true, weight: 700, min: 9, max: 15, fit: w - (auto ? 1.25 : 0.95) });
-    this.padlock(x + w - (auto ? 0.86 : 0.52), y + 0.2, auto, c);
+    this.padlock(x + w - (auto ? 0.86 : 0.52), y + 0.2, auto, auto ? pal.ok : pal.danger);
     /* the stock, on the ground: tickets stand on it */
     if (w >= 2 && h >= 2) this.stencil(String(stock).padStart(2, '0'), x + 0.2, y + h - 0.56, 0.9, c, stock ? 0.3 : 0.14, { mono: true, weight: 700 });
     if (auto && m.status === 'todo') {
@@ -1231,7 +1231,7 @@ export class FactoryView {
     this.quays(takers, D, st, pal, dt, true);
   }
 
-  /** A padlock, stencilled: shut, or open with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
+  /** A padlock, stencilled: shut and red, or open and green with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
   private padlock(x: number, y: number, open: boolean, col: string): void {
     const ctx = this.ctx, k = 1 / 40, top = y + (open ? 0.5 : 2.5) * k;
     ctx.fillStyle = col; rr(ctx, x, y + 5 * k, 11 * k, 9 * k, 2 * k); ctx.fill();

@@ -44,6 +44,7 @@ const PATHS: Record<string, ReactNode> = {
   cut: <><circle cx="6" cy="6.5" r="2.5" /><circle cx="6" cy="17.5" r="2.5" /><path d="M8.2 8l11.8 9M8.2 16L20 7" /></>,
   paste: <><rect x="5" y="5" width="14" height="16" rx="2" /><path d="M9 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M9 11h6M9 15h4" /></>,
   star: <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />,
+  gauge: <><path d="M4.5 17a8 8 0 1 1 15 0" /><path d="M12 13l4-4.500" /><circle cx="12" cy="13.500" r="1.300" /><path d="M4 20h16" /></>,
   coin: <><circle cx="12" cy="12" r="8" /><path d="M14.6 9.3c-.5-.8-1.4-1.3-2.6-1.3-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2 2.8.8 2.8 2.1-1.2 2-2.8 2c-1.3 0-2.3-.5-2.8-1.4M12 6.3V8M12 16.1v1.6" /></>,
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>,
   person: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c0-3.8 2.8-6.3 6.5-6.3s6.5 2.5 6.5 6.3" /></>,

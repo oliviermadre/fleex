@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
-import { CommitInput } from './FactoryMachinePopup';
+import { RunLimits } from './FactoryLimits';
 import { FactoryPopup } from './FactoryPopup';
 import { PeriodSelect, Tile } from './FactoryStatsBits';
 import { money, span } from './format';
@@ -17,7 +17,7 @@ const Hint = ({ children }: { children: React.ReactNode }) => <p className="text
  * by machine, where tickets stand right now, and its safety limits. A row leads to its machine on the floor.
  */
 export function FactoryFloorPopup({ onClose, onGoTo }: { onClose: () => void; onGoTo: (machineId: string) => void }) {
-  const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), stats = useFactoryStore((s) => s.stats), setSettings = useFactoryStore((s) => s.setSettings);
+  const snapshot = useFactoryStore((s) => s.snapshot), layout = useFactoryStore((s) => s.layout), stats = useFactoryStore((s) => s.stats);
   useEffect(() => { if (!useFactoryStore.getState().stats) void useFactoryStore.getState().loadStats(); }, []);
   if (!snapshot || !layout) return null;
   const jams = standing(layout, snapshot.tickets, snapshot.serverTime);
@@ -77,11 +77,7 @@ export function FactoryFloorPopup({ onClose, onGoTo }: { onClose: () => void; on
           ))}
           {jams.length > 0 && <Hint>Count, and how long the oldest has been there. The worst first.</Hint>}
           <Head>Safety limits</Head>
-          <div className="grid grid-cols-2 gap-2">
-            <CommitInput id="f-rph" label="Runs started per hour" value={String(snapshot.floor.settings.maxRunsPerHour)} onCommit={(v) => void setSettings({ maxRunsPerHour: Number(v) })} />
-            <CommitInput id="f-conc" label="Runs in flight at once" value={String(snapshot.floor.settings.maxConcurrentRuns)} onCommit={(v) => void setSettings({ maxConcurrentRuns: Number(v) })} />
-          </div>
-          <Hint>On top of the global agent concurrency. Past the hourly limit, tickets wait in their station.</Hint>
+          <RunLimits idPrefix="f" />
         </div>
       </div>
     </FactoryPopup>

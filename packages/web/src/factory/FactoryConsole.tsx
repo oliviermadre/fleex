@@ -119,7 +119,7 @@ function Tile({ c, onRun }: { c: Command; onRun: (c: Command) => void }) {
   );
 }
 
-export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow }: {
+export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow, hidden = false, onHide }: {
   view: FactoryView | null; snapshot: FactorySnapshot | null; layout: FactoryLayout | null; selection: Selection; onSelect: (s: Selection) => void;
   /** The menu shown in the command card, the menus that lead to it, and what running one of its commands does. */
   menu: Menu; trail: string[]; onRun: (c: Command) => void;
@@ -127,6 +127,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   lens: Lens; onLens: (lens: Lens) => void; onFit: () => void;
   /** What the floor shows on top of the machines, and the switch for each. */
   show: Show; onShow: (key: keyof Show) => void;
+  /** The console is put away to give the floor the whole page; its handle stays, and the card's keys still work. */
+  hidden?: boolean; onHide?: () => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
   const stats = useFactoryStore((s) => s.stats), period = periodLabel(useFactoryStore((s) => s.statsDays)).toLowerCase();
@@ -158,8 +160,20 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   const picked = selection && 'tickets' in selection ? ((ids) => tickets.filter((t) => ids.has(t.ticketId)).sort((a, b) => a.since.localeCompare(b.since)))(new Set(selection.tickets)) : null;
   const box = 'rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]';
 
+  /* the handle sits on the console's top edge, in the middle; with the console hidden it is all that is left, at the foot of the floor */
+  const handle = onHide && (
+    <button type="button" onClick={onHide} aria-expanded={!hidden} aria-label={hidden ? 'Show the console' : 'Hide the console'} title={hidden ? 'Bring the console back (U)' : 'Hide the console and give the floor the whole page (U). The keys of the command card still work.'}
+      className="absolute bottom-full left-1/2 z-10 flex h-5 -translate-x-1/2 items-center gap-1.5 rounded-t-md border border-b-0 border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={hidden ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} /></svg>
+      {hidden ? 'Console' : 'Hide'}
+      <kbd className="font-mono text-[var(--theme-text-faint)]">U</kbd>
+    </button>
+  );
+  if (hidden) return <div className="relative h-0 flex-shrink-0" aria-label="Factory console">{handle}</div>;
+
   return (
-    <div className="flex h-[254px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
+    <div className="relative flex h-[254px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
+      {handle}
       {/* minimap */}
       <div className={cn(box, 'flex flex-none gap-1.5 p-1.5')}>
         <div className="flex h-full w-[250px] flex-col gap-1.5">
@@ -257,7 +271,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
               <>
                 <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
                 <div className="text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
-                <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={snapshot?.running ?? 0} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} tone={waiting.length ? 'warning' : undefined} /></div>
+                <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={`${snapshot?.running ?? 0}/${snapshot?.floor.settings.maxConcurrentRuns ?? 0}`} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} tone={waiting.length ? 'warning' : undefined} /></div>
                 {!many && stats && (
                   <div className="flex flex-wrap gap-x-3" aria-label="What the floor did">
                     <span className="text-[11px] text-[var(--theme-text-faint)]">{period}</span>

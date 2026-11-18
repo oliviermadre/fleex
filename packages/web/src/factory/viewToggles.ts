@@ -36,6 +36,15 @@ export function loadShow(): Show {
     return out;
   } catch { return { ...DEFAULT_SHOW }; }
 }
+/** Whether the console along the bottom is hidden, to give the floor the whole page: kept like the rest. */
+const HUD_KEY = 'fleex.factory.console-hidden';
+export function loadConsoleHidden(): boolean {
+  try { return window.localStorage.getItem(HUD_KEY) === '1'; } catch { return false; }
+}
+export function saveConsoleHidden(hidden: boolean): void {
+  try { window.localStorage.setItem(HUD_KEY, hidden ? '1' : '0'); } catch { /* nothing is kept: the choice lasts the visit */ }
+}
+
 export function saveShow(show: Show): void {
   try { window.localStorage.setItem(KEY, JSON.stringify(show)); } catch { /* nothing is kept: the choice lasts the visit */ }
 }

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { FactoryMachinePopup, machineKind } from './FactoryMachinePopup';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
+import { FactoryLimitsPopup } from './FactoryLimits';
 import { useFactoryStore } from './factoryStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { hasPopup } from './types';
@@ -260,5 +261,21 @@ describe('<FactoryFloorPopup/>', () => {
     fireEvent.change(perHour, { target: { value: '40' } });
     fireEvent.blur(perHour);
     expect(acts.setSettings).toHaveBeenCalledWith({ maxRunsPerHour: 40 });
+  });
+
+  it('the run limits have a popup of their own: both fields, and where the floor stands against each', () => {
+    const acts = seed([]);
+    render(<FactoryLimitsPopup onClose={vi.fn()} />);
+    const popup = screen.getByRole('region', { name: 'Run limits' });
+    expect(popup.textContent).toContain('0 of 20 started this hour');
+    expect(popup.textContent).toContain('0 of 3 in flight');
+    const atOnce = within(popup).getByLabelText('Runs in flight at once');
+    fireEvent.change(atOnce, { target: { value: '5' } });
+    fireEvent.blur(atOnce);
+    expect(acts.setSettings).toHaveBeenCalledWith({ maxConcurrentRuns: 5 });
+    const perHour = within(popup).getByLabelText('Runs started per hour');
+    fireEvent.change(perHour, { target: { value: '60' } });
+    fireEvent.blur(perHour);
+    expect(acts.setSettings).toHaveBeenCalledWith({ maxRunsPerHour: 60 });
   });
 });

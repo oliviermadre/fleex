@@ -14,6 +14,7 @@ import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
+import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
 import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
@@ -32,7 +33,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
-import { loadShow, saveShow, type Show } from './viewToggles';
+import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type Target } from './types';
 
@@ -162,6 +163,10 @@ function Floor() {
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
+  /* the console put away, to give the floor the whole page: kept in the browser like the toggles */
+  const [hudHidden, setHudHidden] = useState(loadConsoleHidden);
+  const flipHud = useCallback(() => setHudHidden((h) => { saveConsoleHidden(!h); return !h; }), []);
   const [planOpen, setPlanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   /* what the floor shows on top of the machines: kept in the browser from one visit to the next */
@@ -572,6 +577,7 @@ function Floor() {
       openMachine: () => { if (selMachine && hasPopup(selMachine)) setOpenMachine(selMachine.id); },
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
+      limits: () => setLimitsOpen(true),
       next: () => stepWaiting(1),
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
@@ -610,7 +616,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || openTicket || openMachine || floorOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -629,6 +635,8 @@ function Floor() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'Space') { e.preventDefault(); live.current.space = true; if (canvasRef.current && !press.current) canvasRef.current.style.cursor = 'grab'; return; }
       /* N goes to the next ticket that waits for someone, Shift+N to the one before: the arrows only ever move the view */
+      /* U puts the console away and brings it back, in any mode */
+      if (e.code === 'KeyU') { e.preventDefault(); flipHud(); return; }
       if (e.code === 'KeyN' && !live.current.building) { e.preventDefault(); stepWaiting(e.shiftKey ? -1 : 1); return; }
       if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
       if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
@@ -648,7 +656,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const halted = snapshot?.floor.settings.halted === true;
@@ -665,7 +673,7 @@ function Floor() {
         {snapshot && (halted
           ? <Button size="sm" variant="primary" onClick={() => void store.halt(false)} title="Belts, arms and stations carry on from where they stood; the runs that were cut start again">Restart the floor</Button>
           : <Button size="sm" variant="danger" onClick={() => void store.halt(true)} title="Stops every belt, arm and station at once, and cuts the runs in progress. They start again when the floor is restarted">Emergency stop</Button>)}
-        {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
+        {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running}/{snapshot.floor.settings.maxConcurrentRuns} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
@@ -708,12 +716,13 @@ function Floor() {
           )}
         </div>
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud}
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
+      {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}

@@ -125,6 +125,14 @@ by its place: in every build menu Undo, Redo and the way back sit in the same sl
 only, and a click or a drag selects: none of them takes a place on the card. A
 label is one or two short words and is never cut. `factoryMenu.test.ts` holds every menu to these rules.
 
+With nothing selected the card has **Limits** (L) next to Stats: the floor's two run limits, runs started per hour
+and runs in flight at once, in a popup of their own (`FactoryLimits.tsx`; the same fields close the Stats popup). The
+console shows where the floor stands against each ("running 1/3", "runs this hour 4/20").
+
+The console can be put away to give the floor the whole page: a handle in the middle of its top edge, or U. The handle
+is all that stays, at the foot of the floor; the keys of the command card still work. The choice is kept in the
+browser (`viewToggles.ts`).
+
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from
@@ -170,8 +178,8 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
   ON"), and that R turns it.
 - **A zone** is paint on the floor, in the colour of the status it sets (the accent for the intake): a faint fill, a
-  dashed line, three corners. What it says is stencilled: its name, a padlock (shut: nothing leaves without you; open,
-  with chevrons: it lets tickets out by itself), and how many tickets it holds as a large figure on the ground, under
+  dashed line, three corners. What it says is stencilled: its name, a padlock (shut and red: nothing leaves without you; open
+  and green, with chevrons: it lets tickets out by itself), and how many tickets it holds as a large figure on the ground, under
   them. A zone that releases by itself and sets "todo" stops while too many tickets are in work on the floor: that
   limit is the line along its bottom, which fills with the tickets in doing or reviewing (not with what the zone
   holds), amber from four fifths, and says "IN WORK 4/5".

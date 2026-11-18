@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { DEFAULT_SHOW, loadShow, saveShow, TOGGLES } from './viewToggles';
+import { DEFAULT_SHOW, loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, TOGGLES } from './viewToggles';
 
 beforeEach(() => window.localStorage.clear());
 
@@ -21,6 +21,15 @@ describe('what the floor shows', () => {
     expect(loadShow()).toEqual({ ...DEFAULT_SHOW, arms: false });
     window.localStorage.setItem('fleex.factory.show', '"a string"');
     expect(loadShow()).toEqual(DEFAULT_SHOW);
+  });
+
+  it('remembers that the console was put away, and shows it when nothing was kept', () => {
+    expect(loadConsoleHidden()).toBe(false);
+    saveConsoleHidden(true);
+    expect(loadConsoleHidden()).toBe(true);
+    saveConsoleHidden(false);
+    expect(loadConsoleHidden()).toBe(false);
+    expect(loadShow()).toEqual(DEFAULT_SHOW);                                       // one does not touch the other
   });
 
   it('gives a fresh copy each time', () => {

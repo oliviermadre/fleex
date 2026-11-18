@@ -61,6 +61,8 @@ export interface MenuContext {
     power(): void;
     /** Open the popup of the floor itself: its figures and its limits. */
     floor(): void;
+    /** The floor's run limits, in a popup of their own. */
+    limits(): void;
     /** Go to the next ticket that waits for someone. */
     next(): void;
     /** Make the belts selected fast, or plain again. */
@@ -133,6 +135,7 @@ export function factoryMenu(c: MenuContext): Menu {
       2: { id: 'fit', key: 'F', label: 'Fit', icon: 'fit', tone: 'plain', title: 'Frame the floor', run: a.fit },
       3: { id: 'tickets', key: 'Tab', label: 'Tickets', icon: 'list', tone: 'ticket', title: 'Every ticket on the floor, as a list to filter and to jump from', run: a.tickets },
       4: { id: 'floor', key: 'V', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
+      5: { id: 'limits', key: 'L', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
       8: next,
     });
   }

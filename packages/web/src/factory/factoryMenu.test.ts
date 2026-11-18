@@ -51,7 +51,9 @@ describe('the command card', () => {
 
   it('starts with Build, Intake, Fit, the list of tickets, which Tab opens, and the floor\'s figures', () => {
     const root = factoryMenu(ctx());
-    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets', 'Stats', 'Next']);
+    expect(labels(root).filter(Boolean)).toEqual(['Build', 'Intake', 'Fit', 'Tickets', 'Stats', 'Limits', 'Next']);
+    /* the run limits have a command of their own, next to the figures: nobody looks for a setting under "Stats" */
+    expect(root.slots[5]).toMatchObject({ id: 'limits', key: 'L' });
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
   });
 
