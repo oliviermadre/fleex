@@ -91,6 +91,8 @@ export interface FactorySettings {
   maxRunsPerHour: number;
   /** Station runs the Factory may have in flight at once (on top of the global agent limit). */
   maxConcurrentRuns: number;
+  /** The emergency stop is on: nothing moves and nothing runs until it is lifted. Kept across restarts. */
+  halted?: boolean;
 }
 export const DEFAULT_SETTINGS: FactorySettings = { maxRunsPerHour: 20, maxConcurrentRuns: 3 };
 export const DEFAULT_FLOOR_ID = 'default';

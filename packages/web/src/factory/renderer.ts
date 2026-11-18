@@ -63,6 +63,8 @@ export interface ViewState {
   grid?: boolean;
   /** The machine whose light the pointer is on. */
   hoverLamp?: string | null;
+  /** The emergency stop is on: belts stand still, arms stay where they are, nothing pulses. */
+  halted?: boolean;
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
   exits?: Readonly<Record<string, number>> | null;
   exitDays?: number;
@@ -479,7 +481,9 @@ export class FactoryView {
 
   draw(st: ViewState, dtReal: number): void {
     const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, L = st.layout;
-    this.resize(); this.index(L); this.clock += dtReal;
+    /* stopped, the floor's own clock stands still: chevrons do not run, rings do not turn */
+    const moving = st.halted ? 0 : dtReal;
+    this.resize(); this.index(L); this.clock += moving;
     this.constrain(L);
     const z = cam.z;
     const inside = new Map<string, FactoryTicket[]>();
@@ -518,7 +522,7 @@ export class FactoryView {
       const m = t.machineId ? this.byId.get(t.machineId) : null;
       if (!m || (m.kind !== 'belt' && m.kind !== 'bridge')) continue;
       const told: TrackPos = { id: m.id, p: t.p, fx: t.fx, fy: t.fy };
-      let pos = follow(track, this.drawnOn.get(t.ticketId), told, dtReal);
+      let pos = follow(track, this.drawnOn.get(t.ticketId), told, moving);
       const tile = this.byId.get(pos.id);
       if (!tile || (tile.kind !== 'belt' && tile.kind !== 'bridge')) pos = told;
       this.drawnOn.set(t.ticketId, pos); riding.add(t.ticketId);

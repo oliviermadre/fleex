@@ -174,6 +174,21 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   how many tickets left by it over the period of the floor's figures: `exits` in `GET /api/factory/stats`, a count
   per exit, to which the page adds what it has seen leave since it last asked.
 
+## The emergency stop
+
+One button, always in the page's header: **Emergency stop**. It is `halted` in the floor's settings
+(`POST /api/factory/halt`, `setHalted` in the engine), so it survives a restart of the server.
+
+On, the engine's tick does nothing: belts, arms, zones and teleporters stay where they are and no station starts
+anything. Every run in progress is cut at once (its execution is cancelled, its run row says "Cut by the emergency
+stop") and its ticket goes back in line in its station, in its place. People can still move tickets by hand, decide at
+gates and build: what they do waits with the rest. On the page nothing moves either (chevrons, arms and rings stand
+still) and a red notice says so. **Restart the floor** lifts it: everything carries on from where it stood, and the
+tickets whose run was cut are run again.
+
+It is not a pause to work in: there is no stepping, and no way to stop one line only (a station's own switch does
+that).
+
 ## Teleporters
 
 A jump across the floor, so that a ticket can be sent to another line without a belt running all the way there. The

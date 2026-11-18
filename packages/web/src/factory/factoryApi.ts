@@ -29,6 +29,7 @@ export const factoryApi = {
   setAside: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/aside`),
   /** Put back a ticket that was set aside: with an outcome it leaves the station by that arm, without one the station runs again. */
   putBack: (ticketId: string, outcome?: string) => post<FactorySnapshot>(`/tickets/${ticketId}/put-back`, outcome ? { how: 'as', outcome } : { how: 'again' }),
+  halt: (on: boolean) => post<FactorySnapshot>('/halt', { on }),
   power: (machineId: string, on: boolean) => post<FactorySnapshot>(`/machines/${machineId}/power`, { on }),
   retry: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/retry`),
   refreshTicket: (ticketId: string) => post<FactorySnapshot>(`/tickets/${ticketId}/refresh`),

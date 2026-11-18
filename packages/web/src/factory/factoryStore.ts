@@ -41,6 +41,8 @@ interface FactoryState {
   /** With an outcome the ticket leaves its station by that arm; without, the station runs again. */
   putBack: (ticketId: string, outcome?: string) => Promise<void>;
   power: (machineId: string, on: boolean) => Promise<void>;
+  /** The emergency stop: on, nothing moves and every run is cut; off, the floor carries on. */
+  halt: (on: boolean) => Promise<void>;
   ackNotice: () => Promise<void>;
   retry: (ticketId: string) => Promise<void>;
   giveBack: (ticketId: string) => Promise<void>;
@@ -122,6 +124,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     setAside: (ticketId) => act(() => factoryApi.setAside(ticketId)),
     putBack: (ticketId, outcome) => act(() => factoryApi.putBack(ticketId, outcome)),
     power: (machineId, on) => act(() => factoryApi.power(machineId, on)),
+    halt: (on) => act(() => factoryApi.halt(on)),
     ackNotice: () => act(() => factoryApi.ackNotice()),
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),

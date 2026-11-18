@@ -53,7 +53,7 @@ export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
 export interface FactoryLayout { version?: number; w: number; h: number; machines: MachineSpec[] }
-export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number }
+export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number; /** The emergency stop is on: nothing moves, nothing runs. */ halted?: boolean }
 
 export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone' | 'port';
 /** The three ways a ticket is set aside in its station: the agent asked, the run failed, or a human took it. It waits there to be put back. */

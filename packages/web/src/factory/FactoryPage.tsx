@@ -207,7 +207,8 @@ function Floor() {
     if (!s.snapshot || !s.layout) return null;
     return {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
-      armAge: (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName,
+      /* stopped, an arm stays where the server last had it */
+      halted: s.snapshot.floor.settings.halted === true, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
@@ -641,6 +642,7 @@ function Floor() {
   }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
+  const halted = snapshot?.floor.settings.halted === true;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
   return (
     <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
@@ -648,9 +650,12 @@ function Floor() {
       <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
         <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
-        {building && <span className="text-xs text-[var(--theme-accent)]">Building — the floor keeps running</span>}
+        {building && !halted && <span className="text-xs text-[var(--theme-accent)]">Building — the floor keeps running</span>}
         {snapshot && <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} />}
         <span className="flex-1" />
+        {snapshot && (halted
+          ? <Button size="sm" variant="primary" onClick={() => void store.halt(false)} title="Belts, arms and stations carry on from where they stood; the runs that were cut start again">Restart the floor</Button>
+          : <Button size="sm" variant="danger" onClick={() => void store.halt(true)} title="Stops every belt, arm and station at once, and cuts the runs in progress. They start again when the floor is restarted">Emergency stop</Button>)}
         {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
       </div>
       <div className="flex min-h-0 flex-1">
@@ -664,7 +669,13 @@ function Floor() {
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
           {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} />}
-          {snapshot?.notice && (
+          {halted && (
+            <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-2xl items-center gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('red'))} role="alert">
+              <span className="min-w-0 flex-1"><b>Emergency stop.</b> Nothing moves and nothing runs. The runs that were cut start again when the floor restarts. You can still move tickets and build.</span>
+              <Button size="sm" variant="primary" onClick={() => void store.halt(false)}>Restart the floor</Button>
+            </div>
+          )}
+          {snapshot?.notice && !halted && (
             <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-3xl items-start gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('yellow'))} role="status">
               <span className="min-w-0 flex-1">{snapshot.notice}</span>
               <Button size="sm" onClick={() => void store.ackNotice()}>Got it</Button>

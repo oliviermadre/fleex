@@ -792,6 +792,57 @@ describe('a station has a switch', () => {
   });
 });
 
+describe('the emergency stop', () => {
+  it('stops everything where it is, cuts the runs in progress, and carries on from there when it is lifted', async () => {
+    await boot([belt('b1', 0, 0), belt('b2', 1, 0), belt('b3', 2, 0), station('s', 5, 0, { cap: 2 }), arm('out', 8, 1, 0), zone('z', 9, 0)]);
+    await engine.transfer('a', { machineId: 's' });
+    await run(0.2);
+    expect(where('a')).toBe('s:running');
+    pending[0]!.started('exec-1');
+    await engine.transfer('b', { machineId: 'b1' });
+    await run(0.2);
+    const before = engine.snapshot().tickets.find((t) => t.ticketId === 'b')!.p;
+
+    await engine.setHalted(true);
+    expect(engine.halted).toBe(true);
+    expect(cancelled).toEqual(['exec-1']);                              // the run is cut at once
+    expect(where('a')).toBe('s:wait');                                  // and its ticket is back in line, in its place
+    expect([...store.runs.values()].find((r) => r.ticketId === 'a')).toMatchObject({ status: 'interrupted', error: 'Cut by the emergency stop' });
+    await run(3);
+    expect(where('b')).toBe('b1:belt');                                 // nothing moved
+    expect(engine.snapshot().tickets.find((t) => t.ticketId === 'b')!.p).toBe(before);
+    expect(pending).toHaveLength(1);                                    // nothing started
+    expect(store.floor!.settings.halted).toBe(true);                    // and it is written down: a restart of the server keeps it
+
+    /* what the run that was cut returns afterwards is ignored */
+    pending[0]!.resolve({ status: 'completed', outcome: 'ok', executionId: 'exec-1', error: null });
+    await settle();
+    expect(where('a')).toBe('s:wait');
+
+    /* people can still act while it is on */
+    await engine.transfer('c', { machineId: 'z' });
+    expect(where('c')).toBe('z:zone');
+
+    await engine.setHalted(false);
+    expect(store.floor!.settings.halted).toBeUndefined();
+    await run(0.2);
+    expect(where('a')).toBe('s:running');                               // the run starts over
+    expect(pending).toHaveLength(2);
+    await run(3);
+    expect(where('b')).not.toBe('b1:belt');                             // and the belts run again
+  });
+
+  it('is still on after the server restarts', async () => {
+    await boot([belt('b1', 0, 0), belt('b2', 1, 0)]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await engine.setHalted(true);
+    await boot([belt('b1', 0, 0), belt('b2', 1, 0)]);
+    expect(engine.halted).toBe(true);
+    await run(2);
+    expect(where('a')).toBe('b1:belt');
+  });
+});
+
 describe('a decision at a gate', () => {
   it('goes in the thread with its reason', async () => {
     await boot([station('gate', 1, 3, { exec: 'human_gate', name: 'Check spec', outcomes: ['approve', 'reject'] }), arm('ok', 4, 3, 0, 'outcome', ['approve']), zone('next', 5, 3)]);

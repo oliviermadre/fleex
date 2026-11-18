@@ -592,6 +592,7 @@ export class FactoryEngine {
   // ---------- the tick ----------
 
   tick(dt: number): void {
+    if (this.floor.settings.halted) return;
     for (const m of this.machines) {
       const k = m.spec.kind;
       if (k === 'belt') this.updateBelt(m, dt);
@@ -790,6 +791,35 @@ export class FactoryEngine {
     if (on) delete m.spec.off; else m.spec.off = true;
     for (const t of this.inside(m)) if (t.s.phase === 'wait' && t.s.note) { t.s.note = ''; this.dirty.add(t.ticketId); }
     this.floor = { ...this.floor, layout: { ...this.floor.layout }, updatedAt: new Date(this.now()).toISOString() };
+    await this.deps.store.saveFloor(this.floor);
+    await this.flush();
+  }
+
+  get halted(): boolean { return this.floor.settings.halted === true; }
+
+  /**
+   * The emergency stop. On: belts, arms, zones and teleporters stop where they are, no station starts anything, and
+   * every run in progress is cut at once; its ticket stays in its place, to be run again. Off: the floor carries on
+   * from where it stood, and those tickets start over. People can still move tickets by hand and decide at gates
+   * while it is on: what they decide waits with the rest. It is kept across restarts.
+   */
+  async setHalted(on: boolean): Promise<void> {
+    const nowIso = new Date(this.now()).toISOString();
+    if (on) for (const t of this.tickets.values()) {
+      if (t.s.phase !== 'running') continue;
+      const run = t.s.runId ? this.openRuns.get(t.s.runId) : null;
+      if (run) {
+        run.status = 'interrupted'; run.finishedAt = nowIso; run.error = 'Cut by the emergency stop'; this.saveRun(run);
+        if (run.executionId && this.deps.cancelExecution) void this.deps.cancelExecution(run.executionId)
+          .catch((err) => this.deps.logger.warn('Factory: could not stop a run', { ticketId: t.ticketId, error: String(err) }));
+      }
+      /* back in line in its station: the result of the run that was cut is ignored (its run id no longer matches) */
+      t.s.phase = 'wait'; t.s.runId = null; t.s.note = 'Cut by the emergency stop: it runs again when the floor restarts'; this.dirty.add(t.ticketId);
+    }
+    const settings = { ...this.floor.settings };
+    if (on) settings.halted = true; else delete settings.halted;
+    this.floor = { ...this.floor, settings, updatedAt: nowIso };
+    this.deps.logger.info(on ? 'Factory: emergency stop' : 'Factory: restarted after an emergency stop');
     await this.deps.store.saveFloor(this.floor);
     await this.flush();
   }

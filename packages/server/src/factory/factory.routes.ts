@@ -41,6 +41,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
 
     app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.engine.snapshot(); });
     app.put<{ Body: { layout: FactoryLayout } }>('/api/factory/layout', (request, reply) => guard(reply, (f) => f.engine.setLayout(request.body?.layout)));
+    app.post<{ Body: { on?: boolean } }>('/api/factory/halt', (request, reply) => guard(reply, (f) => f.engine.setHalted(request.body?.on !== false)));
     app.put<{ Body: Partial<FactorySettings> }>('/api/factory/settings', (request, reply) => guard(reply, (f) => f.engine.setSettings(request.body ?? {})));
 
     app.post<{ Params: { ticketId: string }; Body: Target }>('/api/factory/tickets/:ticketId/transfer', (request, reply) => guard(reply, (f) => f.engine.transfer(request.params.ticketId, request.body ?? {})));
