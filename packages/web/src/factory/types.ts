@@ -43,14 +43,19 @@ export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
 /** Where two belts cross: a ticket that enters keeps going straight. */
 export interface BridgeSpec extends MachineBase { kind: 'bridge' }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
+/**
+ * A jump across the floor, on one tile. A departure takes one ticket and sends it to the arrival it is set to (`to`,
+ * that arrival's id); an arrival holds one ticket, takes nothing from the floor, and an arm takes the ticket out.
+ */
+export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 'departure' | 'arrival'; to?: string; /** One of `PALETTE`; without one, see `portColor`. */ color?: string }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
 export interface FactoryLayout { version?: number; w: number; h: number; machines: MachineSpec[] }
 export interface FactorySettings { maxRunsPerHour: number; maxConcurrentRuns: number }
 
-export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone';
+export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone' | 'port';
 /** The three ways a ticket is set aside in its station: the agent asked, the run failed, or a human took it. It waits there to be put back. */
 export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
 /** The stations that run something: they have a switch, and tickets can be set aside in them. */

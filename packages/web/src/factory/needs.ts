@@ -3,6 +3,7 @@
  * a failed run, a ticket a human set aside and has to put back, one lying on the floor. Longest wait first.
  * This is the list shown top-left on the floor, and what the left and right arrows walk.
  */
+import { portName } from './teleport';
 import { QUESTION_OUTCOME, type FactoryTicket, type MachineSpec } from './types';
 
 export type NeedKind = 'decision' | 'question' | 'failed' | 'aside' | 'floor';
@@ -19,7 +20,7 @@ export function needKind(t: FactoryTicket): NeedKind | null {
   return null;
 }
 
-const placeOf = (m: MachineSpec | undefined): string => !m ? 'Floor' : m.kind === 'belt' || m.kind === 'bridge' ? 'On a belt' : m.kind === 'arm' ? 'In an arm'
+const placeOf = (m: MachineSpec | undefined): string => !m ? 'Floor' : m.kind === 'belt' || m.kind === 'bridge' ? 'On a belt' : m.kind === 'arm' ? 'In an arm' : m.kind === 'teleporter' ? portName(m)
   : m.name || (m.kind === 'station' ? (m.exec === 'human_gate' ? 'Gate' : 'Station') : m.kind === 'zone' ? 'Zone' : 'Exit');
 
 /** Where a ticket is and what happens to it there, in words: the two lines of the Factory group in a ticket's context. */
@@ -34,6 +35,7 @@ export function standing(t: FactoryTicket, m: MachineSpec | null | undefined): {
     : t.phase === 'out' ? `Done${out}, waiting to be taken`
     : t.phase === 'loose' ? 'Lying there until it is put on a machine'
     : t.outcome === QUESTION_OUTCOME ? 'Carries a question for you'
+    : t.phase === 'port' ? 'In a teleporter'
     : t.phase === 'zone' ? 'Kept there' : 'On its way';
   return { where: placeOf(m ?? undefined), state };
 }

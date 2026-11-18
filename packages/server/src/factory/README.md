@@ -173,6 +173,40 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   how many tickets left by it over the period of the floor's figures: `exits` in `GET /api/factory/stats`, a count
   per exit, to which the page adds what it has seen leave since it last asked.
 
+## Teleporters
+
+A jump across the floor, so that a ticket can be sent to another line without a belt running all the way there. The
+concept was settled on a mock-up first (`docs/factory/teleport.html`).
+
+A teleporter takes one tile and holds one ticket. It is a **departure** or an **arrival**, has a name, and can be
+given one of the sixteen colours.
+
+- A **departure** takes a ticket from an arm, a belt or a hand, one at a time, and leads to an arrival (`to`, that
+  arrival's id). It sends its ticket as soon as that arrival is free. Without a destination (none chosen, or the
+  arrival was removed, which the engine notices when the layout is saved) it keeps what it is given.
+- An **arrival** takes nothing from the floor: an arm pointed at it never picks, a belt that leads into it holds its
+  ticket at its end, and a ticket cannot be dropped on it by hand. It only receives from its departures, and an arm
+  takes the ticket out, with its conditions as anywhere else.
+- **Several departures can lead to one arrival.** While it holds a ticket they keep theirs; when it is emptied, the
+  ticket that has waited longest in its departure goes first (`updateTeleporters`, once per tick).
+- A ticket stays in view a moment (`TELEPORT_REST_MS`) in a departure before it goes and in an arrival before an arm
+  takes it, so the page sees it there. A jump is not a run: nothing is written on the ticket, in `factory_runs` or on
+  the timeline. In a teleporter a ticket's phase is `port`.
+
+On the page (`packages/web/src/factory/teleport.ts` for what is decided, `renderer.ts` for what is drawn): a ring
+where the ticket stands, four chevrons that go in on a departure and come out on an arrival, a frame that is closed
+on a departure and open in the middle of each side on an arrival. The ring is amber dashes while a departure waits
+for its arrival, and the pad is red when it cannot work: a departure with no destination, an arrival holding a
+ticket no arm takes. A plate beside it carries its name and one line (where it leads, how many lead to it, or what
+is wrong). Without a colour of its own a departure takes the colour of its arrival, so the two read as a pair. The
+link between them is not drawn all the time: it shows for the teleporter that is selected or pointed at (for an
+arrival, every departure that leads to it), and while a ticket crosses, with the ticket as a dot on it. An arm that
+points into an arrival carries a no-entry sign, and in build mode says "NO ENTRY" where it would say "DROPS ON".
+
+They are placed from Build › Move › Teleporter, as a departure; the popup sets the name, the role, the destination
+(among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
+with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
+
 ## What waits for someone
 
 Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,

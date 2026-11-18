@@ -12,8 +12,9 @@ import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
 import { follow, type Track, type TrackPos } from './ticketMotion';
 import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
+import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
 import { tokenSprite, type TokenLook } from './ticketToken';
-import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type ZoneSpec } from './types';
+import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number; /** An arm about to be placed: where it would take from and drop on is shown. */ arm?: boolean }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
@@ -83,13 +84,17 @@ const PAINT = '#60a5fa';
 const SNAP = 0.0005, SLIDE = 0.03;
 /** Seconds a ticket takes to fade once it is past an exit's frame. */
 const FADE_S = 0.75;
+/** Seconds a ticket is drawn jumping from a departure to its arrival. The engine moves it at once; this is for the eye. */
+const JUMP_S = 0.6;
+/** A ticket on its way from a departure to its arrival. */
+interface Jump { id: string; type: string; from: TeleporterSpec; to: TeleporterSpec; age: number }
 /** A ticket that has just left by an exit, drawn a moment longer: up to the frame as it was, then as an outline that fades. */
 interface Leaving { type: string; from: { x: number; y: number }; edge: EdgePoint; exit: MachineSpec; age: number; travel: number }
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
-type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number }];
+type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
@@ -159,6 +164,11 @@ export class FactoryView {
   /** Arm id → where its cup was drawn at the last frame. */
   private handAt = new Map<string, { x: number; y: number }>();
   private leaving: Leaving[] = [];
+  private jumps: Jump[] = [];
+  /** Machine id → the tickets it holds, at this frame. */
+  private inside = new Map<string, FactoryTicket[]>();
+  /** Where an arm points into an arrival, at this frame: a no-entry sign goes there, over the arm. */
+  private noEntry: { x: number; y: number }[] = [];
   /** Exit id → tickets seen leaving by it since the counts were last given. */
   private passed = new Map<string, number>();
   private countsFrom: unknown = null;
@@ -300,7 +310,7 @@ export class FactoryView {
     if (px < 3.6) return;
     if (o.min) px = Math.max(px, o.min);
     if (o.max) px = Math.min(px, o.max);
-    const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2;
+    const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2 + (o.dy ?? 0);
     if (sx < -300 || sx > this.w + 300 || sy < -40 || sy > this.h + 40) return;
     ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
     ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
@@ -475,6 +485,7 @@ export class FactoryView {
     const inside = new Map<string, FactoryTicket[]>();
     for (const t of st.tickets) if (t.machineId) { const a = inside.get(t.machineId); if (a) a.push(t); else inside.set(t.machineId, [t]); }
     for (const a of inside.values()) a.sort((p, q) => p.since.localeCompare(q.since));
+    this.inside = inside; this.noEntry.length = 0;
     this.floor(st, inside, pal);
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
     this.shadows(st, pal);
@@ -484,7 +495,10 @@ export class FactoryView {
     for (const id of this.shown.keys()) if (!live.has(id)) { this.left(id, st); this.shown.delete(id); }
     for (const id of this.lastOn.keys()) if (!live.has(id)) { this.lastOn.delete(id); this.quayFor.delete(id); }
     this.wip = 0;
+    this.jumps = this.jumps.filter((j) => { j.age += dtReal; return j.age < JUMP_S && live.has(j.id); });
     for (const t of st.tickets) {
+      const was = this.lastOn.get(t.ticketId);
+      if (was && was.m !== t.machineId) this.jumped(t, was.m);
       this.lastOn.set(t.ticketId, { m: t.machineId, fx: t.fx, fy: t.fy, type: t.info?.type ?? '' });
       if (t.info && (t.info.status === 'doing' || t.info.status === 'reviewing')) this.wip++;
     }
@@ -518,6 +532,7 @@ export class FactoryView {
       else if (m.kind === 'zone') this.zone(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'station') this.station(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'exit') this.exit(m, st, pal);
+      else if (m.kind === 'teleporter') this.port(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
     }
     for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
       const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
@@ -535,6 +550,7 @@ export class FactoryView {
     }
     for (const m of L.machines) if (m.kind === 'arm') this.arm(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
     this.departures(pal, dtReal);
+    this.portLinks(st, pal);
 
     if (st.lens) this.lens(st.lens, L, pal);
     this.overlay(st, pal);
@@ -682,7 +698,7 @@ export class FactoryView {
       ctx.beginPath();
       for (let s = 0; s < 4; s++) {
         const n = this.at(x + DX[s as 0], y + DY[s as 0]);
-        if (s === b.dir ? !!n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n)) : this.feeds(n, x, y)) continue;
+        if (s === b.dir ? !!n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n) || isDeparture(n)) : this.feeds(n, x, y)) continue;
         if (s === 0) { ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); } else if (s === 2) { ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); }
         else if (s === 1) { ctx.moveTo(x, y + 0.955); ctx.lineTo(x + 1, y + 0.955); } else { ctx.moveTo(x, y + 0.045); ctx.lineTo(x + 1, y + 0.045); }
       }
@@ -690,7 +706,7 @@ export class FactoryView {
     }
     /* a belt that leads nowhere says so */
     const n = this.at(x + dx, y + dy);
-    if (!(n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n))) && !this.takersOf(b).length) {
+    if (!(n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n) || isDeparture(n))) && !this.takersOf(b).length) {
       ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.12; ctx.beginPath();
       ctx.moveTo(x + 0.5 + dx * 0.42 - dy * 0.4, y + 0.5 + dy * 0.42 - dx * 0.4); ctx.lineTo(x + 0.5 + dx * 0.42 + dy * 0.4, y + 0.5 + dy * 0.42 + dx * 0.4); ctx.stroke();
     }
@@ -851,14 +867,16 @@ export class FactoryView {
      */
     /* the tag is in the arm's colour: a dark plate tinted with it, and the colour lightened for the ink */
     const o = { min: 9, max: 12, mono: true, plate: a.color ? mix('#09090b', col, 0.2) : filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = a.color ? mix(col, '#ffffff', 0.45) : filtered ? '#fde68a' : pal.text2;
-    if (isBox(dst) && isBox(src)) {
+    /* a teleporter is a tile a tag must not cover either: it has its ring and its own plate */
+    const solid = (m: MachineSpec | null) => isBox(m) || isPort(m);
+    if (solid(dst) && solid(src)) {
       /* squeezed between two machines, there is no room on its own line: beside it, as a last resort */
       if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, ink, { ...o, align: 'center' });
       else this.label(tag, a.x + 1.14, by, 0.3, ink, { ...o, fit: 6 });
       return;
     }
     /* past the head, unless that is a machine: then behind the arm, over the belt it takes from */
-    const fx = isBox(dst) ? -dx : dx, fy = isBox(dst) ? -dy : dy;
+    const fx = solid(dst) ? -dx : dx, fy = solid(dst) ? -dy : dy;
     if (fx > 0) this.label(tag, a.x + 1.12, by, 0.3, ink, { ...o, align: 'left', fit: 5 });
     else if (fx < 0) this.label(tag, a.x - 0.12, by, 0.3, ink, { ...o, align: 'right', fit: 5 });
     else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
@@ -1090,6 +1108,149 @@ export class FactoryView {
     else this.label(count, x + w / 2, y + h - 0.04, 0.24, ok, { ...o, align: 'center' });
   }
 
+  /**
+   * A teleporter, on one tile: a ring where its ticket stands, and four chevrons round it that go in on a departure
+   * and come out on an arrival. A departure's frame is closed; an arrival's is open in the middle of each side, where
+   * its chevrons come out. The ring turns to amber dashes while a departure keeps its ticket because the arrival is
+   * taken, and the whole pad to red when it cannot work as it is (a departure that leads nowhere, an arrival no arm
+   * empties). Its name and what it leads to are on a plate beside it.
+   */
+  private port(m: TeleporterSpec, held: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, { x, y } = m, cx = x + 0.5, cy = y + 0.5, z = this.cam.z, find = (id: string) => this.byId.get(id), dep = m.role === 'departure';
+    const arrival = arrivalOf(m, find), state = portState(m, { arrival, arrivalHolds: !!arrival && !!this.inside.get(arrival.id)?.length, holds: held, takers: dep ? [] : this.takersOf(m) });
+    const bad = portBad(state), waiting = state === 'waiting', col = bad ? pal.danger : portColor(m, find);
+    /* a ticket on its way out of here, or into here: see `jumped` */
+    const out = this.jumps.find((j) => j.from.id === m.id), into = this.jumps.find((j) => j.to.id === m.id), w = (j: Jump) => j.age / JUMP_S;
+    const burst = out && w(out) < 0.5 ? w(out) / 0.5 : into && w(into) > 0.5 ? 1 - (w(into) - 0.5) / 0.5 : 0;
+    rr(ctx, x + 0.068, y + 0.068, 0.864, 0.864, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', 0.3); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 0.057;
+    if (dep) ctx.stroke();
+    else {
+      ctx.lineCap = 'round'; ctx.beginPath();
+      for (const [px, py, sx, sy] of [[x + 0.068, y + 0.068, 1, 1], [x + 0.932, y + 0.068, -1, 1], [x + 0.932, y + 0.932, -1, -1], [x + 0.068, y + 0.932, 1, -1]] as const) {
+        ctx.moveTo(px, py + sy * 0.27); ctx.lineTo(px, py + sy * 0.2); ctx.quadraticCurveTo(px, py, px + sx * 0.2, py); ctx.lineTo(px + sx * 0.27, py);
+      }
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, 0.26, 0, 6.3); ctx.fillStyle = col; ctx.globalAlpha = 0.1 + 0.3 * burst; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = waiting ? pal.warn : col; ctx.lineWidth = 0.045;
+    if (waiting) { ctx.setLineDash([0.11, 0.09]); ctx.lineDashOffset = -this.clock * 0.25; }
+    ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+    if (burst > 0) { ctx.globalAlpha = 1 - burst; ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 0.26 + 0.3 * burst, 0, 6.3); ctx.stroke(); ctx.globalAlpha = 1; }
+    if (z >= 9) {
+      /* in towards the ring on a departure, out of it on an arrival */
+      const k = dep ? -1 : 1;
+      ctx.strokeStyle = col; ctx.lineWidth = 0.05; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+      for (let s = 0; s < 4; s++) {
+        const ux = DX[s as 0], uy = DY[s as 0], px = cx + ux * 0.37, py = cy + uy * 0.37;
+        ctx.moveTo(px - k * ux * 0.045 - uy * 0.105, py - k * uy * 0.045 + ux * 0.105); ctx.lineTo(px + k * ux * 0.05, py + k * uy * 0.05); ctx.lineTo(px - k * ux * 0.045 + uy * 0.105, py - k * uy * 0.045 - ux * 0.105);
+      }
+      ctx.stroke(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    }
+    if (held) {
+      /* one that is still crossing is not here yet; it is kept in place, so it does not come sliding over the floor */
+      if (into && into.id === held.ticketId && w(into) < 0.6) this.shown.set(held.ticketId, { x: cx, y: cy });
+      else this.ticket(held, cx, cy, 0.32, st, '', dt);
+    }
+    if (out && w(out) < 0.4) {
+      /* the one that has just left: it shrinks where it stood */
+      const k = 1 - w(out) / 0.4, sprite = tokenSprite(out.type, TYPE_COLORS[out.type] ?? NO_TYPE, 0.37 * z * this.dpr);
+      ctx.globalAlpha = Math.min(1, k * 1.5);
+      if (sprite) { const size = (sprite.width / (z * this.dpr)) * k; ctx.drawImage(sprite, cx - size / 2, cy - size / 2, size, size); }
+      else { rr(ctx, cx - 0.16 * k, cy - 0.16 * k, 0.32 * k, 0.32 * k, 0.07); ctx.fillStyle = TYPE_COLORS[out.type] ?? NO_TYPE; ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    if (waiting || bad) {
+      /* a pause sign while it holds its ticket back, "!" when it cannot work */
+      const bx = x + 0.86, by = y + 0.14;
+      ctx.beginPath(); ctx.arc(bx, by, 0.15, 0, 6.3); ctx.fillStyle = bad ? pal.danger : pal.warn; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+      if (bad) this.label('!', bx, by + 0.012, 0.22, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 16 });
+      else { ctx.fillStyle = 'rgba(9,9,11,0.88)'; ctx.fillRect(bx - 0.065, by - 0.07, 0.04, 0.14); ctx.fillRect(bx + 0.025, by - 0.07, 0.04, 0.14); }
+    }
+    /* an arm that points into an arrival will never drop there: a no-entry sign on the side it comes from */
+    if (!dep) for (let s = 0; s < 4; s++) {
+      const n = this.at(m.x - DX[s as 0], m.y - DY[s as 0]);
+      if (n && n.kind === 'arm' && n.dir === s) this.noEntry.push({ x: cx - DX[s as 0] * 0.5, y: cy - DY[s as 0] * 0.5 });
+    }
+    const asked = st.selMachine === m.id || st.hoverMachine === m.id;
+    if (z < 11 && !asked) return;
+    /* the plate: under the pad, over it when something stands under, beside it when it is boxed in. Its second line is what to know now. */
+    const line = z >= 16 || asked || bad || waiting ? portLine(m, state, arrival, dep ? 0 : departuresOf(m, st.layout.machines).length) : '';
+    const name = { mono: true, weight: 700, min: 9, max: 12, plate: 'rgba(9,9,11,0.9)' } as const, sub = { mono: true, min: 8, max: 10, plate: 'rgba(9,9,11,0.9)' } as const;
+    const ink = bad ? '#fca5a5' : waiting ? pal.warn : pal.text2;
+    if (!this.at(m.x, m.y + 1)) {
+      this.label(portName(m), cx, y + 1, 0.24, col, { ...name, align: 'center', dy: 11 });
+      if (line) this.label(line, cx, y + 1, 0.2, ink, { ...sub, align: 'center', dy: 26 });
+    } else if (!this.at(m.x, m.y - 1)) {
+      this.label(portName(m), cx, y, 0.24, col, { ...name, align: 'center', dy: line ? -26 : -11 });
+      if (line) this.label(line, cx, y, 0.2, ink, { ...sub, align: 'center', dy: -11 });
+    } else {
+      this.label(portName(m), x + 1.14, cy, 0.24, col, { ...name, dy: line ? -8 : 0 });
+      if (line) this.label(line, x + 1.14, cy, 0.2, ink, { ...sub, dy: 8 });
+    }
+  }
+
+  /**
+   * A ticket that is now in an arrival and was, a frame ago, in a departure that leads to it (or in the arm or on
+   * the belt that fed that departure, when the page did not see it there): it jumped. It is drawn crossing.
+   */
+  private jumped(t: FactoryTicket, before: string | null): void {
+    const to = t.machineId ? this.byId.get(t.machineId) : null;
+    if (!isArrival(to)) return;
+    const was = before ? this.byId.get(before) : null;
+    const from = was && (was.kind === 'arm' || was.kind === 'belt') ? this.at(was.x + DX[was.dir], was.y + DY[was.dir]) : was;
+    if (!isDeparture(from) || from.to !== to.id) return;
+    this.jumps.push({ id: t.ticketId, type: t.info?.type ?? '', from, to, age: 0 });
+    this.shown.set(t.ticketId, { x: to.x + 0.5, y: to.y + 0.5 });
+  }
+
+  /**
+   * The link between a departure and its arrival. It is not on the floor all the time: it shows for the teleporter
+   * that is selected or pointed at (for an arrival, every departure that leads to it), and while a ticket crosses,
+   * with the ticket as a dot on it. Drawn over everything, since it crosses the floor.
+   */
+  private portLinks(st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, find = (id: string) => this.byId.get(id), arcs = new Map<string, { from: TeleporterSpec; to: TeleporterSpec; packet: number | null }>();
+    for (const id of [st.selMachine, st.hoverMachine]) {
+      const m = id ? this.byId.get(id) : null;
+      if (!isPort(m)) continue;
+      const a = arrivalOf(m, find);
+      if (a) arcs.set(m.id, { from: m, to: a, packet: null });
+      else if (m.role === 'arrival') for (const d of departuresOf(m, st.layout.machines)) arcs.set(d.id, { from: d, to: m, packet: null });
+    }
+    for (const j of this.jumps) { const w = j.age / JUMP_S; arcs.set(j.from.id, { from: j.from, to: j.to, packet: w > 0.15 && w < 0.85 ? (w - 0.15) / 0.7 : null }); }
+    /* arcs that end on the same arrival bend one way then the other, so they do not lie on each other */
+    const seen = new Map<string, number>();
+    for (const { from, to, packet } of arcs.values()) {
+      const n = seen.get(to.id) ?? 0; seen.set(to.id, n + 1);
+      const x1 = from.x + 0.5, y1 = from.y + 0.5, x2 = to.x + 0.5, y2 = to.y + 0.5, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+      if (L < 0.01) continue;
+      const bend = (n % 2 ? -1 : 1) * 0.2 * (1 + Math.floor(n / 2) * 0.5), qx = (x1 + x2) / 2 + dy * bend, qy = (y1 + y2) / 2 - dx * bend;
+      const at = (u: number) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
+      /* from the edge of one pad to the edge of the other */
+      const trim = Math.min(0.3, 0.6 / L), col = portColor(from, find), hot = packet != null || this.jumps.some((j) => j.from.id === from.id);
+      const path = () => { ctx.beginPath(); for (let i = 0; i <= 28; i++) { const p = at(trim + (1 - 2 * trim) * (i / 28)); if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); } };
+      ctx.lineCap = 'round'; ctx.setLineDash([0.07, 0.17]); ctx.lineDashOffset = -this.clock * 0.5;
+      path(); ctx.strokeStyle = 'rgba(9,9,11,0.6)'; ctx.lineWidth = hot ? 0.13 : 0.1; ctx.stroke();
+      path(); ctx.strokeStyle = col; ctx.lineWidth = hot ? 0.075 : 0.05; ctx.globalAlpha = hot ? 1 : 0.9; ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      /* its head, at the arrival */
+      const e = at(1 - trim), e0 = at(1 - trim - 0.03), a = Math.atan2(e.y - e0.y, e.x - e0.x);
+      ctx.lineJoin = 'round'; ctx.lineWidth = 0.06; ctx.beginPath();
+      ctx.moveTo(e.x - Math.cos(a - 0.6) * 0.2, e.y - Math.sin(a - 0.6) * 0.2); ctx.lineTo(e.x, e.y); ctx.lineTo(e.x - Math.cos(a + 0.6) * 0.2, e.y - Math.sin(a + 0.6) * 0.2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+      if (packet != null) {
+        const p = at(trim + (1 - 2 * trim) * packet);
+        ctx.fillStyle = col; ctx.globalAlpha = 0.28; ctx.beginPath(); ctx.arc(p.x, p.y, 0.23, 0, 6.3); ctx.fill();
+        ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 0.1, 0, 6.3); ctx.fill();
+      }
+    }
+    for (const s of this.noEntry) {
+      ctx.beginPath(); ctx.arc(s.x, s.y, 0.18, 0, 6.3); ctx.fillStyle = pal.danger; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.06; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(s.x - 0.1, s.y); ctx.lineTo(s.x + 0.1, s.y); ctx.stroke(); ctx.lineCap = 'butt';
+    }
+  }
+
   /** A ticket that was on its way into an exit when it left the floor: it is seen crossing the frame. Anything else that goes was taken back, and just goes. */
   private left(ticketId: string, st: ViewState): void {
     const was = this.lastOn.get(ticketId), from = this.shown.get(ticketId), m = was?.m ? this.byId.get(was.m) : null;
@@ -1186,24 +1347,27 @@ export class FactoryView {
    */
   private armWay(x: number, y: number, dir: number, pal: Palette, turn: boolean): void {
     const ctx = this.ctx, dx = DX[dir as 0], dy = DY[dir as 0];
-    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
+    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
     const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
       ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
       ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
     };
     const sx = x - dx, sy = y - dy, tx = x + dx, ty = y + dy, src = this.at(sx, sy), dst = this.at(tx, ty);
-    tile(sx, sy, PICK, true); tile(tx, ty, pal.ok, false);
-    const o = { mono: true, weight: 700, min: 9, max: 11 } as const, takes = `TAKES FROM · ${nameOf(src)}`, drops = `DROPS ON · ${nameOf(dst)}`;
-    const blue = { ...o, plate: 'rgba(23,37,84,0.95)' }, green = { ...o, plate: 'rgba(5,46,22,0.95)' };
+    /* a teleporter only goes one way: nothing is taken out of a departure, nothing is put into an arrival */
+    const idle = isDeparture(src), shut = isArrival(dst), red = 'rgba(69,10,10,0.95)', pink = '#fecaca';
+    tile(sx, sy, idle ? pal.danger : PICK, true); tile(tx, ty, shut ? pal.danger : pal.ok, false);
+    const o = { mono: true, weight: 700, min: 9, max: 11 } as const;
+    const takes = idle ? `TAKES NOTHING · ${nameOf(src)} is a departure` : `TAKES FROM · ${nameOf(src)}`, drops = shut ? `NO ENTRY · ${nameOf(dst)} is an arrival` : `DROPS ON · ${nameOf(dst)}`;
+    const blue = { ...o, plate: idle ? red : 'rgba(23,37,84,0.95)' }, green = { ...o, plate: shut ? red : 'rgba(5,46,22,0.95)' };
     if (dy === 0) {
       /* side by side over the arm, each on its own side of it */
-      this.label(takes, x + 0.5 - dx * 0.1, y - 0.34, 0.22, '#bfdbfe', { ...blue, align: dx > 0 ? 'right' : 'left' });
-      this.label(drops, x + 0.5 + dx * 0.1, y - 0.34, 0.22, '#bbf7d0', { ...green, align: dx > 0 ? 'left' : 'right' });
+      this.label(takes, x + 0.5 - dx * 0.1, y - 0.34, 0.22, idle ? pink : '#bfdbfe', { ...blue, align: dx > 0 ? 'right' : 'left' });
+      this.label(drops, x + 0.5 + dx * 0.1, y - 0.34, 0.22, shut ? pink : '#bbf7d0', { ...green, align: dx > 0 ? 'left' : 'right' });
       if (turn) this.label('R · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
     } else {
       /* one above the other, to the right of the tiles they name */
-      this.label(takes, x + 1.16, sy + 0.5, 0.22, '#bfdbfe', blue);
-      this.label(drops, x + 1.16, ty + 0.5, 0.22, '#bbf7d0', green);
+      this.label(takes, x + 1.16, sy + 0.5, 0.22, idle ? pink : '#bfdbfe', blue);
+      this.label(drops, x + 1.16, ty + 0.5, 0.22, shut ? pink : '#bbf7d0', green);
       if (turn) this.label('R · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
   }
@@ -1221,7 +1385,7 @@ export class FactoryView {
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : pal.text2;
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     for (const t of st.tickets) {

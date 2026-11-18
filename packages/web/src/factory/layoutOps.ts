@@ -1,7 +1,8 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
+import { relink } from './teleport';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -30,6 +31,8 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'zone': return { id, kind: 'zone', x: x - 1, y: y - 1, w: 4, h: 4, name: 'Zone', status: '', release: 'manual' };
     case 'exit': return { id, kind: 'exit', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Exit' };
     case 'label': return { id, kind: 'label', x, y, w: 1, h: 1, text: 'Zone' };
+    /* a departure until its popup says otherwise: that is the one that has something to set */
+    case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
     default: return null;
   }
 }
@@ -140,7 +143,8 @@ export const canPaste = (layout: FactoryLayout, clip: Clip, x: number, y: number
  */
 export function pasteAt(layout: FactoryLayout, clip: Clip, x: number, y: number): { layout: FactoryLayout; ids: string[] } | null {
   if (!canPaste(layout, clip, x, y)) return null;
-  const copies = clipAt(clip, x, y).map((m) => ({ ...structuredClone(m), id: newId(), ...(m.kind === 'zone' ? { inbound: false } : {}) }) as MachineSpec);
+  const ids = new Map<string, string>();
+  const copies = relink(clipAt(clip, x, y).map((m) => { const id = newId(); ids.set(m.id, id); return { ...structuredClone(m), id, ...(m.kind === 'zone' ? { inbound: false } : {}) } as MachineSpec; }), ids);
   const solid = copies.filter((m) => m.kind !== 'label');
   const rest = layout.machines.filter((m) => !(m.kind === 'belt' && solid.some((q) => overlaps(m, q))));
   return { layout: { ...layout, machines: [...rest, ...copies] }, ids: copies.map((m) => m.id) };

@@ -139,6 +139,40 @@ describe('<FactoryMachinePopup/>', () => {
     expect(again.onPatch).toHaveBeenLastCalledWith('a1', { color: undefined });
   });
 
+  it('sets up a teleporter: its name, which of the two it is, where a departure leads, its colour', () => {
+    const go: MachineSpec = { id: 'go', kind: 'teleporter', x: 20, y: 1, w: 1, h: 1, name: 'goto bugfix', role: 'departure' };
+    const land: MachineSpec = { id: 'land', kind: 'teleporter', x: 25, y: 1, w: 1, h: 1, name: 'entrypoint bugfix', role: 'arrival', color: '#f472b6' };
+    seed([ticket('t1', 'land', 'port')], [dev, go, land]);
+    const on = open('go'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Departure teleporter');
+    expect(popup.textContent).toContain('No destination');                                  // it leads nowhere yet, and says so
+    expect(screen.getByRole('radio', { name: 'Departure' }).getAttribute('aria-checked')).toBe('true');
+    /* the arrivals of the floor are what it can lead to */
+    const to = screen.getByLabelText('Destination') as HTMLSelectElement;
+    expect([...to.options].map((o) => o.textContent)).toEqual(['choose an arrival', 'entrypoint bugfix']);
+    fireEvent.change(to, { target: { value: 'land' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('go', { to: 'land' });
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Teleporter colour' })).getByRole('radio', { name: 'Red' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('go', { color: '#ef4444' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Arrival' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('go', { role: 'arrival', to: undefined });  // an arrival leads nowhere
+    cleanup();
+    /* once it leads somewhere it says what waiting means, and opens its arrival */
+    seed([ticket('t1', 'land', 'port'), ticket('t2', 'go', 'port')], [dev, { ...go, to: 'land' } as MachineSpec, land]);
+    const led = open('go');
+    expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('entrypoint bugfix holds a ticket: this one keeps its own and waits');
+    fireEvent.click(screen.getByRole('button', { name: 'Open entrypoint bugfix' }));
+    expect(led.onOpenMachine).toHaveBeenCalledWith('land');
+    cleanup();
+    /* an arrival has no destination: it lists the departures that lead to it, and says what it holds */
+    const there = open('land'), arrival = screen.getByRole('region', { name: 'Machine' });
+    expect(arrival.textContent).toContain('Arrival teleporter');
+    expect(screen.queryByLabelText('Destination')).toBeNull();
+    expect(arrival.textContent).toContain('Holds #7 Ticket t1');
+    fireEvent.click(screen.getByRole('button', { name: 'goto bugfix' }));
+    expect(there.onOpenMachine).toHaveBeenCalledWith('go');
+  });
+
   it('closes when its machine is no longer on the floor', () => {
     seed([]);
     const on = open('gone');

@@ -15,6 +15,7 @@ import type { FactoryView } from './renderer';
 import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRules';
 import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
+import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { FactoryPopup } from './FactoryPopup';
 import { MachineFigures, PeriodSelect } from './FactoryStatsBits';
@@ -22,13 +23,13 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
-  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting',
+  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting', port: 'in the teleporter',
 };
 const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1];
 const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
@@ -37,6 +38,7 @@ const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 /** What a machine is, in a word or two. */
 export function machineKind(m: MachineSpec): string {
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'Gate' : m.exec === 'native' ? 'Status station' : `${m.exec[0]!.toUpperCase()}${m.exec.slice(1)} station`;
+  if (m.kind === 'teleporter') return m.role === 'arrival' ? 'Arrival teleporter' : 'Departure teleporter';
   return m.kind === 'zone' && m.inbound ? 'Inbound zone' : `${m.kind[0]!.toUpperCase()}${m.kind.slice(1)}`;
 }
 export const machineIcon = (m: MachineSpec): string => (m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
@@ -57,27 +59,81 @@ const Head = ({ children, right }: { children: React.ReactNode; right?: React.Re
 const Hint = ({ children }: { children: React.ReactNode }) => <p className="text-xs text-[var(--theme-text-muted)]">{children}</p>;
 
 /**
- * The colour of an arm. Left to itself it is grey, and amber once it has a condition; one of the sixteen can be
- * picked instead, to tell at a glance the arm that takes what failed from the one that takes what passed.
+ * The colour of a machine that can be given one (an arm, a teleporter): its own unless one of the sixteen is picked.
+ * `own` is what "Automatic" gives it, `ownTitle` says why.
  */
-function ArmColour({ arm, onChange }: { arm: ArmSpec; onChange: (color: string | undefined) => void }) {
-  const auto = !arm.color, ring = (on: boolean) => (on ? 'border-[var(--theme-text-primary)]' : 'border-transparent');
+function ColourPicker({ label, value, own, ownTitle, hint, onChange }: { label: string; value: string | undefined; own: string; ownTitle: string; hint: string; onChange: (color: string | undefined) => void }) {
+  const auto = !value, ring = (on: boolean) => (on ? 'border-[var(--theme-text-primary)]' : 'border-transparent');
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Colour</span>
-      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Arm colour">
-        <button type="button" role="radio" aria-checked={auto} title="Grey, and amber once the arm has a condition" onClick={() => onChange(undefined)}
+      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={label}>
+        <button type="button" role="radio" aria-checked={auto} title={ownTitle} onClick={() => onChange(undefined)}
           className={cn('flex h-6 items-center gap-1.5 rounded-full border-2 bg-[var(--theme-bg-overlay)] px-2 text-[11px] text-[var(--theme-text-secondary)]', ring(auto))}>
-          <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: isConditional(arm) ? 'var(--theme-warning)' : 'var(--theme-text-secondary)' }} />
+          <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: own }} />
           Automatic
         </button>
         {PALETTE.map((c) => (
-          <button key={c.hex} type="button" role="radio" aria-checked={arm.color === c.hex} aria-label={c.name} title={c.name} onClick={() => onChange(c.hex)}
-            className={cn('h-6 w-6 rounded-full border-2', ring(arm.color === c.hex))} style={{ background: c.hex }} />
+          <button key={c.hex} type="button" role="radio" aria-checked={value === c.hex} aria-label={c.name} title={c.name} onClick={() => onChange(c.hex)}
+            className={cn('h-6 w-6 rounded-full border-2', ring(value === c.hex))} style={{ background: c.hex }} />
         ))}
       </div>
-      <Hint>Its quay, the arrow under it and its tag take the same colour.</Hint>
+      <Hint>{hint}</Hint>
     </div>
+  );
+}
+/**
+ * The colour of an arm. Left to itself it is grey, and amber once it has a condition; one of the sixteen can be
+ * picked instead, to tell at a glance the arm that takes what failed from the one that takes what passed.
+ */
+const ArmColour = ({ arm, onChange }: { arm: ArmSpec; onChange: (color: string | undefined) => void }) => (
+  <ColourPicker label="Arm colour" value={arm.color} own={isConditional(arm) ? 'var(--theme-warning)' : 'var(--theme-text-secondary)'} ownTitle="Grey, and amber once the arm has a condition"
+    hint="Its quay, the arrow under it and its tag take the same colour." onChange={onChange} />
+);
+
+/**
+ * A teleporter: its name, which of the two it is, and for a departure the arrival it leads to. An arrival has nothing
+ * to point at: it lists the departures that lead to it, each of which opens. Either says what it holds.
+ */
+function TeleporterSettings({ m, onPatch, onSelect }: { m: TeleporterSpec; onPatch: (patch: Partial<MachineSpec>) => void; onSelect: (machineId: string) => void }) {
+  const layout = useFactoryStore((s) => s.layout), tickets = useFactoryStore((s) => s.snapshot?.tickets);
+  const machines = layout?.machines ?? [], find = (id: string) => machines.find((q) => q.id === id);
+  const dep = m.role === 'departure', arrival = arrivalOf(m, find), arrivals = arrivalsOn(machines), leading = dep ? [] : departuresOf(m, machines);
+  const held = tickets?.find((t) => t.machineId === m.id) ?? null, busy = !!arrival && !!tickets?.some((t) => t.machineId === arrival.id);
+  return (
+    <>
+      <Hint>{dep
+        ? 'A departure takes one ticket at a time, from an arm, a belt or your hand, and sends it to its destination as soon as that arrival is free.'
+        : 'An arrival receives from its departures only, one ticket at a time: nothing on the floor can drop a ticket here. An arm takes the ticket out.'}</Hint>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={dep ? 'Departure' : 'Arrival'} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Role</span>
+        <div className="flex gap-1.5" role="radiogroup" aria-label="Role">
+          <Button size="sm" role="radio" aria-checked={dep} variant={dep ? 'primary' : 'secondary'} onClick={() => { if (!dep) onPatch({ role: 'departure' }); }}>Departure</Button>
+          <Button size="sm" role="radio" aria-checked={!dep} variant={dep ? 'secondary' : 'primary'} onClick={() => { if (dep) onPatch({ role: 'arrival', to: undefined }); }}>Arrival</Button>
+        </div>
+      </div>
+      {dep ? (
+        <>
+          <Select id="f-to" label="Destination" value={arrival?.id ?? ''} onChange={(e) => onPatch({ to: e.target.value || undefined })}
+            options={[{ value: '', label: arrivals.length ? 'choose an arrival' : 'no arrival on the floor yet' }, ...arrivals.map((a) => ({ value: a.id, label: portName(a) }))]} />
+          {arrival
+            ? <Hint>{busy && held ? `${portName(arrival)} holds a ticket: this one keeps its own and waits.` : 'While that arrival holds a ticket, this one keeps its own and waits. The ticket that has waited longest goes first.'}</Hint>
+            : <p className="text-xs text-[var(--theme-danger)]">No destination: it keeps the ticket it is given. Put an arrival on the floor, then choose it here.</p>}
+          {arrival && <div><Button size="sm" onClick={() => onSelect(arrival.id)}>Open {portName(arrival)}</Button></div>}
+        </>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Departures that lead here</span>
+          {leading.length === 0 ? <Hint>None yet: choose this arrival as the destination of a departure.</Hint> : (
+            <div className="flex flex-wrap gap-1.5">{leading.map((d) => <Button key={d.id} size="sm" onClick={() => onSelect(d.id)}>{portName(d)}</Button>)}</div>
+          )}
+        </div>
+      )}
+      <ColourPicker label="Teleporter colour" value={m.color} own={portOwnColor(m, find)} ownTitle={dep ? 'The colour of its destination' : 'Cyan'}
+        hint={dep ? 'Automatic: the colour of its destination, so the two read as a pair.' : 'Its departures take its colour unless they have their own.'} onChange={(color) => onPatch({ color })} />
+      <Hint>{held ? `Holds #${held.info?.displayId ?? '?'} ${held.info?.title ?? ''}` : 'Holds nothing right now.'}</Hint>
+    </>
   );
 }
 const Column = ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={cn('flex min-h-0 flex-col gap-3 overflow-y-auto p-4', className)}>{children}</div>;
@@ -122,6 +178,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
           <ArmColour arm={m} onChange={(color) => onPatch({ color })} />
         </>
       )}
+      {m.kind === 'teleporter' && <TeleporterSettings m={m} onPatch={onPatch} onSelect={onSelect} />}
 
       {m.kind === 'station' && (
         <>

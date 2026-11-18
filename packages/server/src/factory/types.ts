@@ -67,7 +67,19 @@ export interface LabelSpec extends MachineBase { kind: 'label'; text: string; co
  * running east-west and a line running north-south pass over each other without mixing.
  */
 export interface BridgeSpec extends MachineBase { kind: 'bridge' }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec;
+/**
+ * A jump across the floor, on one tile. A departure takes one ticket (from an arm, a belt or a hand) and sends it to
+ * the arrival it is set to (`to`, that arrival's id) as soon as that arrival is free. An arrival holds one ticket:
+ * nothing on the floor can put one in it, it only receives from its departures, and an arm takes the ticket out.
+ * Several departures can lead to one arrival: their tickets wait where they are, the one that came first goes first.
+ */
+export interface TeleporterSpec extends MachineBase {
+  kind: 'teleporter'; role: 'departure' | 'arrival';
+  to?: string;
+  /** The colour it was given by hand, as `#rrggbb`: paint, nothing more. */
+  color?: string;
+}
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec;
 
 /**
  * `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. `version` says what
@@ -87,12 +99,13 @@ export const DEFAULT_FLOOR_ID = 'default';
  * Where a ticket stands:
  * loose (on the floor) · belt · arm · wait (in a station, run not started) · running ·
  * review (a gate waits for a human) · question (the agent asked something) ·
- * failed · aside (a human took it off the station's hands) · out (done, waits for an arm) · zone
+ * failed · aside (a human took it off the station's hands) · out (done, waits for an arm) · zone ·
+ * port (in a teleporter: about to be sent, or waiting to be taken out)
  *
  * `question`, `failed` and `aside` are the three ways a ticket is set aside in its station: it stays there, takes
  * none of the station's places, and waits for a human to put it back.
  */
-export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone';
+export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone' | 'port';
 export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
 /** The stations that run something, and so can be switched off and have tickets set aside in them. */
 export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel'];

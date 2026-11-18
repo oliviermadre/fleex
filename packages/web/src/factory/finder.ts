@@ -12,7 +12,7 @@ export const STATE_LABEL: Record<TicketState, string> = {
 export const STATES = Object.keys(STATE_LABEL) as TicketState[];
 export function stateOf(t: FactoryTicket): TicketState {
   switch (t.phase) {
-    case 'belt': case 'arm': return 'moving';
+    case 'belt': case 'arm': case 'port': return 'moving';
     case 'loose': return 'floor';
     case 'wait': return 'queue';
     case 'running': return 'running';

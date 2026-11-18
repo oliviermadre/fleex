@@ -1,3 +1,4 @@
+import { arrivalOf, portDrop } from './teleport';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -53,6 +54,7 @@ const ARROW = ['→', '↓', '←', '↑'];
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
   ['fastbelt', 'V', 'Fast belt', 'Drag to lay fast belts, twice as fast as plain ones: over belts already there, it speeds them up'],
+  ['teleporter', 'T', 'Teleporter', 'A jump across the floor: a departure sends its ticket to the arrival it is set to'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
   ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. R turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
@@ -258,6 +260,11 @@ function Floor() {
     const tx = Math.floor(wx), ty = Math.floor(wy), m = v.at(tx, ty);
     if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
     if (m.kind === 'arm' || m.kind === 'label') return { target: {}, ok: false, can: false, text: 'Not on an arm' };
+    if (m.kind === 'teleporter') {
+      /* as for an arm: a departure takes one ticket, an arrival none */
+      const held = !!useFactoryStore.getState().snapshot?.tickets.some((t) => t.machineId === m.id), drop = portDrop(m, held, arrivalOf(m, (id) => v.machine(id)));
+      return { target: drop.ok ? { machineId: m.id } : {}, ok: drop.ok, can: drop.ok, text: drop.text };
+    }
     const dest = m.kind === 'belt' ? v.leadsTo(m) : null;
     return { target: { machineId: m.id }, ok: true, can: true, text: m.kind === 'belt' ? `Belt ${ARROW[m.dir]}${dest ? ` towards ${dest.name ?? dest.kind}` : ': leads nowhere'}` : m.kind === 'exit' ? 'Ship: sets it to done' : `Drop in ${m.name ?? m.kind}` };
   };

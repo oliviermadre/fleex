@@ -166,6 +166,7 @@ export function factoryMenu(c: MenuContext): Menu {
     1: place('bridge', 'H', 'Bridge', 'move', 'Where two belts cross: each ticket goes straight across, the lines do not mix'),
     2: place('arm', 'B', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
     4: place('fastbelt', 'V', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
+    5: place('teleporter', 'T', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
     3: { id: 'face', key: 'R', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Direction of the belts and arms you place', run: a.face },
   }, previous);
   const station = frame('Station', {

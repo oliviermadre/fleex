@@ -18,6 +18,8 @@ export const FAST_BELT = 2;
 const ARM_SWING = 1.1;
 /** How long a ticket rests in a station once it is done there, before an arm may take it: long enough to be seen. */
 const STATION_REST_MS = 1000;
+/** How long a ticket stays in a teleporter before it is sent on, or taken out: long enough to be seen there. */
+const TELEPORT_REST_MS = 800;
 const FLUSH_EVERY_MS = 2000;
 const REFRESH_INFO_EVERY_MS = 10_000;
 const HOUR_MS = 3_600_000;
@@ -28,7 +30,7 @@ interface Machine {
   takers: Machine[];
   src: Machine | null;
   dst: Machine | null;
-  /** Belts: the ticket on the tile. Arms: the ticket in the gripper. Bridges: the ticket travelling east-west. */
+  /** Belts: the ticket on the tile. Arms: the ticket in the gripper. Bridges: the ticket travelling east-west. Teleporters: the ticket it holds. */
   item: Ticket | null;
   /** Bridges: the ticket travelling north-south. */
   item2: Ticket | null;
@@ -73,7 +75,7 @@ export interface FactoryEngineDeps {
   /** Write a gate decision in the ticket's thread, in the human's name. */
   recordDecision?(ticketId: string, gate: string, outcome: string, reason: string): Promise<void>;
   /** Paces of the floor, for tests that do not want to wait for them. */
-  timing?: { armSwing?: number; stationRestMs?: number };
+  timing?: { armSwing?: number; stationRestMs?: number; teleportRestMs?: number };
 }
 
 export class FactoryError extends Error {}
@@ -112,6 +114,14 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       }
       if (m.kind === 'belt') { if (m.fast === true) m.fast = true; else delete m.fast; }
     }
+    else if (m.kind === 'teleporter') {
+      m.w = 1; m.h = 1;
+      m.role = m.role === 'arrival' ? 'arrival' : 'departure';
+      m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
+      if (typeof m.color === 'string' && /^#[0-9a-f]{6}$/i.test(m.color)) m.color = m.color.toLowerCase(); else delete m.color;
+      /* only a departure leads somewhere; where to is checked once every machine is known */
+      if (m.role !== 'departure' || typeof m.to !== 'string' || !m.to) delete m.to;
+    }
     else if (m.kind === 'station') {
       /* a status station is two tiles a side; the others are machines the page draws with places, a tray and a bay: 5 by 4 unless said otherwise */
       if (m.exec === 'native') { m.w = 2; m.h = 2; }
@@ -138,6 +148,9 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h);
     machines.push(m);
   }
+  /* a departure leads to an arrival of this floor, or nowhere: it then keeps what it is given, and the page says so */
+  const arrivals = new Set(machines.filter((m) => m.kind === 'teleporter' && m.role === 'arrival').map((m) => m.id));
+  for (const m of machines) if (m.kind === 'teleporter' && m.to && !arrivals.has(m.to)) delete m.to;
   /* the floor has no edge: `w` and `h` only record how far what is built extends */
   return { version: LAYOUT_VERSION, w: machines.length ? x1 - x0 : 0, h: machines.length ? y1 - y0 : 0, machines };
 }
@@ -167,11 +180,13 @@ export class FactoryEngine {
   private readonly now: () => number;
   private readonly armSwing: number;
   private readonly restMs: number;
+  private readonly portMs: number;
 
   constructor(private readonly deps: FactoryEngineDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.armSwing = deps.timing?.armSwing ?? ARM_SWING;
     this.restMs = deps.timing?.stationRestMs ?? STATION_REST_MS;
+    this.portMs = deps.timing?.teleportRestMs ?? TELEPORT_REST_MS;
   }
 
   // ---------- lifecycle ----------
@@ -252,7 +267,7 @@ export class FactoryEngine {
   private attach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) ?? null : null;
     if (!m) { if (t.machineId || t.s.phase !== 'loose') { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } return; }
-    if (m.spec.kind === 'belt') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m.item = t; }
+    if (m.spec.kind === 'belt' || m.spec.kind === 'teleporter') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m.item = t; }
     else if (m.spec.kind === 'bridge') { const lane = t.s.fx !== 0 ? 'item' : 'item2'; if (m[lane]) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m[lane] = t; }
     else if (m.spec.kind === 'arm') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else { m.item = t; m.armState = 'carry'; m.armP = t.s.p; } }
   }
@@ -293,6 +308,8 @@ export class FactoryEngine {
   private canTake(m: Machine | null, dir?: number): boolean {
     if (!m) return false;
     if (m.spec.kind === 'belt') return !m.item;
+    /* a departure takes one ticket; nothing on the floor goes into an arrival, which only receives from its departures */
+    if (m.spec.kind === 'teleporter') return m.spec.role === 'departure' && !m.item;
     if (m.spec.kind === 'bridge') return dir !== undefined && !(dir % 2 === 0 ? m.item : m.item2);   // 0 and 2 cross east-west
     if (m.spec.kind === 'station') {
       /* its places are for what it works on; what is done waits apart, and intake stops when that piles up as high */
@@ -317,6 +334,7 @@ export class FactoryEngine {
     this.dirty.add(t.ticketId);
     if (spec.kind === 'belt') { m.item = t; t.s.phase = 'belt'; t.s.p = p ?? 0.5; t.s.fx = fx ?? DX[spec.dir]; t.s.fy = fy ?? DY[spec.dir]; }
     else if (spec.kind === 'bridge') { t.s.phase = 'belt'; t.s.p = p ?? 0; t.s.fx = fx ?? 1; t.s.fy = fy ?? 0; if (t.s.fx !== 0) m.item = t; else m.item2 = t; }
+    else if (spec.kind === 'teleporter') { m.item = t; t.s.phase = 'port'; t.s.p = 0; }
     else if (spec.kind === 'station') {
       t.s.outcome = '';
       if (spec.exec === 'human_gate') { t.s.phase = 'review'; this.openRun(spec, t, 'needs_review'); }
@@ -388,6 +406,8 @@ export class FactoryEngine {
     if (s.spec.kind === 'belt') return s.item && this.wants(arm, s.item) ? s.item : null;
     if (s.spec.kind === 'station') return this.inside(s).find((t) => ((t.s.phase === 'out' && this.rested(t)) || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
     if (s.spec.kind === 'zone') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
+    /* out of an arrival only: what is in a departure is on its way somewhere else */
+    if (s.spec.kind === 'teleporter') return s.spec.role === 'arrival' && s.item && this.ported(s.item) && this.wants(arm, s.item) ? s.item : null;
     return null;
   }
 
@@ -432,7 +452,7 @@ export class FactoryEngine {
     if (!n) return false;
     if (n.spec.kind === 'belt') { if (n.item) return false; this.accept(n, t, fx, fy, 0); return true; }
     if (n.spec.kind === 'bridge') { if (fx !== 0 ? n.item : n.item2) return false; this.accept(n, t, fx, fy, 0); return true; }
-    if (isBox(n) && this.canTake(n)) { this.accept(n, t); return true; }
+    if ((isBox(n) || n.spec.kind === 'teleporter') && this.canTake(n)) { this.accept(n, t); return true; }
     return false;
   }
 
@@ -548,6 +568,27 @@ export class FactoryEngine {
     next.s.released = true; this.dirty.add(next.ticketId);
   }
 
+  // ---------- teleporters ----------
+
+  /** A ticket in a teleporter stays in view a moment before it is sent on, or taken out. */
+  private ported(t: Ticket): boolean { return this.portMs <= 0 || this.now() - Date.parse(t.s.since) >= this.portMs; }
+
+  /**
+   * Send what waits in the departures: to each arrival that is free, the ticket that has waited longest among the
+   * departures that lead to it. The others stay where they are until an arm has emptied the arrival.
+   */
+  private updateTeleporters(): void {
+    const next = new Map<Machine, Machine>();
+    for (const d of this.machines) {
+      if (d.spec.kind !== 'teleporter' || d.spec.role !== 'departure' || !d.item || !d.spec.to || !this.ported(d.item)) continue;
+      const a = this.byId.get(d.spec.to);
+      if (!a || a.spec.kind !== 'teleporter' || a.spec.role !== 'arrival' || a.item) continue;
+      const first = next.get(a);
+      if (!first || d.item.s.since < first.item!.s.since) next.set(a, d);
+    }
+    for (const [a, d] of next) { const t = d.item!; d.item = null; this.accept(a, t); }
+  }
+
   // ---------- the tick ----------
 
   tick(dt: number): void {
@@ -559,6 +600,7 @@ export class FactoryEngine {
       else if (k === 'station') this.updateStation(m);
       else if (k === 'zone') this.updateZone(m);
     }
+    this.updateTeleporters();
   }
 
   async flush(): Promise<void> {
@@ -634,7 +676,7 @@ export class FactoryEngine {
   private place(t: Ticket, target: { machineId?: string; x?: number; y?: number }): void {
     const m = target.machineId ? this.byId.get(target.machineId) ?? null : target.x != null && target.y != null ? this.at(Math.floor(target.x), Math.floor(target.y)) : null;
     if (target.machineId && !m) throw new FactoryError('Unknown machine');
-    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : m.spec.kind === 'bridge' ? 'A ticket cannot be dropped on a bridge: put it on the belt before it' : 'A ticket cannot be dropped on this machine');
+    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : m.spec.kind === 'bridge' ? 'A ticket cannot be dropped on a bridge: put it on the belt before it' : m.spec.kind === 'teleporter' ? (m.spec.role === 'arrival' ? 'Nothing can be dropped on an arrival: tickets come to it from its departures' : 'This teleporter already holds a ticket') : 'A ticket cannot be dropped on this machine');
     this.detach(t);
     if (m) { this.accept(m, t); return; }
     t.s.phase = 'loose'; t.s.x = Math.floor(target.x ?? 0); t.s.y = Math.floor(target.y ?? 0);

@@ -57,8 +57,8 @@ const run = async (seconds: number) => { for (let i = 0; i < seconds * 10; i++) 
 const where = (ticketId: string) => { const t = engine.snapshot().tickets.find((x) => x.ticketId === ticketId); return t ? `${t.machineId ?? 'floor'}:${t.phase}` : 'gone'; };
 
 /** The floor's own paces (a slow arm, a rest in each station) are asked for by the tests that are about them; the others run brisk. */
-const BRISK = { armSwing: 0.45, stationRestMs: 0 };
-async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?: number; stationRestMs?: number } | 'real' = BRISK): Promise<void> {
+const BRISK = { armSwing: 0.45, stationRestMs: 0, teleportRestMs: 0 };
+async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?: number; stationRestMs?: number; teleportRestMs?: number } | 'real' = BRISK): Promise<void> {
   const layout: FactoryLayout = { w, h, machines };
   engine = new FactoryEngine({
     store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: timing === 'real' ? undefined : timing,
@@ -489,7 +489,123 @@ describe('FactoryEngine', () => {
   });
 });
 
+describe('teleporters', () => {
+  const port = (id: string, x: number, y: number, role: 'departure' | 'arrival', to?: string): MachineSpec => ({ id, kind: 'teleporter', x, y, w: 1, h: 1, name: id, role, ...(to ? { to } : {}) });
+  /* a zone, an arm into a departure; far away its arrival, an arm out of it onto a belt */
+  const line = (extra: MachineSpec[] = []) => [zone('z', 0, 0), arm('a1', 2, 0, 0), port('go', 3, 0, 'departure', 'land'), port('land', 10, 5, 'arrival'), arm('a2', 11, 5, 0), belt('b', 12, 5), ...extra];
+  beforeEach(() => { for (const id of ['t1', 't2', 't3', 'held']) infos.set(id, info(id)); });
+
+  it('a ticket dropped in a departure comes out of its arrival, where an arm takes it', async () => {
+    await boot(line());
+    await engine.transfer('t1', { machineId: 'z' });
+    await engine.release('t1');
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) { await run(0.1); seen.add(where('t1')); }
+    expect([...seen]).toEqual(expect.arrayContaining(['a1:arm', 'land:port', 'a2:arm', 'b:belt']));
+    expect(statuses).toEqual([]);                                   // a jump changes nothing on the ticket
+    expect(store.runs.size).toBe(0);                                // and is not a run
+  });
+
+  it('stays in view a moment in the departure, then in the arrival, when the floor runs at its own pace', async () => {
+    await boot(line(), 30, 12, { armSwing: 0.2, stationRestMs: 0, teleportRestMs: 800 });
+    await engine.transfer('t1', { machineId: 'go' });
+    await run(0.7);
+    expect(where('t1')).toBe('go:port');
+    await run(0.2);
+    expect(where('t1')).toBe('land:port');
+    await run(0.6);
+    expect(where('t1')).toBe('land:port');                          // the arm waits for it to have landed
+    await run(0.2);
+    expect(where('t1')).toBe('a2:arm');
+  });
+
+  it('holds one ticket: a second one waits in the arm that brings it', async () => {
+    await boot([zone('z', 0, 0), arm('a1', 2, 0, 0), port('go', 3, 0, 'departure')]);       // no destination: it keeps what it is given
+    await engine.transfer('t1', { machineId: 'z' }); await engine.transfer('t2', { machineId: 'z' });
+    await engine.release('t1'); await engine.release('t2');
+    await run(3);
+    expect(where('t1')).toBe('go:port');
+    expect(where('t2')).toBe('z:zone');                             // the arm does not pick what it could not put down
+    await expect(engine.move('t2', { machineId: 'go' })).rejects.toThrow(/already holds a ticket/);
+  });
+
+  it('nothing on the floor enters an arrival: not an arm, not a belt, not a hand', async () => {
+    await boot([zone('z', 0, 0), arm('a1', 2, 0, 0), port('land', 3, 0, 'arrival'), belt('b1', 0, 5), belt('b2', 1, 5), port('land2', 2, 5, 'arrival')]);
+    await engine.transfer('t1', { machineId: 'z' }); await engine.release('t1');
+    await engine.transfer('t2', { machineId: 'b1' });
+    await run(3);
+    expect(where('t1')).toBe('z:zone');
+    expect(where('t2')).toBe('b2:belt');                            // at the end of its belt, and no further
+    await expect(engine.move('t1', { machineId: 'land' })).rejects.toThrow(/Nothing can be dropped on an arrival/);
+    await expect(engine.transfer('t3', { machineId: 'land' })).rejects.toThrow();
+  });
+
+  it('a belt feeds a departure as it feeds a station', async () => {
+    await boot([belt('b1', 0, 0), belt('b2', 1, 0), port('go', 2, 0, 'departure', 'land'), port('land', 8, 8, 'arrival')]);
+    await engine.transfer('t1', { machineId: 'b1' });
+    await run(3);
+    expect(where('t1')).toBe('land:port');
+  });
+
+  it('several departures lead to one arrival: their tickets wait where they are, and go in the order they came', async () => {
+    await boot([port('one', 0, 0, 'departure', 'land'), port('two', 0, 2, 'departure', 'land'), port('three', 0, 4, 'departure', 'land'), port('land', 10, 5, 'arrival'), arm('a2', 11, 5, 0), zone('out', 12, 5)], 30, 12, { armSwing: 0.2, stationRestMs: 0, teleportRestMs: 0 });
+    /* nothing is sent while the arrival holds a ticket: `three` first, then `one`, then `two` */
+    await engine.transfer('held', { machineId: 'one' });
+    await run(0.1);
+    expect(where('held')).toBe('land:port');
+    /* the arm is kept from emptying it: its zone is replaced by nothing it can drop on */
+    await engine.setLayout({ w: 30, h: 12, machines: [port('one', 0, 0, 'departure', 'land'), port('two', 0, 2, 'departure', 'land'), port('three', 0, 4, 'departure', 'land'), port('land', 10, 5, 'arrival'), arm('a2', 11, 5, 0), port('wall', 12, 5, 'arrival')] });
+    expect(where('held')).toBe('land:port');
+    await engine.transfer('c', { machineId: 'three' }); clock += 1000;
+    await engine.transfer('a', { machineId: 'one' }); clock += 1000;
+    await engine.transfer('b', { machineId: 'two' });
+    await run(1);
+    expect([where('a'), where('b'), where('c')]).toEqual(['one:port', 'two:port', 'three:port']);
+    /* the arrival is emptied by hand, three times: each time the one that waited longest comes */
+    const order: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      await engine.giveBack(engine.snapshot().tickets.find((t) => t.machineId === 'land')!.ticketId);
+      await run(0.2);
+      order.push(engine.snapshot().tickets.find((t) => t.machineId === 'land')!.ticketId);
+    }
+    expect(order).toEqual(['c', 'a', 'b']);
+  });
+
+  it('a departure with no arrival to go to keeps its ticket; one whose arrival is removed loses its destination', async () => {
+    await boot([port('go', 0, 0, 'departure', 'land'), port('land', 5, 0, 'arrival')]);
+    await engine.setLayout({ w: 30, h: 12, machines: [port('go', 0, 0, 'departure', 'land')] });
+    expect((store.floor!.layout.machines[0] as { to?: string }).to).toBeUndefined();
+    await engine.transfer('t1', { machineId: 'go' });
+    await run(2);
+    expect(where('t1')).toBe('go:port');
+  });
+
+  it('comes back as it was after a restart, and a ticket in a teleporter that is removed lies on the floor', async () => {
+    await boot([port('go', 0, 0, 'departure'), port('land', 5, 0, 'arrival')]);
+    await engine.transfer('t1', { machineId: 'go' });
+    await engine.flush();
+    await boot([port('go', 0, 0, 'departure'), port('land', 5, 0, 'arrival')]);
+    expect(where('t1')).toBe('go:port');
+    await expect(engine.transfer('t2', { machineId: 'go' })).rejects.toThrow(/already holds/);
+    await engine.setLayout({ w: 30, h: 12, machines: [port('land', 5, 0, 'arrival')] });
+    expect(where('t1')).toBe('floor:loose');
+  });
+});
+
 describe('normaliseLayout', () => {
+  it('keeps of a teleporter what makes one: a role, a name, a colour, and for a departure an arrival of this floor', () => {
+    const out = normaliseLayout({ w: 20, h: 20, machines: [
+      { id: 'd', kind: 'teleporter', x: 0, y: 0, w: 3, h: 3, role: 'departure', to: 'a', name: '  goto bugfix  ', color: '#F472B6' } as MachineSpec,
+      { id: 'a', kind: 'teleporter', x: 5, y: 0, w: 1, h: 1, role: 'arrival', to: 'd', color: 'pink' } as MachineSpec,
+      { id: 'x', kind: 'teleporter', x: 8, y: 0, w: 1, h: 1, role: 'sideways', to: 'nowhere' } as unknown as MachineSpec,
+      { id: 'y', kind: 'teleporter', x: 10, y: 0, w: 1, h: 1, role: 'departure', to: 'd' } as MachineSpec,
+    ] }).machines as (MachineSpec & { role?: string; to?: string; color?: string })[];
+    expect(out[0]).toMatchObject({ w: 1, h: 1, role: 'departure', to: 'a', name: 'goto bugfix', color: '#f472b6' });
+    expect(out[1]).toMatchObject({ role: 'arrival' }); expect(out[1]!.to).toBeUndefined(); expect(out[1]!.color).toBeUndefined();
+    expect(out[2]).toMatchObject({ role: 'departure' }); expect(out[2]!.to).toBeUndefined();   // an unknown role is a departure, and it leads nowhere
+    expect(out[3]!.to).toBeUndefined();                                                        // a departure cannot lead to another departure
+  });
+
   it('refuses overlaps and duplicate ids, and records how far the floor extends', () => {
     expect(() => normaliseLayout({ w: 10, h: 10, machines: [belt('a', 1, 1), belt('b', 1, 1)] })).toThrow(/overlap/);
     expect(normaliseLayout({ w: 0, h: 0, machines: [station('s', -8, 8), belt('a', 30, 2)] })).toMatchObject({ w: 39, h: 9 });

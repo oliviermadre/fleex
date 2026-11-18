@@ -1,3 +1,4 @@
+import { arrivalOf, portName } from './teleport';
 import { useRef } from 'react';
 import { Button } from '../components/ui/Button';
 import { tintClasses, type TintHue } from '../lib/tints';
@@ -29,7 +30,7 @@ const LAYERS: [Lens, string, string][] = [
 
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
-  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone',
+  question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone', port: 'in a teleporter',
 };
 const YELLOW = tintClasses('yellow');
 const keyLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
@@ -44,6 +45,11 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
+  if (m.kind === 'teleporter') {
+    if (m.role === 'arrival') return 'Arrival · receives from its departures only, one ticket at a time; an arm takes it out';
+    const to = arrivalOf(m, (id) => view.machine(id));
+    return `Departure · ${to ? `sends its ticket to ${portName(to)}` : 'no destination: it keeps what it is given'}`;
+  }
   if (m.kind === 'bridge') { const f = bridgeFlow((px, py) => view.at(px, py), m); return `Bridge · over ${flowLabel(f.over)}, under ${flowLabel(f.under)}`; }
   return 'Label';
 }
