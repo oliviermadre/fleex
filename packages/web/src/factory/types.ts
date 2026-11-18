@@ -11,7 +11,7 @@ export const DY = [0, 1, 0, -1] as const;
 
 export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
 /** What an arm can look at on a ticket, and how it compares it. Mirrors the server's `types.ts`. */
-export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'outcome';
+export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'tagkey' | 'outcome';
 export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
 export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 

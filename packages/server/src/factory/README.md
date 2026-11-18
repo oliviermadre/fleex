@@ -174,6 +174,16 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   how many tickets left by it over the period of the floor's figures: `exits` in `GET /api/factory/stats`, a count
   per exit, to which the page adds what it has seen leave since it last asked.
 
+## Tags of the form key:value
+
+A tag written `key:value` gives a ticket one value for that key (`tags.ts`, the same file on the server and on the
+page). Setting `type:major` replaces `type:minor`; a key can be counted on (`passes:2`), from nothing; a plain tag is
+left as it is. An arm has a condition for it, **Tag value**: a key, an operator and what to compare to (`passes > 3`).
+The two are compared as numbers when both are, and a ticket that does not have the key counts as 0, which is what a
+counter that has not started is. Otherwise they are compared as text, where only "is" and "is not" mean anything.
+
+Nothing is stored anywhere else: these are the ticket's own tags, seen and filtered as such in the rest of Fleex.
+
 ## The emergency stop
 
 One button, always in the page's header: **Emergency stop**. It is `halted` in the floor's settings

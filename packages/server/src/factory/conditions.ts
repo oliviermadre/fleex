@@ -1,5 +1,6 @@
 import { TICKET_COMPLEXITIES, TICKET_PRIORITIES } from '@fleex/shared';
 import type { ArmCondition, ArmField, ArmOp, ArmSpec, FactoryTicketInfo } from './types.js';
+import { compareTag, type TagCompare } from './tags.js';
 
 /**
  * What an arm lets through. An arm carries a list of conditions and takes a
@@ -15,9 +16,11 @@ export const NONE = 'none';
 
 const ORDERED: ArmOp[] = ['is', 'is_not', 'gte', 'lte', 'gt', 'lt', 'between'];
 const PLAIN: ArmOp[] = ['is', 'is_not'];
+/** The value of a `key:value` tag is compared as a number when it is one: no "between", which nothing needs yet. */
+const KEYED: ArmOp[] = ['is', 'is_not', 'gte', 'lte', 'gt', 'lt'];
 /** Which operators make sense on which field: only priority and complexity have an order. */
 export const OPS_BY_FIELD: Record<ArmField, readonly ArmOp[]> = {
-  type: PLAIN, board: PLAIN, favorite: PLAIN, tag: PLAIN, outcome: PLAIN, priority: ORDERED, complexity: ORDERED,
+  type: PLAIN, board: PLAIN, favorite: PLAIN, tag: PLAIN, tagkey: KEYED, outcome: PLAIN, priority: ORDERED, complexity: ORDERED,
 };
 
 const SCALES: Partial<Record<ArmField, readonly string[]>> = { priority: TICKET_PRIORITIES, complexity: TICKET_COMPLEXITIES };
@@ -30,13 +33,21 @@ export function conditionsOf(arm: ArmSpec): ArmCondition[] {
 }
 
 /** Keep what can be evaluated, drop the rest: an unknown field, an operator the field has no use for, a condition with nothing to compare to. */
-export function normaliseConditions(arm: ArmSpec): ArmCondition[] {
+export function normaliseConditions(arm: ArmSpec): ArmCondition[] { return normaliseList(conditionsOf(arm)); }
+/** The same, for any list of conditions (a toll has its own). */
+export function normaliseList(list: readonly ArmCondition[]): ArmCondition[] {
   const out: ArmCondition[] = [];
-  for (const raw of conditionsOf(arm)) {
+  for (const raw of (Array.isArray(list) ? list : []) as ArmCondition[]) {
     const ops = OPS_BY_FIELD[raw?.field];
     if (!ops) continue;
     const op: ArmOp = ops.includes(raw.op) ? raw.op : 'is';
     let values = (Array.isArray(raw.values) ? raw.values : []).map((v) => String(v).trim()).filter(Boolean);
+    if (raw.field === 'tagkey') {
+      /* a key, without its colon, then what its value is compared to: both are needed, and they may be equal */
+      const key = (values[0] ?? '').replace(/:.*$/, ''), to = values[1] ?? '';
+      if (key && to) out.push({ field: raw.field, op, values: [key, to] });
+      continue;
+    }
     if (raw.field === 'favorite') values = ['true'];
     if (op !== 'is' && op !== 'is_not') values = values.slice(0, op === 'between' ? 2 : 1);
     if (!values.length || (op === 'between' && values.length < 2)) continue;
@@ -66,6 +77,7 @@ export function holds(c: ArmCondition, info: FactoryTicketInfo | null, outcome: 
   if (!info) return false;
   if (c.field === 'favorite') return info.favorite !== not;
   if (c.field === 'tag') return info.tags.some((tag) => c.values.includes(tag)) !== not;
+  if (c.field === 'tagkey') return compareTag(info.tags, c.values[0] ?? '', c.op as TagCompare, c.values[1] ?? '');
   if (c.field === 'board') return c.values.includes(info.boardId) !== not;
   const value = c.field === 'type' ? info.type || NONE : c.field === 'priority' ? info.priority || NONE : info.complexity ?? NONE;
   if (c.op === 'is' || c.op === 'is_not') return c.values.includes(value) !== not;

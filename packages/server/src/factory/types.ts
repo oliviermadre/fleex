@@ -7,12 +7,13 @@ export const DY = [0, 1, 0, -1] as const;
 
 export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
 /** What an arm can look at on a ticket, and how it compares it. */
-export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'outcome';
+export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'tagkey' | 'outcome';
 export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
 /**
  * One thing an arm asks of a ticket. `values` are type names, priorities, complexity points, board ids, tags or
  * station outcomes; `none` stands for no type, no priority or not estimated. `between` takes two, the ordered
  * operators one, `is` and `is_not` any number (any of them). A favourite condition carries no value that matters.
+ * `tagkey` compares the value of a `key:value` tag: its values are the key, then what to compare to (see `tags.ts`).
  */
 export interface ArmCondition { field: ArmField; op: ArmOp; values: string[] }
 

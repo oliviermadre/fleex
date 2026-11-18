@@ -11,11 +11,11 @@ import { DX, DY, type ArmCondition, type ArmField, type ArmOp, type ArmSpec, typ
 const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 /** Free text for the fields that have no finite list (tags): saved when left, or on Enter. */
-function TextValues({ id, values, onCommit }: { id: string; values: string[]; onCommit: (v: string[]) => void }) {
+function TextValues({ id, values, onCommit, label = 'Values, comma separated', placeholder = 'one, or several separated by commas' }: { id: string; values: string[]; onCommit: (v: string[]) => void; label?: string; placeholder?: string }) {
   const [draft, setDraft] = useState(values.join(', '));
   useEffect(() => setDraft(values.join(', ')), [values]);
   return (
-    <Input id={id} aria-label="Values, comma separated" placeholder="one, or several separated by commas" value={draft} onChange={(e) => setDraft(e.target.value)}
+    <Input id={id} aria-label={label} placeholder={placeholder} value={draft} onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (list(draft).join() !== values.join()) onCommit(list(draft)); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
   );
 }
@@ -76,6 +76,12 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
               </>
             )}
             {n === 'many' && !options && <TextValues id={`f-cond-values-${i}`} values={c.values} onCommit={(values) => patch(i, { ...c, values })} />}
+            {n === 'keyed' && (
+              <div className="grid grid-cols-2 gap-1.5">
+                <TextValues id={`f-cond-key-${i}`} label="Key" placeholder="key, such as passes" values={c.values[0] ? [c.values[0]] : []} onCommit={(v) => patch(i, { ...c, values: [(v[0] ?? '').replace(/:.*$/, ''), c.values[1] ?? ''] })} />
+                <TextValues id={`f-cond-keyval-${i}`} label="Compared to" placeholder="a value, such as 3" values={c.values[1] ? [c.values[1]] : []} onCommit={(v) => patch(i, { ...c, values: [c.values[0] ?? '', v[0] ?? ''] })} />
+              </div>
+            )}
             {n === 'one' && pick(`f-cond-value-${i}`, c.values[0] ?? '', (v) => patch(i, { ...c, values: v ? [v] : [] }), 'Compared to')}
             {n === 'two' && (
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
@@ -85,6 +91,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
               </div>
             )}
             {incomplete(c) && <div className="text-[11px] text-[var(--theme-warning)]">Choose what to compare to: until then this condition is not applied.</div>}
+            {c.field === 'tagkey' && <div className="text-[11px] text-[var(--theme-text-muted)]">The value of a tag written key:value. Compared as numbers when both are; a ticket without that key counts as 0.</div>}
             {(c.field === 'complexity' && c.op !== 'is' && c.op !== 'is_not') && <div className="text-[11px] text-[var(--theme-text-muted)]">A ticket that is not estimated is neither above nor below: it does not pass.</div>}
           </div>
         );
