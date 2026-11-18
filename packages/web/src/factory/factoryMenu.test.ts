@@ -57,29 +57,29 @@ describe('the command card', () => {
 
   it('build sorts what can be placed into Move, Station and Area', () => {
     const build = factoryMenu(ctx({ building: true }));
-    expect(labels(build)).toEqual(['Move', 'Station', 'Area', 'Plan', 'Select', 'Erase', 'Undo', 'Redo', 'Copy', 'Cut', 'Paste', 'Done']);
+    expect(labels(build)).toEqual(['Move', 'Station', 'Area', 'Plan', 'Erase', null, 'Undo', 'Redo', null, null, null, 'Done']);
     expect(labels(menuAt(build, ['move']).menu).slice(0, 6)).toEqual(['Belt', 'Bridge', 'Arm', 'Face →', 'Fast belt', 'Teleporter']);
     expect(labels(menuAt(build, ['station']).menu).slice(0, 6)).toEqual(['Agent', 'Skill', 'Panel', 'Gate', 'Status', null]);
     expect(labels(menuAt(build, ['area']).menu).slice(0, 6)).toEqual(['Zone', 'Exit', 'Label', null, null, null]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });
 
-  it('keeps Undo, Redo, Copy, Cut, Paste and the way back at the same place in every build menu', () => {
+  it('keeps Undo, Redo and the way back at the same place in every build menu, and leaves copy, cut and paste to the keyboard', () => {
     const build = factoryMenu(ctx({ building: true }));
     const menus = [build, menuAt(build, ['move']).menu, menuAt(build, ['station']).menu, menuAt(build, ['area']).menu,
       factoryMenu(ctx({ building: true, machine: { kind: 'belt', waiting: false } })), factoryMenu(ctx({ building: true, many: 4 }))];
     for (const m of menus) {
-      expect([6, 7, 8, 9, 10].map((i) => at(m, i))).toEqual(['Undo', 'Redo', 'Copy', 'Cut', 'Paste']);
+      expect([6, 7, 8, 9, 10].map((i) => at(m, i))).toEqual(['Undo', 'Redo', null, null, null]);
       expect(m.slots[BACK_SLOT]).toMatchObject({ id: 'back', key: 'Escape' });
     }
     expect(menus.map((m) => at(m, BACK_SLOT))).toEqual(['Done', 'Previous', 'Previous', 'Previous', 'Previous', 'Previous']);
   });
 
-  it('copy and cut wait for a selection, paste for something copied, undo and redo for something to take back', () => {
+  it('undo and redo wait for something to take back; a selection has its own commands', () => {
     const idle = factoryMenu(ctx({ building: true, undoable: false, hasClip: false }));
-    expect([6, 7, 8, 9, 10].map((i) => idle.slots[i]!.disabled)).toEqual([true, true, true, true, true]);
+    expect([6, 7].map((i) => idle.slots[i]!.disabled)).toEqual([true, true]);
     const sel = factoryMenu(ctx({ building: true, many: 3, redoable: true }));
-    expect([6, 7, 8, 9, 10].map((i) => !!sel.slots[i]!.disabled)).toEqual([false, false, false, false, false]);
+    expect([6, 7].map((i) => !!sel.slots[i]!.disabled)).toEqual([false, false]);
     expect([at(sel, 0), at(sel, 3)]).toEqual([null, 'Remove']);
     const arm = factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false } }));
     expect([at(arm, 0), at(arm, 3)]).toEqual(['Turn', 'Remove']);
@@ -87,13 +87,13 @@ describe('the command card', () => {
 
   it('shows the tool in hand, and offers to put it down instead of leaving', () => {
     const erasing = factoryMenu(ctx({ building: true, tool: 'erase' }));
-    expect(erasing.slots[5]).toMatchObject({ label: 'Erase', active: true });
-    expect(erasing.slots[4]).toMatchObject({ label: 'Select', active: false });
+    expect(erasing.slots[4]).toMatchObject({ label: 'Erase', active: true });
+    expect(erasing.slots.some((c) => c?.label === 'Select')).toBe(false);          // a click or a drag selects: no command for it
     expect(at(erasing, BACK_SLOT)).toBe('Cancel');
     const belts = menuAt(factoryMenu(ctx({ building: true, tool: 'belt', dir: 1 })), ['move']).menu;
     expect(belts.slots[0]).toMatchObject({ label: 'Belt', active: true });
     expect(at(belts, 3)).toBe('Face ↓');
-    expect(factoryMenu(ctx({ building: true, tool: 'paste' })).slots[10]).toMatchObject({ active: true });
+    expect(at(factoryMenu(ctx({ building: true, tool: 'paste' })), BACK_SLOT)).toBe('Cancel');   // what was pasted from the keyboard is put down the same way
   });
 
   it('runs what a key is for in the menu shown, and nothing for a key of another menu', () => {

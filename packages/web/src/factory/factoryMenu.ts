@@ -138,14 +138,12 @@ export function factoryMenu(c: MenuContext): Menu {
   }
 
   // ---------- build mode: one frame, whatever the menu ----------
+  /* copy, cut and paste are on the keyboard only, and a click or a drag selects: none of them takes a place on the card */
   const selected = c.tool === 'select' && (c.many > 1 || !!c.machine);
   const frame = (title: string, top: Record<number, Command | null | false>, last: Command): Menu => menu(title, {
     ...top,
     6: { id: 'undo', key: 'Z', label: 'Undo', icon: 'undo', tone: 'plain', disabled: !c.undoable, title: `Take back the last change to the floor (also ${c.mod}Z)`, run: a.undo },
     7: { id: 'redo', key: 'Y', label: 'Redo', icon: 'redo', tone: 'plain', disabled: !c.redoable, title: `Put back the change you took back (also ${c.mod}Shift+Z)`, run: a.redo },
-    8: { id: 'copy', key: '', keyText: `${c.mod}C`, label: 'Copy', icon: 'copy', tone: 'plain', disabled: !selected, title: selected ? 'Copy what is selected, with its settings' : 'Select one or several machines to copy them', run: a.copy },
-    9: { id: 'cut', key: '', keyText: `${c.mod}X`, label: 'Cut', icon: 'cut', tone: 'plain', disabled: !selected, title: selected ? 'Cut what is selected' : 'Select one or several machines to cut them', run: a.cut },
-    10: { id: 'paste', key: '', keyText: `${c.mod}V`, label: 'Paste', icon: 'paste', tone: 'plain', disabled: !c.hasClip, active: c.tool === 'paste', title: c.hasClip ? 'Put down what you copied, cut or imported: click where' : 'Nothing copied yet', run: a.paste },
     [BACK_SLOT]: last,
   });
   const place = (id: Tool, key: string, label: string, tone: Command['tone'], title: string): Command => ({ id, key, label, icon: id, tone, active: c.tool === id, title, run: () => a.tool(id) });
@@ -188,7 +186,6 @@ export function factoryMenu(c: MenuContext): Menu {
     1: { id: 'station', key: 'S', label: 'Station', icon: 'agent', tone: 'station', title: 'What works on tickets: agents, skills, panels, gates, status changes', menu: station },
     2: { id: 'area', key: 'A', label: 'Area', icon: 'zone', tone: 'area', title: 'Where tickets wait or leave, and names on the floor', menu: area },
     3: { id: 'plan', key: 'P', label: 'Plan', icon: 'plan', tone: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: a.plan },
-    4: { id: 'select', key: 'Q', label: 'Select', icon: 'select', tone: 'plain', active: !inHand, title: 'Click a machine to set it up, drag on empty floor to select several', run: a.select },
-    5: { ...place('erase', 'X', 'Erase', 'danger', 'Click or drag to remove machines') },
+    4: { ...place('erase', 'X', 'Erase', 'danger', 'Click or drag to remove machines') },
   }, inHand ? back('Cancel', 'Put down what is in hand', a.select) : back('Done', 'Leave build mode', a.done));
 }

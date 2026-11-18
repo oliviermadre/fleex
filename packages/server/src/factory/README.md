@@ -113,7 +113,8 @@ steps and native actions other than a status change have no equivalent yet.
 
 The commands of the page are a grid of four columns by three rows (`packages/web/src/factory/menu.ts`), organised as
 menus that open sub-menus: Factory, then Build, then Move, Station or Area. Three levels at most. A command is found
-by its place: in every build menu Undo and Redo, then Copy, Cut, Paste and the way back, sit in the same slots. A
+by its place: in every build menu Undo, Redo and the way back sit in the same slots. Copy, cut and paste are on the keyboard
+only, and a click or a drag selects: none of them takes a place on the card. A
 label is one or two short words and is never cut. `factoryMenu.test.ts` holds every menu to these rules.
 
 ## Reading the floor
