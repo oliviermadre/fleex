@@ -1,0 +1,490 @@
+<title>Factory, quatre chantiers</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the concept running in one large scene, then its states, its settings (a form that drives a preview), two things to pick, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .box .tok { color: #18181b; font-size: 0.72rem; }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  code { font-family: var(--mono); font-size: 0.88em; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Quatre chantiers à cadrer avant de construire</h1>
+    <p class="lede">Compteur de passages, poste « script », poste « étiqueteur », arrêt d'urgence. Pour chacun : ce que je propose, un bac à sable pour l'essayer, et ce qu'il reste à trancher. Rien de tout ça n'est dans la branche.</p>
+  </header>
+
+  <section aria-labelledby="h-tags">
+    <h2 id="h-tags">7 · Le poste qui pose des choses sur le ticket</h2>
+    <p class="brief">Je commence par lui : il sert de fondation au compteur de passages. Le poste de statut devient un poste « Set » qui applique une liste d'opérations, sans agent, à tout ticket qui le traverse. Les tags gagnent une forme <code>clef:valeur</code>, qu'un poste peut poser, remplacer, incrémenter ou retirer, et qu'un bras sait comparer.</p>
+    <div class="two">
+      <div class="app" id="set-app" role="group" aria-label="Poste Set (maquette)">
+        <h4>Set station · operations</h4>
+        <div id="set-ops"></div>
+        <div class="row">
+          <select id="set-field" aria-label="Field"></select>
+          <button type="button" id="set-add">Add an operation</button>
+        </div>
+        <div class="row"><span class="hint">Presets:</span>
+          <button type="button" data-preset="bugfix">Mark for the bugfix line</button>
+          <button type="button" data-preset="count">Count a pass</button>
+          <button type="button" data-preset="reset">Reset the count</button>
+          <button type="button" data-preset="front">Attach odys-front</button>
+        </div>
+        <div class="row"><button type="button" class="go" id="set-run">Pass the ticket through</button><button type="button" id="set-fresh">New ticket</button></div>
+        <p class="hint" id="set-says"></p>
+      </div>
+      <div class="app" role="group" aria-label="Le ticket">
+        <h4>The ticket</h4>
+        <dl class="fld" id="set-ticket"></dl>
+        <p class="hint">In yellow: what the last pass changed.</p>
+      </div>
+    </div>
+    <div class="grade">
+      <div class="card"><h3>Simple, déterministe</h3><ul>
+        <li><b>Statut, priorité, complexité, type, board, favori, bloqué, assigné, échéance</b> : ce sont les champs de la mise à jour ordinaire d'un ticket, déjà utilisée par le poste de statut.</li>
+        <li><b>Tags</b> : ajouter, retirer, et les quatre opérations <code>clef:valeur</code> (poser, incrémenter, retirer la clef, retirer une valeur).</li>
+      </ul></div>
+      <div class="card"><h3>Faisable sans agent, mais peut échouer</h3><ul>
+        <li><b>Ajouter ou retirer un worktree</b> : il faut créer la branche et jouer le hook d'installation du dépôt. C'est lent et ça peut rater, donc le poste a deux sorties, <code>ok</code> et <code>ko</code>.</li>
+        <li><b>Rattacher la PR</b> : possible si on la déduit de la branche du worktree ; sinon rien à rattacher.</li>
+        <li><b>Epic</b> : simple si l'epic est choisi à la main dans le poste.</li>
+      </ul></div>
+      <div class="card"><h3>Demande un agent</h3><ul>
+        <li><b>Choisir</b> le dépôt, le type, la complexité ou l'epic en lisant le ticket : c'est le travail d'un poste de triage (agent), dont les sorties guident ensuite des postes Set.</li>
+        <li>Ton exemple tient : le triage sort « front », un bras l'emmène vers le poste Set qui attache odys-front. Pour le multi-dépôts, le triage pose plutôt des tags <code>repo:odys-front</code>, <code>repo:odys-api</code>, et un seul poste « attache les dépôts des tags repo » fait le reste.</li>
+      </ul></div>
+    </div>
+    <p class="rec"><b>À confirmer.</b> Je n'ai pas trouvé de champ « sévérité » sur les tickets : dis-moi où il vit, ou si c'est un tag <code>severity:…</code>. Et je propose que la syntaxe soit <code>clef:valeur</code> avec une seule valeur par clef (poser <code>type:major</code> remplace <code>type:minor</code>).</p>
+  </section>
+
+  <section aria-labelledby="h-loop">
+    <h2 id="h-loop">1 · Compteur de passages</h2>
+    <p class="brief">Essaie la boucle : chaque « ko » de Review renvoie le ticket en Bugfix, jusqu'à la limite ; ensuite il part en zone d'attente. Tu le libères, et il repart pour un tour complet. Les quatre variantes font la même chose ; ce qui change, c'est ce qu'on pose sur le plancher et où vit le compteur.</p>
+    <div class="app" id="loop-app" role="group" aria-label="Boucle (maquette)">
+      <div class="row"><h4>Limit</h4>
+        <select id="loop-limit" aria-label="Limit"><option>2</option><option selected>3</option><option>4</option></select>
+        <span class="hint mono" id="loop-count"></span>
+      </div>
+      <div class="line" id="loop-line"></div>
+      <div class="row">
+        <button type="button" class="stop" id="loop-ko">Review says ko</button>
+        <button type="button" class="go" id="loop-ok">Review says ok</button>
+        <button type="button" id="loop-release">Release from the zone</button>
+        <button type="button" id="loop-new">New ticket</button>
+      </div>
+      <ul class="log" id="loop-log" aria-live="polite"></ul>
+    </div>
+    <div class="grid" id="loops"></div>
+  </section>
+
+  <section aria-labelledby="h-script">
+    <h2 id="h-script">4 · Poste « script »</h2>
+    <p class="brief">Le poste ne contient pas une ligne de commande : il nomme une <b>commande Factory</b> (« test », « lint »). Ce que ce nom veut dire est défini dépôt par dépôt. Le poste la joue dans chaque worktree du ticket. Modifie le tableau, choisis un ticket, fais échouer un dépôt, et regarde par où le ticket sort.</p>
+    <div class="two">
+      <div class="app" role="group" aria-label="Commandes par dépôt (maquette)">
+        <h4>Factory commands, per repository</h4>
+        <div class="scroll"><table id="cmd-table"></table></div>
+        <p class="hint">Empty: this repository has no such command.</p>
+      </div>
+      <div class="app" role="group" aria-label="Poste script (maquette)">
+        <h4>Script station</h4>
+        <div class="row">
+          <label class="hint" for="sc-cmd">Runs</label><select id="sc-cmd"><option>test</option><option>lint</option></select>
+          <label class="hint" for="sc-ticket">on</label><select id="sc-ticket"></select>
+        </div>
+        <div class="row" id="sc-fails"></div>
+        <div class="row"><button type="button" class="go" id="sc-run">Run</button></div>
+        <ul class="log" id="sc-out"></ul>
+        <p id="sc-verdict" class="mono"></p>
+      </div>
+    </div>
+    <div class="grid" id="sources"></div>
+    <div class="grid" id="missing"></div>
+  </section>
+
+  <section aria-labelledby="h-stop">
+    <h2 id="h-stop">10 · Arrêt d'urgence</h2>
+    <p class="brief">Un seul bouton, toujours visible dans l'en-tête de la page. Pas de confirmation : c'est un arrêt d'urgence. Pas de pas-à-pas.</p>
+    <div class="two">
+      <div class="app" id="stop-app" role="group" aria-label="Arrêt d'urgence (maquette)">
+        <div class="row"><h4>Factory</h4><span style="flex:1"></span><button type="button" class="stop" id="stop-btn">Emergency stop</button></div>
+        <div class="alert" id="stop-alert" hidden><b>Emergency stop.</b> Nothing moves and nothing runs. The runs that were cut start again when the floor restarts. You can still move tickets and build.</div>
+        <div class="belt" aria-hidden="true"></div>
+        <ul class="log" id="stop-state"></ul>
+      </div>
+      <div class="card">
+        <h3>Ce que ça fait</h3>
+        <dl>
+          <dt>Arrêt</dt><dd>Convoyeurs, bras, zones et téléporteurs se figent où ils sont. Aucun poste ne démarre rien. Chaque run en cours est coupé sur-le-champ ; son ticket reste à sa place dans le poste.</dd>
+          <dt>Pendant</dt><dd>On peut encore déplacer un ticket à la main, décider à une porte, construire. Rien de tout ça ne se propage tant que c'est arrêté.</dd>
+          <dt>Reprise</dt><dd>Tout repart d'où c'était. Les tickets dont le run a été coupé sont relancés.</dd>
+          <dt>Tenace</dt><dd>L'arrêt survit à un redémarrage du serveur.</dd>
+        </dl>
+        <p class="rec"><b>Je l'ai déjà codé</b>, trop tôt, avant ton message : il est testé (moteur, page pilotée dans un navigateur) mais je ne l'ai ni commité ni poussé. Si le comportement ci-dessus te va, je le pousse tel quel ; sinon je le corrige ou je le jette.</p>
+      </div>
+    </div>
+    <div class="rules"><div class="card"><h3>À confirmer</h3><ul>
+      <li>Un run coupé puis relancé <b>repart de zéro</b> (nouvelle exécution de l'agent), il ne reprend pas où il en était.</li>
+      <li>Il <b>compte</b> dans la limite de runs par heure, puisqu'il a démarré.</li>
+      <li>Les postes arrêtés à la main avant l'arrêt d'urgence <b>restent arrêtés</b> à la reprise.</li>
+      <li>L'arrêt ne touche que la Factory : un agent lancé à la main depuis Work continue.</li>
+    </ul></div></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------- 7 · the Set station ----------
+  const FIELDS = {
+    status: { label: 'Status', values: ['backlog', 'todo', 'doing', 'reviewing'] },
+    priority: { label: 'Priority', values: ['low', 'medium', 'high', 'urgent'] },
+    type: { label: 'Type', values: ['build', 'fix', 'think', 'review', 'ops'] },
+    complexity: { label: 'Complexity', values: ['1', '2', '3', '5', '8', '13'] },
+    board: { label: 'Board', values: ['Core product', 'Support', 'Bugfix'] },
+    favorite: { label: 'Favourite', values: ['yes', 'no'] },
+    blocked: { label: 'Blocked', values: ['yes', 'no'] },
+    tag: { label: 'Tag', ops: ['add', 'remove', 'set key', 'increment key', 'remove key'] },
+    worktree: { label: 'Worktree', ops: ['add', 'remove'], values: ['odys-api', 'odys-front', 'agentic-dmc-2'] },
+  };
+  const fresh = () => ({ status: 'todo', priority: 'medium', type: '', complexity: '', board: 'Core product', favorite: 'no', blocked: 'no', tags: ['type:minor', 'customer'], worktrees: [] });
+  let ticket = fresh(), changed = new Set(), ops = [{ field: 'tag', op: 'increment key', value: 'passes' }];
+  const PRESETS = {
+    bugfix: [{ field: 'board', value: 'Bugfix' }, { field: 'type', value: 'fix' }, { field: 'priority', value: 'high' }, { field: 'tag', op: 'set key', value: 'type:major' }],
+    count: [{ field: 'tag', op: 'increment key', value: 'passes' }],
+    reset: [{ field: 'tag', op: 'remove key', value: 'passes' }],
+    front: [{ field: 'worktree', op: 'add', value: 'odys-front' }, { field: 'tag', op: 'set key', value: 'repo:odys-front' }],
+  };
+  const keyOf = (t) => (t.includes(':') ? t.slice(0, t.indexOf(':')) : null);
+  function apply(t, o) {
+    const hit = new Set();
+    if (o.field === 'tag') {
+      const v = (o.value || '').trim(); if (!v) return hit;
+      const before = t.tags.join('|');
+      if (o.op === 'add') { if (!t.tags.includes(v)) t.tags.push(v); }
+      else if (o.op === 'remove') t.tags = t.tags.filter((x) => x !== v);
+      else if (o.op === 'set key') { const k = keyOf(v); if (k) t.tags = [...t.tags.filter((x) => keyOf(x) !== k), v]; }
+      else if (o.op === 'increment key') { const k = v.replace(/:.*$/, ''), cur = t.tags.find((x) => keyOf(x) === k), n = cur ? Number(cur.slice(k.length + 1)) || 0 : 0; t.tags = [...t.tags.filter((x) => keyOf(x) !== k), `${k}:${n + 1}`]; }
+      else if (o.op === 'remove key') { const k = v.replace(/:.*$/, ''); t.tags = t.tags.filter((x) => keyOf(x) !== k); }
+      if (t.tags.join('|') !== before) hit.add('tags');
+    } else if (o.field === 'worktree') {
+      const before = t.worktrees.join('|');
+      if (o.op === 'add') { if (!t.worktrees.includes(o.value)) t.worktrees.push(o.value); } else t.worktrees = t.worktrees.filter((x) => x !== o.value);
+      if (t.worktrees.join('|') !== before) hit.add('worktrees');
+    } else if (t[o.field] !== o.value) { t[o.field] = o.value; hit.add(o.field); }
+    return hit;
+  }
+  const tagHtml = (t, hot) => { const k = keyOf(t); return `<span class="tag${k ? ' kv' : ''}${hot ? ' hot' : ''}">${k ? `<b>${esc(k)}</b>:${esc(t.slice(k.length + 1))}` : esc(t)}</span>`; };
+  let lastTags = [];
+  function showTicket() {
+    const row = (k, label, html) => `<div class="fld${changed.has(k) ? ' hot' : ''}" style="display:contents"><dt>${label}</dt><dd${changed.has(k) && k !== 'tags' ? ' style="background:rgba(250,204,21,0.18)"' : ''}>${html}</dd></div>`;
+    $('set-ticket').innerHTML = ['status', 'priority', 'type', 'complexity', 'board', 'favorite', 'blocked'].map((k) => row(k, FIELDS[k].label, esc(ticket[k] || 'none'))).join('')
+      + row('tags', 'Tags', ticket.tags.map((t) => tagHtml(t, changed.has('tags') && !lastTags.includes(t))).join('') || 'none')
+      + row('worktrees', 'Worktrees', ticket.worktrees.map((w) => `<span class="tag">${esc(w)}</span>`).join('') || 'none');
+  }
+  function showOps() {
+    $('set-ops').innerHTML = ops.length ? ops.map((o, i) => {
+      const f = FIELDS[o.field];
+      const op = f.ops ? `<select data-i="${i}" data-k="op" aria-label="Operation">${f.ops.map((x) => `<option${x === o.op ? ' selected' : ''}>${x}</option>`).join('')}</select>` : '<span class="hint">set to</span>';
+      const val = f.values ? `<select data-i="${i}" data-k="value" aria-label="Value">${f.values.map((x) => `<option${x === o.value ? ' selected' : ''}>${x}</option>`).join('')}</select>`
+        : `<input data-i="${i}" data-k="value" aria-label="Tag" value="${esc(o.value || '')}" placeholder="${o.op === 'increment key' || o.op === 'remove key' ? 'key' : o.op === 'set key' ? 'key:value' : 'tag'}" size="14">`;
+      return `<div class="row" style="margin-bottom:6px"><b style="min-width:76px">${f.label}</b>${op}${val}<button type="button" data-del="${i}" aria-label="Remove operation ${i + 1}">×</button></div>`;
+    }).join('') : '<p class="hint">No operation: the ticket goes through unchanged.</p>';
+  }
+  $('set-field').innerHTML = Object.entries(FIELDS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('');
+  $('set-add').addEventListener('click', () => { const k = $('set-field').value, f = FIELDS[k]; ops.push({ field: k, op: f.ops ? f.ops[0] : undefined, value: f.values ? f.values[0] : '' }); showOps(); });
+  $('set-ops').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i == null) return; ops[i][e.target.dataset.k] = e.target.value; if (e.target.dataset.k === 'op') showOps(); });
+  $('set-ops').addEventListener('click', (e) => { const d = e.target.dataset.del; if (d != null) { ops.splice(Number(d), 1); showOps(); } });
+  $('set-app').addEventListener('click', (e) => { const p = e.target.dataset.preset; if (p) { ops = PRESETS[p].map((o) => ({ ...o })); showOps(); $('set-says').textContent = ''; } });
+  $('set-run').addEventListener('click', () => {
+    lastTags = [...ticket.tags]; changed = new Set();
+    for (const o of ops) for (const k of apply(ticket, o)) changed.add(k);
+    showTicket();
+    const wt = ops.some((o) => o.field === 'worktree');
+    $('set-says').textContent = changed.size ? `${changed.size} field${changed.size === 1 ? '' : 's'} changed. Leaves by the arm "ok"${wt ? ' (a worktree that cannot be created would send it out by "ko")' : ''}.` : 'Nothing to change: it goes through as it is.';
+  });
+  $('set-fresh').addEventListener('click', () => { ticket = fresh(); changed = new Set(); showTicket(); $('set-says').textContent = ''; });
+  showOps(); showTicket();
+
+  // ---------- 1 · the loop ----------
+  const loops = [
+    { id: 'C1', name: 'Tag compteur + bras existant', mine: true,
+      idea: 'Rien de neuf à part le chantier 7. Un poste Set sur le retour fait « increment passes ». Le bras qui sort de Review gagne la condition « tag passes ≥ 3 » et mène à la zone. Sur la sortie de la zone, un poste Set fait « remove key passes ».',
+      reads: 'Le compteur est sur le ticket, visible partout (Work, filtres). La remise à zéro est un morceau de plancher : tu choisis où et quand elle a lieu. On peut compter autre chose que des boucles.',
+      limit: 'Trois petites machines à poser pour une boucle. Un tag de plus sur le ticket.',
+      boxes: ['Review', 'arm · passes ≥ N', 'Set · passes +1', 'Bugfix', 'Zone', 'Set · remove passes'] },
+    { id: 'C2', name: 'Condition « passages » sur le bras',
+      idea: 'Le bras gagne un champ « passages par ce poste ≥ N », calculé depuis l\'historique des runs. Pas de nouvelle machine.',
+      reads: 'Le plus court à poser : un réglage sur un bras.',
+      limit: 'La remise à zéro n\'a pas de place naturelle : il faut une action « Reset » sur le ticket, ou décider que « libérer d\'une zone » remet tout à zéro, ce qui est implicite. Le compteur ne se voit pas sur le ticket.',
+      boxes: ['Review', 'arm · passes ≥ N', 'Bugfix', 'Zone'] },
+    { id: 'C3', name: 'Péage',
+      idea: 'Une nouvelle machine d\'une case, posée sur le retour. Elle compte les passages de chaque ticket et a une limite : en dessous il continue tout droit, au-dessus un bras « over » le sort. Libérer le ticket remet son compteur à zéro.',
+      reads: 'Une seule machine dit tout : elle affiche sa limite, et le compte du ticket qui passe.',
+      limit: 'Un type de machine en plus, qui ne sert qu\'à ça. La remise à zéro reste implicite.',
+      boxes: ['Review', 'arm · ko', 'Toll · N', 'Bugfix', 'Zone'] },
+    { id: 'C4', name: 'Crédits',
+      idea: 'Le ticket reçoit N crédits en entrant dans la boucle (une borne de recharge). Chaque retour en dépense un. À zéro, le bras « no credit » le sort. Repasser par la borne recharge.',
+      reads: 'La remise à zéro est explicite, comme en C1 : on repasse par la borne.',
+      limit: 'Compte à rebours plutôt que compteur : deux machines nouvelles, et c\'est le même mécanisme que C1 avec un vocabulaire à lui.',
+      boxes: ['Recharge · N', 'Review', 'arm · credit = 0', 'Toll · −1', 'Bugfix', 'Zone'] },
+  ];
+  let variant = 'C1', count = 0, where = 'Review', log = [];
+  const limit = () => Number($('loop-limit').value);
+  const say = (s) => { log.unshift(s); log = log.slice(0, 6); };
+  function showLoop() {
+    const v = loops.find((l) => l.id === variant), n = limit();
+    const label = (b) => b.replace(' N', ` ${n}`).replace('≥ N', `≥ ${n}`).replace('· N', `· ${n}`);
+    const hereOf = where === 'Zone' ? 'Zone' : where === 'Bugfix' ? 'Bugfix' : where === 'Done' ? null : 'Review';
+    $('loop-line').innerHTML = v.boxes.map((b, i) => `${i ? '<span class="arrow">→</span>' : ''}<div class="box${b === hereOf ? ' here' : ''}${b === 'Zone' ? ' hold' : ''}${/Set|Toll|Recharge/.test(b) ? ' new' : ''}"><b>${esc(label(b))}</b><span>${b === 'Zone' ? 'needs a human' : /Set|Toll|Recharge/.test(b) ? 'no agent' : b.startsWith('arm') ? 'takes it out of the loop' : 'station'}</span>${b === hereOf ? `<span class="tok">#142${variant === 'C1' && count ? ` · passes:${count}` : ''}</span>` : ''}</div>`).join('')
+      + (where === 'Done' ? '<span class="arrow">→</span><div class="box here"><b>Exit</b><span>done</span><span class="tok">#142</span></div>' : '');
+    $('loop-count').textContent = variant === 'C4' ? `credits left: ${Math.max(0, n - count)}` : `passes: ${count} / ${n}`;
+    $('loop-ko').disabled = $('loop-ok').disabled = where !== 'Review';
+    $('loop-release').disabled = where !== 'Zone';
+    $('loop-log').innerHTML = log.map((l) => `<li>${esc(l)}</li>`).join('');
+  }
+  $('loop-ko').addEventListener('click', () => {
+    if (count + 1 >= limit()) { count++; where = 'Zone'; say(`ko n°${count}: the limit is reached, it leaves the loop and waits in the zone.`); }
+    else { count++; say(`ko n°${count}: back to Bugfix, then Review again.`); }
+    showLoop();
+  });
+  $('loop-ok').addEventListener('click', () => { where = 'Done'; say('ok: it leaves by the exit.'); showLoop(); });
+  $('loop-release').addEventListener('click', () => {
+    const how = { C1: 'it goes through "Set · remove passes" on its way out', C2: 'releasing it resets its count (implicit)', C3: 'releasing it resets the toll for this ticket (implicit)', C4: 'it goes through the recharge again' }[variant];
+    count = 0; where = 'Review'; say(`Released: ${how}. It has ${limit()} tries again.`); showLoop();
+  });
+  $('loop-new').addEventListener('click', () => { count = 0; where = 'Review'; log = []; showLoop(); });
+  $('loop-limit').addEventListener('change', showLoop);
+
+  // ---------- 4 · the script station ----------
+  const repos = { 'odys-api': { test: 'make test', lint: 'make lint' }, 'odys-front': { test: 'pnpm test --run', lint: 'pnpm lint' }, 'agentic-dmc-2': { test: '', lint: 'uv run ruff check' } };
+  const tickets = { '#201 · odys-api': ['odys-api'], '#202 · odys-api + odys-front': ['odys-api', 'odys-front'], '#203 · agentic-dmc-2': ['agentic-dmc-2'], '#204 · no worktree': [] };
+  const sources = [
+    { id: 'S1', name: 'Réglage par dépôt, dans Fleex', mine: true,
+      idea: 'Dans les réglages de chaque dépôt (là où vit déjà son hook d\'installation), une liste de commandes nommées : test, lint, build. Le tableau ci-dessus.',
+      reads: 'Tout se règle au même endroit, sans toucher aux dépôts. On voit d\'un coup d\'œil ce qui manque.',
+      limit: 'La commande vit hors du dépôt : si le dépôt change sa façon de tester, il faut le reporter ici.' },
+    { id: 'S2', name: 'Fichier dans le dépôt',
+      idea: 'Chaque dépôt porte un fichier (par exemple .fleex/factory.json) qui déclare ses commandes. Le poste le lit dans le worktree.',
+      reads: 'La commande est versionnée avec le code, et peut différer d\'une branche à l\'autre.',
+      limit: 'Il faut une PR dans chaque dépôt avant de pouvoir s\'en servir. Un ticket peut modifier la commande qui le juge.' },
+    { id: 'S3', name: 'Convention make',
+      idea: 'Le poste joue toujours « make factory-test », « make factory-lint ». Chaque dépôt fournit ses cibles.',
+      reads: 'Aucun réglage dans Fleex.',
+      limit: 'Impose un Makefile partout, y compris aux dépôts qui n\'en ont pas. Mêmes limites que S2.' },
+    { id: 'S4', name: 'Fichier du dépôt, sinon réglage Fleex',
+      idea: 'S2 quand le fichier existe, S1 sinon.',
+      reads: 'On démarre tout de suite avec S1, et un dépôt peut reprendre la main quand il veut.',
+      limit: 'Deux endroits où regarder quand une commande surprend.' },
+  ];
+  const missing = [
+    { id: 'M1', name: 'Sortie dédiée « unconfigured »', mine: true,
+      idea: 'Un dépôt sans commande donne une troisième sortie, distincte de ko. Un bras la prend et l\'emmène où tu veux, en général vers toi.',
+      reads: 'On ne confond pas « les tests échouent » (à corriger par un agent) et « je ne sais pas tester » (à régler par toi).',
+      limit: 'Un bras de plus à poser par poste script. Sans bras pour elle, le ticket reste dans le bac rouge « NO ARM ».' },
+    { id: 'M2', name: 'Défaut : sort en ko',
+      idea: 'Comme tu le décrivais : pas de commande, donc défaut.',
+      reads: 'Rien de plus à poser.',
+      limit: 'Le ticket part en Bugfix pour un problème qu\'aucun agent ne peut corriger, et reviendra : c\'est une boucle.' },
+    { id: 'M3', name: 'Mis de côté dans le poste',
+      idea: 'Le ticket reste dans le poste, mis de côté, comme une question d\'agent. Il apparaît dans « Needs you ».',
+      reads: 'Aucun bras à prévoir, et tu es prévenu.',
+      limit: 'Bloque jusqu\'à ce que tu passes, même la nuit.' },
+  ];
+  let fails = new Set();
+  function showCmd() {
+    $('cmd-table').innerHTML = '<tr><th>Repository</th><th>test</th><th>lint</th></tr>' + Object.entries(repos).map(([r, c]) => `<tr><td class="mono">${r}</td>${['test', 'lint'].map((k) => `<td><input class="mono" data-repo="${r}" data-cmd="${k}" value="${esc(c[k])}" aria-label="${k} for ${r}" placeholder="none"></td>`).join('')}</tr>`).join('');
+  }
+  function showFails() {
+    const wts = tickets[$('sc-ticket').value];
+    $('sc-fails').innerHTML = wts.length ? '<span class="hint">Make it fail in:</span>' + wts.map((w) => `<button type="button" data-fail="${w}" aria-pressed="${fails.has(w)}">${w}</button>`).join('') : '<span class="hint">This ticket has no worktree.</span>';
+  }
+  $('sc-ticket').innerHTML = Object.keys(tickets).map((t) => `<option>${t}</option>`).join('');
+  $('cmd-table').addEventListener('input', (e) => { const d = e.target.dataset; if (d.repo) repos[d.repo][d.cmd] = e.target.value.trim(); });
+  $('sc-ticket').addEventListener('change', () => { fails = new Set(); showFails(); $('sc-out').innerHTML = ''; $('sc-verdict').textContent = ''; });
+  $('sc-fails').addEventListener('click', (e) => { const w = e.target.dataset.fail; if (!w) return; if (fails.has(w)) fails.delete(w); else fails.add(w); showFails(); });
+  $('sc-run').addEventListener('click', () => {
+    const cmd = $('sc-cmd').value, wts = tickets[$('sc-ticket').value], policy = picks.missing || 'M1';
+    let ko = false, none = false;
+    const lines = wts.map((w) => {
+      const c = repos[w][cmd];
+      if (!c) { none = true; return `<li><span class="na">–</span> ${w}: no "${cmd}" command for this repository</li>`; }
+      if (fails.has(w)) { ko = true; return `<li><span class="ko">✗</span> ${w} $ ${esc(c)} · exit 1</li>`; }
+      return `<li><span class="ok">✓</span> ${w} $ ${esc(c)} · exit 0</li>`;
+    });
+    $('sc-out').innerHTML = lines.join('') || '<li>nothing to run</li>';
+    const v = !wts.length ? ['na', 'no worktree: outcome "unconfigured" too (nothing was checked)'] : ko ? ['ko', 'outcome "ko": at least one command failed'] : none
+      ? (policy === 'M2' ? ['ko', 'outcome "ko": a repository has no command (M2)'] : policy === 'M3' ? ['na', 'set aside in the station: it waits for you (M3)'] : ['na', 'outcome "unconfigured": leaves by its own arm (M1)'])
+      : ['ok', 'outcome "ok": every worktree passed'];
+    $('sc-verdict').innerHTML = `<span class="${v[0]}">→ ${esc(v[1])}</span>`;
+  });
+  showCmd(); showFails();
+
+  // ---------- 10 · the emergency stop ----------
+  let halted = false, cut = false;
+  function showStop() {
+    $('stop-app').classList.toggle('halted', halted);
+    $('stop-alert').hidden = !halted;
+    const b = $('stop-btn'); b.textContent = halted ? 'Restart the floor' : 'Emergency stop'; b.className = halted ? 'go' : 'stop';
+    $('stop-state').innerHTML = [
+      `Belts, arms, teleporters: ${halted ? '<span class="ko">stopped where they are</span>' : '<span class="ok">moving</span>'}`,
+      `Build · #142: ${halted ? '<span class="ko">run cut, back in line in its place</span>' : cut ? '<span class="ok">running again, from the start</span>' : '<span class="ok">running</span>'}`,
+      `Review · #150 (waiting to start): ${halted ? '<span class="na">not started</span>' : '<span class="ok">starts when a place is free</span>'}`,
+      `QA (switched off by hand): <span class="na">off</span>, stays off`,
+    ].map((l) => `<li>${l}</li>`).join('');
+  }
+  $('stop-btn').addEventListener('click', () => { halted = !halted; if (halted) cut = true; showStop(); });
+  showStop();
+
+  // ---------- the picks ----------
+  const KEY = 'factory-next-picks';
+  let picks = { loop: '', source: '', missing: '' };
+  try { picks = { ...picks, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* no storage here: the picks live for the visit */ }
+  const families = [
+    { key: 'loop', host: 'loops', list: loops, label: 'Compteur' },
+    { key: 'source', host: 'sources', list: sources, label: 'Commande' },
+    { key: 'missing', host: 'missing', list: missing, label: 'Non configuré' },
+  ];
+  for (const f of families) {
+    $(f.host).innerHTML = f.list.map((it) => `
+      <article class="card" data-family="${f.key}" data-id="${it.id}">
+        <div class="card-head"><span class="letter">${it.id}</span><h3>${esc(it.name)}</h3>${it.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+        <dl><dt>Idée</dt><dd>${esc(it.idea)}</dd><dt>Atout</dt><dd>${esc(it.reads)}</dd><dt>Limite</dt><dd>${esc(it.limit)}</dd></dl>
+        <button type="button" aria-pressed="false">Choisir ${it.id}</button>
+      </article>`).join('');
+  }
+  const nameOf = (f) => f.list.find((x) => x.id === picks[f.key])?.name;
+  const summary = () => `${families.map((f) => `${f.label} : ${picks[f.key] ? `${picks[f.key]} (${nameOf(f) ?? '?'})` : 'pas encore choisi'}`).join(' · ')}`;
+  function paint() {
+    for (const card of document.querySelectorAll('.card[data-family]')) {
+      const b = card.querySelector(':scope > button'), on = picks[card.dataset.family] === card.dataset.id;
+      card.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    $('picks').innerHTML = families.map((f) => `${f.label} <b>${picks[f.key] || '–'}</b>`).join(' &nbsp;·&nbsp; ');
+    /* the loop's sandbox shows the variant that is picked, or the one last looked at */
+    if (picks.loop) variant = picks.loop;
+    showLoop();
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card[data-family] > button'); if (!b) return;
+    const card = b.closest('.card'), k = card.dataset.family;
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    if (k === 'loop') variant = card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    $('said').textContent = '';
+    paint();
+  });
+  $('copy').addEventListener('click', () => {
+    const said = $('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint();
+})();
+</script>
