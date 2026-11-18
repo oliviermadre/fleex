@@ -33,6 +33,7 @@ import { WorkBoardPicker } from './WorkBoardPicker';
 import { WorkStatusPicker } from './WorkStatusPicker';
 import type { WorkTask } from '../types';
 import { FactoryContextGroup } from '../../../factory/FactoryContextGroup';
+import { FactoryHandover } from '../../../factory/FactoryHandover';
 
 /** Parse a github_pr link ref ("org/name#123") into its parts. */
 function parsePrLink(link: TicketLink): { org: string; name: string; number: number } | null {
@@ -589,6 +590,7 @@ export function ContextPanel({ task, onDelete }: { task: WorkTask; onDelete: () 
 
       {/* Actions — pinned to the bottom */}
       <div className="mt-auto border-t border-[var(--theme-border)] px-3 py-3">
+        <FactoryHandover ticketId={ticket.id} status={ticket.status} />
         <button
           type="button"
           onClick={onDelete}

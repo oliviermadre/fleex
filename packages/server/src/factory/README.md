@@ -379,6 +379,12 @@ What is written in the thread reaches the floor (`FactoryModule.listen`, on `com
   (`refusesWorkflow`, asked by `CreateWorkflowRunUseCase`): the comment that asks for one is refused before it is
   written, with the reason. Give the ticket back first.
 
+At the foot of that panel, above "Delete Ticket", is the hand-over (`FactoryHandover.tsx`): **Send to Factory** for a
+ticket plain Fleex drives (it lands in the Inbound zone; a ticket that is done or cancelled cannot be sent), **Take
+back from Factory** for one the floor drives (it leaves the floor at once and is an ordinary ticket again, in the
+status it has; a run in progress is left to finish and its result is ignored). It is there for every ticket while
+the Factory is on, and is the only thing of the Factory a ticket that is not on the floor shows.
+
 ## Finding a ticket
 
 The snapshot carries what tells tickets apart: board, type, priority, complexity, favourite. They are shown with

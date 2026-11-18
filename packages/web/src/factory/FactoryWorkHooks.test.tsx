@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { FactoryContextGroup } from './FactoryContextGroup';
 import { FactoryThreadCard } from './FactoryThreadCard';
+import { FactoryHandover } from './FactoryHandover';
 import { useFactoryStore } from './factoryStore';
 import type { FactorySnapshot, FactoryTicket, MachineSpec, TicketPhase } from './types';
 
@@ -89,6 +90,40 @@ describe('<FactoryContextGroup/>', () => {
       expect(screen.queryByLabelText('Send to another machine')).toBeNull();
       cleanup();
     }
+  });
+});
+
+describe('<FactoryHandover/>', () => {
+  const hand = () => { const acts = { transfer: vi.fn(async () => {}), giveBack: vi.fn(async () => {}) }; useFactoryStore.setState(acts); return acts; };
+
+  it('sends to the Factory a ticket plain Fleex drives: it lands in Inbound, no target given', () => {
+    seed(null, false);
+    const acts = hand();
+    render(<FactoryHandover ticketId="t1" status="todo" />);
+    expect(screen.queryByRole('button', { name: 'Take back from Factory' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Factory' }));
+    expect(acts.transfer).toHaveBeenCalledWith('t1', {});
+    expect(screen.getByRole('group', { name: 'Who drives this ticket' }).textContent).toContain('Inbound zone');
+  });
+
+  it('takes back a ticket the Factory drives, and says what happens to a run in progress', () => {
+    seed(ticket('dev', 'running'));
+    const acts = hand();
+    render(<FactoryHandover ticketId="t1" status="doing" />);
+    expect(screen.queryByRole('button', { name: 'Send to Factory' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Who drives this ticket' }).textContent).toContain('its result is ignored');
+    fireEvent.click(screen.getByRole('button', { name: 'Take back from Factory' }));
+    expect(acts.giveBack).toHaveBeenCalledWith('t1');
+  });
+
+  it('does not send a ticket that is done or cancelled, and is not there while the Factory is off', () => {
+    seed(null, false);
+    hand();
+    const { container, rerender } = render(<FactoryHandover ticketId="t1" status="done" />);
+    expect((screen.getByRole('button', { name: 'Send to Factory' }) as HTMLButtonElement).disabled).toBe(true);
+    useFactoryStore.setState({ enabled: false });
+    rerender(<FactoryHandover ticketId="t1" status="todo" />);
+    expect(container.textContent).toBe('');
   });
 });
 
