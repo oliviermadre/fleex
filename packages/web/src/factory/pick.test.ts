@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { addTo } from './pick';
 import { groupOf, ticketsIn } from './pick';
 import type { FactoryTicket, MachineSpec, TicketPhase } from './types';
 
@@ -20,6 +21,29 @@ describe('a frame dragged over the floor', () => {
   it('takes none when none is in it, and one on its edge', () => {
     expect(ticketsIn(places, { x0: 6, y0: 0, x1: 8, y1: 5 })).toEqual([]);
     expect(ticketsIn(places, { x0: 1, y0: 1, x1: 1, y1: 1 })).toEqual(['a']);
+  });
+});
+
+describe('picking with Shift held', () => {
+  it('replaces the selection without Shift', () => {
+    expect(addTo(['a', 'b'], ['c'], false)).toEqual(['c']);
+    expect(addTo(['a', 'b'], [], false)).toEqual([]);
+  });
+
+  it('adds what was not there, in the order picked, and never twice', () => {
+    expect(addTo(['a'], ['b'], true, true)).toEqual(['a', 'b']);
+    expect(addTo(['a', 'b'], ['b', 'c', 'd'], true)).toEqual(['a', 'b', 'c', 'd']);
+    expect(addTo([], ['a'], true, true)).toEqual(['a']);
+  });
+
+  it('takes out the one thing clicked that was already there; a frame only adds', () => {
+    expect(addTo(['a', 'b', 'c'], ['b'], true, true)).toEqual(['a', 'c']);
+    expect(addTo(['a', 'b', 'c'], ['b'], true)).toEqual(['a', 'b', 'c']);
+    expect(addTo(['a'], ['a'], true, true)).toEqual([]);
+  });
+
+  it('keeps the selection when Shift is held and nothing was picked', () => {
+    expect(addTo(['a', 'b'], [], true)).toEqual(['a', 'b']);
   });
 });
 

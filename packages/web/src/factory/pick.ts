@@ -14,6 +14,19 @@ export function ticketsIn(places: Iterable<[string, { x: number; y: number }]>, 
   return out;
 }
 
+/**
+ * What a selection becomes when something is picked. Without Shift the pick replaces it. With Shift it adds to it:
+ * what was not there joins, in the order picked; and one thing clicked that was already there is taken out
+ * (`toggles`, for a click: a frame only ever adds).
+ */
+export function addTo(current: readonly string[], picked: readonly string[], shift: boolean, toggles = false): string[] {
+  if (!shift) return [...picked];
+  if (toggles && picked.length === 1 && current.includes(picked[0]!)) return current.filter((id) => id !== picked[0]);
+  const out = [...current];
+  for (const id of picked) if (!out.includes(id)) out.push(id);
+  return out;
+}
+
 /** What a group of tickets can do together: how many each command would act on. */
 export interface TicketGroup {
   count: number;

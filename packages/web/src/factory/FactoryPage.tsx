@@ -29,7 +29,7 @@ import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
 import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
-import { groupOf, ticketsIn } from './pick';
+import { addTo, groupOf, ticketsIn } from './pick';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
@@ -52,6 +52,11 @@ const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator
 /** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
 let clipboard: Clip | null = null;
 const ARROW = ['→', '↓', '←', '↑'];
+/* a selection as the ids it holds, and back: one thing is not a group of one */
+const machineIds = (s: Selection): string[] => (s && 'machines' in s ? s.machines : s && 'machine' in s ? [s.machine] : []);
+const ticketIds = (s: Selection): string[] => (s && 'tickets' in s ? s.tickets : s && 'ticket' in s ? [s.ticket] : []);
+const machinesSel = (ids: string[]): Selection => (ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
+const ticketsSel = (ids: string[]): Selection => (ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
@@ -384,11 +389,14 @@ function Floor() {
     else if (pr?.kind === 'machine') {
       const g = live.current.ghost; live.current.ghost = null;
       if (pr.dragging && g) { if (g.ok) commit(moveMany(st.layout, new Set(pr.group), tx - pr.sx, ty - pr.sy)); else toast.warning('No room here'); }
-      if (!pr.dragging || pr.group.length === 1) setSelection({ machine: pr.id });
+      /* Shift adds the machine to what is selected, or takes it out; a drag moved it and leaves the selection alone */
+      if (!pr.dragging && e.shiftKey) setSelection(machinesSel(addTo(machineIds(live.current.selection), [pr.id], true, true)));
+      else if (!pr.dragging || pr.group.length === 1) setSelection({ machine: pr.id });
     } else if (pr?.kind === 'marquee') {
       const q = live.current.marquee; live.current.marquee = null;
       const ids = q && !click ? machinesIn(st.layout, q.x0, q.y0, q.x1, q.y1) : [];
-      setSelection(ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
+      /* with Shift a frame adds to the selection, and a click on bare floor leaves it as it is */
+      setSelection(machinesSel(e.shiftKey ? addTo(machineIds(live.current.selection), ids, true) : ids));
     } else if (pr?.kind === 'place') {
       if (click && live.current.tool === 'paste') {
         const done = clipboard ? pasteAt(st.layout, clipboard, tx, ty) : null;
@@ -414,10 +422,11 @@ function Floor() {
         return;
       }
       if (pr.dragging && dr) { const d = dropTarget(v, dr.x, dr.y); if (d.can) void store.move(pr.id, d.target); else toast.warning(d.text); }
-      setSelection({ ticket: pr.id }); setPeekOpen(!pr.dragging);
+      if (!pr.dragging && e.shiftKey) { setSelection(ticketsSel(addTo(ticketIds(live.current.selection), [pr.id], true, true))); setPeekOpen(false); }
+      else { setSelection({ ticket: pr.id }); setPeekOpen(!pr.dragging); }
     } else if (pr?.kind === 'pick' && !click) {
       const ids = ticketsIn(v.ticketPlaces(), { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y });
-      setSelection(ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
+      setSelection(ticketsSel(e.shiftKey ? addTo(ticketIds(live.current.selection), ids, true) : ids));
       setPeekOpen(false);
     } else if (click) {
       const hit = v.pick(p.x, p.y, st, !live.current.building);
@@ -425,7 +434,7 @@ function Floor() {
         /* the light of a machine that runs something is its switch; a gate's only speaks */
         const m = v.machine(hit.lamp);
         if (m?.kind === 'station' && RUNS.includes(m.exec)) void store.power(m.id, !!m.off);
-      } else { setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null); setPeekOpen(!!hit && 'ticketId' in hit); }
+      } else if (hit || !e.shiftKey) { setSelection(hit ? ('ticketId' in hit ? { ticket: hit.ticketId } : { machine: hit.machineId }) : null); setPeekOpen(!!hit && 'ticketId' in hit); }
     }
   };
 
@@ -720,7 +729,7 @@ function Floor() {
       </div>
       <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud}
         title={building ? 'Build' : 'Factory floor'}
-        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
+        hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}

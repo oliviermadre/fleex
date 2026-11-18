@@ -133,6 +133,10 @@ The console can be put away to give the floor the whole page: a handle in the mi
 is all that stays, at the foot of the floor; the keys of the command card still work. The choice is kept in the
 browser (`viewToggles.ts`).
 
+Shift adds to a selection (`addTo` in `pick.ts`): Shift and a click add a machine in build mode, a ticket out of it,
+or take it out when it was already selected; Shift and a frame add what the frame takes; Shift and a click on bare
+floor leave the selection as it is.
+
 Build mode says so all round the view (`FactoryBuildFrame.tsx`): hazard tape, yellow and black on the diagonal like
 the bay of what is set aside, and a plate in the corner, "BUILD MODE, the floor keeps running" (or "the floor is
 stopped" under the emergency stop). It is laid over the floor and takes no pointer event.
