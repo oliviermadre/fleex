@@ -127,11 +127,11 @@ function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: C
   const shortcut = c.also ? `${slotKey}, ${alsoLabel(c.also)}` : slotKey;
   return (
     <button type="button" disabled={c.disabled} onClick={() => onRun(c)} aria-pressed={c.active} aria-haspopup={c.menu ? 'menu' : undefined} title={`${c.title ?? c.label}${shortcut ? ` (${shortcut})` : ''}`}
-      className={cn('relative flex h-[62px] w-[68px] flex-col items-center justify-end gap-[3px] rounded-lg border px-0.5 pb-[5px] transition-colors', look,
+      className={cn('relative flex h-[64px] w-[68px] flex-col items-center justify-end gap-[2px] rounded-lg border px-0.5 pb-[5px] transition-colors', look,
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-35')}>
       <kbd className="absolute left-1.5 top-1 font-mono text-[9.5px] font-bold opacity-75">{slotKey}{c.also === 'Escape' ? ' Esc' : ''}</kbd>
       {c.menu && <span className="absolute right-1.5 top-0.5 text-[11px] font-bold opacity-75" aria-hidden="true">›</span>}
-      <FIcon name={c.icon} size={24} />
+      <FIcon name={c.icon} size={30} />
       {/* a label is shown whole: it wraps before it is ever cut */}
       <span className="max-w-full break-words text-center text-[11px] font-medium leading-[1.05]">{c.label}</span>
     </button>
@@ -312,16 +312,17 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
 
       <Side side="right">
         {/* command card: five by three, one menu at a time; a command's key is its place on the keyboard */}
-        <div className="flex h-full flex-col justify-end gap-1">
-          <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]" style={{ paddingLeft: HUD.cut - 6 }}>
-            <span className="min-w-0 flex-1 truncate" aria-label="Menu">{trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}</span>
+        <div className="flex h-full flex-col gap-1">
+          {/* the head of the card takes the room over the grid, under the cut corner: where one is, in the middle and large; the keyboard read, aside */}
+          <div className="relative flex min-h-0 flex-1 items-center justify-center">
+            <span className="max-w-full truncate text-[12.5px] font-medium uppercase tracking-[0.14em] text-[var(--theme-text-muted)]" aria-label="Menu">{trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-bold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1.5" aria-hidden="true">›</span>}{t}</span>)}</span>
             <button type="button" onClick={keys.flip} aria-label={`Keyboard: ${keys.name}`} title={`The keys of the card follow your keyboard, read as ${keys.name}${keys.forced ? ' because you said so' : ''}. Click ${keys.forced ? 'to let Fleex find out again' : 'if it is the other one'}.`}
-              className={cn('flex-none rounded px-1 font-mono text-[9px] hover:text-[var(--theme-text-primary)]', keys.forced && 'text-[var(--theme-text-secondary)] underline')}>{keys.name}</button>
+              className={cn('absolute bottom-0 right-0 rounded px-1 font-mono text-[9px] uppercase tracking-wider text-[var(--theme-text-faint)] hover:text-[var(--theme-text-primary)]', keys.forced && 'text-[var(--theme-text-secondary)] underline')}>{keys.name}</button>
           </div>
           <div className="grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Factory commands">
             {Array.from({ length: SLOTS }, (_, i) => {
               const c = menu.slots[i];
-              return c ? <Tile key={`${i}-${c.id}`} c={c} slotKey={keys.labels[i] ?? ''} onRun={onRun} /> : <span key={i} className="h-[62px] w-[68px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
+              return c ? <Tile key={`${i}-${c.id}`} c={c} slotKey={keys.labels[i] ?? ''} onRun={onRun} /> : <span key={i} className="h-[64px] w-[68px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
             })}
           </div>
         </div>

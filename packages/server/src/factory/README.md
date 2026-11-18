@@ -130,7 +130,8 @@ in the card's header forces the other one.
 
 The bottom row never moves: Undo and Redo first in build mode, Next fourth on the floor, and last the way in and
 out (Build, Done, Previous, Cancel), so one key enters build mode and leaves it. Fit is fourth in the middle row of
-every menu, which is F on any keyboard. Some commands also answer to a named key: Escape for the way back, Delete to
+every menu, which is F on any keyboard. The card's head fills the room over the grid, under the cut corner: where one is, in
+the middle and large, and the keyboard as it was read, aside. Some commands also answer to a named key: Escape for the way back, Delete to
 remove, Tab for the list of tickets, N for Next. Copy, cut and paste are on the keyboard only, and a click or a drag
 selects: none of them takes a place on the card. A label is one or two short words and is never cut.
 `factoryMenu.test.ts` holds every menu to these rules.
