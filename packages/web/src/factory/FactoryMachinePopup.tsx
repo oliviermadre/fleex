@@ -25,7 +25,7 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -33,18 +33,19 @@ const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting', port: 'in the teleporter',
 };
-const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1];
+const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1], SIDE = ['East', 'South', 'West', 'North'];
 const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 /** What a machine is, in a word or two. */
 export function machineKind(m: MachineSpec): string {
+  if (m.kind === 'belt' && m.toll) return 'Toll';
   if (m.kind === 'belt' && m.set !== undefined) return 'Set gantry';
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'Gate' : m.exec === 'native' ? 'Status station' : `${m.exec[0]!.toUpperCase()}${m.exec.slice(1)} station`;
   if (m.kind === 'teleporter') return m.role === 'arrival' ? 'Arrival teleporter' : 'Departure teleporter';
   return m.kind === 'zone' && m.inbound ? 'Inbound zone' : `${m.kind[0]!.toUpperCase()}${m.kind.slice(1)}`;
 }
-export const machineIcon = (m: MachineSpec): string => (m.kind === 'belt' && m.set !== undefined ? 'set' : m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
+export const machineIcon = (m: MachineSpec): string => (m.kind === 'belt' && m.toll ? 'toll' : m.kind === 'belt' && m.set !== undefined ? 'set' : m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
 
 /** A text field that saves when you leave it or press Enter, not on every keystroke. Escape takes back what was typed. */
 export function CommitInput({ id, label, value, onCommit, placeholder }: { id: string; label: string; value: string; onCommit: (v: string) => void; placeholder?: string }) {
@@ -98,7 +99,7 @@ const ArmColour = ({ arm, onChange }: { arm: ArmSpec; onChange: (color: string |
  * A Set gantry: the list of what it does to every ticket that goes under it, in order. An operation that has nothing
  * to set yet stays in this form only: the floor is saved with the complete ones.
  */
-function GantrySettings({ ops, onChange, onRemove }: { ops: SetOp[]; onChange: (ops: SetOp[]) => void; onRemove: () => void }) {
+function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetOp[]; toll: boolean; onChange: (ops: SetOp[]) => void; onRemove: () => void; children?: React.ReactNode }) {
   const boards = useTicketStore((s) => s.boards), list = useMemo(() => boards.map((b) => ({ id: b.id, name: b.name })), [boards]);
   const savedKey = JSON.stringify(ops);
   const [rows, setRows] = useState<SetOp[]>(ops), [adding, setAdding] = useState<AnyField>('tag');
@@ -107,7 +108,9 @@ function GantrySettings({ ops, onChange, onRemove }: { ops: SetOp[]; onChange: (
   const patch = (i: number, o: SetOp) => commit(rows.map((r, k) => (k === i ? o : r)));
   return (
     <>
-      <Hint>A gantry over a belt. A ticket goes under it without leaving the line: it stops the time it takes to write these changes on it, then goes on. No agent runs here.</Hint>
+      <Hint>{toll
+        ? 'A toll: a gantry over a belt, with an arm of its own. It sets things on every ticket that goes under it, then takes off the belt the ones it rejects. No agent runs here.'
+        : 'A gantry over a belt. A ticket goes under it without leaving the line: it stops the time it takes to write these changes on it, then goes on. No agent runs here.'}</Hint>
       <div className="text-xs font-medium text-[var(--theme-text-secondary)]">On every ticket, in this order</div>
       {rows.length === 0 && <Hint>Nothing yet: tickets go under it unchanged.</Hint>}
       {rows.map((o, i) => {
@@ -133,7 +136,8 @@ function GantrySettings({ ops, onChange, onRemove }: { ops: SetOp[]; onChange: (
         <Button size="sm" onClick={() => commit([...rows, blankOp(adding, list)])}>Add an operation</Button>
       </div>
       <Hint>A tag written key:value has one value per key: "set" replaces it, "add 1" counts on it from nothing, "remove key" clears it. An arm can then sort on that value.</Hint>
-      <div><Button size="sm" variant="ghost" onClick={onRemove} title="The belt stays, without its gantry">Remove the gantry</Button></div>
+      {children}
+      <div><Button size="sm" variant="ghost" onClick={onRemove} title="The belt stays, without it">{toll ? 'Remove the toll' : 'Remove the gantry'}</Button></div>
     </>
   );
 }
@@ -211,7 +215,19 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
           </div>
         </>
       )}
-      {m.kind === 'belt' && m.set !== undefined && <GantrySettings key={m.id} ops={m.set} onChange={(set) => onPatch({ set })} onRemove={() => onPatch({ set: undefined })} />}
+      {m.kind === 'belt' && m.set !== undefined && (
+        <GantrySettings key={m.id} ops={m.set} toll={!!m.toll} onChange={(set) => onPatch({ set })} onRemove={() => onPatch({ set: undefined, toll: undefined })}>
+          {m.toll && (
+            <>
+              <FactoryArmForm arm={{ id: m.id, kind: 'arm', x: m.x, y: m.y, w: 1, h: 1, dir: m.dir, when: m.toll.when }} view={view} layout={layout} heading="Then rejects the ticket when" any
+                onChange={(when) => onPatch({ toll: { ...m.toll!, when } })} />
+              <Select id="f-toll-out" label="Rejects to" value={String(m.toll.out)} onChange={(e) => onPatch({ toll: { ...m.toll!, out: Number(e.target.value) as Dir } })}
+                options={[(m.dir + 1) % 4, (m.dir + 3) % 4].map((d) => ({ value: String(d), label: `${SIDE[d]!} · ${view.at(m.x + DX[d]!, m.y + DY[d]!)?.name ?? (view.at(m.x + DX[d]!, m.y + DY[d]!) ? 'a machine' : 'the floor')}` }))} />
+              <Hint>Its own arm takes what is rejected off the belt, to the tile on that side. What is not rejected goes on along the belt. The operations above are applied first: with "add 1 to passes" and "passes above 3", a ticket goes round three times.</Hint>
+            </>
+          )}
+        </GantrySettings>
+      )}
       {m.kind === 'belt' && m.set === undefined && <Hint>One tile, one ticket. It pushes it to the tile it points at when that tile is free. Leads to: {view.leadsTo(m)?.name ?? 'nowhere'}.</Hint>}
       {m.kind === 'bridge' && (() => {
         const flow = bridgeFlow((px, py) => view.at(px, py), m);

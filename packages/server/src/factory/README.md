@@ -206,6 +206,29 @@ its own, and its popup edits the list.
 Only what cannot fail is here. Attaching a worktree or a pull request can fail, so it needs a station with two ways
 out: that is not built.
 
+## The toll
+
+A toll is the Set gantry with something to reject: `toll` on a belt, next to `set`. It is one component: placed
+(Build › Move › Toll), moved, copied and set up as one, in one popup.
+
+Once the gantry has done its work on a ticket, and that is written, the toll tests the ticket against its conditions.
+They are an arm's conditions, **any** of which is enough. A ticket that is rejected is taken off the belt by the
+toll's own arm, a short red arm on the edge of the tile, and put on the tile next to it on the side it was told
+(`out`, always across the belt: it turns with it). What is not rejected goes on along the belt. While the arm
+carries, the belt under the toll is free; if there is nowhere to put what it rejects, the ticket waits under the toll
+and the line waits behind it.
+
+Operations first, condition after: "add 1 to passes" then "passes is above 3" lets a ticket round a loop three times
+and takes it out the fourth. The count is a tag on the ticket, so it is cleared by a plain Set gantry ("remove key
+passes") put wherever the ticket should start again from nothing, on the way out of the zone where someone looks at
+it for instance. Nothing resets by itself.
+
+A toll with no operation is a plain filter on a belt ("reject when type is not build").
+
+The engine keeps the toll's arm on the belt's own machine (`armState`, `item2`) and tells the page about it among
+the arms, under the belt's id. A ticket in that arm is `arm` on the belt's id; after a restart it is back under the
+toll, already dealt with, and is rejected again without being counted again.
+
 ## The emergency stop
 
 One button, always in the page's header: **Emergency stop**. It is `halted` in the floor's settings

@@ -192,6 +192,24 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined });
   });
 
+  it('sets up a toll in one popup: what it sets, what it rejects, and to which side', () => {
+    const t: MachineSpec = { id: 'g', kind: 'belt', x: 20, y: 1, w: 1, h: 1, dir: 0, set: [{ field: 'tag', op: 'inc', value: 'passes' }], toll: { when: [{ field: 'tagkey', op: 'gt', values: ['passes', '3'] }], out: 1 } };
+    seed([], [dev, t]);
+    const on = open('g'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Toll');
+    expect(popup.textContent).toContain('Then rejects the ticket when');
+    expect((within(screen.getByRole('group', { name: 'Operation 1' })).getByRole('textbox') as HTMLInputElement).value).toBe('passes');
+    /* the two sides across the belt, and nothing else */
+    const out = screen.getByLabelText('Rejects to') as HTMLSelectElement;
+    expect([...out.options].map((o) => o.value)).toEqual(['1', '3']);
+    fireEvent.change(out, { target: { value: '3' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { toll: { when: [{ field: 'tagkey', op: 'gt', values: ['passes', '3'] }], out: 3 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove condition 1' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { toll: { when: [], out: 1 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the toll' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined, toll: undefined });
+  });
+
   it('closes when its machine is no longer on the floor', () => {
     seed([]);
     const on = open('gone');

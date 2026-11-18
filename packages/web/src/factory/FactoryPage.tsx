@@ -54,6 +54,7 @@ const ARROW = ['→', '↓', '←', '↑'];
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
   ['fastbelt', 'V', 'Fast belt', 'Drag to lay fast belts, twice as fast as plain ones: over belts already there, it speeds them up'],
+  ['toll', 'L', 'Toll', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds'],
   ['set', 'E', 'Set', 'A gantry over a belt: sets fields and tags on every ticket that goes under it'],
   ['teleporter', 'T', 'Teleporter', 'A jump across the floor: a departure sends its ticket to the arrival it is set to'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
@@ -286,7 +287,7 @@ function Floor() {
       const cells = clipAt(clipboard, x, y).map((m) => ({ x: m.x, y: m.y, w: m.w, h: m.h, dir: m.kind === 'belt' || m.kind === 'arm' ? m.dir : undefined }));
       return { cells, ok: canPaste(l, clipboard, x, y), text: cells.length > 1 ? `Paste ${cells.length} machines` : 'Paste' };
     }
-    if (t === 'set') return { cells: [{ x, y, w: 1, h: 1 }], ok: !!gantryAt(l, x, y, live.current.dir), text: 'Set gantry' };
+    if (t === 'set' || t === 'toll') return { cells: [{ x, y, w: 1, h: 1 }], ok: !!gantryAt(l, x, y, live.current.dir, t === 'toll'), text: t === 'toll' ? 'Toll' : 'Set gantry' };
     const spec = specFor(t, x, y, live.current.dir); if (!spec) return null;
     return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined, arm: spec.kind === 'arm' }], ok: canPlace(l, spec) };
   };
@@ -386,9 +387,9 @@ function Floor() {
         const done = clipboard ? pasteAt(st.layout, clipboard, tx, ty) : null;
         if (done) { commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null; }
         else toast.warning('No room to paste here');
-      } else if (click && live.current.tool === 'set') {
+      } else if (click && (live.current.tool === 'set' || live.current.tool === 'toll')) {
         /* on the belt that is there, or with a belt of its own */
-        const done = gantryAt(st.layout, tx, ty, live.current.dir);
+        const done = gantryAt(st.layout, tx, ty, live.current.dir, live.current.tool === 'toll');
         if (done) { commit(done.layout); setTool('select'); setSelection({ machine: done.id }); live.current.ghost = null; }
         else toast.warning('A gantry goes on a belt, or on bare floor');
       } else if (click) {

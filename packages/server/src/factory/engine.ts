@@ -4,7 +4,7 @@ import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
-import { acceptsOutcome, isConditional, matches as armMatches, normaliseConditions, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
+import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
   DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, RUNS, SET_ASIDE,
   type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
@@ -120,6 +120,12 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       }
       if (m.kind === 'belt') {
         if (m.fast === true) m.fast = true; else delete m.fast;
+        if (m.toll) {
+          /* a toll is a gantry, and its arm reaches across the belt, never along it */
+          const out = [0, 1, 2, 3].includes(m.toll.out) && (m.toll.out + m.dir) % 2 === 1 ? m.toll.out : (((m.dir + 1) % 4) as 0 | 1 | 2 | 3);
+          m.toll = { when: normaliseList(m.toll.when), out };
+          if (m.set === undefined) m.set = [];
+        } else delete m.toll;
         if (m.set !== undefined) m.set = normaliseOps(m.set);
       }
     }
@@ -276,6 +282,8 @@ export class FactoryEngine {
   private attach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) ?? null : null;
     if (!m) { if (t.machineId || t.s.phase !== 'loose') { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } return; }
+    /* what a toll's arm was carrying goes back under the toll: it was rejected, and will be again */
+    if (m.spec.kind === 'belt' && t.s.phase === 'arm') { t.s.phase = 'belt'; t.s.p = 0.5; this.dirty.add(t.ticketId); }
     if (m.spec.kind === 'belt' || m.spec.kind === 'teleporter') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m.item = t; }
     else if (m.spec.kind === 'bridge') { const lane = t.s.fx !== 0 ? 'item' : 'item2'; if (m[lane]) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m[lane] = t; }
     else if (m.spec.kind === 'arm') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else { m.item = t; m.armState = 'carry'; m.armP = t.s.p; } }
@@ -332,7 +340,7 @@ export class FactoryEngine {
   private detach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) : null;
     if (m && m.item === t) { m.item = null; if (m.spec.kind === 'arm') m.armState = 'back'; if (m.gate === 'failed') m.gate = 'idle'; }
-    if (m && m.item2 === t) m.item2 = null;
+    if (m && m.item2 === t) { m.item2 = null; if (m.spec.kind === 'belt') m.armState = 'back'; }
     t.machineId = null;
   }
 
@@ -447,15 +455,41 @@ export class FactoryEngine {
 
   private updateBelt(b: Machine, dt: number): void {
     const t = b.item, spec = b.spec as BeltSpec;
+    if (spec.toll) this.updateTollArm(b, spec.toll.out, dt);
     if (!t) return;
     /* under a gantry it stops in the middle of the tile until what the gantry changes is written on it */
     const gated = spec.set !== undefined && !this.underGantry(b, t);
     /* an arm that wants this ticket gets it: the belt holds it in the middle of the tile */
-    const held = gated || b.takers.some((a) => this.wants(a, t));
+    /* a toll then tests it: what it rejects stays in the middle too, until the toll's arm is free to take it */
+    const rejected = !!spec.toll && !gated && t.s.p <= 0.5 && spec.toll.when.some((c) => holds(c, t.info, t.s.outcome));
+    const held = gated || rejected || b.takers.some((a) => this.wants(a, t));
     t.s.p = Math.min(t.s.p + BELT_SPEED * (spec.fast ? FAST_BELT : 1) * dt, held && t.s.p <= 0.5 ? 0.5 : 1);
+    if (rejected && spec.toll) {
+      if (t.s.p < 0.5 || b.armState !== 'rest') return;
+      const dst = this.at(spec.x + DX[spec.toll.out], spec.y + DY[spec.toll.out]);
+      if (dst && !this.canTake(dst, spec.toll.out)) return;             // nowhere to put it yet: it waits, and so does the line
+      b.item = null; b.item2 = t; b.armState = 'carry'; b.armP = 0;
+      t.s.phase = 'arm'; t.s.p = 0; this.dirty.add(t.ticketId);
+      return;
+    }
     if (t.s.p < 1) return;
     const n = this.at(spec.x + DX[spec.dir], spec.y + DY[spec.dir]);
     if (this.hand(n, t, DX[spec.dir], DY[spec.dir])) b.item = null;
+  }
+
+  /** The arm of a toll: it carries what was rejected from the middle of the belt to the tile beside it, then comes back. Shorter than an arm, so quicker. */
+  private updateTollArm(b: Machine, out: 0 | 1 | 2 | 3, dt: number): void {
+    const step = dt / (this.armSwing * 0.6);
+    if (b.armState === 'carry' && b.item2) {
+      b.armP = Math.min(1, b.armP + step); b.item2.s.p = b.armP;
+      if (b.armP < 1) return;
+      const dst = this.at(b.spec.x + DX[out], b.spec.y + DY[out]);
+      if (dst && !this.canTake(dst, out)) return;
+      const t = b.item2; b.item2 = null; b.armState = 'back';
+      if (dst?.spec.kind === 'bridge') this.accept(dst, t, DX[out], DY[out], 0.5);
+      else if (dst) this.accept(dst, t);
+      else { t.machineId = null; t.s.phase = 'loose'; t.s.x = b.spec.x + DX[out]; t.s.y = b.spec.y + DY[out]; this.dirty.add(t.ticketId); }
+    } else if (b.armState !== 'rest') { b.armP -= step; if (b.armP <= 0) { b.armP = 0; b.armState = 'rest'; } }
   }
 
   /** How long a gantry waits before it tries again to write what it could not. */
@@ -878,7 +912,8 @@ export class FactoryEngine {
       notice: this.notice,
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
       tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
-      arms: this.machines.filter((m) => m.spec.kind === 'arm').map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: m.item ? m.item.ticketId : null })),
+      /* arms, and the arms of tolls, which go by their belt's id */
+      arms: this.machines.filter((m) => m.spec.kind === 'arm' || (m.spec.kind === 'belt' && !!m.spec.toll)).map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: (m.spec.kind === 'arm' ? m.item : m.item2)?.ticketId ?? null })),
       armSwing: this.armSwing, beltSpeed: BELT_SPEED, fastBelt: FAST_BELT,
       runsLastHour: this.runsLastHour(), running: this.runningCount(), serverTime: new Date(this.now()).toISOString(),
     };

@@ -69,7 +69,8 @@ describe('the command card', () => {
     const menus = [build, menuAt(build, ['move']).menu, menuAt(build, ['station']).menu, menuAt(build, ['area']).menu,
       factoryMenu(ctx({ building: true, machine: { kind: 'belt', waiting: false } })), factoryMenu(ctx({ building: true, many: 4 }))];
     for (const m of menus) {
-      expect([6, 7, 8, 9, 10].map((i) => at(m, i))).toEqual(['Undo', 'Redo', null, null, null]);
+      expect([6, 7].map((i) => at(m, i))).toEqual(['Undo', 'Redo']);
+      expect(m.slots.some((c) => c && ['Copy', 'Cut', 'Paste'].includes(c.label))).toBe(false);
       expect(m.slots[BACK_SLOT]).toMatchObject({ id: 'back', key: 'Escape' });
     }
     expect(menus.map((m) => at(m, BACK_SLOT))).toEqual(['Done', 'Previous', 'Previous', 'Previous', 'Previous', 'Previous']);

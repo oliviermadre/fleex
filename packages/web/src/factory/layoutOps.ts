@@ -1,8 +1,8 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
-import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec } from './types';
+import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec, type ArmCondition } from './types';
 import { relink } from './teleport';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'set' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'set' | 'toll' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -34,6 +34,8 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     /* a departure until its popup says otherwise: that is the one that has something to set */
     /* a gantry is carried by a belt: on bare floor it comes with its own, see `gantryAt` for a belt that is already there */
     case 'set': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, set: [] };
+    /* a toll rejects to its right, as one goes along the belt, until its popup says otherwise */
+    case 'toll': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, set: [], toll: { when: [], out: ((dir + 1) % 4) as Dir } };
     case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
     default: return null;
   }
@@ -61,12 +63,16 @@ export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout |
  * Put a Set gantry on a tile: on the belt that is there, which keeps its direction and its speed, or on bare floor
  * with a belt of its own. Null where something else stands, or where the belt already has one.
  */
-export function gantryAt(layout: FactoryLayout, x: number, y: number, dir: Dir): { layout: FactoryLayout; id: string } | null {
+export function gantryAt(layout: FactoryLayout, x: number, y: number, dir: Dir, toll = false): { layout: FactoryLayout; id: string } | null {
   const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
-  if (!there) { const spec = specFor('set', x, y, dir)!; return { layout: { ...layout, machines: [...layout.machines, spec] }, id: spec.id }; }
-  if (there.kind !== 'belt' || there.set !== undefined) return null;
-  return { layout: { ...layout, machines: layout.machines.map((m) => (m === there ? { ...there, set: [] } : m)) }, id: there.id };
+  if (!there) { const spec = specFor(toll ? 'toll' : 'set', x, y, dir)!; return { layout: { ...layout, machines: [...layout.machines, spec] }, id: spec.id }; }
+  /* a gantry becomes a toll, keeping what it sets; a toll is already both */
+  if (there.kind !== 'belt' || there.toll || (there.set !== undefined && !toll)) return null;
+  const next = { ...there, set: there.set ?? [], ...(toll ? { toll: { when: [], out: ((there.dir + 1) % 4) as Dir } } : {}) };
+  return { layout: { ...layout, machines: layout.machines.map((m) => (m === there ? next : m)) }, id: there.id };
 }
+/** A belt's fields once it points another way: the arm of a toll turns with its belt, so it still reaches across it. */
+const turned = <T extends { dir: Dir; toll?: { when: ArmCondition[]; out: Dir } }>(m: T, dir: Dir): T => ({ ...m, dir, ...(m.toll ? { toll: { ...m.toll, out: ((m.toll.out + dir - m.dir + 4) % 4) as Dir } } : {}) });
 
 /** A belt's own fields for a speed: a fast belt carries the flag, a plain one does not. */
 const speedOf = (fast: boolean): { fast?: true } => (fast ? { fast: true } : {});
@@ -78,7 +84,7 @@ export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir, f
   if (there) {
     if (there.dir === dir && !!there.fast === fast) return layout;
     const { fast: _was, ...rest } = there;
-    return { ...layout, machines: layout.machines.map((m) => (m === there ? { ...rest, dir, ...speedOf(fast) } : m)) };
+    return { ...layout, machines: layout.machines.map((m) => (m === there ? { ...turned(rest, dir), ...speedOf(fast) } : m)) };
   }
   return { ...layout, machines: [...layout.machines, { id: newId(), kind: 'belt', x, y, w: 1, h: 1, dir, ...speedOf(fast) }] };
 }
@@ -164,5 +170,5 @@ export function pasteAt(layout: FactoryLayout, clip: Clip, x: number, y: number)
 }
 
 export function rotate(layout: FactoryLayout, id: string): FactoryLayout {
-  return { ...layout, machines: layout.machines.map((m) => (m.id === id && (m.kind === 'belt' || m.kind === 'arm') ? { ...m, dir: ((m.dir + 1) % 4) as Dir } : m)) };
+  return { ...layout, machines: layout.machines.map((m) => (m.id === id && m.kind === 'belt' ? turned(m, ((m.dir + 1) % 4) as Dir) : m.id === id && m.kind === 'arm' ? { ...m, dir: ((m.dir + 1) % 4) as Dir } : m)) };
 }

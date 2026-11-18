@@ -37,11 +37,13 @@ const YELLOW = tintClasses('yellow');
 const keyLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
 
 function machineIcon(m: MachineSpec): string {
+  if (m.kind === 'belt' && m.toll) return 'toll';
   if (m.kind === 'belt' && m.set !== undefined) return 'set';
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'gate' : m.exec;
   return m.kind === 'zone' && m.inbound ? 'inbound' : m.kind;
 }
 function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) => string): string {
+  if (m.kind === 'belt' && m.toll) return `Toll · ${[...(m.set ?? []).map((o) => opText(o, boardName)), m.toll.when.length ? `rejects when ${m.toll.when.map((c) => longCondition(c, boardName)).join(', or ')}` : 'rejects nothing yet'].join(', ')}`;
   if (m.kind === 'belt' && m.set !== undefined) return `Set gantry · ${m.set.length ? m.set.map((o) => opText(o, boardName)).join(', ') : 'nothing set yet'}`;
   if (m.kind === 'belt') { const d = view.leadsTo(m); return `${m.fast ? 'Fast belt, twice as fast' : 'Belt'} · ${d ? `leads to ${d.name ?? d.kind}` : 'leads nowhere'}`; }
   if (m.kind === 'arm') { const when = conditionsOf(m); return `Arm · ${when.length ? `takes a ticket when ${when.map((c) => longCondition(c, boardName)).join(', and ')}` : 'takes anything, or what the arms next to it leave'}`; }

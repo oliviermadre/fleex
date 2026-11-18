@@ -23,6 +23,8 @@ export interface BeltSpec extends MachineBase {
   /** A fast belt: it carries a ticket across its tile in half the time. */
   fast?: boolean;
   /** A Set gantry over the tile: what it does to every ticket that goes under it (see `setOps.ts`). Present, even empty, the belt carries a gantry. */ set?: SetOp[];
+  /** A toll: once the gantry has done its work, a ticket any of these conditions holds for is taken off the belt by the toll's own arm, to the tile on the side `out`. */
+  toll?: { when: ArmCondition[]; out: Dir };
 }
 export interface ArmSpec extends MachineBase {
   kind: 'arm'; dir: Dir;
@@ -163,4 +165,6 @@ export const LABEL_COLORS = ['#a1a1aa', '#c084fc', '#60a5fa', '#2dd4bf', '#4ade8
 /** A machine that has something to set up or to show in its own popup: everything but what only carries tickets. */
 export const hasPopup = (m: { kind: MachineSpec['kind']; set?: unknown }): boolean => (m.kind !== 'belt' || m.set !== undefined) && m.kind !== 'bridge';
 /** A belt that carries a Set gantry. */
+/** A belt that carries a toll: a gantry with something to reject, and an arm for it. */
+export const isToll = (m: MachineSpec | null | undefined): m is BeltSpec & { set: SetOp[]; toll: { when: ArmCondition[]; out: Dir } } => !!m && m.kind === 'belt' && !!m.toll;
 export const isGantry = (m: MachineSpec | null | undefined): m is BeltSpec & { set: SetOp[] } => !!m && m.kind === 'belt' && m.set !== undefined;

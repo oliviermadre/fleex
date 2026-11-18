@@ -29,7 +29,7 @@ function TextValues({ id, values, onCommit, label = 'Values, comma separated', p
  * floor is saved with the complete ones, so a half-filled row never changes
  * what the arm does.
  */
-export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; view: FactoryView; layout: FactoryLayout; onChange: (when: ArmCondition[]) => void }) {
+export function FactoryArmForm({ arm, view, layout, onChange, heading = 'Takes a ticket when', any = false }: { arm: ArmSpec; view: FactoryView; layout: FactoryLayout; onChange: (when: ArmCondition[]) => void; /** What the conditions are for, when it is not an arm that takes. */ heading?: string; /** One condition is enough (a toll), where an arm needs them all. */ any?: boolean }) {
   const boards = useTicketStore((s) => s.boards);
   const saved = conditionsOf(arm), savedKey = JSON.stringify(saved);
   const [rows, setRows] = useState<ArmCondition[]>(saved);
@@ -51,8 +51,8 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">Takes a ticket when</div>
-      {rows.length === 0 && <p className="text-xs text-[var(--theme-text-muted)]">No condition: it takes anything, or what the conditions of the arms next to it leave.</p>}
+      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">{heading}</div>
+      {rows.length === 0 && <p className="text-xs text-[var(--theme-text-muted)]">{any ? 'No condition: it rejects nothing, every ticket goes on.' : 'No condition: it takes anything, or what the conditions of the arms next to it leave.'}</p>}
       {rows.map((c, i) => {
         const options = optionsFor(c.field, c.op, ctx), n = arity(c.field, c.op), label = (v: string) => options?.find((o) => o.value === v)?.label ?? v;
         const pick = (id: string, value: string, set: (v: string) => void, what: string) => (
@@ -62,7 +62,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
         return (
           <div key={i} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Condition ${i + 1}`}>
             <div className="flex items-center gap-1.5">
-              {i > 0 && <span className="flex-none text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">and</span>}
+              {i > 0 && <span className="flex-none text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{any ? 'or' : 'and'}</span>}
               <div className="min-w-0 flex-1">
                 <Select id={`f-cond-field-${i}`} aria-label="What the arm looks at" value={c.field} onChange={(e) => patch(i, blank(e.target.value as ArmField))} options={FIELDS.map((f) => ({ value: f, label: FIELD_LABEL[f] }))} />
               </div>
@@ -97,7 +97,7 @@ export function FactoryArmForm({ arm, view, layout, onChange }: { arm: ArmSpec; 
         );
       })}
       <div><Button size="sm" onClick={add}>Add a condition</Button></div>
-      {rows.length > 1 && <p className="text-xs text-[var(--theme-text-muted)]">All the conditions must hold. For "either this or that", use one arm for each.</p>}
+      {rows.length > 1 && <p className="text-xs text-[var(--theme-text-muted)]">{any ? 'One condition that holds is enough to reject the ticket.' : 'All the conditions must hold. For "either this or that", use one arm for each.'}</p>}
     </div>
   );
 }

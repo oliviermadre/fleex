@@ -892,6 +892,92 @@ describe('a Set gantry over a belt', () => {
   });
 });
 
+describe('a toll', () => {
+  /* a loop: a belt under the toll, then a zone the ticket is taken out of and put back on the belt by hand; what is rejected goes to another zone */
+  const toll = (when: { field: string; op: string; values: string[] }[], set: SetOp[] = [{ field: 'tag', op: 'inc', value: 'passes' }], out = 1): MachineSpec =>
+    ({ ...belt('toll', 1, 0), set, toll: { when, out } } as unknown as MachineSpec);
+  const floor = (t: MachineSpec) => [belt('b1', 0, 0), t, belt('b2', 2, 0), zone('on', 3, 0), zone('off', 1, 1)];
+  const over3 = [{ field: 'tagkey', op: 'gt', values: ['passes', '3'] }];
+  const round = async () => { await engine.move('a', { machineId: 'b1' }); await run(3); return where('a'); };
+
+  it('counts, then rejects: with "passes +1" and "passes > 3" a ticket goes round three times and is taken out the fourth', async () => {
+    await boot(floor(toll(over3)));
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('on:zone');
+    expect([await round(), await round()]).toEqual(['on:zone', 'on:zone']);
+    expect(await round()).toBe('off:zone');                             // the operations first, then the condition
+    expect(engine.snapshot().tickets.find((t) => t.ticketId === 'a')!.info!.tags).toEqual(['passes:4']);
+  });
+
+  it('starts again from nothing once a Set gantry has cleared the count', async () => {
+    await boot([...floor(toll(over3)), { ...belt('reset', 6, 0), set: [{ field: 'tag', op: 'clear', value: 'passes' }] } as MachineSpec, zone('back', 7, 0)]);
+    infos.set('a', info('a', { tags: ['passes:3'] }));
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('off:zone');
+    await engine.move('a', { machineId: 'reset' }); await run(2);
+    expect(where('a')).toBe('back:zone');
+    expect(await round()).toBe('on:zone');
+  });
+
+  it('rejects on anything an arm can sort on, and when any of its conditions holds', async () => {
+    await boot(floor(toll([{ field: 'type', op: 'is_not', values: ['build'] }, { field: 'priority', op: 'is', values: ['urgent'] }], [])));
+    infos.set('b', info('b', { type: 'fix' })); infos.set('c', info('c', { priority: 'urgent' }));
+    for (const id of ['a', 'b', 'c']) { await engine.transfer(id, { machineId: 'b1' }); await run(3); }
+    expect([where('a'), where('b'), where('c')]).toEqual(['on:zone', 'off:zone', 'off:zone']);
+  });
+
+  it('carries what it rejects in its own arm, which the page is told about under the belt\'s id', async () => {
+    await boot(floor(toll([{ field: 'type', op: 'is', values: ['build'] }], [])), 30, 12, { armSwing: 1, stationRestMs: 0, teleportRestMs: 0 });
+    await engine.transfer('a', { machineId: 'toll' });
+    await run(0.3);
+    expect(where('a')).toBe('toll:arm');
+    expect(engine.snapshot().arms.find((x) => x.id === 'toll')).toMatchObject({ state: 'carry', carrying: 'a' });
+    /* the belt under it is free meanwhile: the line does not wait for the arm */
+    await engine.transfer('b', { machineId: 'b1' });
+    await run(1);
+    expect(where('a')).toBe('off:zone');
+    expect(engine.snapshot().arms.find((x) => x.id === 'toll')!.carrying).not.toBe('a');     // it may already be on the next one
+  });
+
+  it('holds the line when there is nowhere to put what it rejects', async () => {
+    await boot([belt('b1', 0, 0), toll([{ field: 'type', op: 'is', values: ['build'] }], []), belt('b2', 2, 0), belt('side', 1, 1, 1)]);
+    await engine.transfer('a', { machineId: 'side' });                   // the tile it rejects to is taken, and leads nowhere
+    await engine.transfer('b', { machineId: 'b1' });
+    await run(3);
+    expect(where('b')).toBe('toll:belt');
+    await engine.giveBack('a');
+    await run(2);
+    expect(where('b')).toBe('side:belt');
+  });
+
+  it('comes back under the toll after a restart, to be rejected again without being counted again', async () => {
+    const f = floor(toll(over3));
+    await boot(f, 30, 12, { armSwing: 5, stationRestMs: 0, teleportRestMs: 0 });
+    infos.set('a', info('a', { tags: ['passes:3'] }));
+    await engine.transfer('a', { machineId: 'toll' });
+    await run(0.5);
+    expect(where('a')).toBe('toll:arm');
+    await engine.flush();
+    await boot(f);
+    expect(where('a')).toBe('toll:belt');
+    await run(3);
+    expect(where('a')).toBe('off:zone');
+    expect(changes).toEqual([['a', { fields: { tags: ['passes:4'] } }]]);
+  });
+
+  it('is a gantry whose arm reaches across the belt: a side along it is put right', () => {
+    const out = normaliseLayout({ w: 9, h: 9, machines: [
+      { ...belt('t', 0, 0, 0), toll: { when: [{ field: 'tagkey', op: 'gt', values: ['passes', '3'] }, { field: 'nope', op: 'is', values: ['x'] }], out: 0 } } as unknown as MachineSpec,
+      { ...belt('u', 2, 0, 1), set: [], toll: { when: [], out: 2 } } as unknown as MachineSpec,
+    ] }).machines as (MachineSpec & { set?: SetOp[]; toll?: { when: unknown[]; out: number } })[];
+    expect(out[0]!.toll).toEqual({ when: [{ field: 'tagkey', op: 'gt', values: ['passes', '3'] }], out: 1 });
+    expect(out[0]!.set).toEqual([]);
+    expect(out[1]!.toll).toEqual({ when: [], out: 2 });
+  });
+});
+
 describe('the emergency stop', () => {
   it('stops everything where it is, cuts the runs in progress, and carries on from there when it is lifted', async () => {
     await boot([belt('b1', 0, 0), belt('b2', 1, 0), belt('b3', 2, 0), station('s', 5, 0, { cap: 2 }), arm('out', 8, 1, 0), zone('z', 9, 0)]);

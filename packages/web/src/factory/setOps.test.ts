@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blankOp, choicesFor, incompleteOp, opText, plateLines, SET_FIELDS, type SetOp } from './setOps';
-import { gantryAt, specFor } from './layoutOps';
-import { hasPopup, isGantry, type FactoryLayout, type MachineSpec } from './types';
+import { gantryAt, rotate, setBelt, specFor } from './layoutOps';
+import { hasPopup, isGantry, isToll, type FactoryLayout, type MachineSpec } from './types';
 
 const boards = [{ id: 'b1', name: 'Core product' }, { id: 'b2', name: 'Bugfix' }];
 const tag = (op: 'add' | 'remove' | 'set' | 'inc' | 'clear', value: string): SetOp => ({ field: 'tag', op, value });
@@ -63,5 +63,30 @@ describe('putting a gantry on the floor', () => {
     expect(hasPopup(belt)).toBe(false); expect(isGantry(belt)).toBe(false);
     const g = { ...belt, set: [] } as MachineSpec;
     expect(hasPopup(g)).toBe(true); expect(isGantry(g)).toBe(true);
+  });
+});
+
+describe('putting a toll on the floor', () => {
+  const belt: MachineSpec = { id: 'b', kind: 'belt', x: 3, y: 3, w: 1, h: 1, dir: 0 };
+  const layout: FactoryLayout = { w: 20, h: 20, machines: [belt] };
+  const tollOf = (l: FactoryLayout) => l.machines.find((m) => m.id === 'b') as MachineSpec & { toll?: { when: unknown[]; out: number }; set?: unknown[] };
+
+  it('is a gantry with something to reject, to the right of the way the belt runs until said otherwise', () => {
+    const done = gantryAt(layout, 3, 3, 2, true)!;
+    expect(tollOf(done.layout)).toMatchObject({ dir: 0, set: [], toll: { when: [], out: 1 } });
+    expect(isToll(tollOf(done.layout))).toBe(true); expect(isGantry(tollOf(done.layout))).toBe(true);
+    expect(specFor('toll', 0, 0, 1)).toMatchObject({ kind: 'belt', dir: 1, set: [], toll: { out: 2 } });
+    expect(gantryAt(done.layout, 3, 3, 0, true)).toBeNull();                 // it is one already
+  });
+  it('a gantry becomes a toll and keeps what it sets', () => {
+    const g = gantryAt(layout, 3, 3, 0)!.layout, set = [{ field: 'priority', value: 'high' }];
+    const withOps = { ...g, machines: g.machines.map((m) => ({ ...m, set })) } as FactoryLayout;
+    expect(tollOf(gantryAt(withOps, 3, 3, 0, true)!.layout)).toMatchObject({ set, toll: { out: 1 } });
+  });
+  it('its arm turns with its belt, so it still reaches across it', () => {
+    const t = gantryAt(layout, 3, 3, 0, true)!.layout;
+    expect(tollOf(rotate(t, 'b'))).toMatchObject({ dir: 1, toll: { out: 2 } });
+    expect(tollOf(setBelt(t, 3, 3, 3))).toMatchObject({ dir: 3, toll: { out: 0 } });
+    expect(tollOf(rotate(layout, 'b')).toll).toBeUndefined();                // a plain belt just turns
   });
 });

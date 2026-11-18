@@ -31,6 +31,13 @@ export interface BeltSpec extends MachineBase {
    * carries a gantry.
    */
   set?: SetOp[];
+  /**
+   * A toll: the gantry with something to reject. Once the gantry has done its work on a ticket, the ticket is tested
+   * against these conditions; if any of them holds, the toll's own arm takes it off the belt and puts it on the tile
+   * next to it, on the side `out` (across the belt). Otherwise it goes on. So "add 1 to passes, reject when passes
+   * is above 3" lets a ticket round a loop three times.
+   */
+  toll?: { when: ArmCondition[]; out: Dir };
 }
 /** Takes from the tile behind it, drops on the tile in front; with conditions, only a ticket that meets them all. */
 export interface ArmSpec extends MachineBase {

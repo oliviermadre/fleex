@@ -5,7 +5,7 @@
  */
 import type { LensLayer } from './lens';
 import { layoutNames, tie, type NamedTicket } from './nameTags';
-import { armColor, armTag, isConditional } from './armRules';
+import { armColor, armTag, isConditional, shortCondition } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
@@ -177,6 +177,8 @@ export class FactoryView {
   private inside = new Map<string, FactoryTicket[]>();
   /** Where an arm points into an arrival, at this frame: a no-entry sign goes there, over the arm. */
   private noEntry: { x: number; y: number }[] = [];
+  /** Belt id → the ticket its toll's arm is carrying, at this frame. */
+  private tollCarry = new Map<string, FactoryTicket>();
   /** Exit id → tickets seen leaving by it since the counts were last given. */
   private passed = new Map<string, number>();
   private countsFrom: unknown = null;
@@ -534,9 +536,12 @@ export class FactoryView {
      * tile before the one the server has it on.
      */
     const track = this.track(st), onTrack = new Map<string, Riding[]>(), riding = new Set<string>();
+    this.tollCarry.clear();
     for (const t of st.tickets) {
       const m = t.machineId ? this.byId.get(t.machineId) : null;
       if (!m || (m.kind !== 'belt' && m.kind !== 'bridge')) continue;
+      /* what a toll rejected is in its arm, no longer on its belt */
+      if (t.phase === 'arm') { this.tollCarry.set(m.id, t); continue; }
       const told: TrackPos = { id: m.id, p: t.p, fx: t.fx, fy: t.fy };
       let pos = follow(track, this.drawnOn.get(t.ticketId), told, moving);
       const tile = this.byId.get(pos.id);
@@ -571,6 +576,7 @@ export class FactoryView {
       this.ticket(t, t.x + 0.5, t.y + 0.5, 0.5, st, '', dtReal);
     }
     for (const m of L.machines) if (m.kind === 'arm') this.arm(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
+    for (const b of belts) if (b.toll) this.tollArm(b, this.tollCarry.get(b.id) ?? null, st, pal, dtReal);
     this.departures(pal, dtReal);
     this.portLinks(st, pal);
 
@@ -779,9 +785,42 @@ export class FactoryView {
     box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
     const asked = st.selMachine === b.id || st.hoverMachine === b.id;
     if (this.cam.z < 13 && !asked) return;
-    const ops = b.set ?? [], lines = ops.length ? plateLines(ops.map((o) => opText(o, st.boardName)), asked ? 12 : 4) : ['nothing set yet'];
-    const side = this.freeSide(b.x, b.y, across);
-    this.boards.push({ lines, inks: lines.map((l) => (ops.length && !l.endsWith(' more') ? col : pal.text3)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
+    const ops = b.set ?? [], rejects = (b.toll?.when ?? []).map((c) => `reject: ${shortCondition(c, st.boardName)}`);
+    const set = ops.length ? plateLines(ops.map((o) => opText(o, st.boardName)), asked ? 12 : 4) : b.toll ? [] : ['nothing set yet'];
+    /* a toll says what it rejects under what it sets, in the colour of its arm */
+    const lines = [...set, ...(b.toll ? (rejects.length ? plateLines(rejects, asked ? 8 : 3) : ['rejects nothing yet']) : [])];
+    /* the plate keeps clear of the side the toll's arm works on */
+    let side = this.freeSide(b.x, b.y, across);
+    if (b.toll && side === (['right', 'below', 'left', 'above'] as const)[b.toll.out]) side = (['left', 'above', 'right', 'below'] as const)[b.toll.out];
+    this.boards.push({ lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= set.length ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
+  }
+
+  /**
+   * The arm of a toll: a short red arm on the edge of its belt, on the side it rejects to. It takes what the toll
+   * rejects from the middle of the belt to the middle of the next tile, swinging by the way the belt runs, so it
+   * does not cross what is coming.
+   */
+  private tollArm(b: BeltSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, out = b.toll!.out, ox = DX[out], oy = DY[out], ex = b.x + 0.5 + ox * 0.5, ey = b.y + 0.5 + oy * 0.5;
+    const swing = (st.armSwing || 1.1) * 0.6, p = armShown(this.armShown.get(b.id), armDue(st.arms.get(b.id), st.armAge ?? 0, swing), dt, swing);
+    this.armShown.set(b.id, p);
+    const way = oy === DX[b.dir] && -ox === DY[b.dir] ? 1 : -1, th = Math.atan2(-oy, -ox) + way * Math.PI * easeSwing(p), hx = ex + Math.cos(th) * 0.5, hy = ey + Math.sin(th) * 0.5;
+    const col = pal.danger, steel = mix(pal.body, pal.text2, 0.38), link = (dx: number, dy: number) => { ctx.beginPath(); ctx.moveTo(ex + dx, ey + dy); ctx.lineTo(hx + dx, hy + dy); ctx.stroke(); };
+    ctx.lineCap = 'round';
+    if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.22; link(0.05, 0.08); }
+    const hand = this.handAt.get(b.id);
+    this.handAt.set(b.id, { x: hx, y: hy });
+    if (carried) {
+      const cur = this.shown.get(carried.ticketId);
+      if (cur && hand) this.shown.set(carried.ticketId, { x: cur.x + hx - hand.x, y: cur.y + hy - hand.y });
+      ctx.lineCap = 'butt'; this.ticket(carried, hx, hy, 0.4, st, '', dt); ctx.lineCap = 'round';
+    }
+    ctx.strokeStyle = steel; ctx.lineWidth = 0.2; link(0, 0);
+    ctx.strokeStyle = col; ctx.lineWidth = 0.06; link(0, 0);
+    ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.arc(hx, hy, 0.15, 0, 6.3); ctx.fillStyle = 'rgba(24,24,27,0.3)'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.045; ctx.stroke();
+    ctx.beginPath(); ctx.arc(ex, ey, 0.17, 0, 6.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.055; ctx.stroke();
+    ctx.beginPath(); ctx.arc(ex, ey, 0.06, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
   }
 
   /** The belts and bridges as a track a ticket is drawn along: which tile follows which, and how fast each carries. */
