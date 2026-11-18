@@ -6,6 +6,11 @@ import { Button } from '../components/ui/Button';
 import { tintClasses, type TintHue } from '../lib/tints';
 import { SLOTS, type Command, type Menu, type Tone } from './menu';
 import { useKeyLabels } from './keys';
+import { HUD } from './hudShape';
+import { FactoryAvatar, type AvatarOf } from './FactoryAvatar';
+import { Clock, Groups, Units, type Unit } from './FactoryHudBits';
+import { machinesSel, ticketsSel } from './pick';
+import { machineKind } from './FactoryMachinePopup';
 import { cn } from '../lib/cn';
 import { FIcon } from './icons';
 import { useTicketStore } from '../stores/ticketStore';
@@ -98,6 +103,19 @@ function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: S
 /** The colour of each family of commands. `null`: the app's own neutral, accent or outline. */
 const HUE: Record<Tone, TintHue | null> = { go: null, move: 'blue', station: 'purple', area: 'teal', plan: 'yellow', ticket: 'indigo', danger: 'red', back: null, plain: null };
 
+/**
+ * A side block of the console: taller than the middle, its inner top corner cut. The line along its edge follows
+ * the cut: it is the block itself, in the border's colour, under a copy of it one pixel smaller.
+ */
+function Side({ side, children }: { side: 'left' | 'right'; children: React.ReactNode }) {
+  const c = HUD.cut, clip = side === 'left' ? `polygon(0 0, calc(100% - ${c}px) 0, 100% ${c}px, 100% 100%, 0 100%)` : `polygon(${c}px 0, 100% 0, 100% 100%, 0 100%, 0 ${c}px)`;
+  return (
+    <div className="absolute bottom-0 bg-[var(--theme-border-input)]" style={{ [side]: 0, width: HUD[side], height: HUD.mid + HUD.step, clipPath: clip }}>
+      <div className="absolute bg-[var(--theme-bg-surface)] p-2" style={{ top: 1, bottom: 0, left: side === 'right' ? 1 : 0, right: side === 'left' ? 1 : 0, clipPath: clip }}>{children}</div>
+    </div>
+  );
+}
+
 /** One command of the card: the key of its place, a large icon, its label whole. */
 function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: Command) => void }) {
   const tone = c.tone ?? 'plain', hue = HUE[tone], t = hue ? tintClasses(hue) : null;
@@ -109,7 +127,7 @@ function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: C
   const shortcut = c.also ? `${slotKey}, ${alsoLabel(c.also)}` : slotKey;
   return (
     <button type="button" disabled={c.disabled} onClick={() => onRun(c)} aria-pressed={c.active} aria-haspopup={c.menu ? 'menu' : undefined} title={`${c.title ?? c.label}${shortcut ? ` (${shortcut})` : ''}`}
-      className={cn('relative flex h-[64px] w-[72px] flex-col items-center justify-end gap-[3px] rounded-lg border px-0.5 pb-[5px] transition-colors', look,
+      className={cn('relative flex h-[62px] w-[68px] flex-col items-center justify-end gap-[3px] rounded-lg border px-0.5 pb-[5px] transition-colors', look,
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:pointer-events-none disabled:opacity-35')}>
       <kbd className="absolute left-1.5 top-1 font-mono text-[9.5px] font-bold opacity-75">{slotKey}{c.also === 'Escape' ? ' Esc' : ''}</kbd>
       {c.menu && <span className="absolute right-1.5 top-0.5 text-[11px] font-bold opacity-75" aria-hidden="true">›</span>}
@@ -120,7 +138,7 @@ function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: C
   );
 }
 
-export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow, hidden = false, onHide }: {
+export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow, hidden = false, onHide, building = false }: {
   view: FactoryView | null; snapshot: FactorySnapshot | null; layout: FactoryLayout | null; selection: Selection; onSelect: (s: Selection) => void;
   /** The menu shown in the command card, the menus that lead to it, and what running one of its commands does. */
   menu: Menu; trail: string[]; onRun: (c: Command) => void;
@@ -130,6 +148,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   show: Show; onShow: (key: keyof Show) => void;
   /** The console is put away to give the floor the whole page; its handle stays, and the card's keys still work. */
   hidden?: boolean; onHide?: () => void;
+  /** Build mode: with nothing selected, the portrait is the work site and not the factory. */
+  building?: boolean;
 }) {
   const boards = useTicketStore((s) => s.boards), keys = useKeyLabels();
   const stats = useFactoryStore((s) => s.stats), period = periodLabel(useFactoryStore((s) => s.statsDays)).toLowerCase();
@@ -150,83 +170,86 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   const inside = machine ? tickets.filter((t) => t.machineId === machine.id).sort((a, b) => a.since.localeCompare(b.since)) : [];
   const waiting = tickets.filter((t) => needsHuman(t));
   const many = selection && 'machines' in selection ? selection.machines.length : 0;
-  const groupName = (g: Selection): string => {
-    if (!g) return '';
-    if ('machines' in g) return `${g.machines.length} machines`;
-    if ('ticket' in g) { const t = tickets.find((q) => q.ticketId === g.ticket); return t ? `#${t.info?.displayId ?? '?'}` : 'gone'; }
-    if ('tickets' in g) return `${g.tickets.length} tickets`;
-    const m = layout?.machines.find((q) => q.id === g.machine); return m ? m.name || m.kind : 'gone';
-  };
   /* several tickets selected together: those of them still on the floor, longest there first */
   const picked = selection && 'tickets' in selection ? ((ids) => tickets.filter((t) => ids.has(t.ticketId)).sort((a, b) => a.since.localeCompare(b.since)))(new Set(selection.tickets)) : null;
   const box = 'rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]';
 
-  /* the handle sits on the console's top edge, in the middle; with the console hidden it is all that is left, at the foot of the floor */
+  const pickedMachines = selection && 'machines' in selection && layout ? selection.machines.map((id) => layout.machines.find((m) => m.id === id)).filter((m): m is MachineSpec => !!m) : [];
+  const ticketUnit = (t: FactoryTicket): Unit => ({ id: t.ticketId, face: <TicketToken info={t.info ? { ...t.info, favorite: false } : null} size={22} />, name: `#${t.info?.displayId ?? '?'} ${t.info?.title ?? ''}`.trim(), sub: `${view?.machine(t.machineId)?.name ?? ''} ${PHASE[t.phase]}`.trim(), mark: String(t.info?.displayId ?? ''), warn: !!needsHuman(t) });
+  const machineUnit = (m: MachineSpec): Unit => ({ id: m.id, face: <FIcon name={machineIcon(m)} size={20} />, name: ('name' in m && m.name) || (m.kind === 'label' ? m.text : machineKind(m)), sub: machineKind(m) });
+  const avatar: AvatarOf = ticket ? { kind: 'ticket', info: ticket.info } : machine ? { kind: 'machine', machine } : picked ? { kind: 'many', count: picked.length, of: 'tickets' } : many ? { kind: 'many', count: many, of: 'machines' } : building ? { kind: 'build' } : { kind: 'floor' };
+
+  /* the handle: at the end of the notch over the middle; with the console hidden it is all that is left, at the foot of the floor */
   const handle = onHide && (
     <button type="button" onClick={onHide} aria-expanded={!hidden} aria-label={hidden ? 'Show the console' : 'Hide the console'} title={hidden ? 'Bring the console back (U)' : 'Hide the console and give the floor the whole page (U). The keys of the command card still work.'}
-      className="absolute bottom-full left-1/2 z-10 flex h-5 -translate-x-1/2 items-center gap-1.5 rounded-t-md border border-b-0 border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]">
+      className={cn('flex h-5 flex-none items-center gap-1 rounded-t-md border border-b-0 border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]', hidden && 'absolute bottom-full left-1/2 z-10 -translate-x-1/2')}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={hidden ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} /></svg>
-      {hidden ? 'Console' : 'Hide'}
+      {hidden && 'Console'}
       <kbd className="font-mono text-[var(--theme-text-faint)]">U</kbd>
     </button>
   );
   if (hidden) return <div className="relative h-0 flex-shrink-0" aria-label="Factory console">{handle}</div>;
 
+  /*
+   * The console is not a straight bar: the block of the minimap and the block of the command card stand taller than
+   * the middle, their inner top corners cut, and the floor shows in the notch between them (`hudShape.ts`). The page
+   * gives the console the height of its middle; the two side blocks rise over the foot of the floor.
+   */
   return (
-    <div className="relative flex h-[254px] flex-shrink-0 gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-2" aria-label="Factory console">
-      {handle}
-      {/* minimap */}
-      <div className={cn(box, 'flex flex-none gap-1.5 p-1.5')}>
-        <div className="flex h-full w-[250px] flex-col gap-1.5">
-          {/* what the floor shows on top of the machines: each one on or off, black or yellow */}
-          <div className="flex flex-none gap-1" role="group" aria-label="Show on the floor">
-            {TOGGLES.map((t) => (
-              <button key={t.key} type="button" aria-pressed={show[t.key]} aria-label={t.label} title={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`} onClick={() => onShow(t.key)}
-                className={cn('grid h-[26px] w-[30px] place-items-center rounded-md border transition-colors',
-                  show[t.key] ? cn(YELLOW.solid, YELLOW.onSolid, 'border-transparent') : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>
-                <FIcon name={t.icon} size={16} />
-              </button>
-            ))}
+    <div className="relative flex-shrink-0" style={{ height: HUD.mid }} aria-label="Factory console">
+      <Side side="left">
+        <div className="flex h-full flex-col gap-1.5">
+          <div className="flex flex-none items-center gap-2" style={{ paddingRight: HUD.cut - 6 }}>
+            <span className="h-1.5 w-1.5 flex-none rounded-full bg-[var(--theme-success)]" aria-hidden="true" /><Clock />
+            <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">local time</span>
           </div>
-          <canvas ref={miniRef} className="min-h-0 w-full flex-1 cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
-          onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
+          <div className="flex min-h-0 flex-1 gap-1.5">
+            <div className="flex h-full min-w-0 flex-1 flex-col gap-1.5">
+              {/* what the floor shows on top of the machines: each one on or off, black or yellow */}
+              <div className="flex flex-none gap-1" role="group" aria-label="Show on the floor">
+                {TOGGLES.map((t) => (
+                  <button key={t.key} type="button" aria-pressed={show[t.key]} aria-label={t.label} title={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`} onClick={() => onShow(t.key)}
+                    className={cn('grid h-[26px] w-[30px] place-items-center rounded-md border transition-colors',
+                      show[t.key] ? cn(YELLOW.solid, YELLOW.onSolid, 'border-transparent') : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>
+                    <FIcon name={t.icon} size={16} />
+                  </button>
+                ))}
+              </div>
+              <canvas ref={miniRef} className="min-h-0 w-full flex-1 cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
+              onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
+            </div>
+            <div className="flex w-[104px] flex-col justify-between gap-1">
+              {/* one layer at a time: a list, not commands */}
+              <div className="flex flex-col rounded-md border border-[var(--theme-border-input)] p-0.5" role="radiogroup" aria-label="Layer">
+                {LAYERS.map(([l, label, what]) => (
+                  <button key={l} type="button" role="radio" aria-checked={lens === l} title={what} onClick={() => onLens(l)}
+                    className={cn('rounded px-2 py-[2.5px] text-left text-[11px] font-medium', lens === l ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>{label}</button>
+                ))}
+              </div>
+              <div className="flex rounded-md border border-[var(--theme-border-input)]" role="group" aria-label="Zoom">
+                <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1 / 1.4)}>−</button>
+                <button type="button" className="flex-1 py-0.5 text-xs text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Fit the floor" title="Fit the floor (F)" onClick={onFit}>⤢</button>
+                <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.4)}>+</button>
+              </div>
+            </div>
+          </div>
+
         </div>
-        <div className="flex w-[104px] flex-col justify-between gap-1">
-          {/* one layer at a time: a list, not commands */}
-          <div className="flex flex-col rounded-md border border-[var(--theme-border-input)] p-0.5" role="radiogroup" aria-label="Layer">
-            {LAYERS.map(([l, label, what]) => (
-              <button key={l} type="button" role="radio" aria-checked={lens === l} title={what} onClick={() => onLens(l)}
-                className={cn('rounded px-2 py-[2.5px] text-left text-[11px] font-medium', lens === l ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>{label}</button>
-            ))}
-          </div>
-          <div className="flex rounded-md border border-[var(--theme-border-input)]" role="group" aria-label="Zoom">
-            <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1 / 1.4)}>−</button>
-            <button type="button" className="flex-1 py-0.5 text-xs text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Fit the floor" title="Fit the floor (F)" onClick={onFit}>⤢</button>
-            <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.4)}>+</button>
-          </div>
-        </div>
+      </Side>
+
+      {/* in the notch: the saved selections at their ten places, and the handle that puts the console away */}
+      <div className="absolute bottom-full z-10 flex items-end gap-2" style={{ left: HUD.left + 8, right: HUD.right + 8 }}>
+        <Groups groups={groups} selection={selection} tickets={tickets} layout={layout} onGroup={onGroup} />
+        {handle}
       </div>
 
-      {/* selection */}
-      <div className={cn(box, 'flex min-w-0 flex-1 flex-col gap-1.5 p-2')}>
-        <div className="flex flex-none gap-1.5 overflow-hidden" aria-label="Saved selections">
-          {groups.map((g, i) => (
-            <button key={i} type="button" onClick={(e) => onGroup(i, e.shiftKey || !g)} title={g ? `${(i + 1) % 10}: recall · Shift+${(i + 1) % 10}: replace` : `Shift+${(i + 1) % 10}: save the selection here`}
-              className={cn('flex h-6 flex-none items-center gap-1.5 rounded-md border px-1.5 text-[11px]', g ? 'border-[var(--theme-border-input)] text-[var(--theme-text-primary)]' : 'border-dashed border-[var(--theme-border)] text-[var(--theme-text-faint)]',
-                g && JSON.stringify(g) === JSON.stringify(selection) && 'border-[var(--theme-text-primary)]')}>
-              <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">{(i + 1) % 10}</span>{g && <span className="max-w-[72px] truncate">{groupName(g)}</span>}
-            </button>
-          ))}
-        </div>
-        <div className="flex min-h-0 flex-1 gap-2.5 border-t border-[var(--theme-border)] pt-2">
-          <div className={cn('grid h-[58px] w-[58px] flex-none place-items-center rounded-lg border-2 bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)]',
-            ticket && needsHuman(ticket) ? 'border-[var(--theme-warning)]' : 'border-[var(--theme-border-input)]')}>
-            {ticket ? <TicketToken info={ticket.info} size={38} /> : <FIcon name={machine ? machineIcon(machine) : picked ? 'stack' : 'floor'} size={30} />}
-          </div>
+      {/* the middle: what is selected, and its portrait against the command card */}
+      <div className="@container absolute inset-y-0 flex gap-2 border-t border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-2" style={{ left: HUD.left, right: HUD.right }}>
+        <div className={cn(box, 'flex min-w-0 flex-1 p-2')}>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
             {ticket ? (
               <>
-                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-xs font-normal text-[var(--theme-text-muted)]">#{ticket.info?.displayId ?? '?'}</span>{ticket.info?.title ?? ticket.ticketId}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-xs font-normal text-[var(--theme-text-muted)]">#{ticket.info?.displayId ?? '?'}</span>{ticket.info?.title ?? ticket.ticketId}</div>
                 <div className={cn('truncate text-xs', needsHuman(ticket) ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-secondary)]')}>{view?.machine(ticket.machineId)?.name ?? ''} {PHASE[ticket.phase]}{ticket.note ? ` · ${ticket.note}` : ''}</div>
                 <TicketGlyphs info={ticket.info} words className="text-[11px] text-[var(--theme-text-secondary)]" />
                 <div className="flex flex-wrap gap-x-3">
@@ -240,7 +263,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
               </>
             ) : machine && view ? (
               <>
-                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
                 <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view, (id) => boards.find((b) => b.id === id)?.name ?? 'a board')}</div>
                 {(machine.kind === 'station' || machine.kind === 'zone') && (
                   <div className="flex flex-wrap gap-x-3" aria-label="Settings">
@@ -258,20 +281,19 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
               </>
             ) : picked ? (
               <>
-                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{picked.length} tickets selected</div>
-                <div className="text-xs text-[var(--theme-text-secondary)]">What the commands do, they do to those of them it applies to. Drag one of them into a zone, a station or an exit to move them all. Click one to select it alone.</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{picked.length} tickets selected</div>
                 <div className="flex flex-wrap gap-x-3">
                   <Stat label="waiting for you" value={picked.filter((t) => needsHuman(t)).length} tone={picked.some((t) => needsHuman(t)) ? 'warning' : undefined} />
                   <Stat label="running" value={picked.filter((t) => t.phase === 'running').length} />
                   <Stat label="in a zone" value={picked.filter((t) => t.phase === 'zone').length} />
                   <Stat label="on their way" value={picked.filter((t) => t.phase === 'belt' || t.phase === 'arm').length} />
                 </div>
-                <Wire tickets={picked} onSelect={onSelect} />
+                <Units units={picked.map(ticketUnit)} onPick={(id, shift) => onSelect(shift ? ticketsSel(picked.map((t) => t.ticketId).filter((q) => q !== id)) : { ticket: id })} />
               </>
             ) : (
               <>
-                <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
-                <div className="text-xs text-[var(--theme-text-secondary)]">{many ? 'Drag one of them to move them all. Delete removes them.' : hint}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{many ? `${many} machines selected` : title}</div>
+                <div className="line-clamp-2 flex-none text-xs text-[var(--theme-text-secondary)]" title={many ? undefined : hint}>{many ? 'Drag one of them to move them all. Delete removes them. Click one below to keep only it.' : hint}</div>
                 <div className="flex flex-wrap gap-x-3"><Stat label="tickets" value={tickets.length} /><Stat label="running" value={`${snapshot?.running ?? 0}/${snapshot?.floor.settings.maxConcurrentRuns ?? 0}`} /><Stat label="runs this hour" value={`${snapshot?.runsLastHour ?? 0}/${snapshot?.floor.settings.maxRunsPerHour ?? 0}`} /><Stat label="waiting for you" value={waiting.length} tone={waiting.length ? 'warning' : undefined} /></div>
                 {!many && stats && (
                   <div className="flex flex-wrap gap-x-3" aria-label="What the floor did">
@@ -280,27 +302,30 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
                     <Stat label="failed" value={stats.totals.failed} tone={stats.totals.failed ? 'danger' : undefined} /><Stat label="cost" value={money(stats.totals.costUsd)} /><Stat label="human wait" value={span(stats.totals.humanMs)} />
                   </div>
                 )}
-                <Wire tickets={waiting} onSelect={onSelect} />
+                {many ? <Units units={pickedMachines.map(machineUnit)} onPick={(id, shift) => onSelect(shift ? machinesSel(pickedMachines.map((m) => m.id).filter((q) => q !== id)) : { machine: id })} /> : <Wire tickets={waiting} onSelect={onSelect} />}
               </>
             )}
           </div>
         </div>
+        <FactoryAvatar of={avatar} className="hidden w-[132px] flex-none @[430px]:block" />
       </div>
 
-      {/* command card: five by three, one menu at a time; a command's key is its place on the keyboard */}
-      <div className={cn(box, 'flex flex-none flex-col gap-1 p-1.5')}>
-        <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">
-          <span className="min-w-0 flex-1 truncate" aria-label="Menu">{trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}</span>
-          <button type="button" onClick={keys.flip} aria-label={`Keyboard: ${keys.name}`} title={`The keys of the card follow your keyboard, read as ${keys.name}${keys.forced ? ' because you said so' : ''}. Click ${keys.forced ? 'to let Fleex find out again' : 'if it is the other one'}.`}
-            className={cn('flex-none rounded px-1 font-mono text-[9px] hover:text-[var(--theme-text-primary)]', keys.forced && 'text-[var(--theme-text-secondary)] underline')}>{keys.name}</button>
+      <Side side="right">
+        {/* command card: five by three, one menu at a time; a command's key is its place on the keyboard */}
+        <div className="flex h-full flex-col justify-end gap-1">
+          <div className="flex items-baseline text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]" style={{ paddingLeft: HUD.cut - 6 }}>
+            <span className="min-w-0 flex-1 truncate" aria-label="Menu">{trail.map((t, i) => <span key={i} className={i === trail.length - 1 ? 'font-semibold text-[var(--theme-text-primary)]' : undefined}>{i > 0 && <span className="mx-1" aria-hidden="true">›</span>}{t}</span>)}</span>
+            <button type="button" onClick={keys.flip} aria-label={`Keyboard: ${keys.name}`} title={`The keys of the card follow your keyboard, read as ${keys.name}${keys.forced ? ' because you said so' : ''}. Click ${keys.forced ? 'to let Fleex find out again' : 'if it is the other one'}.`}
+              className={cn('flex-none rounded px-1 font-mono text-[9px] hover:text-[var(--theme-text-primary)]', keys.forced && 'text-[var(--theme-text-secondary)] underline')}>{keys.name}</button>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Factory commands">
+            {Array.from({ length: SLOTS }, (_, i) => {
+              const c = menu.slots[i];
+              return c ? <Tile key={`${i}-${c.id}`} c={c} slotKey={keys.labels[i] ?? ''} onRun={onRun} /> : <span key={i} className="h-[62px] w-[68px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
+            })}
+          </div>
         </div>
-        <div className="grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Factory commands">
-          {Array.from({ length: SLOTS }, (_, i) => {
-            const c = menu.slots[i];
-            return c ? <Tile key={`${i}-${c.id}`} c={c} slotKey={keys.labels[i] ?? ''} onRun={onRun} /> : <span key={i} className="h-[64px] w-[72px] rounded-lg border border-dashed border-[var(--theme-border)] opacity-40" />;
-          })}
-        </div>
-      </div>
+      </Side>
     </div>
   );
 }

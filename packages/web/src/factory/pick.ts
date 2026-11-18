@@ -3,7 +3,7 @@
  * are in it (machines are not selected there: they are in build mode). And what a group of tickets can be asked to do
  * together, for the command card.
  */
-import { canSetAside, type FactoryTicket, type MachineSpec } from './types';
+import { canSetAside, type FactoryTicket, type MachineSpec, type Selection } from './types';
 
 export interface Frame { x0: number; y0: number; x1: number; y1: number }
 
@@ -13,6 +13,12 @@ export function ticketsIn(places: Iterable<[string, { x: number; y: number }]>, 
   for (const [id, p] of places) if (p.x >= xa && p.x <= xb && p.y >= ya && p.y <= yb) out.push(id);
   return out;
 }
+
+/* a selection as the ids it holds, and back: one thing is not a group of one */
+export const machineIds = (s: Selection): string[] => (s && 'machines' in s ? s.machines : s && 'machine' in s ? [s.machine] : []);
+export const ticketIds = (s: Selection): string[] => (s && 'tickets' in s ? s.tickets : s && 'ticket' in s ? [s.ticket] : []);
+export const machinesSel = (ids: string[]): Selection => (ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
+export const ticketsSel = (ids: string[]): Selection => (ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
 
 /**
  * What a selection becomes when something is picked. Without Shift the pick replaces it. With Shift it adds to it:

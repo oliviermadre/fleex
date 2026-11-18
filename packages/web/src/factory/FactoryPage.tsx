@@ -14,6 +14,7 @@ import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
+import { HUD } from './hudShape';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
@@ -30,7 +31,7 @@ import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
 import { needsOf, stepNeed } from './needs';
 import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
-import { addTo, groupOf, ticketsIn } from './pick';
+import { addTo, groupOf, machineIds, machinesSel, ticketIds, ticketsIn, ticketsSel } from './pick';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryPlanModal } from './FactoryPlanModal';
@@ -53,11 +54,6 @@ const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator
 /** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
 let clipboard: Clip | null = null;
 const ARROW = ['→', '↓', '←', '↑'];
-/* a selection as the ids it holds, and back: one thing is not a group of one */
-const machineIds = (s: Selection): string[] => (s && 'machines' in s ? s.machines : s && 'machine' in s ? [s.machine] : []);
-const ticketIds = (s: Selection): string[] => (s && 'tickets' in s ? s.tickets : s && 'ticket' in s ? [s.ticket] : []);
-const machinesSel = (ids: string[]): Selection => (ids.length > 1 ? { machines: ids } : ids.length === 1 ? { machine: ids[0]! } : null);
-const ticketsSel = (ids: string[]): Selection => (ids.length > 1 ? { tickets: ids } : ids.length === 1 ? { ticket: ids[0]! } : null);
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
@@ -693,7 +689,7 @@ function Floor() {
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
           {/* build mode says so all round the view: tape, and a plate in its corner */}
-          {building && <FactoryBuildFrame halted={halted} />}
+          {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
@@ -728,7 +724,7 @@ function Floor() {
           )}
         </div>
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud} building={building}
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}

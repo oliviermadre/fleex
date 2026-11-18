@@ -139,7 +139,21 @@ With nothing selected the card has **Limits** next to Stats: the floor's two run
 and runs in flight at once, in a popup of their own (`FactoryLimits.tsx`; the same fields close the Stats popup). The
 console shows where the floor stands against each ("running 1/3", "runs this hour 4/20").
 
-The console can be put away to give the floor the whole page: a handle in the middle of its top edge, or U. The handle
+The console is not a straight bar (`hudShape.ts`): the block of the minimap and the block of the command card stand
+taller than its middle, their inner top corners cut, and the floor shows in the notch between them. The page gives
+the console the height of its middle; the two side blocks rise over the foot of the floor's view.
+
+- **Over the minimap**, the time it is, to the second.
+- **In the notch**, the saved selections (`Groups` in `FactoryHudBits.tsx`): ten places that never move, Shift+1 to
+  Shift+0 to save, the digit to recall. A place shows only once something is saved in it and is always the same
+  size: its key, an icon, and a ticket's number or how many things it holds. Pointing at one says what it holds.
+- **In the middle**, what is selected. Several things show as one icon each (`Units`): pointing at one says what it
+  is, a click keeps only it, Shift and a click take it out. Twenty-four at once, the rest as pages.
+- **Against the command card**, a portrait of what is selected (`FactoryAvatar.tsx`): the factory with nothing
+  selected, a work site in build mode, a ticket as its own object, large and gently tilting before a glow of its
+  colour, a machine as what it does, a stack with a count for several things. It gives way when the middle is narrow.
+
+The console can be put away to give the floor the whole page: a handle at the end of the notch, or U. The handle
 is all that stays, at the foot of the floor; the keys of the command card still work. The choice is kept in the
 browser (`viewToggles.ts`).
 
@@ -149,7 +163,9 @@ floor leave the selection as it is.
 
 Build mode says so all round the view (`FactoryBuildFrame.tsx`): hazard tape, yellow and black on the diagonal like
 the bay of what is set aside, and a plate in the corner, "BUILD MODE, the floor keeps running" (or "the floor is
-stopped" under the emergency stop). It is laid over the floor and takes no pointer event.
+stopped" under the emergency stop). It is laid over the floor and takes no pointer event. The tape follows the
+console's contour while the console is shown, steps and cut corners included, and is a plain frame when it is put
+away (`tapeShape`): a shape measured from the view's own edges, so nothing has to be measured.
 
 ## Reading the floor
 
