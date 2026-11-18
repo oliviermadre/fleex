@@ -4,6 +4,7 @@
  * deleting two folders.
  */
 import type { SetOp } from './setOps';
+import type { ScriptSpec } from './script';
 export type { SetOp } from './setOps';
 import type { TicketStatus } from '@fleex/shared';
 
@@ -11,7 +12,7 @@ export type Dir = 0 | 1 | 2 | 3;
 export const DX = [1, 0, -1, 0] as const;
 export const DY = [0, 1, 0, -1] as const;
 
-export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
+export type StationExec = 'agent' | 'skill' | 'panel' | 'script' | 'human_gate' | 'native';
 /** What an arm can look at on a ticket, and how it compares it. Mirrors the server's `types.ts`. */
 export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'tagkey' | 'outcome';
 export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
@@ -42,6 +43,8 @@ export interface StationSpec extends MachineBase {
   outcomes: string[]; cap: number; sets?: TicketStatus;
   /** Agent, skill and panel stations: switched off, it takes tickets in but starts nothing on them. */
   off?: boolean;
+  /** A script station: the shell commands it runs for a ticket (see `script.ts`). */
+  script?: ScriptSpec;
 }
 export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
 export interface ExitSpec extends MachineBase { kind: 'exit' }
@@ -64,7 +67,7 @@ export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'revie
 /** The three ways a ticket is set aside in its station: the agent asked, the run failed, or a human took it. It waits there to be put back. */
 export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
 /** The stations that run something: they have a switch, and tickets can be set aside in them. */
-export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel'];
+export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel', 'script'];
 export interface FactoryTicketInfo {
   id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
   boardId: string; complexity: string | null; favorite: boolean;

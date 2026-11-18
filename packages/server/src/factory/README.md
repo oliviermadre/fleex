@@ -229,6 +229,39 @@ The engine keeps the toll's arm on the belt's own machine (`armState`, `item2`) 
 the arms, under the belt's id. A ticket in that arm is `arm` on the belt's id; after a restart it is back under the
 toll, already dealt with, and is rejected again without being counted again.
 
+## Named actions, and the script station
+
+**Named actions** are actions that have a name of their own ("test", "lint", "build"), which each repository fills
+in with its own command. The list is `namedActions` in the configuration, edited in Settings › General; a
+repository's commands are `repoConfigs[<org/name>].actions`, edited in the repository's Config tab
+(`packages/web/src/factory/NamedActions.tsx`, mounted by one line in each of those two screens, and shown only while
+the Factory is on). A new action shows everywhere without touching what uses the others. Nothing but the Factory
+runs them yet.
+
+A **script station** (`exec: 'script'`, `script-runner.ts`) runs shell commands when a ticket arrives, with no agent.
+It is not about testing in particular: it runs whatever it is given.
+
+- It has an optional **default action**: with one, each repository of the ticket runs its own command for it; with
+  none, the station runs only its own lines.
+- It has **lines of its own**: for one repository, for any repository, or for the ticket's workspace (run once,
+  whether or not the ticket has a repository; the workspace directory is created if it is not there yet). A line
+  is a named action or a command typed in.
+- For each repository of the ticket: its own line, else the "any repository" line, else the default action, else
+  nothing to run.
+- A command runs in the worktree, through the host's shell, with the ticket in its environment
+  (`FLEEX_TICKET_NUMBER`, `FLEEX_TICKET_TITLE`, `FLEEX_TICKET_ID`, `FLEEX_REPO`, `FLEEX_WORKSPACE`), and a time
+  allowed (300 s unless said otherwise).
+- It concludes by itself, so its outcomes are not typed in: **ok** when every command exits with 0, **ko** when one
+  does not (or runs out of time, or its worktree is not on disk). After a failure the others are run anyway, or
+  not, as the station says. A repository it has nothing to run for is skipped, counts as a failure, or sends the
+  ticket out by a third outcome, **unconfigured**, which the station then has: "the tests fail" and "I do not know
+  how to test this" need not go the same way.
+
+It is a station like the others that run something: places, a switch, tickets set aside. What failed, and the end of
+what the command said, is kept on the run (its `error`), and shows in the station's latest runs. Two limits: a
+command in progress is not stopped when its ticket is set aside or when the emergency stop is pressed (its result is
+ignored, but it runs to its end); and the output of a command that succeeded is not kept.
+
 ## The emergency stop
 
 One button, always in the page's header: **Emergency stop**. It is `halted` in the floor's settings
@@ -397,6 +430,9 @@ Supported storage: SQLite and Supabase. On pgsql the store is `null` and the mod
 | web: `components/ui/Modal.tsx` | three opt-in props for the Factory's popups: `variant="glass"`, `flush` (no padding), `guardEscape` (Escape stays in a field, and is left to what is opened over the dialog). Unset, a dialog is unchanged; they can stay |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
+| `application/ports/config.port.ts` | `namedActions`, and `actions` in a repository's config: the named actions script stations run |
+| `infrastructure/container.ts` | gives the module the host's shell and where a ticket's workspace and worktrees are (`host`), for script stations |
+| web: `SettingsPanel.tsx`, `repository-dashboard/RepoConfigPanel.tsx`, `settingsStore.ts` | one line each to mount the list of named actions and a repository's commands for them; their two fields in the settings type |
 | `application/use-cases/create-workflow-run.ts`, `domain/errors.ts`, `infrastructure/http/error-handler.ts`, `application/domain-event-listener.ts` | an optional `refuses(ticketId)` asked before a run is created, its `WorkflowRefusedError` (409), and the mention that asked for it closed |
 | `infrastructure/http/tickets.routes.ts` | a comment that asks for a workflow on a ticket of the floor is refused before it is written |
 | `infrastructure/http/skill.routes.ts`, `panel.routes.ts` | a skill or a panel launched by its button tells the Factory (`launchedByHand`) |

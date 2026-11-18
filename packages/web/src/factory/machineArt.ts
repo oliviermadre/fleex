@@ -103,7 +103,8 @@ export function lampLines(m: StationSpec, tickets: readonly FactoryTicket[]): st
 export const inRect = (r: Rect, x: number, y: number): boolean => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
 /** What a machine is, as strokes in a 24 by 24 box: drawn on its head plate. */
-export const MACHINE_ICONS: Record<'agent' | 'skill' | 'panel' | 'human_gate', string[]> = {
+export const MACHINE_ICONS: Record<'agent' | 'skill' | 'panel' | 'script' | 'human_gate', string[]> = {
+  script: ['M4.500 5h15a1.500 1.500 0 0 1 1.500 1.500v11a1.500 1.500 0 0 1-1.500 1.500h-15A1.500 1.500 0 0 1 3 17.500v-11A1.500 1.500 0 0 1 4.500 5z', 'M7.500 9.500l3 2.500-3 2.500', 'M12.500 15h4'],
   agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.500v-6A2.5 2.5 0 0 1 7.500 8z', 'M12 8V4.600', 'M11 3.600a1 1 0 1 0 2 0a1 1 0 1 0-2 0', 'M8.400 13a.9.9 0 1 0 1.800 0a.9.9 0 1 0-1.800 0', 'M13.800 13a.9.9 0 1 0 1.800 0a.9.9 0 1 0-1.800 0', 'M9.500 16.200h5', 'M2.500 12v3', 'M21.500 12v3'],
   skill: ['M14.700 6.300a4 4 0 0 0-5.200 5.200L4 17v3h3l5.500-5.500a4 4 0 0 0 5.200-5.200l-2.600 2.600-2.300-.7-.7-2.300z'],
   panel: ['M5 9a2.400 2.400 0 1 0 4.800 0A2.400 2.400 0 1 0 5 9', 'M14.200 9a2.400 2.400 0 1 0 4.800 0a2.400 2.400 0 1 0-4.800 0', 'M9.600 16a2.400 2.400 0 1 0 4.800 0a2.400 2.400 0 1 0-4.800 0'],

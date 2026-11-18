@@ -1,5 +1,7 @@
 import type { TicketStatus } from '@fleex/shared';
 import type { SetOp } from './set-ops.js';
+import type { ScriptSpec } from './script-runner.js';
+export type { ScriptSpec, ScriptLine } from './script-runner.js';
 export type { SetOp } from './set-ops.js';
 
 /** 0 east, 1 south, 2 west, 3 north. */
@@ -7,7 +9,7 @@ export type Dir = 0 | 1 | 2 | 3;
 export const DX = [1, 0, -1, 0] as const;
 export const DY = [0, 1, 0, -1] as const;
 
-export type StationExec = 'agent' | 'skill' | 'panel' | 'human_gate' | 'native';
+export type StationExec = 'agent' | 'skill' | 'panel' | 'script' | 'human_gate' | 'native';
 /** What an arm can look at on a ticket, and how it compares it. */
 export type ArmField = 'type' | 'priority' | 'complexity' | 'board' | 'favorite' | 'tag' | 'tagkey' | 'outcome';
 export type ArmOp = 'is' | 'is_not' | 'gte' | 'lte' | 'gt' | 'lt' | 'between';
@@ -68,6 +70,8 @@ export interface StationSpec extends MachineBase {
   off?: boolean;
   /** Native stations: the status to set. */
   sets?: TicketStatus;
+  /** A script station: the shell commands it runs for a ticket (see `script-runner.ts`). */
+  script?: ScriptSpec;
 }
 /** Where tickets wait. Sets a status on entry; an arm only takes what has been released. */
 export interface ZoneSpec extends MachineBase {
@@ -126,7 +130,7 @@ export const DEFAULT_FLOOR_ID = 'default';
 export type TicketPhase = 'loose' | 'belt' | 'arm' | 'wait' | 'running' | 'review' | 'question' | 'failed' | 'aside' | 'out' | 'zone' | 'port';
 export const SET_ASIDE: readonly TicketPhase[] = ['question', 'failed', 'aside'];
 /** The stations that run something, and so can be switched off and have tickets set aside in them. */
-export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel'];
+export const RUNS: readonly StationExec[] = ['agent', 'skill', 'panel', 'script'];
 export interface FactoryTicketState {
   x: number; y: number;
   phase: TicketPhase;

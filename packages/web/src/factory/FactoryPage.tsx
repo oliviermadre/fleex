@@ -62,6 +62,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
   ['skill', 'S', 'Skill', 'A station that runs a skill'],
   ['panel', 'N', 'Panel', 'A station that runs a panel of personas'],
+  ['script', 'C', 'Script', 'A station that runs shell commands in the ticket\'s worktrees or its workspace'],
   ['gate', 'G', 'Gate', 'Waits for your decision; each outcome leaves by its own arm'],
   ['native', 'T', 'Status', 'Sets a status on the ticket and lets it through'],
   ['zone', 'D', 'Zone', 'Tickets wait here until released'],

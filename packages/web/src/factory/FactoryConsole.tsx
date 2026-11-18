@@ -1,3 +1,4 @@
+import { scriptSummary } from './script';
 import { opText } from './setOps';
 import { arrivalOf, portName } from './teleport';
 import { useRef } from 'react';
@@ -47,7 +48,7 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'belt' && m.set !== undefined) return `Set gantry · ${m.set.length ? m.set.map((o) => opText(o, boardName)).join(', ') : 'nothing set yet'}`;
   if (m.kind === 'belt') { const d = view.leadsTo(m); return `${m.fast ? 'Fast belt, twice as fast' : 'Belt'} · ${d ? `leads to ${d.name ?? d.kind}` : 'leads nowhere'}`; }
   if (m.kind === 'arm') { const when = conditionsOf(m); return `Arm · ${when.length ? `takes a ticket when ${when.map((c) => longCondition(c, boardName)).join(', and ')}` : 'takes anything, or what the arms next to it leave'}`; }
-  if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
+  if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : m.exec === 'script' ? `Script · ${scriptSummary(m.script)}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
   if (m.kind === 'teleporter') {

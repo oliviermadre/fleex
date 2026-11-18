@@ -2,7 +2,7 @@
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec, type ArmCondition } from './types';
 import { relink } from './teleport';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'set' | 'toll' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'set' | 'toll' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -26,6 +26,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
       return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 2 };
+    case 'script': return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: 'Script', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
     case 'gate': return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
     case 'native': return { id, kind: 'station', x, y, w: 2, h: 2, name: 'Set status', exec: 'native', outcomes: ['ok'], cap: 3, sets: 'doing' };
     case 'zone': return { id, kind: 'zone', x: x - 1, y: y - 1, w: 4, h: 4, name: 'Zone', status: '', release: 'manual' };

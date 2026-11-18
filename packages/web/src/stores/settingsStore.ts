@@ -16,6 +16,8 @@ export type { PinnedIcon, WorkspaceAction };
 export interface RepoConfig {
   postCheckoutHook?: string; // multiline shell script, empty = disabled
   hookTimeoutSeconds?: number; // default 60
+  /** What each named action (`namedActions`) means in this repository: action name → shell command. */
+  actions?: Record<string, string>;
 }
 
 export type SessionLayoutType = '1x2' | '2x2';
@@ -52,6 +54,8 @@ export interface AppSettings {
   todoAgentAccess?: boolean;
   /** The experimental Factory (src/factory) is switched on. Unset → off. */
   factoryEnabled?: boolean;
+  /** The actions repositories can define a command for ("test", "lint"). Script stations of the Factory run them by name. */
+  namedActions?: { name: string; description?: string }[];
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

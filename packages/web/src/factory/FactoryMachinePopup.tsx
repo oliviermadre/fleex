@@ -17,6 +17,8 @@ import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
 import { blankOp, choicesFor, incompleteOp, SET_FIELD_LABEL, SET_FIELDS, TAG_OP_HINT, TAG_OP_LABEL, type AnyField, type SetOp } from './setOps';
 import { TAG_OPS, type TagOp } from './tags';
+import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetName, WORKSPACE, type ScriptLine, type ScriptSpec } from './script';
+import { useSettingsStore } from '../stores/settingsStore';
 import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { FactoryPopup } from './FactoryPopup';
@@ -143,6 +145,60 @@ function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetO
 }
 
 /**
+ * A script station: an optional default action, lines of its own (for a repository, for any repository, or for the
+ * ticket's workspace), and what it concludes when it has nothing to run for a repository. A line with no command yet
+ * stays in this form only.
+ */
+function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; onChange: (s: ScriptSpec) => void }) {
+  const named = useSettingsStore((s) => s.settings.namedActions) ?? [], repos = useSettingsStore((s) => s.settings.resolvedRepositories ?? s.settings.repositories) ?? [];
+  const saved = scriptOf(script), savedKey = JSON.stringify(saved.lines);
+  const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [target, setTarget] = useState(ANY_REPO);
+  useEffect(() => { setRows((cur) => (JSON.stringify(cur.filter((l) => !incompleteLine(l))) === savedKey ? cur : (JSON.parse(savedKey) as ScriptLine[]))); }, [savedKey]);
+  const put = (patch: Partial<ScriptSpec>) => onChange({ ...saved, ...patch });
+  const commit = (next: ScriptLine[]) => { setRows(next); const complete = next.filter((l) => !incompleteLine(l)); if (JSON.stringify(complete) !== savedKey) put({ lines: complete }); };
+  const line = (i: number, l: ScriptLine) => commit(rows.map((r, k) => (k === i ? l : r)));
+  const free = [ANY_REPO, WORKSPACE, ...repos].filter((t) => !rows.some((r) => r.target === t));
+  const pick = free.includes(target) ? target : free[0] ?? '';
+  return (
+    <>
+      <Hint>Runs shell commands when a ticket arrives: in each of the ticket's worktrees, or in its workspace. No agent runs here. It ends "ok" when every command exits with 0, "ko" when one does not.</Hint>
+      <Select id="f-script-action" label="Default action" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
+        options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
+      <Hint>{saved.action ? `Each repository of the ticket runs its own "${saved.action}", unless a line below says otherwise.` : 'With none, only the lines below are run.'}{named.length === 0 ? ' Named actions are created in Settings, under General, then filled in repository by repository.' : ''}</Hint>
+      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">Lines of this station</div>
+      {rows.length === 0 && <Hint>None.</Hint>}
+      {rows.map((l, i) => (
+        <div key={l.target} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Line for ${targetName(l.target)}`}>
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--theme-text-primary)]">{targetName(l.target)}</span>
+            {l.target !== WORKSPACE && (
+              <div className="w-36 flex-none"><Select id={`f-script-kind-${i}`} aria-label="What it runs" value={l.kind} onChange={(e) => line(i, { ...l, kind: e.target.value as ScriptLine['kind'], value: '' })} options={[{ value: 'command', label: 'a command' }, { value: 'action', label: 'a named action' }]} /></div>
+            )}
+            <Button size="sm" variant="ghost" aria-label={`Remove the line for ${targetName(l.target)}`} onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
+          </div>
+          {l.kind === 'action'
+            ? <Select id={`f-script-value-${i}`} aria-label="Named action" value={l.value} onChange={(e) => line(i, { ...l, value: e.target.value })} options={[{ value: '', label: 'choose' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(l.value && !named.some((a) => a.name === l.value) ? [{ value: l.value, label: l.value }] : [])]} />
+            : <CommitInput id={`f-script-value-${i}`} label="" placeholder={l.target === WORKSPACE ? 'a command, run once in the workspace of the ticket' : 'a command, run in the worktree'} value={l.value} onCommit={(v) => line(i, { ...l, value: v.trim() })} />}
+        </div>
+      ))}
+      {free.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1"><Select id="f-script-target" aria-label="What the line is for" value={pick} onChange={(e) => setTarget(e.target.value)} options={free.map((t) => ({ value: t, label: targetName(t) }))} /></div>
+          <Button size="sm" onClick={() => commit([...rows, { target: pick, kind: 'command', value: '' }])}>Add a line</Button>
+        </div>
+      )}
+      <Select id="f-script-missing" label="A repository it has nothing to run for" value={saved.missing} onChange={(e) => put({ missing: e.target.value as ScriptSpec['missing'] })}
+        options={[{ value: 'ignore', label: 'is skipped' }, { value: 'ko', label: 'counts as a failure' }, { value: 'own', label: 'sends the ticket out by "unconfigured"' }]} />
+      <div className="grid grid-cols-2 gap-2">
+        <Select id="f-script-fail" label="After a command fails" value={saved.onFail} onChange={(e) => put({ onFail: e.target.value as ScriptSpec['onFail'] })} options={[{ value: 'all', label: 'run the others anyway' }, { value: 'stop', label: 'stop there' }]} />
+        <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
+      </div>
+      <Hint>A command gets the ticket in its environment: FLEEX_TICKET_NUMBER, FLEEX_TICKET_TITLE, FLEEX_TICKET_ID, FLEEX_REPO, FLEEX_WORKSPACE.</Hint>
+    </>
+  );
+}
+
+/**
  * A teleporter: its name, which of the two it is, and for a departure the arrival it leads to. An arrival has nothing
  * to point at: it lists the departures that lead to it, each of which opens. Either says what it holds.
  */
@@ -246,7 +302,8 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
 
       {m.kind === 'station' && (
         <>
-          {RUNS.includes(m.exec) && (
+          {m.exec === 'script' && <ScriptSettings key={m.id} script={m.script} onChange={(script) => onPatch({ script, outcomes: scriptOutcomes(script) } as Partial<StationSpec>)} />}
+          {RUNS.includes(m.exec) && m.exec !== 'script' && (
             <>
               <div className="grid grid-cols-2 gap-2">
                 <Select id="f-exec" label="Runs" value={m.exec} onChange={(e) => onPatch({ exec: e.target.value as StationExec, ref: '' } as Partial<StationSpec>)}
@@ -284,7 +341,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
             </>
           )}
           {m.exec === 'native' && <Select id="f-sets" label="Sets the ticket status to" value={m.sets ?? 'doing'} onChange={(e) => onPatch({ sets: e.target.value as TicketStatus } as Partial<StationSpec>)} options={STATUS_OPTIONS.slice(1)} />}
-          {m.exec !== 'native' && <CommitInput id="f-outcomes" label="Outcomes, comma separated (the first is the way forward)" value={m.outcomes.join(', ')} onCommit={(v) => onPatch({ outcomes: list(v).length ? list(v) : ['ok'] } as Partial<StationSpec>)} />}
+          {m.exec !== 'native' && m.exec !== 'script' && <CommitInput id="f-outcomes" label="Outcomes, comma separated (the first is the way forward)" value={m.outcomes.join(', ')} onCommit={(v) => onPatch({ outcomes: list(v).length ? list(v) : ['ok'] } as Partial<StationSpec>)} />}
           <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(RUNS.includes(m.exec) ? MAX_PLACES : 50, Number(v) || 2)) } as Partial<StationSpec>)} />
           <Head>Where each outcome leaves</Head>
           <div className="flex flex-col gap-1">
@@ -292,7 +349,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
               const arm = takers.find((a) => acceptsOutcome(a, o)) ?? takers.find((a) => !isConditional(a)), dest = arm ? beyond(arm) : null;
               return <div key={o} className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-text-primary)]">{o}</span><span className={arm ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-danger)]'}>{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'no arm takes it'}</span></div>;
             })}
-            {m.exec !== 'human_gate' && m.exec !== 'native' && (() => {
+            {m.exec !== 'human_gate' && m.exec !== 'native' && m.exec !== 'script' && (() => {
               const arm = takers.find((a) => takesQuestions(a)), dest = arm ? beyond(arm) : null;
               return <div className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-warning)]">{QUESTION_OUTCOME}</span><span className="text-[var(--theme-text-secondary)]">{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'stays here until answered'}</span></div>;
             })()}

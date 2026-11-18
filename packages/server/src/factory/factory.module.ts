@@ -17,8 +17,12 @@ import { PanelStepExecutor } from '../application/services/step-executors/panel-
 import type { FactoryStorePort } from './factory-store.port.js';
 import { FactoryEngine } from './engine.js';
 import { StationRunner } from './station-runner.js';
+import { runScript, normaliseScript, type ScriptContext, type Shell } from './script-runner.js';
+import { buildTicketWorkspaceId } from '@fleex/shared';
+import { basename } from 'node:path';
 import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
-import type { FactoryTicketInfo } from './types.js';
+import type { FactoryTicketInfo, StationSpec } from './types.js';
+import type { StationRunResult } from './station-runner.js';
 import type { CommentPostedEvent } from '../domain/events.js';
 
 /** What a person launches by hand from a ticket's thread. A workflow is not one: a ticket on the floor cannot run any. */
@@ -41,6 +45,8 @@ export interface FactoryModuleDeps {
   submitDeliverable: SubmitDeliverableUseCase;
   postComment: PostCommentUseCase;
   eventBus: EventBus;
+  /** What a script station needs of the machine: a shell, and where a ticket's workspace and worktrees are. Without it script stations cannot run. */
+  host?: { shell: Shell; exists(path: string): Promise<boolean>; workspacePath(workspaceId: string): string; workspaceRepoPath(workspaceId: string, repoName: string): string };
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
 }
 
@@ -53,6 +59,33 @@ export class FactoryModule {
   readonly engine: FactoryEngine;
   readonly store: FactoryStorePort;
   private initPromise: Promise<void> | null = null;
+
+  /**
+   * A script station on a ticket: where the ticket's workspace and worktrees are, what each of its repositories
+   * defines as named actions, and the commands run through the host's shell. A repository the ticket is linked to
+   * whose worktree is not on disk is told as such: the station says so and counts it as a failure.
+   */
+  private async runScript(station: StationSpec, ticketId: string): Promise<StationRunResult> {
+    const host = this.deps.host;
+    if (!host) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
+    const entity = await this.deps.ticketStore.getTicketById(ticketId);
+    if (!entity) return { status: 'failed', outcome: '', executionId: null, error: 'The ticket is gone' };
+    const t = entity.toDTO(), links = t.links ?? [], workspaceId = buildTicketWorkspaceId(t.title, t.id), workspace = host.workspacePath(workspaceId);
+    const made = links.filter((l) => l.type === 'worktree' && l.ref);
+    const worktrees: ScriptContext['worktrees'] = [];
+    for (const l of links) {
+      if (l.type !== 'repository' || !l.ref?.includes('/')) continue;
+      const name = l.ref.split('/')[1] ?? '', path = made.find((w) => basename(w.ref) === name)?.ref ?? host.workspaceRepoPath(workspaceId, name);
+      worktrees.push({ repo: l.ref, path: (await host.exists(path).catch(() => false)) ? path : null });
+    }
+    const spec = normaliseScript(station.script), repoConfigs = this.deps.config.get().repoConfigs ?? {};
+    /* the workspace exists as soon as something runs in it: a ticket no agent has worked on yet may not have one */
+    if (spec.lines.some((l) => l.target === 'workspace')) await host.shell(`mkdir -p '${workspace.replace(/'/g, `'\\''`)}'`, { cwd: '/', timeoutMs: 10_000 }).catch(() => undefined);
+    return runScript(spec, {
+      workspace, worktrees, actions: (repo) => repoConfigs[repo]?.actions ?? {},
+      env: { FLEEX_TICKET_ID: t.id, FLEEX_TICKET_NUMBER: String(t.displayId), FLEEX_TICKET_TITLE: t.title, FLEEX_WORKSPACE: workspace, FLEEX_STATION: station.name || 'Script' },
+    }, host.shell);
+  }
   private statsCache = new Map<number, { at: number; value: Promise<FactoryStats> }>();
 
   constructor(private readonly deps: FactoryModuleDeps & { store: FactoryStorePort }) {
@@ -62,6 +95,7 @@ export class FactoryModule {
         skill: new SkillStepExecutor(deps.executeAgent, deps.skillStore, deps.personaStore, deps.config),
         panel: new PanelStepExecutor(deps.runPanel, deps.config),
       },
+      script: (station, ticketId) => this.runScript(station, ticketId),
       submitDeliverable: deps.submitDeliverable, postComment: deps.postComment, agentEventStore: deps.agentEventStore, eventBus: deps.eventBus,
     });
     this.store = deps.store;

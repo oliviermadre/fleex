@@ -7,6 +7,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import { FactoryMachinePopup, machineKind } from './FactoryMachinePopup';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { useFactoryStore } from './factoryStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { hasPopup } from './types';
 import type { FactoryView } from './renderer';
 import type { FactorySnapshot, FactoryStats, FactoryTicket, MachineSpec, MachineStats, TicketPhase } from './types';
@@ -208,6 +209,30 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenLastCalledWith('g', { toll: { when: [], out: 1 } });
     fireEvent.click(screen.getByRole('button', { name: 'Remove the toll' }));
     expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined, toll: undefined });
+  });
+
+  it('sets up a script station: an optional default action, lines of its own, and what "nothing to run" means', () => {
+    const sc: MachineSpec = { id: 'sc', kind: 'station', x: 20, y: 1, w: 5, h: 4, name: 'On arrival', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
+    seed([], [dev, sc]);
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, namedActions: [{ name: 'test' }, { name: 'lint' }], resolvedRepositories: ['acme/api', 'acme/front'] } }) as never);
+    const on = open('sc'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Script station');
+    expect(screen.queryByLabelText('Persona')).toBeNull();                                  // it runs no agent
+    expect(popup.textContent).toContain('With none, only the lines below are run.');
+    /* no default action is a choice, and so is one of the named actions */
+    const action = screen.getByLabelText('Default action') as HTMLSelectElement;
+    expect([...action.options].map((o) => o.textContent)).toEqual(['none', 'test', 'lint']);
+    fireEvent.change(action, { target: { value: 'test' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'ignore', onFail: 'all', action: 'test' }, outcomes: ['ok', 'ko'] });
+    /* a line is for any repository, the ticket's workspace, or one repository */
+    expect([...(screen.getByLabelText('What the line is for') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['any repository', 'ticket workspace', 'acme/api', 'acme/front']);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a line' }));
+    const command = within(screen.getByRole('group', { name: 'Line for any repository' })).getByRole('textbox');
+    fireEvent.change(command, { target: { value: 'open http://localhost:3000' } }); fireEvent.blur(command);
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: '*', kind: 'command', value: 'open http://localhost:3000' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    /* asking for its own way out gives the station a third outcome */
+    fireEvent.change(screen.getByLabelText('A repository it has nothing to run for'), { target: { value: 'own' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'own', onFail: 'all' }, outcomes: ['ok', 'ko', 'unconfigured'] });
   });
 
   it('closes when its machine is no longer on the floor', () => {

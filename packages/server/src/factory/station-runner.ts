@@ -27,6 +27,8 @@ export interface StationRunnerPort {
 export class StationRunner implements StationRunnerPort {
   constructor(private readonly deps: {
     executors: Partial<Record<'agent' | 'skill' | 'panel', StepExecutor>>;
+    /** Runs a script station: shell commands, no agent. */
+    script?: (station: StationSpec, ticketId: string) => Promise<StationRunResult>;
     submitDeliverable: SubmitDeliverableUseCase;
     postComment: PostCommentUseCase;
     agentEventStore: AgentEventStorePort;
@@ -34,6 +36,11 @@ export class StationRunner implements StationRunnerPort {
   }) {}
 
   async run(station: StationSpec, ticketId: string, runId: string, targets: Record<string, string>, onExecutionStarted: (executionId: string) => void): Promise<StationRunResult> {
+    if (station.exec === 'script') {
+      if (!this.deps.script) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
+      try { return await this.deps.script(station, ticketId); }
+      catch (err) { return { status: 'failed', outcome: '', executionId: null, error: err instanceof Error ? err.message : String(err) }; }
+    }
     const executor = this.deps.executors[station.exec as 'agent' | 'skill' | 'panel'];
     if (!executor) return { status: 'failed', outcome: '', executionId: null, error: `No executor for "${station.exec}"` };
     const name = station.name || 'Station';

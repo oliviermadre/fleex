@@ -7,7 +7,12 @@ export interface RepoConfig {
    */
   postCheckoutHook?: string; // multiline shell script, empty = disabled
   hookTimeoutSeconds?: number; // default 60
+  /** What each named action (`AppConfig.namedActions`) means in this repository: action name → shell command. */
+  actions?: Record<string, string>;
 }
+
+/** An action that has a name of its own, such as "test" or "lint": each repository says what it runs. */
+export interface NamedAction { name: string; description?: string }
 
 export interface AppConfig {
   basePath: string;
@@ -97,6 +102,8 @@ export interface AppConfig {
    * answer 403 and nothing else in Fleex behaves differently.
    */
   factoryEnabled?: boolean;
+  /** The actions repositories can define a command for. Script stations of the Factory run them by name. */
+  namedActions?: NamedAction[];
   /**
    * Local hour (0-23) after which the nightly memory consolidation becomes due.
    * Unset → 3. The pass runs on the first tick past this hour, so a laptop that

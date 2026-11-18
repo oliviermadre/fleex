@@ -174,6 +174,7 @@ export function factoryMenu(c: MenuContext): Menu {
     2: place('panel', 'N', 'Panel', 'station', 'A station that runs a panel of personas'),
     3: place('gate', 'G', 'Gate', 'station', 'Waits for your decision; each outcome leaves by its own arm'),
     4: place('native', 'T', 'Status', 'station', 'Sets a status on the ticket and lets it through'),
+    8: place('script', 'C', 'Script', 'station', 'A station that runs shell commands in the ticket\'s worktrees or its workspace: tests, a build, anything'),
     5: place('set', 'E', 'Set', 'station', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
   }, previous);
   const area = frame('Area', {

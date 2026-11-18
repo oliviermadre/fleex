@@ -478,6 +478,13 @@ export async function createContainer() {
   const factory = createFactoryModule({
     store: factoryStore, config, ticketStore: ticketStore_, skillStore, personaStore: personaStore_, agentEventStore: agentEventStore_,
     executeAgent, runPanel, applyTicketMutation, submitDeliverable, postComment, eventBus, logger,
+    /* script stations: the host's shell, and where a ticket's workspace and worktrees are */
+    host: {
+      shell: (command, options) => shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs }),
+      exists: (path) => hostFs.exists(path),
+      workspacePath: (id) => resolver.workspacePath(id),
+      workspaceRepoPath: (id, name) => resolver.workspaceRepoPath(id, name),
+    },
   });
 
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.

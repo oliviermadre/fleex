@@ -14,6 +14,7 @@ import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type 
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
 import { opText, plateLines } from './setOps';
+import { scriptPlate, scriptSummary } from './script';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
@@ -1036,7 +1037,7 @@ export class FactoryView {
       ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     }
     this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y, 0.33, pal.text, { weight: 650, min: 9, max: 17, fit: P.lamp.x - P.name.x - 0.1 });
-    this.label(gate ? 'gate · you decide' : `${m.exec} · ${m.ref || 'nothing chosen'}`, P.name.x, P.name.y + 0.36, 0.2, pal.text3, { fit: P.lamp.x - P.name.x - 0.1 });
+    this.label(gate ? 'gate · you decide' : m.exec === 'script' ? `script · ${scriptSummary(m.script)}` : `${m.exec} · ${m.ref || 'nothing chosen'}`, P.name.x, P.name.y + 0.36, 0.2, pal.text3, { fit: P.lamp.x - P.name.x - 0.1 });
     /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
     rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
     P.lights.forEach((l, i) => {
@@ -1087,6 +1088,13 @@ export class FactoryView {
       if (aside.length > fit) this.label(`+${aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
     }
     this.quays(takers, D, st, pal, dt, false);
+    /* a script station says what it runs when it is pointed at: one line a command */
+    if (m.exec === 'script' && (st.selMachine === m.id || st.hoverMachine === m.id)) {
+      const lines = plateLines(scriptPlate(m.script), 9), col = '#38bdf8';
+      /* over the station, or under it when there is no room left above in the view */
+      const above = (y - this.cam.y) * z + this.h / 2 > lines.length * 15 + 24;
+      this.boards.push({ lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
+    }
     if (L === 'off') { ctx.globalAlpha = 0.28; rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
   }
 
