@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inRect, lampLines, lampOf, machineParts, placesOf, sortInto, type Rect } from './machineArt';
+import { BAR, bodyOf, inRect, KIND_LOOK, kindOf, lampLines, lampOf, machineParts, placesOf, sortInto, STACK, type Rect } from './machineArt';
 import type { FactoryTicket, StationSpec } from './types';
 
 const station = (over: Partial<StationSpec> = {}): StationSpec => ({ id: 's', kind: 'station', x: 10, y: 20, w: 5, h: 4, name: 'Build', exec: 'agent', ref: 'builder', outcomes: ['ok'], cap: 2, ...over });
@@ -9,7 +9,7 @@ const apart = (a: Rect, b: Rect) => a.x + a.w <= b.x + 1e-9 || b.x + b.w <= a.x 
 
 describe('the parts of a machine', () => {
   it('fit inside it and keep clear of one another, whatever its size and its places', () => {
-    for (const [w, h] of [[5, 4], [3, 3], [8, 6]] as const) for (const cap of [1, 2, 3, 4, 6]) for (const exec of ['agent', 'human_gate'] as const) for (const tray of [false, true]) {
+    for (const [w, h] of [[5, 4], [3, 3], [8, 6]] as const) for (const cap of [1, 2, 3, 4, 6]) for (const exec of ['agent', 'skill', 'panel', 'script', 'human_gate'] as const) for (const tray of [false, true]) {
       const m = station({ w, h, cap, exec }), p = machineParts(m, tray), box: Rect = { x: m.x, y: m.y, w, h };
       const parts = [p.badge, p.lamp, ...(p.out ? [p.out] : []), ...(p.aside ? [p.aside] : []), ...(p.places.length ? p.places : [p.work])];
       for (const r of parts) { expect(inside(r, box), `${exec} ${w}x${h} cap ${cap}`).toBe(true); expect(r.w > 0 && r.h > 0).toBe(true); }
@@ -37,6 +37,34 @@ describe('the parts of a machine', () => {
     const gate = machineParts(station({ exec: 'human_gate', cap: 8 }));
     expect(gate.places).toEqual([]);
     expect(gate.aside).toBeNull();
+  });
+});
+
+describe('what tells the kinds apart', () => {
+  it('each kind that runs something has a hue and a word of its own; a gate and a status station have neither', () => {
+    const kinds = ['agent', 'skill', 'panel', 'script'] as const;
+    expect(kinds.map((exec) => kindOf(station({ exec })))).toEqual([...kinds]);
+    expect(new Set(kinds.map((k) => KIND_LOOK[k].hue)).size).toBe(4);
+    expect(kinds.map((k) => KIND_LOOK[k].word)).toEqual(['AGENT', 'SKILL', 'PANEL', 'SCRIPT']);
+    expect(kindOf(station({ exec: 'human_gate' }))).toBeNull();
+    expect(kindOf(station({ exec: 'native' }))).toBeNull();
+  });
+
+  it('a panel is a stack: its front plate leaves room for the two behind it, and its parts stand on that plate', () => {
+    const m = station({ exec: 'panel' }), b = bodyOf(m), p = machineParts(m);
+    expect(b).toEqual({ x: m.x, y: m.y + STACK, w: m.w - STACK, h: m.h - STACK });
+    for (const r of [p.badge, p.lamp, p.aside!, ...p.places]) expect(inside(r, b)).toBe(true);
+    /* any other body is the whole box */
+    expect(bodyOf(station({ exec: 'skill' }))).toEqual({ x: m.x, y: m.y, w: m.w, h: m.h });
+  });
+
+  it('a script is a window: its parts start under the title bar', () => {
+    const agent = machineParts(station()), script = machineParts(station({ exec: 'script' }));
+    expect(script.badge.y).toBeCloseTo(agent.badge.y + BAR);
+    expect(script.lamp.y).toBeCloseTo(agent.lamp.y + BAR);
+    expect(script.places[0]!.y).toBeCloseTo(agent.places[0]!.y + BAR);
+    /* and end where any machine's do */
+    expect(script.aside!.y + script.aside!.h).toBeCloseTo(agent.aside!.y + agent.aside!.h);
   });
 });
 

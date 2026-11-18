@@ -10,7 +10,7 @@ import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
 import { follow, type Track, type TrackPos } from './ticketMotion';
-import { inRect, lampOf, MACHINE_ICONS, machineParts, sortInto, type Lamp, type Rect } from './machineArt';
+import { BAR, bodyOf, CUT, inRect, KIND_LOOK, kindOf, lampOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, sortInto, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
 import { opText, plateLines } from './setOps';
@@ -102,7 +102,7 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
-type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number }];
+type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
@@ -342,7 +342,9 @@ export class FactoryView {
       const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
       ctx.fillStyle = o.plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
     }
+    if (o.spacing) ctx.letterSpacing = `${(px * o.spacing).toFixed(2)}px`;
     ctx.fillStyle = color; ctx.fillText(text, sx, sy);
+    if (o.spacing) ctx.letterSpacing = '0px';
   }
 
   private ticket(t: FactoryTicket, x: number, y: number, s: number, st: ViewState, mark: 'run' | 'human' | 'fail' | 'out' | 'wait' | '', dt: number, rate = SNAP): void {
@@ -1018,26 +1020,32 @@ export class FactoryView {
     const P = machineParts(m, D.stuck.length > 0), S = sortInto(m, tickets), L = lampOf(m, tickets);
     /* a question an arm takes is on its way out: it stands at that arm's quay, not in the bay */
     const aside = S.aside.filter((t) => !D.quay.has(t.ticketId));
-    const tint = gate ? pal.warn : '#c084fc', tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
+    const kind = kindOf(m), look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.warn, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
     const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke(); };
-    /* the body: a plate lit from above; a gate keeps its dashed amber edge */
-    rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34);
-    const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body);
-    ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : pal.edge;
+    /* the body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
+    if (kind) this.behind(m, kind, tint, pal);
+    this.trace(m);
+    if (kind === 'script') ctx.fillStyle = mix(pal.body, '#000000', 0.55);
+    else { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body); ctx.fillStyle = g; }
+    ctx.fill();
+    ctx.lineWidth = gate ? 0.12 : 0.055; ctx.strokeStyle = tint;
     if (gate) ctx.setLineDash([0.3, 0.2]);
     ctx.stroke(); ctx.setLineDash([]);
-    /* head plate: what it is, and its name */
-    rr(ctx, P.badge.x, P.badge.y, P.badge.w, P.badge.h, 0.18); ctx.fillStyle = veil(tint, 0.16); ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = veil(tint, 0.55); ctx.stroke();
-    if (P.badge.w * z >= 11 && typeof Path2D !== 'undefined') {
-      const k = (P.badge.w * 0.7) / 24;
-      ctx.save(); ctx.translate(P.badge.x + P.badge.w * 0.15, P.badge.y + P.badge.h * 0.15); ctx.scale(k, k);
-      ctx.strokeStyle = tint; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      for (const d of MACHINE_ICONS[m.exec as keyof typeof MACHINE_ICONS] ?? []) ctx.stroke(new Path2D(d));
-      ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    if (kind === 'script') {
+      /* the title bar of a terminal window, with its three buttons */
+      ctx.fillStyle = veil(tint, 0.22); ctx.fillRect(x + 0.1, y + 0.1, w - 0.2, BAR - 0.04);
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x + 0.3 + i * 0.2, y + 0.08 + BAR / 2, 0.055, 0, 6.3); ctx.fillStyle = veil(tint, 0.9 - i * 0.25); ctx.fill(); }
     }
-    this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y, 0.33, pal.text, { weight: 650, min: 9, max: 17, fit: P.lamp.x - P.name.x - 0.1 });
-    this.label(gate ? 'gate · you decide' : m.exec === 'script' ? `script · ${scriptSummary(m.script)}` : `${m.exec} · ${m.ref || 'nothing chosen'}`, P.name.x, P.name.y + 0.36, 0.2, pal.text3, { fit: P.lamp.x - P.name.x - 0.1 });
+    /* head plate: what it is (a full badge for what runs something, its word over the name), and its name */
+    rr(ctx, P.badge.x, P.badge.y, P.badge.w, P.badge.h, 0.18);
+    if (kind) { ctx.fillStyle = tint; ctx.fill(); } else { ctx.fillStyle = veil(tint, 0.16); ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = veil(tint, 0.55); ctx.stroke(); }
+    if (P.badge.w * z >= 11) this.glyph(m.exec, P.badge.x + P.badge.w * 0.15, P.badge.y + P.badge.h * 0.15, P.badge.w * 0.7, kind ? '#09090b' : tint, kind ? 2.2 : 2);
+    /* the word needs room to be read: seen from far, the head keeps its two lines and the shape and the hue say the kind */
+    const fit = P.lamp.x - P.name.x - 0.1, worded = !!look && 0.17 * z >= 6;
+    if (worded) this.label(look.word, P.name.x, P.name.y - 0.13, 0.17, tint, { mono: true, weight: 700, spacing: 0.16, fit });
+    this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y + (worded ? 0.14 : 0), worded ? 0.31 : 0.33, pal.text, { weight: 650, min: 9, max: 17, fit });
+    const what = gate ? 'you decide' : m.exec === 'script' ? scriptSummary(m.script) : m.ref || 'nothing chosen';
+    this.label(worded ? what : `${gate ? 'gate' : m.exec} · ${what}`, P.name.x, P.name.y + (worded ? 0.44 : 0.36), worded ? 0.19 : 0.2, pal.text3, { fit });
     /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
     rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
     P.lights.forEach((l, i) => {
@@ -1059,6 +1067,7 @@ export class FactoryView {
         pit(c);
         const t = S.places[i], size = Math.min(c.w, c.h - 0.2) * 0.52, cx = c.x + c.w / 2, cy = c.y + c.h / 2 + 0.08;
         tiny(t ? (t.phase === 'running' ? 'RUNNING' : 'HELD') : 'FREE', c, t?.phase === 'running' ? pal.ok : pal.text3);
+        if (!t && kind && c.w * z >= 38) this.idle(kind, cx, cy, size, c, tint);
         if (t) this.ticket(t, cx, cy, size, st, t.phase === 'running' ? 'run' : 'wait', dt);
       });
       S.extra.forEach((t) => this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + 0.3 }));
@@ -1090,12 +1099,68 @@ export class FactoryView {
     this.quays(takers, D, st, pal, dt, false);
     /* a script station says what it runs when it is pointed at: one line a command */
     if (m.exec === 'script' && (st.selMachine === m.id || st.hoverMachine === m.id)) {
-      const lines = plateLines(scriptPlate(m.script), 9), col = '#38bdf8';
+      const lines = plateLines(scriptPlate(m.script), 9), col = tint;
       /* over the station, or under it when there is no room left above in the view */
       const above = (y - this.cam.y) * z + this.h / 2 > lines.length * 15 + 24;
       this.boards.push({ lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
     }
-    if (L === 'off') { ctx.globalAlpha = 0.28; rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.34); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
+    if (L === 'off') { ctx.globalAlpha = 0.28; this.trace(m); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
+  }
+
+  /** The outline of a machine's body, as a path: each kind that runs something has its own (see `machineArt.ts`). */
+  private trace(m: StationSpec): void {
+    const ctx = this.ctx, b = bodyOf(m), x = b.x + 0.07, y = b.y + 0.07, w = b.w - 0.14, h = b.h - 0.14;
+    if (m.exec !== 'skill') { rr(ctx, x, y, w, h, m.exec === 'agent' ? SHOULDER : m.exec === 'script' ? 0.07 : ROUND); return; }
+    const c = Math.min(CUT, w / 4, h / 4);
+    ctx.beginPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w - c, y); ctx.lineTo(x + w, y + c); ctx.lineTo(x + w, y + h - c);
+    ctx.lineTo(x + w - c, y + h); ctx.lineTo(x + c, y + h); ctx.lineTo(x, y + h - c); ctx.lineTo(x, y + c); ctx.closePath();
+  }
+
+  /** What stands behind the body: an agent's antenna, the two plates behind a panel's front one. */
+  private behind(m: StationSpec, kind: RunKind, tint: string, pal: Palette): void {
+    const ctx = this.ctx, b = bodyOf(m);
+    if (kind === 'agent') {
+      const ax = b.x + 0.92;
+      ctx.strokeStyle = tint; ctx.lineWidth = 0.055; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ax, b.y + 0.1); ctx.lineTo(ax, b.y - 0.1); ctx.stroke(); ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.arc(ax, b.y - 0.13, 0.08, 0, 6.3); ctx.fillStyle = tint; ctx.fill();
+    } else if (kind === 'panel') {
+      for (const [k, a] of [[1, 0.35], [0.5, 0.6]] as const) {
+        rr(ctx, b.x + 0.07 + STACK * k, b.y + 0.07 - STACK * k, b.w - 0.14, b.h - 0.14, ROUND);
+        ctx.fillStyle = pal.body; ctx.fill(); ctx.lineWidth = 0.055; ctx.strokeStyle = veil(tint, a); ctx.stroke();
+      }
+    }
+  }
+
+  /** A machine's icon, as strokes, in a square of that side. */
+  private glyph(exec: string, x: number, y: number, side: number, color: string, lw: number): void {
+    if (typeof Path2D === 'undefined') return;
+    const ctx = this.ctx, k = side / 24;
+    ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const d of MACHINE_ICONS[exec as keyof typeof MACHINE_ICONS] ?? []) ctx.stroke(new Path2D(d));
+    ctx.restore();
+  }
+
+  /**
+   * A free place says what will work there, faintly: a robot's head (agent), a tool in its holder (skill), three
+   * seats (panel), a prompt (script). A ticket that comes in covers it.
+   */
+  private idle(kind: RunKind, cx: number, cy: number, size: number, c: Rect, tint: string): void {
+    const ctx = this.ctx, s = Math.min(size, 0.7);
+    if (kind === 'agent') this.glyph('agent', cx - s / 2, cy - s / 2, s, veil(tint, 0.3), 1.6);
+    else if (kind === 'skill') {
+      ctx.setLineDash([0.09, 0.09]); ctx.lineWidth = 0.04; ctx.strokeStyle = veil(tint, 0.3); ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
+      this.glyph('skill', cx - s * 0.3, cy - s * 0.3, s * 0.6, veil(tint, 0.4), 1.8);
+    } else if (kind === 'panel') {
+      for (const [dx, dy] of [[-0.36, -0.2], [0.36, -0.2], [0, 0.32]] as const) { ctx.beginPath(); ctx.arc(cx + dx * s, cy + dy * s, s * 0.21, 0, 6.3); ctx.fillStyle = veil(tint, 0.2); ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = veil(tint, 0.5); ctx.stroke(); }
+    } else {
+      const sx = c.x + 0.12, sy = c.y + 0.34, sw = c.w - 0.24, sh = c.h - 0.46;
+      if (sh < 0.3) return;
+      rr(ctx, sx, sy, sw, sh, 0.05); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+      this.label('$', sx + 0.1, sy + 0.2, 0.2, veil(tint, 0.8), { mono: true, weight: 700 });
+      ctx.fillStyle = veil(tint, 0.7); ctx.fillRect(sx + 0.3, sy + 0.1, 0.07, 0.2);
+      if (sh > 0.5) { ctx.fillStyle = veil(tint, 0.3); ctx.fillRect(sx + 0.1, sy + sh - 0.16, sw * 0.55, 0.05); }
+    }
   }
 
   private statusStation(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
@@ -1480,7 +1545,7 @@ export class FactoryView {
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : pal.text2;
+      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2;
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     for (const t of st.tickets) {

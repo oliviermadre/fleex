@@ -7,6 +7,9 @@
  * `quays.ts`). Only what no arm takes is kept in a tray, which is there only then.
  *
  * Nothing queues in a machine: what cannot enter waits on the belt that feeds it.
+ *
+ * The four kinds that run something are told apart at a glance, as a gate is by its dashed edge: each has a hue, its
+ * word on the head plate, and a body of its own (`KIND_LOOK`, `bodyOf`).
  */
 import { RUNS, SET_ASIDE, type FactoryTicket, type StationSpec } from './types';
 import { MAX_PLACES } from './layoutOps';
@@ -30,12 +33,44 @@ export interface MachineParts {
 
 const EDGE = 0.22, HEAD = 1.14;
 
+/** A station that runs something. */
+export type RunKind = 'agent' | 'skill' | 'panel' | 'script';
+export const kindOf = (m: StationSpec): RunKind | null => (RUNS.includes(m.exec) ? (m.exec as RunKind) : null);
+
+/**
+ * What tells the kinds apart: a hue (none of them the gate's amber, the green of "it works", the pink of a Set gantry
+ * or the cyan of a teleporter), the word written over the name, and a body:
+ * an agent has round shoulders and an antenna, a skill cut corners (a tool), a panel is a stack of plates (several
+ * personas), a script a terminal window with its title bar.
+ */
+export const KIND_LOOK: Record<RunKind, { hue: string; word: string }> = {
+  agent: { hue: '#a78bfa', word: 'AGENT' },
+  skill: { hue: '#38bdf8', word: 'SKILL' },
+  panel: { hue: '#fb923c', word: 'PANEL' },
+  script: { hue: '#a3e635', word: 'SCRIPT' },
+};
+
+/** How far a panel's plates step back from one another, and how tall a script's title bar is. */
+export const STACK = 0.24, BAR = 0.24;
+/** How round an agent's shoulders are, and how much is cut off a skill's corners; any other body has `ROUND`. */
+export const SHOULDER = 0.52, CUT = 0.34, ROUND = 0.34;
+
+/**
+ * The plate the machine's parts stand on, in its tile box: the whole box, except for a panel, whose front plate
+ * leaves room at the top and on the right for the two behind it.
+ */
+export function bodyOf(m: StationSpec): Rect {
+  const s = m.exec === 'panel' ? STACK : 0;
+  return { x: m.x, y: m.y + s, w: m.w - s, h: m.h - s };
+}
+
 /** Room kept between the light and the machine's right edge: a quay there, on the top row, does not cover it. */
 const LAMP_IN = 0.56;
 
 /** The parts of a machine; `tray` when it holds something done that no arm takes, which then gets a tray on the right. */
 export function machineParts(m: StationSpec, tray = false): MachineParts {
-  const { x, y, w, h } = m, runs = RUNS.includes(m.exec);
+  /* a script's parts start under its title bar */
+  const b = bodyOf(m), bar = m.exec === 'script' ? BAR : 0, x = b.x, y = b.y + bar, w = b.w, h = b.h - bar, runs = RUNS.includes(m.exec);
   const lamp: Rect = { x: x + w - LAMP_IN - 0.44, y: y + 0.2, w: 0.44, h: 0.9 };
   const top = y + HEAD, asideH = runs ? Math.min(0.78, (h - HEAD) * 0.36) : 0;
   const aside = runs ? { x: x + EDGE, y: y + h - EDGE - asideH, w: w - EDGE * 2, h: asideH } : null;

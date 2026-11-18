@@ -93,6 +93,14 @@ gate, amber while something is to decide. On a machine that runs something it is
 on, and pointing at it says what runs, what is set aside and whether the exit is clear. The floor's glow follows the
 light: amber around a machine that needs someone, a dimmer red around one that is off.
 
+The four kinds that run something are told apart at a glance, as a gate is by its dashed amber edge (`KIND_LOOK`,
+`bodyOf` in `machineArt.ts`). Each has a hue for its edge and its badge, its word over the name, and a body of its
+own: an agent is violet, with round shoulders and an antenna; a skill is blue, with cut corners; a panel is orange, a
+stack of three plates; a script is lime, a terminal window with its title bar. A free place says faintly what will
+work there (a robot's head, a tool, three seats, a prompt). Seen from far the word goes and the shape and the hue
+remain; the minimap paints each station in its hue. A panel's parts stand on its front plate and a script's under its
+title bar, so both have a little less room than the other two.
+
 A layout carries a `version` (`layout-versions.ts`). When what a layout means changes, the version goes up and a step
 is added, as a migration is for a table. A change of shape is converted when the floor is loaded. A change of
 geometry cannot be: the step returns null, the old layout is kept as an archived floor (`default@v<n>-<time>` in
