@@ -765,7 +765,7 @@ function Floor() {
         onCancel={() => setConfirmGive(false)}
         onConfirm={() => { setConfirmGive(false); for (const t of selTickets) void store.giveBack(t.ticketId); setSelection(null); }} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
-      {deskForm && <FactoryDeskForm desk={deskForm.desk} onClose={() => setDeskForm(undefined)} />}
+      {deskForm && <FactoryDeskForm desk={deskForm.desk} onClose={() => setDeskForm(undefined)} onOpenTicket={setOpenTicket} />}
     </div>
   );
 }

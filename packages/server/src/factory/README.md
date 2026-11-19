@@ -74,9 +74,11 @@ Work view. It was picked on `docs/factory/intake.html` (I1 for its look, N3 for 
   on the desk selected, else on the floor's first desk; with no desk on the floor the ticket is handed over without
   a target and lands in Inbound. A desk selected has New ticket where a zone has Release. Out of build mode a
   double-click on a desk opens the form too; its settings are Edit.
-- The form is the Work view's own (`NewTaskCompose`, mounted by `FactoryDeskForm.tsx` with a draft of its own, so the
-  Work view's draft is left alone, and with `onCreated` instead of opening the ticket in the Work view). A desk's
-  `defaults` (board, type, priority) prefill it; the rest of the form is as it is (epics, repos, complexity).
+- The form is the Work view's whole new-task flow (`NewTask`, mounted by `FactoryDeskForm.tsx`): a title, a link that
+  is recognised and imported, or a source to browse (GitHub issues and pull requests, Slack), then the composer. It
+  runs on a draft of its own (`NewTaskDraftProvider`), so the Work view's draft is left alone; `onCreated` replaces
+  opening the ticket in the Work view, and an import that already has a ticket opens that one in the workbench
+  (`onOpenTicket`). A desk's `defaults` (board, type, priority) prefill the draft; the rest is as it is.
 - Once created, the ticket is handed over to the Factory at the desk (`POST …/transfer` with the desk's id). It is
   released at once: the first arm that wants it takes it out. Nothing else can put a ticket into a desk (a drop, a
   move, an arm, a belt): `canTake` is false for it, and `transfer` is the only way in.
@@ -555,7 +557,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
 | web: `work/timeline/buildTimeline.ts`, `TimelineGlyph.tsx`, `useTicketTimeline.ts` | a run a station started goes by the station's name on a ticket's timeline, with the Factory's glyph, instead of "Workflow": an optional `stationRuns` source (read by `useFactoryStationRuns`, empty while the Factory is off) and a `factory` glyph |
 | web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
-| web: `work/new/NewTaskCompose.tsx` | three optional props for the desks' form: `draftState` (a draft of its own), `onCreated` (instead of opening the ticket in the Work view), `onCancel`. Unset, the composer is unchanged; they can stay |
+| web: `work/new/newTaskDraft.ts`, `NewTask.tsx`, `NewTaskEntry.tsx`, `SourcePicker.tsx`, `NewTaskCompose.tsx` | the new-task screens read their draft and their Cancel from `useNewTaskDraft` (the Work store's, unless a `NewTaskDraftProvider` gives another), and `NewTask` takes an optional `onCreated` and `onOpenTicket`. Without a provider or those props, the Work view is unchanged; they can stay |
 
 ## Removing it
 

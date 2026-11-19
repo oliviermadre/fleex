@@ -14,8 +14,8 @@ the previous session's opinion and can be overturned.
   (`ticketToken.ts`). To draw on a mock-up before step 3. Intake: **I1**, a loading dock. New ticket: **N3**, a
   Desk machine and a command on the card.
 - **Order changed**: the Desk went first (it needs no migration and no item), then items.
-- **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. Only the composer of the form
-  is mounted, not its entry screen (importing from a link or a source): to add if wanted.
+- **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. The whole new-task flow is
+  mounted on it, import from a link or a source included.
 - **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
   machines. Rename one of them before step 7.
 

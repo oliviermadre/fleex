@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
-import { useWorkStore, type WorkDraft } from '../../../stores/workStore';
+import { useWorkStore } from '../../../stores/workStore';
+import { useNewTaskDraft } from './newTaskDraft';
 import type { Ticket } from '@fleex/shared';
 import { toast } from '../../../lib/toast';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
@@ -28,32 +29,20 @@ import { SourceChip } from './SourceChip';
  * source's links + tags), joins epics, attaches repos (with a base branch or a
  * direct checkout), and, for a GitHub issue, syncs its metadata after the fact.
  *
- * Mounted elsewhere than the Work view (the Factory's desks), it is given its own
- * draft (`draftState`, so the Work view's draft is left alone), what to do with the
- * ticket once created (`onCreated`, instead of opening it in the Work view) and
- * where Cancel goes (`onCancel`).
+ * Mounted elsewhere than the Work view (the Factory's desks), its draft and its
+ * Cancel come from `NewTaskDraftProvider`, and `onCreated` says what to do with
+ * the ticket instead of opening it in the Work view.
  */
-export interface ComposeDraftState {
-  draft: WorkDraft;
-  update: (patch: Partial<WorkDraft>) => void;
-  reset: (boardId?: string | null) => void;
-}
 export function NewTaskCompose({
   onStartOver,
   enterStarts = true,
-  draftState,
   onCreated,
-  onCancel,
 }: {
   onStartOver: () => void;
   /** ⏎ in the description starts the task. Off on a phone, where ⏎ is the only way to add a line. */
   enterStarts?: boolean;
-  /** A draft of its own; without one, the Work view's. */
-  draftState?: ComposeDraftState;
   /** Called once the ticket exists, its epics and repos attached; without it, the ticket is opened in the Work view. */
   onCreated?: (ticket: Ticket) => void | Promise<void>;
-  /** Cancel and Escape; without it, back to the Work view's task. */
-  onCancel?: () => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
   const tickets = useTicketStore((s) => s.tickets);
@@ -61,14 +50,8 @@ export function NewTaskCompose({
   const addLink = useTicketStore((s) => s.addLink);
   const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
   const repositories = useRepositoryStore((s) => s.repositories);
-  const workDraft = useWorkStore((s) => s.draft);
-  const workUpdate = useWorkStore((s) => s.updateDraft);
-  const workReset = useWorkStore((s) => s.resetDraft);
-  const draft = draftState?.draft ?? workDraft;
-  const updateDraft = draftState?.update ?? workUpdate;
-  const resetDraft = draftState?.reset ?? workReset;
+  const { draft, update: updateDraft, reset: resetDraft, cancel } = useNewTaskDraft();
   const setView = useWorkStore((s) => s.setView);
-  const cancel = onCancel ?? (() => setView('task'));
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const pinTicket = useWorkStore((s) => s.pinTicket);
   const [creating, setCreating] = useState(false);
