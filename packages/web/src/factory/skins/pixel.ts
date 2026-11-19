@@ -175,7 +175,7 @@ export class PixelSkin extends FleexSkin {
    * and a few of their pixels flare. Chosen at random from the station and the moment, so nothing is kept; it stands
    * still when the floor does (its clock is the floor's).
    */
-  private halo(m: StationSpec, s: Lamp, pal: Palette): void {
+  protected halo(m: StationSpec, s: Lamp, pal: Palette): void {
     const ctx = this.ctx, o = 1 / ART, t = 3 * o, base = s === 'off' ? pal.danger : pal.amber, beat = Math.floor(this.clock * FLICKER);
     const seed = hash(m.id), rnd = (k: number) => hash(`${seed}:${beat}:${k}`) / 0xffffffff;
     const strength = s === 'off' ? 0.6 : 1;
@@ -235,7 +235,7 @@ export class PixelSkin extends FleexSkin {
   }
 
   /** A worker at the foot of a station, in the hue of its kind; it bobs while something runs there. */
-  private worker(v: StationView): void {
+  protected worker(v: StationView): void {
     const ctx = this.ctx, m = v.m, busy = v.places.some((p) => p.t?.t.phase === 'running'), o = 1 / ART;
     const x = m.x + m.w - 0.75, y = m.y + m.h - 0.02 - (busy && Math.floor(this.clock * 6) % 2 ? o : 0);
     const shirt = v.run ? { agent: '#8b7cf6', skill: '#38a8e8', panel: '#f08a3c', script: '#7cc43a' }[v.run] : '#f2b01e';

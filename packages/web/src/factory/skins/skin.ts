@@ -79,6 +79,11 @@ export interface Skin {
   readonly id: string;
   /** The zooms the view may rest on, in pixels per tile; it glides between them. None: the zoom is free. */
   readonly steps?: readonly number[];
+  /**
+   * How high a machine is painted, in tiles, for a skin seen from three quarters: its top is that much higher than its
+   * tiles, its front face fills the gap. What is under the pointer is then what is seen there. None: flat.
+   */
+  liftOf?(m: MachineSpec, st: ViewState): number;
   /** What lies under everything: the floor, its light, what stands casts on it. Leaves the canvas in the floor's units. */
   ground(on: Surface, S: Scene, st: ViewState): void;
   /** The pieces of the scene. */

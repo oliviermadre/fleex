@@ -273,19 +273,30 @@ export class FactoryView {
     this.skin.minimap(c, { w, h, dpr: d, s, ox, oy, floor: F }, st, this.scene, this);
   }
 
+  /** The machine seen at that point when things stand: its top or its front face, the nearest first (the lowest on screen). */
+  private seenAt(x: number, y: number, layout: FactoryLayout, raise: (m: MachineSpec) => number): MachineSpec | null {
+    let best: MachineSpec | null = null;
+    for (const m of layout.machines) {
+      if (m.kind === 'label' || x < m.x || x >= m.x + m.w || y >= m.y + m.h || y < m.y - raise(m)) continue;
+      if (!best || m.y + m.h > best.y + best.h) best = m;
+    }
+    return best;
+  }
   miniToWorld(mx: number, my: number): { x: number; y: number } | null { const m = this.mini; return m ? { x: (mx - m.ox) / m.s, y: (my - m.oy) / m.s } : null; }
 
   pick(sx: number, sy: number, st: ViewState, withTickets: boolean): Hit {
     const p = this.toWorld(sx, sy);
+    this.use(st.layout);
+    /* seen from three quarters, things stand higher than their tiles: a ticket is where it is drawn, a machine where it is seen */
+    const raise = this.skin.liftOf ? (m: MachineSpec | null) => (m ? this.skin.liftOf!(m, st) : 0) : null;
     if (withTickets) {
       let best: string | null = null, bd = Math.max(0.3, 9 / this.cam.z);
-      for (const t of st.tickets) { const q = this.scene.shown.get(t.ticketId); if (!q) continue; const dd = Math.hypot(q.x - p.x, q.y - p.y); if (dd < bd) { bd = dd; best = t.ticketId; } }
+      for (const t of st.tickets) { const q = this.scene.shown.get(t.ticketId); if (!q) continue; const dd = Math.hypot(q.x - p.x, q.y - (raise ? raise(this.machine(t.machineId)) : 0) - p.y); if (dd < bd) { bd = dd; best = t.ticketId; } }
       if (best) return { ticketId: best };
     }
-    this.use(st.layout);
-    const m = this.at(Math.floor(p.x), Math.floor(p.y));
+    const m = raise ? this.seenAt(p.x, p.y, st.layout, raise) : this.at(Math.floor(p.x), Math.floor(p.y)), up = raise ? raise(m) : 0;
     /* out of build mode, the light of a machine is its own target: its switch, and what it has to say */
-    if (m && withTickets && m.kind === 'station' && m.exec !== 'native' && inRect(machineParts(m).lamp, p.x, p.y)) return { lamp: m.id };
+    if (m && withTickets && m.kind === 'station' && m.exec !== 'native' && inRect(machineParts(m).lamp, p.x, p.y + up)) return { lamp: m.id };
     if (m) return { machineId: m.id };
     for (const l of st.layout.machines) if (l.kind === 'label' && Math.floor(p.x) === l.x && Math.floor(p.y) === l.y) return { machineId: l.id };
     return null;

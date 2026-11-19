@@ -36,7 +36,7 @@ const HAZARD = '#eab308';
 /** The colour of a Set gantry, and of everything that says what it does. */
 const SET = '#f472b6';
 /** A plate of several lines beside a machine: what it is set to do, readable from the floor. */
-interface Board { lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
+interface Board { /** How high it stands (see `lifted`). */ lift?: number; lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
@@ -156,8 +156,13 @@ export class FleexSkin implements Skin {
     return this.pal;
   }
 
-  private label(text: string, wx: number, wy: number, size: number, color: string, opts: Label[5] = {}): void { this.labels.push([text, wx, wy, size, color, opts]); }
-  private flushLabels(): void {
+  /**
+   * How high what is being painted stands, in tiles (a variant seen from three quarters lifts what stands): the words
+   * and plates written on it go up with it.
+   */
+  protected lifted = 0;
+  protected label(text: string, wx: number, wy: number, size: number, color: string, opts: Label[5] = {}): void { this.labels.push([text, wx, wy - this.lifted, size, color, opts]); }
+  protected flushLabels(): void {
     const ctx = this.ctx;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const l of this.labels) this.write(l);
@@ -165,7 +170,7 @@ export class FleexSkin implements Skin {
     const z = this.cam.z, px = clamp(0.22 * z, 9, 11), lh = px * 1.3, pad = px * 0.55;
     ctx.font = `700 ${px.toFixed(1)}px ${this.fonts.mono}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     for (const b of this.boards) {
-      const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - this.cam.y) * z + this.h / 2;
+      const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - (b.lift ?? 0) - this.cam.y) * z + this.h / 2;
       const x0 = b.side === 'right' ? sx + 6 : b.side === 'left' ? sx - 6 - w : sx - w / 2, y0 = b.side === 'above' ? sy - 6 - h : b.side === 'below' ? sy + 6 : sy - h / 2;
       if (x0 > this.w || x0 + w < 0 || y0 > this.h || y0 + h < 0) continue;
       const lit = !!this.pal?.light, on = lit ? 1 : 0;
@@ -178,7 +183,7 @@ export class FleexSkin implements Skin {
   private stencil(text: string, wx: number, wy: number, size: number, color: string, alpha: number, opts: Label[5] = {}): void {
     const ctx = this.ctx;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.globalAlpha = alpha;
-    this.write([text, wx, wy, size, color, opts]);
+    this.write([text, wx, wy - this.lifted, size, color, opts]);
     ctx.restore();
   }
   private write([raw, wx, wy, size, color, o]: Label): void {
@@ -215,7 +220,7 @@ export class FleexSkin implements Skin {
     return true;
   }
 
-  private ticket(P: Placed, st: ViewState): void {
+  protected ticket(P: Placed, st: ViewState): void {
     const ctx = this.ctx, pal = this.palette(), { t, x: px, y: py, s, mark, dragging, picked, selected, dim, call } = P;
     const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
     /*
@@ -299,7 +304,7 @@ export class FleexSkin implements Skin {
    * every ticket while the key is held. Tickets of one machine, or close together on a belt, share a box that lists
    * them, and boxes keep clear of each other (see `nameTags.ts`). Drawn last, in screen pixels.
    */
-  private names(st: ViewState, S: Scene, pal: Palette): void {
+  protected names(st: ViewState, S: Scene, pal: Palette): void {
     const all = st.allNames === true, z = this.cam.z;
     const items: NamedTicket[] = [], byId = new Map<string, FactoryTicket>();
     const sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
@@ -340,7 +345,7 @@ export class FleexSkin implements Skin {
     ctx.restore();
   }
 
-  private labelOf({ m }: LabelView, pal: Palette): void { this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 }); }
+  protected labelOf({ m }: LabelView, pal: Palette): void { this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 }); }
 
   /**
    * The floor, before anything built on it. It has no edge: it is drawn as far as what is built, plus room to build
@@ -466,7 +471,7 @@ export class FleexSkin implements Skin {
   }
 
   /** Veil every station and zone, then heat the ones the lens has a value for: yellow is little, red is the most on the floor. */
-  private lens(layer: LensLayer, L: FactoryLayout, pal: Palette): void {
+  protected lens(layer: LensLayer, L: FactoryLayout, pal: Palette): void {
     const ctx = this.ctx;
     for (const m of L.machines) {
       if (m.kind !== 'station' && m.kind !== 'zone') continue;
@@ -482,7 +487,7 @@ export class FleexSkin implements Skin {
     }
   }
 
-  private beltBase(v: BeltView, pal: Palette): void {
+  protected beltBase(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, { x, y } = b, dx = DX[b.dir], dy = DY[b.dir];
     /* a fast belt has its rails in the fast colour: it reads from far, where chevrons are no longer drawn */
     ctx.strokeStyle = b.fast ? mix(pal.fast, pal.belt, 0.35) : pal.edge; ctx.lineWidth = 0.09;
@@ -512,7 +517,7 @@ export class FleexSkin implements Skin {
    * The chevrons that run along a belt. A fast belt says it is one three ways: its chevrons come in pairs, in the fast
    * colour, and they run twice as fast.
    */
-  private beltChevrons(v: BeltView, pal: Palette): void {
+  protected beltChevrons(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = f >= 0 ? DX[f as 0] : 0, fy = f >= 0 ? DY[f as 0] : 0;
     const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
     ctx.strokeStyle = b.fast ? pal.fast : pal.chev;
@@ -537,7 +542,7 @@ export class FleexSkin implements Skin {
    * the time it takes to write what the gantry changes, and goes on. What the gantry does is written on a plate
    * beside it, one operation a line, so its setting is read from the floor; red when it could not write.
    */
-  private gantry(v: BeltView, pal: Palette): void {
+  protected gantry(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, g = v.gantry!, { x, y } = b, across = g.across;
     const under = g.under, col = g.failed ? pal.danger : SET;
     /* laid out for a belt that runs east-west; turned a quarter for one that runs north-south */
@@ -547,7 +552,7 @@ export class FleexSkin implements Skin {
     box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
     if (this.cam.z < 13 && !g.asked) return;
     const lines = g.lines, side = g.side;
-    this.boards.push({ lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= g.set ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
+    this.boards.push({ lift: this.lifted, lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= g.set ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
   }
 
   /**
@@ -555,7 +560,7 @@ export class FleexSkin implements Skin {
    * rejects from the middle of the belt to the middle of the next tile, swinging by the way the belt runs, so it
    * does not cross what is coming.
    */
-  private tollArm(v: BeltView, st: ViewState, pal: Palette): void {
+  protected tollArm(v: BeltView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { ex, ey, hx, hy, carried } = v.toll!;
     const col = pal.danger, steel = mix(pal.body, pal.text2, 0.38), link = (dx: number, dy: number) => { ctx.beginPath(); ctx.moveTo(ex + dx, ey + dy); ctx.lineTo(hx + dx, hy + dy); ctx.stroke(); };
     ctx.lineCap = 'round';
@@ -570,7 +575,7 @@ export class FleexSkin implements Skin {
   }
 
   /** Two belts crossing: the north-south one passes under, the east-west one over it. */
-  private bridge(v: BridgeView, st: ViewState, pal: Palette): void {
+  protected bridge(v: BridgeView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m, riders } = v, { x, y } = m;
     /*
      * A bridge has no direction and no speed of its own: each lane is drawn the way the belts that feed it send
@@ -634,7 +639,7 @@ export class FleexSkin implements Skin {
    * an arrow in its colour says which way it works: narrow where it takes, wide where it drops, its head at the edge.
    * It is there when the arm is at rest or turned the other way, which is when one needs it.
    */
-  private arm(v: ArmView, st: ViewState, pal: Palette): void {
+  protected arm(v: ArmView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m: a, bx, by, dx, dy, hx, hy, carried, filtered } = v;
     const col = armColor(a, { plain: pal.text2, sorts: pal.warn }), steel = mix(pal.body, pal.text2, 0.38);
     const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
@@ -708,7 +713,7 @@ export class FleexSkin implements Skin {
    * A station as a machine (see `machineArt.ts`): head plate, light, places, a bay for what was set aside, and a quay
    * in front of each arm for what is done. A status station stays the small box it was: it holds nothing.
    */
-  private station(v: StationView, st: ViewState, pal: Palette): void {
+  protected station(v: StationView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, z = this.cam.z, { m, gate, parts: P, sorted: S, lamp: L } = v, { x, y, w, h } = m;
     const kind = v.run, look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.amber, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
     /* a place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read */
@@ -789,7 +794,7 @@ export class FleexSkin implements Skin {
       const lines = v.plate, col = tint;
       /* over the station, or under it when there is no room left above in the view */
       const above = (y - this.cam.y) * z + this.h / 2 > lines.length * 15 + 24;
-      this.boards.push({ lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
+      this.boards.push({ lift: this.lifted, lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
     }
     if (L === 'off') { ctx.globalAlpha = 0.28; this.trace(m); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
   }
@@ -861,7 +866,7 @@ export class FleexSkin implements Skin {
     }
   }
 
-  private statusStation(v: StatusView, st: ViewState, pal: Palette): void {
+  protected statusStation(v: StatusView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m, big } = v, { x, y, w, h } = m, gate = false, nat = true;
     const state = v.busy ? pal.ok : pal.text3;
     rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.28); ctx.fillStyle = pal.body; ctx.fill();
@@ -889,7 +894,7 @@ export class FleexSkin implements Skin {
    * itself), how many tickets it holds as a large figure on the ground, and, where it stops releasing above a number
    * of tickets in work, that number as a line that fills.
    */
-  private zone(v: ZoneView, S: Scene, st: ViewState, pal: Palette): void {
+  protected zone(v: ZoneView, S: Scene, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m, stock } = v, { x, y, w, h } = m, auto = m.release === 'auto', c = m.inbound ? pal.accent : ZONE_PAINT[m.status ?? ''] ?? PAINT, wip = S.wip;
     ctx.fillStyle = c; ctx.globalAlpha = pal.light ? 0.1 : 0.055; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = c; ctx.globalAlpha = pal.light ? 0.8 : 0.45; ctx.lineWidth = 0.045; ctx.setLineDash([0.2, 0.16]); ctx.strokeRect(x + 0.035, y + 0.035, w - 0.07, h - 0.07); ctx.setLineDash([]);
@@ -934,7 +939,7 @@ export class FleexSkin implements Skin {
    * Fleex, so it is not kept there: it fades as it crosses the frame (see `departures`). What stays is how many left
    * by it over the period the floor's figures cover.
    */
-  private exit(v: ExitView, pal: Palette): void {
+  protected exit(v: ExitView, pal: Palette): void {
     const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
@@ -959,7 +964,7 @@ export class FleexSkin implements Skin {
    * taken, and the whole pad to red when it cannot work as it is (a departure that leads nowhere, an arrival no arm
    * empties). Its name and what it leads to are on a plate beside it.
    */
-  private port(v: PortView, st: ViewState, pal: Palette): void {
+  protected port(v: PortView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m, dep, bad, waiting, burst } = v, { x, y } = m, cx = x + 0.5, cy = y + 0.5, z = this.cam.z, col = bad ? pal.danger : v.color;
     rr(ctx, x + 0.068, y + 0.068, 0.864, 0.864, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', pal.light ? 0.08 : 0.3); ctx.fill();
     ctx.strokeStyle = col; ctx.lineWidth = 0.057;
@@ -1025,7 +1030,7 @@ export class FleexSkin implements Skin {
    * that is selected or pointed at (for an arrival, every departure that leads to it), and while a ticket crosses,
    * with the ticket as a dot on it. Drawn over everything, since it crosses the floor.
    */
-  private portLinks(S: Scene, pal: Palette): void {
+  protected portLinks(S: Scene, pal: Palette): void {
     const ctx = this.ctx;
     for (const { x1, y1, x2, y2, qx, qy, trim, color: col, hot, packet } of S.links) {
       const at = (u: number) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
@@ -1056,7 +1061,7 @@ export class FleexSkin implements Skin {
    * What leaves by an exit: the ticket goes on to the frame as it was, then it is an outline with a tick that fades
    * towards the middle, while the side it came in by lights up where it passed.
    */
-  private departures(S: Scene, pal: Palette): void {
+  protected departures(S: Scene, pal: Palette): void {
     const ctx = this.ctx, z = this.cam.z;
     for (const l of S.leaving) {
       if (l.travel) {
@@ -1075,8 +1080,11 @@ export class FleexSkin implements Skin {
     }
   }
 
-  private overlay(st: ViewState, S: Scene, pal: Palette): void {
-    const ctx = this.ctx, outline = (m: MachineSpec, color: string, lw: number) => { ctx.strokeStyle = color; ctx.lineWidth = lw; rr(ctx, m.x - 0.04, m.y - 0.04, m.w + 0.08, m.h + 0.08, m.w > 1 ? 0.32 : 0.2); ctx.stroke(); };
+  /** The box a machine is seen in: its tiles, for a flat skin; with its front face and its top lifted, seen from three quarters. */
+  protected seen(m: MachineSpec): { x: number; y: number; w: number; h: number } { return m; }
+
+  protected overlay(st: ViewState, S: Scene, pal: Palette): void {
+    const ctx = this.ctx, outline = (m: MachineSpec, color: string, lw: number) => { const b = this.seen(m); ctx.strokeStyle = color; ctx.lineWidth = lw; rr(ctx, b.x - 0.04, b.y - 0.04, b.w + 0.08, b.h + 0.08, m.w > 1 ? 0.32 : 0.2); ctx.stroke(); };
     const hov = this.machine(st.hoverMachine), sel = this.machine(st.selMachine);
     if (hov && hov.id !== sel?.id) outline(hov, pal.text3, 0.05);
     for (const id of st.selMany) { const m = this.machine(id); if (m) outline(m, pal.accent, 0.08); }
