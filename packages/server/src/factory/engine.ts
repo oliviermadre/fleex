@@ -7,8 +7,8 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
-  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, RUNS, SET_ASIDE,
-  type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
+  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, RUNS, SET_ASIDE,
+  type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryGroup, type FactoryLayout, type FactoryRunRow, type FactorySettings,
   type FactoryTicketInfo, type FactoryTicketState, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
@@ -105,6 +105,21 @@ function freshLayout(): FactoryLayout {
  * normal path.
  */
 export { QUESTION_OUTCOME };
+const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const ids = (v: unknown): string[] | null => (Array.isArray(v) && v.length > 0 && v.every(isId) ? v : null);
+/** The saved selections as the web sent them, made safe to keep: always `GROUP_SLOTS` slots, anything malformed an empty one. */
+export function cleanGroups(input: unknown): FactoryGroup[] {
+  const list = Array.isArray(input) ? input : [];
+  return Array.from({ length: GROUP_SLOTS }, (_, i): FactoryGroup => {
+    const g = list[i] as Record<string, unknown> | null | undefined;
+    if (!g || typeof g !== 'object') return null;
+    if (isId(g['machine'])) return { machine: g['machine'] };
+    if (isId(g['ticket'])) return { ticket: g['ticket'] };
+    const machines = ids(g['machines']); if (machines) return { machines };
+    const tickets = ids(g['tickets']); if (tickets) return { tickets };
+    return null;
+  });
+}
 function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit'); }
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
@@ -322,6 +337,7 @@ export class FactoryEngine {
     const s = { ...this.floor.settings };
     if (patch.maxRunsPerHour != null) s.maxRunsPerHour = Math.max(0, Math.min(500, Math.floor(patch.maxRunsPerHour)));
     if (patch.maxConcurrentRuns != null) s.maxConcurrentRuns = Math.max(1, Math.min(50, Math.floor(patch.maxConcurrentRuns)));
+    if (patch.groups !== undefined) s.groups = cleanGroups(patch.groups);
     this.floor = { ...this.floor, settings: s, updatedAt: new Date(this.now()).toISOString() };
     await this.deps.store.saveFloor(this.floor);
   }

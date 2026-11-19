@@ -113,7 +113,16 @@ export interface FactorySettings {
   maxConcurrentRuns: number;
   /** The emergency stop is on: nothing moves and nothing runs until it is lifted. Kept across restarts. */
   halted?: boolean;
+  /**
+   * The saved selections of the floor (Shift+1…9, Shift+0), slot by slot: kept with the floor so that a reload or a
+   * restart does not lose them. Ids of machines or tickets that have since gone are left in, and ignored on use.
+   */
+  groups?: FactoryGroup[];
 }
+/** A saved selection: one or several machines, or one or several tickets; null for an empty slot. */
+export type FactoryGroup = { machine: string } | { machines: string[] } | { ticket: string } | { tickets: string[] } | null;
+/** How many saved selections a floor has: one per digit key. */
+export const GROUP_SLOTS = 10;
 export const DEFAULT_SETTINGS: FactorySettings = { maxRunsPerHour: 20, maxConcurrentRuns: 3 };
 export const DEFAULT_FLOOR_ID = 'default';
 
