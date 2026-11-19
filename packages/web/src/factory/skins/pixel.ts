@@ -44,6 +44,10 @@ export const NIGHT = {
   bg: '#17151d', floor: '#25222c', grid: '#2f2b38', belt: '#4a4555', edge: '#0f0e14', chev: '#b3acc4', fast: '#5aa9ff', body: '#3a3644',
   text: '#f4ecdc', text2: '#d2ccdb', text3: '#9a93ab', ok: '#4fbf5f', warn: '#f2b01e', danger: '#ff7a72', amber: '#f2b01e', light: false,
 } as const;
+/** The rings of a lamp's light, nearest first: how strong each is. How many times a second it flickers. */
+const RINGS = [0.42, 0.26, 0.13], FLICKER = 6;
+/** A number from a string, the same each time: what lets the flicker be random and kept by no one. */
+function hash(s: string): number { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 /** A crate's wood, its plank line and its outline. */
 const WOOD = '#c8955a', PLANK = '#9c6b3a', INK = '#2b2833';
 
@@ -119,6 +123,9 @@ export class PixelSkin extends FleexSkin {
   override pieces(S: Scene, st: ViewState, out: Piece[]): void {
     super.pieces(S, st, out);
     for (const v of S.boxes) if (v.kind === 'station' && v.run && !v.gate) out.push({ layer: 'standing', depth: 3.5, draw: () => this.worker(v) });
+    /* the light of the lamps that need someone, on the floor, under everything */
+    const pal = this.palette();
+    for (const [m, s] of S.lit) out.push({ layer: 'floor', depth: 0, draw: () => this.halo(m, s, pal) });
   }
 
   /** The low picture, enlarged without smoothing; then the words are written on the view itself. */
@@ -159,17 +166,45 @@ export class PixelSkin extends FleexSkin {
     ctx.fill();
   }
 
-  /** The lamp's light on the floor, as pixel art has it: a band of dither round the station, not a blur. */
-  protected override glow(ctx: CanvasRenderingContext2D, m: StationSpec, s: Lamp, pal: Palette): void {
-    const o = 1 / ART, band = 0.5;
-    ctx.fillStyle = s === 'off' ? pal.danger : pal.amber; ctx.globalAlpha = s === 'off' ? 0.35 : 0.5;
-    ctx.beginPath();
-    for (let k = 0; k < 2; k++) {
-      const x0 = m.x - band * (1 - k * 0.5), y0 = m.y - band * (1 - k * 0.5), x1 = m.x + m.w + band * (1 - k * 0.5), y1 = m.y + m.h + band * (1 - k * 0.5), d = k ? 2 : 4;
-      for (let x = x0; x < x1; x += o * d) { ctx.rect(x, y0, o, o); ctx.rect(x + o * (d / 2), y1 - o, o, o); }
-      for (let y = y0; y < y1; y += o * d) { ctx.rect(x0, y + o * (d / 2), o, o); ctx.rect(x1 - o, y, o, o); }
+  /** No light in the floor's picture: it flickers, so it is painted at every frame (`halo`), not once. */
+  protected override glow(): void { /* see `halo` */ }
+
+  /**
+   * The lamp's light on the floor, as pixel art draws a light: rings round the station, solid, paler the farther they
+   * are, their corners cut rounder. It flickers: a few times a second the rings breathe a little, their tint shifts,
+   * and a few of their pixels flare. Chosen at random from the station and the moment, so nothing is kept; it stands
+   * still when the floor does (its clock is the floor's).
+   */
+  private halo(m: StationSpec, s: Lamp, pal: Palette): void {
+    const ctx = this.ctx, o = 1 / ART, t = 3 * o, base = s === 'off' ? pal.danger : pal.amber, beat = Math.floor(this.clock * FLICKER);
+    const seed = hash(m.id), rnd = (k: number) => hash(`${seed}:${beat}:${k}`) / 0xffffffff;
+    const strength = s === 'off' ? 0.6 : 1;
+    for (let i = 0; i < RINGS.length; i++) {
+      const e = (i + 1) * t, cut = (i + 1) * o * 2, x0 = m.x - e, y0 = m.y - e, w = m.w + e * 2, h = m.h + e * 2;
+      /* it breathes, and its tint wanders between the lamp's colour and a warmer, lighter one */
+      ctx.globalAlpha = RINGS[i]! * strength * (0.82 + 0.18 * rnd(i));
+      ctx.fillStyle = mix(base, '#ffffff', 0.25 * rnd(i + 10));
+      ctx.beginPath();
+      ctx.rect(x0 + cut, y0, w - cut * 2, t); ctx.rect(x0 + cut, y0 + h - t, w - cut * 2, t);
+      ctx.rect(x0, y0 + cut, t, h - cut * 2); ctx.rect(x0 + w - t, y0 + cut, t, h - cut * 2);
+      /* the corner, one step in: the ring reads round */
+      ctx.rect(x0 + cut - o * 2 + t / 3, y0 + t, o * 2, o * 2); ctx.rect(x0 + w - cut - t / 3, y0 + t, o * 2, o * 2);
+      ctx.rect(x0 + cut - o * 2 + t / 3, y0 + h - t - o * 2, o * 2, o * 2); ctx.rect(x0 + w - cut - t / 3, y0 + h - t - o * 2, o * 2, o * 2);
+      ctx.fill();
     }
-    ctx.fill(); ctx.globalAlpha = 1;
+    /* a few pixels flare, here and there along the rings */
+    const n = Math.round((m.w + m.h) * 1.5);
+    ctx.fillStyle = mix(base, '#ffffff', 0.55);
+    for (let k = 0; k < n; k++) {
+      const side = Math.floor(rnd(100 + k) * 4), along = rnd(200 + k), off = Math.floor(rnd(300 + k) * RINGS.length * 3) * o;
+      ctx.globalAlpha = (0.35 + 0.4 * rnd(400 + k)) * strength;
+      const len = side % 2 ? m.h : m.w, at = Math.floor(along * len * ART) * o;
+      if (side === 0) ctx.fillRect(m.x + at, m.y - o - off, o, o);
+      else if (side === 2) ctx.fillRect(m.x + at, m.y + m.h + off, o, o);
+      else if (side === 1) ctx.fillRect(m.x + m.w + off, m.y + at, o, o);
+      else ctx.fillRect(m.x - o - off, m.y + at, o, o);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** A hard shadow, down and to the right, as in pixel art. */

@@ -580,9 +580,12 @@ that skin and the theme in use. There are three (`skins/index.ts`):
   16 art pixels a tile and enlarged without smoothing; the words are written crisp after, in pixel fonts (Silkscreen,
   Pixelify Sans) that Fleex serves itself (`packages/web/public/fonts`, under the SIL Open Font License, declared in
   `skins/pixelFonts.css`). Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue,
-  hard shadows, a dithered lamp light, tickets as crates in the colour of their type, and a worker at the foot of
+  hard shadows, tickets as crates in the colour of their type, and a worker at the foot of
   each station that runs something, busy while a ticket runs there. Workers are procedural: drawn from the scene at
-  each frame, kept by no one. The page around the floor is painted in the same workshop (`workshopTheme`), in
+  each frame, kept by no one. The light of a lamp that needs someone (or is off) is solid rings round its station,
+  paler the farther they are, that flicker a few times a second: the rings breathe, their tint shifts, a few pixels
+  flare, at random from the station and the moment, so nothing is kept; it stands still when the floor does. The page
+  around the floor is painted in the same workshop (`workshopTheme`), in
   Pixelify Sans; `pixel.test.ts` holds its inks as the neon's are held.
 
 A skin may give the steps its zoom rests on (`steps` on `Skin`): the pixel skin's pixels are whole only at 16, 32,

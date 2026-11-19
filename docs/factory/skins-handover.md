@@ -222,7 +222,8 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   theme. `neon.test.ts`: every ink on every ground, for every built-in theme. Fleex's pictures still identical.
 - **Lot 5, done**: picked on `docs/factory/pixel-flat.html` (a live mock-up embedding the real renderer: a workshop at
   night on a dark theme, pixel fonts). `skins/pixel.ts`: painted at 16 art pixels a tile and enlarged without
-  smoothing, the words crisp after; tiles, flat outlined bodies, hard shadows, dithered lamp light, crates, and a
+  smoothing, the words crisp after; tiles, flat outlined bodies, hard shadows, a lamp light in rings that flicker
+  (asked for after a first dithered try read as dotted outlines), crates, and a
   procedural worker at each station that runs something. The zoom by steps is the view's (`steps` on `Skin`,
   `FactoryView.wheel` / `glide`): it glides and only rests on a step. Fonts served by Fleex (`public/fonts`, OFL).
   The page in the workshop's colours (`workshopTheme`); `pixel.test.ts`; two pixel pictures among the checks.
