@@ -1,5 +1,5 @@
 import { arrivalOf, portDrop } from './teleport';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
@@ -17,6 +17,7 @@ import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
 import { HUD } from './hudShape';
 import { FactoryHudShadow } from './FactoryHudShadow';
+import { useFactorySkin } from './useFactorySkin';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
@@ -145,6 +146,10 @@ function Floor() {
   const { snapshot, layout } = store;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  /* the skin chosen in Settings paints the floor, and the page around it when it has colours of its own */
+  const { skin, chrome } = useFactorySkin(), skinRef = useRef(skin);
+  skinRef.current = skin;
+  const chromeStyle = useMemo<CSSProperties | undefined>(() => (chrome ? { ...chrome.vars, fontFamily: chrome.font ?? undefined, colorScheme: chrome.light ? 'light' : 'dark' } as CSSProperties : undefined), [chrome]);
   const viewRef = useRef<FactoryView | null>(null);
   const [view, setView] = useState<FactoryView | null>(null);
   const [building, setBuilding] = useState(false);
@@ -243,7 +248,7 @@ function Floor() {
   // The draw loop.
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
-    const v = new FactoryView(cv); viewRef.current = v; setView(v);
+    const v = new FactoryView(cv, skinRef.current.make()); viewRef.current = v; setView(v);
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
@@ -680,10 +685,14 @@ function Floor() {
   }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
+  /* another skin chosen while the page is open: the floor is painted with it from the next frame */
+  const skinShown = useRef(skin);
+  useEffect(() => { if (skinShown.current !== skin) { skinShown.current = skin; viewRef.current?.setSkin(skin.make()); } }, [skin]);
+
   const halted = snapshot?.floor.settings.halted === true;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
   return (
-    <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+    <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]" data-skin={skin.id} style={chromeStyle}>
       <style>{EDGE_CSS}</style>
       <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
@@ -703,7 +712,7 @@ function Floor() {
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
           {/* the console casts a shadow on the floor along its contour; the build tape lies over it */}
-          {!hudHidden && <FactoryHudShadow hud={HUD} />}
+          {!hudHidden && <FactoryHudShadow hud={HUD} light={chrome ? chrome.light : undefined} />}
           {/* build mode says so all round the view: tape, and a plate in its corner */}
           {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
           <FactoryTicketTip ref={tipRef} />

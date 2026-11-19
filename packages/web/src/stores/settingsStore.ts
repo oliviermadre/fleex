@@ -56,6 +56,8 @@ export interface AppSettings {
   factoryEnabled?: boolean;
   /** The actions repositories can define a command for ("test", "lint"). Script stations of the Factory run them by name. */
   namedActions?: { name: string; description?: string }[];
+  /** How the Factory floor is painted (`factory/skins/index.ts`). Unset → Fleex's own skin. */
+  factorySkin?: string;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

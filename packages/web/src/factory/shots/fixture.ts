@@ -4,7 +4,7 @@
  * arms, a pair of teleporters, an exit, a label, and tickets in every phase. It is what `shots.ts` paints, so that
  * a change to the renderer can be compared, picture against picture, with what it drew before.
  *
- * Not a working factory: the tickets are placed, not routed.
+ * Not a working factory: the tickets are placed, not routed. Settings shows it too, as the preview of each skin.
  */
 import type { LensLayer } from '../lens';
 import type { ViewState } from '../renderer';
@@ -109,3 +109,13 @@ export const lens: LensLayer = {
 export const later: FactoryTicket[] = tickets
   .filter((t) => t.machineId !== 'a9')
   .map((t) => (t.machineId === 'p_dep' ? { ...t, machineId: 'p_arr' } : t));
+
+/** The made-up floor as the page would hand it to the view: a ticket selected, a teleporter pointed at, filters on. */
+export const floorState = (over: Partial<ViewState> = {}): ViewState => ({
+  layout, tickets, arms, armAge: 0.2, armSwing: 1.1, beltSpeed: 1.2, fastBelt: 2,
+  boardName: () => 'Main', modelOf: (m) => m.model ?? (m.exec === 'skill' || m.exec === 'panel' ? 'claude-opus-4-1' : null),
+  selMachine: null, selMany: [], marquee: null, selTicket: 't9', selTickets: null, pickTickets: null, hoverMachine: 'p_dep',
+  edit: false, ghost: null, drag: null, lens: null, dim: new Set(['t3']), found: new Set(['t16']), named: new Set(['t21']),
+  exits: { ex1: 12 }, exitDays: 7,
+  ...over,
+});

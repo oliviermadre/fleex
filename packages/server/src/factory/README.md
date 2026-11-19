@@ -527,6 +527,9 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `components/ui/Modal.tsx` | three opt-in props for the Factory's popups: `variant="glass"`, `flush` (no padding), `guardEscape` (Escape stays in a field, and is left to what is opened over the dialog). Unset, a dialog is unchanged; they can stay |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
+| `application/ports/config.port.ts`, web: `settingsStore.ts` | `factorySkin`: how the floor is painted, read by the page only |
+| web: `components/settings/AppearanceTab.tsx` | one line to mount the choice of skin under the theme |
+| web: `lib/themes.ts` | `themeVars(theme)`: the CSS variables of a theme, which `applyTheme` sets on the root; the Factory sets those of a night theme on its own page under the neon skin. Pure, it can stay |
 | `application/ports/config.port.ts` | `namedActions`, and `actions` in a repository's config: the named actions script stations run |
 | `infrastructure/container.ts` | gives the module the host's shell and where a ticket's workspace and worktrees are (`host`), for script stations |
 | web: `SettingsPanel.tsx`, `repository-dashboard/RepoConfigPanel.tsx`, `settingsStore.ts` | one line each to mount the list of named actions and a repository's commands for them; their two fields in the settings type |
@@ -555,9 +558,22 @@ between teleporters), and is tested (`scene.test.ts`). A skin (`skins/`) paints 
 floor: sizes, colours, fonts, and what is left out from far are its own. The view (`renderer.ts`) holds the camera, says
 what is under the pointer, and at each frame builds the scene, gives it to the skin, and paints the pieces the skin
 returns in their order (`order` in `skins/skin.ts`: by layer, floor then what stands then what is overhead, by depth on
-a layer, and what is carried just after what carries it). The one skin today is Fleex's own (`skins/fleex.ts`): flat,
-everything on one layer, its depth the order the floor has always been painted in. See
-`docs/factory/skins-handover.md`.
+a layer, and what is carried just after what carries it). See `docs/factory/skins-handover.md`.
+
+The skin is chosen in Settings › Appearance, under the theme (`factorySkin` in the settings, `FactorySkinPicker.tsx`,
+shown only while the Factory is on): one card a skin, each with a made-up floor painted live by the real renderer in
+that skin and the theme in use. There are two (`skins/index.ts`):
+
+- **Fleex** (`skins/fleex.ts`), the default: the floor as it has always been drawn, following the theme. A flat skin:
+  everything on one layer, its depth the order the floor has always been painted in.
+- **Neon** (`skins/neon.ts`), chosen on `docs/factory/skin-choice.html`: Fleex's shapes on a night floor whatever the
+  theme, every line glowing. It takes the theme's accent, lifted until it shines on the night (the chevrons of the
+  belts, the Inbound, what is selected). The glow is one picture: once all is painted, a quarter-size copy is blurred
+  and laid back over it, before the words, so it costs the same however large the floor. The page around the floor
+  (header, console, minimap, what lies over the floor) takes the skin's colours: the CSS variables of a night theme
+  made from the theme in use (`nightTheme`, set on the page's own element through `themeVars`), and a monospace
+  font. Popups, which open over the whole app, keep the theme. `neon.test.ts` holds every ink of the floor and of
+  the page to 4.5 on every ground it is written on, for every built-in theme.
 
 How the floor is painted is checked by eye, in a browser against a made-up server: what is tested is the scene and the
 geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).

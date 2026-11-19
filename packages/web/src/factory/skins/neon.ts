@@ -8,13 +8,15 @@
  * Its floor is night whatever the theme. What it takes from the theme is the accent, lifted until it shines on that
  * floor: the chevrons of the belts, the Inbound, what is selected glow in the colour the rest of the app is in.
  *
- * DRAFT for the mock-up of lot 4 (`docs/factory/skin-choice.html`): not chosen in Settings yet.
+ * The page around the floor (its header, its console, what lies over the floor) is painted in the same night: see
+ * `nightTheme`. Chosen on `docs/factory/skin-choice.html`: a soft glow, the belts' chevrons in the theme's accent.
  */
+import type { Theme } from '../../lib/themes';
 import { contrast, isLight, mix } from '../floorLook';
 import { FleexSkin, type Palette } from './fleex';
 
 /** The night floor, and what does not follow the theme. */
-const NIGHT = {
+export const NIGHT = {
   bg: '#05050b', floor: '#0b0a16', grid: '#1e1b36', belt: '#100e1f', edge: '#2a2550', body: '#0e0d19',
   text: '#e9e7ff', text2: '#a7a3d6', text3: '#6e6a8f', ok: '#39ff9c', warn: '#ffd23f', danger: '#ff4f7b', fast: '#4fd1ff',
 } as const;
@@ -28,12 +30,36 @@ export interface NeonOptions {
   chevrons?: 'accent' | 'cyan';
 }
 
-/** A colour made to shine on the night floor: lifted towards white until it stands out from it. */
+/** `rgb(r,g,b)` (what `mix` gives) as `#rrggbb`; a colour already written so is given back. */
+const toHex = (c: string): string => { const m = /^rgb\((\d+),(\d+),(\d+)\)$/.exec(c.replace(/\s/g, '')); return m ? `#${m.slice(1).map((v) => Number(v).toString(16).padStart(2, '0')).join('')}` : c; };
+
+/** A colour made to shine on the night floor: lifted towards white until it stands out from it. As `#rrggbb`. */
 export function shine(color: string, floor: string = NIGHT.floor): string {
   let c = color;
   for (let k = 0; k < 10 && contrast(c, floor) < 6.5; k++) c = mix(color, '#ffffff', (k + 1) * 0.1);
-  return c;
+  return toHex(c);
 }
+
+/**
+ * The theme the page around a neon floor is painted in: the night's surfaces and inks, the theme's accent lifted to
+ * shine, the rest of the theme (its syntax, its terminal) as it is. Every ink holds 4.5 on its surfaces
+ * (`neon.test.ts`).
+ */
+export function nightTheme(theme: Theme): Theme {
+  const accent = shine(theme.colors.accent), [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+  return {
+    ...theme, id: `${theme.id}@night`, name: `${theme.name}, at night`, builtIn: false,
+    colors: {
+      accent, accentHover: toHex(mix(accent, '#ffffff', 0.15)), accentActive: toHex(mix(accent, '#000000', 0.15)), accentMuted: `rgba(${r}, ${g}, ${b}, 0.15)`,
+      bgBase: NIGHT.bg, bgSurface: '#0e0d19', bgOverlay: '#1a1830', bgHover: 'rgba(26, 24, 48, 0.6)', bgOverlayHover: '#2a2550',
+      border: '#2a2550', borderSubtle: 'rgba(42, 37, 80, 0.5)', borderInput: '#3d3770',
+      textPrimary: NIGHT.text, textSecondary: '#b4b0e0', textMuted: '#908cba', textFaint: '#6e6a8f',
+      success: NIGHT.ok, warning: NIGHT.warn, danger: NIGHT.danger,
+    },
+  };
+}
+/** The font of the page around a neon floor: a control room's. */
+export const NIGHT_FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 export class NeonSkin extends FleexSkin {
   override readonly id: string = 'neon';

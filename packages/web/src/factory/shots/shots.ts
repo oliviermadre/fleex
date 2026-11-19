@@ -9,20 +9,14 @@ import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin, type NeonOptions } from '../skins/neon';
 import type { Skin } from '../skins/skin';
-import { arms, later, layout, lens, tickets } from './fixture';
+import { floorState, later, lens } from './fixture';
 
 const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
 
 /** `then`: what changes after the first frames, drawn for `after` more frames (what is seen moving between two snapshots). */
 interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number; skin?: () => Skin }
 
-const base = (): ViewState => ({
-  layout, tickets, arms, armAge: 0.2, armSwing: 1.1, beltSpeed: 1.2, fastBelt: 2,
-  boardName: () => 'Main', modelOf: (m) => m.model ?? (m.exec === 'skill' || m.exec === 'panel' ? 'claude-opus-4-1' : null),
-  selMachine: null, selMany: [], marquee: null, selTicket: 't9', selTickets: null, pickTickets: null, hoverMachine: 'p_dep',
-  edit: false, ghost: null, drag: null, lens: null, dim: new Set(['t3']), found: new Set(['t16']), named: new Set(['t21']),
-  exits: { ex1: 12 }, exitDays: 7,
-});
+const base = (): ViewState => floorState();
 
 const SHOTS: Shot[] = [
   { name: 'floor-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {} },

@@ -210,8 +210,14 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   `Surface` to paint on; `Piece` with a layer, a depth and what carries it; `order`, tested). `skins/fleex.ts` is
   today's drawing, colours and light-theme rules included, as a flat skin: one layer, its depth the old paint order.
   `renderer.ts` is only the view (camera, pick, the frame loop). Same check, identical pictures.
-- **Next, lot 4**: choosing the skin in Settings next to the theme, the console's CSS variables and font per skin, and
-  the neon skin. Each skin gets the contrast test `floorLook.test.ts` holds Fleex's inks to.
+- **Lot 4, done**: picked on `docs/factory/skin-choice.html` (a soft glow, the belts' chevrons in the theme's accent,
+  the choice made on cards with a preview). `factorySkin` in the settings, chosen in Settings › Appearance under the
+  theme (`FactorySkinPicker.tsx`, previews painted live from `shots/fixture.ts`). The neon skin (`skins/neon.ts`):
+  a palette and one glow over the whole picture. The page around the floor takes the skin's colours through the CSS
+  variables of a night theme (`nightTheme` + `themeVars`, set on the page's element), the minimap too; popups keep the
+  theme. `neon.test.ts`: every ink on every ground, for every built-in theme. Fleex's pictures still identical.
+- **Next, lot 5**: the pixel skin, flat. Open questions 3 (zoom by whole steps or not) and 4 (sprites: who draws them)
+  first, on a mock-up on a real floor that zooms.
 
 ## Proposed order of work
 

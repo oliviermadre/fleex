@@ -122,7 +122,9 @@ export class FactoryView {
   readonly ctx: CanvasRenderingContext2D;
 
   /** Each view has its own skin: a skin keeps pictures it painted once, for this canvas. */
-  constructor(readonly cv: HTMLCanvasElement, private readonly skin: Skin = new FleexSkin()) { this.ctx = cv.getContext('2d')!; }
+  constructor(readonly cv: HTMLCanvasElement, private skin: Skin = new FleexSkin()) { this.ctx = cv.getContext('2d')!; }
+  /** Paint with another skin from the next frame on. What the floor shows, and where, is kept. */
+  setSkin(skin: Skin): void { this.skin = skin; }
 
   resize(): void {
     const d = Math.min(window.devicePixelRatio || 1, 2), w = this.cv.clientWidth, h = this.cv.clientHeight;

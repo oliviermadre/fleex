@@ -31,8 +31,8 @@ export function hudShadowShape(hud: HudShape): string {
  * under the build tape): nothing in the console is filtered, so what moves in it costs nothing more. Deep on a dark
  * floor, where a shadow hardly shows; light on a light one.
  */
-export function FactoryHudShadow({ hud }: { hud: HudShape }) {
-  const light = useLightTheme();
+export function FactoryHudShadow({ hud, light: forced }: { hud: HudShape; /** Set when the page is not in the theme's colours (a skin with its own): light or not. */ light?: boolean }) {
+  const themed = useLightTheme(), light = forced ?? themed;
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden="true" data-hud-shadow={light ? 'light' : 'dark'} style={{ filter: `blur(${light ? 12 : 14}px)`, opacity: light ? 0.38 : 0.95, transform: 'translateY(-9px)' }}>
       <div className="absolute inset-0 bg-black" style={{ clipPath: hudShadowShape(hud) }} />
