@@ -1,5 +1,6 @@
 import { API_URL } from '../lib/constants';
 import { toast } from '../lib/toast';
+import type { ItemSource } from './items';
 import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
@@ -36,5 +37,10 @@ export const factoryApi = {
   giveBack: (ticketId: string) => call<FactorySnapshot>(`/tickets/${ticketId}`, { method: 'DELETE' }),
   runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
   machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),
+  /** A conversation moved in a source (made by hand until the sources are connected): a new item, or an update. */
+  ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null }) =>
+    post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped'; snapshot: FactorySnapshot }>('/items', item),
+  /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
+  archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
   stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),
 };

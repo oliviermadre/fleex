@@ -16,6 +16,13 @@ the previous session's opinion and can be overturned.
 - **Order changed**: the Desk went first (it needs no migration and no item), then items.
 - **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. The whole new-task flow is
   mounted on it, import from a link or a source included.
+- **Done: items and intakes** (steps 1 and 3 of the plan below, and the intake of step 7 without its source). Items
+  have their own table (046) and travel the floor; an intake holds them for the quiet delay, drops by rule, counts;
+  items are drawn in relief from their source's mark. See "Items, and the intakes they come in by" in the README.
+  **The plan's step 1 changed**: `factory_tickets` and `factory_runs` were not touched; an item keeps its place in
+  its own row, and run rows stay for tickets only.
+- **Next**: Triage (step 4), a station on an item (5), Make a ticket (6), then the sources' connectors, each calling
+  `POST /api/factory/items` (Slack first: polling `conversations.history` with the user token, or the events API).
 - **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
   machines. Rename one of them before step 7.
 

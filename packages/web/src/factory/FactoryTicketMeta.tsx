@@ -14,11 +14,18 @@ import { cn } from '../lib/cn';
 import { TYPE_COLORS } from './renderer';
 import { tokenSprite, TOKEN_PAD } from './ticketToken';
 import type { FactoryTicketInfo } from './types';
+import { SOURCE_LABEL, sourceOfType } from './items';
 
 export const typeOf = (info: FactoryTicketInfo | null): TicketType | null => (info && info.type in TICKET_TYPE_LABELS ? (info.type as TicketType) : null);
 export const priorityOf = (info: FactoryTicketInfo | null): TicketPriority => (info && info.priority in PRIORITY_LABELS ? (info.priority as TicketPriority) : 'none');
 export const complexityOf = (info: FactoryTicketInfo | null): TicketComplexity | null => (info?.complexity != null && info.complexity in DIAL_FILL ? (info.complexity as TicketComplexity) : null);
-export const typeLabel = (info: FactoryTicketInfo | null): string => { const t = typeOf(info); return t ? TICKET_TYPE_LABELS[t] ?? t : 'No type'; };
+export const typeLabel = (info: FactoryTicketInfo | null): string => {
+  const t = typeOf(info);
+  if (t) return TICKET_TYPE_LABELS[t] ?? t;
+  /* an item has a source, not a type */
+  const s = sourceOfType(info?.type ?? '');
+  return s ? `${SOURCE_LABEL[s]} item` : 'No type';
+};
 
 export function Star({ on, size = 12, className }: { on: boolean; size?: number; className?: string }) {
   return (

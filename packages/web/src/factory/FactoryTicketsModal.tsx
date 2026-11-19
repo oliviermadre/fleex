@@ -15,6 +15,7 @@ import { find, finderActive, NO_FINDER, STATE_LABEL, stateOf, STATES, type Finde
 import { complexityOf, priorityOf, Star, TicketToken, typeLabel, typeOf } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { humanCall, needsHuman, type FactoryTicket, type MachineSpec } from './types';
+import { refOf } from './items';
 
 type Sort = 'human' | 'here' | 'number' | 'priority' | 'where';
 const SORTS: { value: Sort; label: string }[] = [
@@ -144,7 +145,7 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
                 <div key={t.ticketId} role="row" className={cn(cols, 'border-b border-[var(--theme-border)] px-3 py-1.5 text-xs last:border-b-0 hover:bg-[var(--theme-bg-overlay)]')}>
                   <TicketToken info={info} size={22} />
                   <button type="button" className="min-w-0 text-left" onClick={() => onDetail(t.ticketId)} title={info?.title ?? ''}>
-                    <span className="block truncate font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono font-normal text-[var(--theme-text-muted)]">#{info?.displayId ?? '?'}</span>{info?.title ?? t.ticketId}</span>
+                    <span className="block truncate font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono font-normal text-[var(--theme-text-muted)]">{refOf(info)}</span>{info?.title ?? t.ticketId}</span>
                     {info && info.tags.length > 0 && <span className="block truncate text-[11px] text-[var(--theme-text-muted)]">{info.tags.join(' · ')}</span>}
                   </button>
                   <span className="flex min-w-0 items-center gap-1.5 text-[var(--theme-text-secondary)]"><TicketTypeIconSvg type={typeOf(info)} size={14} /><span className="whitespace-nowrap">{typeLabel(info)}</span></span>

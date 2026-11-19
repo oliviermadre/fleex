@@ -3,7 +3,7 @@
  *
  *   Factory ─ Build ─┬─ Move      (belt, bridge, arm, the way they face)
  *                    ├─ Station   (agent, skill, panel, gate, status)
- *                    ├─ Area      (zone, exit, label, desk)
+ *                    ├─ Area      (zone, exit, label, desk, intake)
  *                    └─ a selection (turn, remove)
  *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its popup)
  *
@@ -24,7 +24,7 @@ export interface MenuContext {
   tool: Tool;
   dir: Dir;
   /** The ticket selected, with the outcomes of the station it is in (empty elsewhere), and whether it can be set aside there. */
-  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean } | null;
+  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean; /** An item, not a ticket: it has a source to open and is archived, not given back. */ item?: { url: string | null } } | null;
   /**
    * The machine selected. `waiting` is true for a zone that holds a ticket not yet released; `power` says whether a
    * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
@@ -55,7 +55,9 @@ export interface MenuContext {
     back(): void;
     face(): void; undo(): void; redo(): void; copy(): void; cut(): void; paste(): void;
     turn(): void; remove(): void; deselect(): void;
-    openTicket(): void; star(): void; giveBack(): void; resolve(outcome: string): void; release(): void; retry(): void;
+    openTicket(): void; star(): void; giveBack(): void;
+    /** An item: open its conversation where it lives, and archive it. */
+    openSource(): void; archive(): void; resolve(outcome: string): void; release(): void; retry(): void;
     /** Take the ticket off its station's hands; and put it back as one of the station's outcomes (`retry` puts it back for another run). */
     setAside(): void; putBack(outcome: string): void;
     /** Open the popup of the machine selected: its settings, what it holds, what it did. */
@@ -101,6 +103,17 @@ export function factoryMenu(c: MenuContext): Menu {
   }
 
   // ---------- a ticket ----------
+  if (c.ticket?.item && !c.building) {
+    const t = c.ticket, url = c.ticket.item.url;
+    return menu('Item', {
+      0: t.phase === 'zone' && !t.released ? { id: 'release', label: 'Release', icon: 'play', tone: 'go', title: 'Let an arm take this item out now, without waiting for its conversation to be quiet', run: a.release } : null,
+      5: { id: 'source', label: 'Source', icon: 'open', tone: 'ticket', disabled: !url, title: url ? 'Open the conversation where it lives (also Enter)' : 'This item has no link to its source', run: a.openSource },
+      [FIT_SLOT]: fit,
+      9: { id: 'archive', label: 'Archive', icon: 'trash', tone: 'danger', title: 'Junk, or done with: it leaves the floor. A new message in its conversation brings it back', run: a.archive },
+      [NEXT_SLOT]: next,
+      [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
+    });
+  }
   if (c.ticket && !c.building) {
     const t = c.ticket, first: Record<number, Command> = {};
     if (t.phase === 'review') t.outcomes.slice(0, 4).forEach((o, i) => { first[i] = { id: `decide-${i}`, label: o, icon: i ? 'loop' : 'check', tone: i ? 'ticket' : 'go', title: `Decide: ${o}`, run: () => a.resolve(o) }; });
@@ -199,6 +212,7 @@ export function factoryMenu(c: MenuContext): Menu {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),
     1: place('exit', 'Exit', 'area', 'Sets the ticket to done and hands it back to Fleex'),
     2: place('label', 'Label', 'area', 'A name on the floor'),
+    4: place('intake', 'Intake', 'area', 'Where items of one source come in (Slack, Gmail, GitHub): they wait while the conversation moves, what its rules recognise is dropped'),
     3: place('desk', 'Desk', 'area', 'Where tickets are born: New ticket opens the creation form on it, with its board, type and priority, and an arm takes the ticket out'),
   }, previous);
 

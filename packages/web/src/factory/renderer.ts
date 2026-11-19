@@ -17,7 +17,8 @@ import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
 import { modelTag } from './stationModel';
 import { tokenSprite, type TokenLook } from './ticketToken';
-import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type DeskSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
+import { refOf, SOURCE_COLORS, SOURCE_LABEL, SOURCE_TYPE_COLORS, sourceType } from './items';
+import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type DeskSpec, type IntakeSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number; /** An arm about to be placed: where it would take from and drop on is shown. */ arm?: boolean }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
@@ -72,13 +73,15 @@ export interface ViewState {
   halted?: boolean;
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
   exits?: Readonly<Record<string, number>> | null;
+  /** What each intake dropped over the last 24 hours, by its id (the snapshot's `intakes`). */
+  intakes?: Readonly<Record<string, { dropped: number }>> | null;
   exitDays?: number;
 }
 /** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */
 export type Hit = { ticketId: string } | { machineId: string } | { lamp: string } | null;
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). */
-export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
+export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa', ...SOURCE_TYPE_COLORS };
 const STAR = '#facc15';
 /** A ticket with no type, and the ghost of one a filter leaves out. */
 const NO_TYPE = '#8b949e', GHOST = '#71717a';
@@ -167,7 +170,7 @@ const PICK = '#60a5fa';
 const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
-export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk');
+export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk' || m.kind === 'intake');
 
 
 export class FactoryView {
@@ -446,8 +449,8 @@ export class FactoryView {
     const found = !!st.found?.has(t.ticketId);
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
-      if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
-      if (token && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
+      if (!call && !token && !t.item && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
+      if (token && !t.item && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
       /* priority: a pip in the top-left corner for what is urgent or high */
       const pip = PRIORITY_PIP[info.priority];
       if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - B / 2 + B * 0.06, py - B / 2 + B * 0.06, B * 0.15, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
@@ -481,15 +484,15 @@ export class FactoryView {
       const m = this.machine(t.machineId), p = this.shown.get(t.ticketId) ?? { x: t.x + 0.5, y: t.y + 0.5 };
       byId.set(t.ticketId, t);
       items.push({
-        id: t.ticketId, text: `#${info.displayId} ${info.title}`, x: sx(p.x), y: sy(p.y),
-        box: m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'desk') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
+        id: t.ticketId, text: `${refOf(info)} ${info.title}`, x: sx(p.x), y: sy(p.y),
+        box: m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'desk' || m.kind === 'intake') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
       });
     }
     if (!items.length) return;
     const ctx = this.ctx, LH = 15, PAD = 5;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = `500 11px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
+    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk' || m.kind === 'intake').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
     const lit = pal.light;
@@ -591,6 +594,7 @@ export class FactoryView {
       else if (m.kind === 'exit') this.exit(m, st, pal);
       else if (m.kind === 'teleporter') this.port(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
       else if (m.kind === 'desk') this.desk(m, inside.get(m.id) ?? [], st, pal, dtReal);
+      else if (m.kind === 'intake') this.intake(m, inside.get(m.id) ?? [], st, pal, dtReal);
     }
     for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
       const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
@@ -1292,6 +1296,33 @@ export class FactoryView {
     this.quays(takers, D, st, pal, dt, false);
   }
 
+  /**
+   * An intake, where items of one source come in (picked on `docs/factory/intake.html`, I1): a loading dock of 3 by 2
+   * in its source's colour, a badge with the source's mark in relief, "INTAKE" over its name, and two counters: HELD,
+   * the conversations that still move (their items wait in it), and DROPPED, what its rules left out over 24 hours.
+   * What is let out waits at the quays of its arms.
+   */
+  private intake(m: IntakeSpec, items: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, { x, y, w, h } = m, z = this.cam.z, col = SOURCE_COLORS[m.source];
+    const takers = this.takersOf(m), D = this.leavers(m, takers, items, st), held = items.filter((t) => !t.released).length, dropped = st.intakes?.[m.id]?.dropped ?? 0;
+    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.22); ctx.fillStyle = pal.body; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 0.05; ctx.stroke();
+    const b = 0.6, bx = x + 0.24, by = y + 0.24;
+    rr(ctx, bx, by, b, b, 0.14); ctx.fillStyle = mix(col, pal.body, 0.82); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.03; ctx.stroke();
+    const sprite = tokenSprite(sourceType(m.source), col, b * 0.78 * z * this.dpr);
+    if (sprite) { const sw = sprite.width / (z * this.dpr); ctx.drawImage(sprite, bx + b / 2 - sw / 2, by + b / 2 - sw / 2, sw, sw); }
+    if (z >= 7) this.label('INTAKE', bx + b + 0.16, by + 0.12, 0.17, col, { mono: true, weight: 700, min: 7, max: 10, fit: w - b - 0.6 });
+    this.label(m.name || SOURCE_LABEL[m.source], bx + b + 0.16, by + 0.42, 0.28, pal.text, { weight: 650, min: 9, max: 15, fit: w - b - 0.6 });
+    if (z >= 10) {
+      this.label(`HELD ${held}`, x + 0.26, y + h - 0.48, 0.16, held ? pal.warn : pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      this.label(`DROPPED ${dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+    }
+    if (z >= 14 && !takers.length) this.label('no arm takes from it', x + w - 0.2, y + h - 0.26, 0.14, pal.danger, { mono: true, align: 'right' });
+    /* what still waits for its conversation to be quiet stands in the dock, faded; what is let out goes to the quays */
+    items.filter((t) => !D.quay.has(t.ticketId)).slice(0, 3).forEach((t, i) => this.ticket(t, x + 1.55 + i * 0.42, y + h - 0.5, 0.3, st, t.released ? '' : 'wait', dt));
+    this.quays(takers, D, st, pal, dt, false);
+  }
+
   /** A padlock, stencilled: shut and red, or open and green with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
   private padlock(x: number, y: number, open: boolean, col: string): void {
     const ctx = this.ctx, k = 1 / 40, top = y + (open ? 0.5 : 2.5) * k;
@@ -1568,7 +1599,7 @@ export class FactoryView {
    */
   private armWay(x: number, y: number, dir: number, pal: Palette, turn: boolean): void {
     const ctx = this.ctx, dx = DX[dir as 0], dy = DY[dir as 0];
-    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : m.kind === 'desk' ? 'Desk' : 'Station'));
+    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : m.kind === 'desk' ? 'Desk' : m.kind === 'intake' ? `the ${SOURCE_LABEL[m.source]} intake` : 'Station'));
     const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
       ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
       ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
@@ -1622,7 +1653,7 @@ export class FactoryView {
       if (m.kind === 'label') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.kind === 'desk' ? DESK_COLOR : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;

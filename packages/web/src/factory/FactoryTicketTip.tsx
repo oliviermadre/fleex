@@ -4,6 +4,7 @@ import { useFactoryStore } from './factoryStore';
 import { since, span } from './format';
 import { Star, TicketGlyphs } from './FactoryTicketMeta';
 import { needsHuman, type FactoryTicket } from './types';
+import { refOf } from './items';
 
 export interface TicketTipHandle {
   /** Show the card for a ticket next to a point given in the floor's own pixels. */
@@ -49,7 +50,7 @@ export const FactoryTicketTip = forwardRef<TicketTipHandle>(function FactoryTick
   return (
     <div ref={el} role="tooltip" className="pointer-events-none absolute left-0 top-0 z-10 flex w-max max-w-[340px] flex-col gap-1.5 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 shadow-xl">
       <div className="flex items-start gap-1.5 text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
-        <span className="flex-none font-mono text-xs font-normal leading-5 text-[var(--theme-text-muted)]">#{info?.displayId ?? '?'}</span>
+        <span className="flex-none font-mono text-xs font-normal leading-5 text-[var(--theme-text-muted)]">{refOf(info)}</span>
         <span className="line-clamp-3 min-w-0">{info?.title ?? ticket.ticketId}</span>
         {info?.favorite && <Star on className="mt-1" />}
       </div>

@@ -37,6 +37,7 @@ import { addTo, groupOf, machineIds, machinesSel, sameSelection, ticketIds, tick
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
 import { FactoryDeskForm } from './FactoryDeskForm';
+import { FactoryItemPeek } from './FactoryItemPeek';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
@@ -75,6 +76,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['zone', 'D', 'Zone', 'Tickets wait here until released'],
   ['exit', 'O', 'Exit', 'Sets the ticket to done and hands it back to Fleex'],
   ['label', 'L', 'Label', 'A name on the floor'],
+  ['intake', 'I', 'Intake', 'Where items of one source come in: they wait while the conversation moves, what its rules recognise is dropped'],
   ['desk', 'K', 'Desk', 'Where tickets are born: New ticket opens the creation form on it'],
   ['erase', 'X', 'Erase', 'Click or drag to remove machines'],
 ];
@@ -177,7 +179,13 @@ function Floor() {
     if (saved) setGroups(Array.from({ length: GROUPS }, (_, k) => saved[k] ?? null));
   }, [snapshot]);
   const miniRef = useRef<HTMLCanvasElement>(null);
-  const [openTicket, setOpenTicket] = useState<string | null>(null);
+  const [openTicket, setOpenTicketRaw] = useState<string | null>(null);
+  /* an item has no workbench: opening it opens its conversation where it lives */
+  const setOpenTicket = useCallback((id: string | null) => {
+    const item = id ? useFactoryStore.getState().snapshot?.tickets.find((t) => t.ticketId === id)?.item : undefined;
+    if (item) { if (item.url) window.open(item.url, '_blank', 'noopener'); return; }
+    setOpenTicketRaw(id);
+  }, []);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
@@ -241,6 +249,7 @@ function Floor() {
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
       exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
+      intakes: s.snapshot.intakes ?? null,
     };
   }, [boardName, modelOf]);
 
@@ -288,6 +297,7 @@ function Floor() {
     if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
     if (m.kind === 'arm' || m.kind === 'label') return { target: {}, ok: false, can: false, text: 'Not on an arm' };
     if (m.kind === 'desk') return { target: {}, ok: false, can: false, text: 'Not on a desk: tickets are born there' };
+    if (m.kind === 'intake') return { target: {}, ok: false, can: false, text: 'Not in an intake: items come to it from their source' };
     if (m.kind === 'teleporter') {
       /* as for an arm: a departure takes one ticket, an arrival none */
       const held = !!useFactoryStore.getState().snapshot?.tickets.some((t) => t.machineId === m.id), drop = portDrop(m, held, arrivalOf(m, (id) => v.machine(id)));
@@ -562,7 +572,7 @@ function Floor() {
   }, [selMany, selMachine, layout]);
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
-    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
+    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate), ...(selTicket.item ? { item: { url: selTicket.item.url } } : {}) } : null,
     waiting: needs.length, speed: beltSpeed, group,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
@@ -588,10 +598,13 @@ function Floor() {
       deselect: () => setSelection(null),
       openTicket: () => { if (selTicket) setOpenTicket(selTicket.ticketId); },
       star: () => {
-        if (group) { for (const t of selTickets) if (t.info && t.info.favorite === group.starred) void store.star(t.ticketId, !group.starred); }
-        else if (selTicket?.info) void store.star(selTicket.ticketId, !selTicket.info.favorite);
+        /* an item is not a ticket: it has no star */
+        if (group) { for (const t of selTickets) if (t.info && !t.item && t.info.favorite === group.starred) void store.star(t.ticketId, !group.starred); }
+        else if (selTicket?.info && !selTicket.item) void store.star(selTicket.ticketId, !selTicket.info.favorite);
       },
       /* one ticket leaves at once; several are asked about first */
+      openSource: () => { if (selTicket?.item?.url) window.open(selTicket.item.url, '_blank', 'noopener'); },
+      archive: () => { if (selTicket?.item) { void store.archiveItem(selTicket.ticketId); setSelection(null); } },
       giveBack: () => { if (group) setConfirmGive(true); else if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
       resolve: (o) => { if (selTicket) void store.resolve(selTicket.ticketId, o); },
       release: () => { if (group) { for (const t of selTickets) if (t.phase === 'zone' && !t.released) void store.release(t.ticketId); } else if (selTicket) void store.release(selTicket.ticketId); },
@@ -718,7 +731,8 @@ function Floor() {
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
-          {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} />}
+          {peekFor.current && selTicket?.item && <FactoryItemPeek ref={peekRef} key={peekFor.current} itemId={peekFor.current} onClose={() => setPeekOpen(false)} />}
+          {peekFor.current && !selTicket?.item && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} />}
           {halted && (
             <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-2xl items-center gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('red'))} role="alert">
               <span className="min-w-0 flex-1"><b>Emergency stop.</b> Nothing moves and nothing runs. The runs that were cut start again when the floor restarts. You can still move tickets and build.</span>

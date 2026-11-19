@@ -126,7 +126,7 @@ describe('FactoryEngine', () => {
       expect(where(id)).toBe('z:zone');
       const tok = engine.snapshot().tickets.find((t) => t.ticketId === id)!;
       expect(tok.item).toMatchObject({ source: 'slack', author: 'Ana', messages: 2, excerpt: 'please fix the cart' });
-      expect(tok.info).toMatchObject({ title: 'the real ask', type: '', tags: ['source:slack'] });
+      expect(tok.info).toMatchObject({ title: 'the real ask', type: 'src:slack', tags: ['source:slack'] });
       await engine.flush();
       expect(store.items.get(id)).toMatchObject({ machineId: 'z', archivedAt: null });
       /* items are not tickets: nothing written as one, nothing counted as one */

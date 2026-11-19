@@ -6,6 +6,7 @@
 import type { SetOp } from './setOps';
 import type { ScriptSpec } from './script';
 export type { SetOp } from './setOps';
+import type { ItemSource } from './items';
 import type { TicketStatus } from '@fleex/shared';
 
 export type Dir = 0 | 1 | 2 | 3;
@@ -62,7 +63,14 @@ export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 
  */
 export interface DeskSpec extends MachineBase { kind: 'desk'; defaults?: DeskDefaults }
 export interface DeskDefaults { boardId?: string; type?: string; priority?: string }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec;
+/** A rule of an intake: an item whose field contains this text (any case) is dropped there, and never reaches the floor. */
+export interface DropRule { field: 'author' | 'title' | 'text'; contains: string }
+/**
+ * Where items of one source come in: a dock of 3 by 2. An item waits in it while its conversation moves, and leaves
+ * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
+ */
+export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; drop?: DropRule[] }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec | IntakeSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
@@ -90,7 +98,10 @@ export interface FactoryTicket {
   outcome: string; released: boolean; since: string; runId: string | null; note: string;
   /** When it was handed over to the Factory (ISO). */
   handedAt: string;
+  /** Set on an item, which is not a ticket: where it came from. Its `info.type` is `src:<source>`. */
+  item?: FactoryItemInfo;
 }
+export interface FactoryItemInfo { source: ItemSource; author: string; excerpt: string; url: string | null; messages: number; lastActivityAt: string }
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: FactoryTicket[];
@@ -105,6 +116,8 @@ export interface FactorySnapshot {
   serverTime: string;
   /** Something to tell once (the floor was started over for a new layout version). */
   notice?: string | null;
+  /** What each intake dropped over the last 24 hours, by its id. */
+  intakes?: Record<string, { dropped: number }>;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
 export type RunExecutor = StationExec | 'exit';

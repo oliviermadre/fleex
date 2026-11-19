@@ -79,13 +79,22 @@ describe('the command card', () => {
     expect(at(desk, 5)).toBe('Edit');
   });
 
+  it('an item selected: release it, open its source, archive it; nothing a ticket only has', () => {
+    const c = ctx({ ticket: { phase: 'zone', released: false, favorite: null, outcomes: [], item: { url: 'https://x.slack.com/a' } } }), m = factoryMenu(c);
+    expect(m.title).toBe('Item');
+    expect(rows(m)).toEqual([['Release', null, null, null, null], ['Source', null, null, 'Fit', 'Archive'], [null, null, null, 'Next', 'Previous']]);
+    m.slots[5]!.run!(); expect(c.act.openSource).toHaveBeenCalled();
+    m.slots[9]!.run!(); expect(c.act.archive).toHaveBeenCalled();
+    expect(factoryMenu(ctx({ ticket: { phase: 'belt', released: false, favorite: null, outcomes: [], item: { url: null } } })).slots[5]!.disabled).toBe(true);
+  });
+
   it('build sorts what can be placed into Move, Station and Area', () => {
     const build = factoryMenu(ctx({ building: true }));
     expect(rows(build)).toEqual([['Move', 'Station', 'Area', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
     expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
     expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], ['Status', null, null, 'Fit', null]]);
-    expect(rows(menuAt(build, ['area']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Desk', null], [null, null, null, 'Fit', null]]);
+    expect(rows(menuAt(build, ['area']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Desk', 'Intake'], [null, null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });
 

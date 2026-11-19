@@ -85,7 +85,36 @@ Work view. It was picked on `docs/factory/intake.html` (I1 for its look, N3 for 
 - Being born at a desk sets nothing on the ticket: its status is the form's (`doing`), its fields what was chosen.
 
 
-## Places, set aside, and the switch
+## Items, and the intakes they come in by
+
+An **item** is a conversation that came in from a source (Slack, Gmail, GitHub, or made by hand) and may ask
+something of the owner. It is not a ticket: it has its own table, `factory_items` (migration 046), one row per
+conversation, keyed by its source and its key there (`source_key`), and becomes a ticket only when a machine makes it
+one (not built yet). Its content is not copied: a title, who it is from, a few lines (`excerpt`) and a link back.
+
+- **On the floor** an item travels as a ticket does (belts, arms, zones, teleporters), saved in its own row
+  (`machine_id`, `state`). Arms see it with the type `src:<source>` and the tag `source:<source>`, so a condition
+  routes it. What only a ticket has is skipped: no status is set, a gantry leaves it untouched, no run row is written,
+  a station sets it aside ("Stations do not work on items yet"), and **an exit archives it** (soft delete,
+  `archived_reason = 'exit'`). Archive (the command card, its card on the floor) archives it as junk; Give back does
+  the same. It is never listed among the tickets the rest of Fleex leaves alone (`managedIds`).
+- **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
+  2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
+  connectors will call, and what its popup's "Make an item by hand" calls until they exist. A new conversation one of
+  its **rules** recognises (a field, From, Title or Title or text, contains a text) is **dropped**: saved archived with
+  the reason `dropped`, counted, and it never reaches the floor. Otherwise it waits in the intake **while its
+  conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
+  said); an arm then takes it. A new message on a known key updates the item where it is (in its intake, it waits
+  again); an archived item comes back to its intake. Nothing on the floor can put anything into an intake.
+- **On the page** an item is an object in relief, as a ticket is (`ticketToken.ts`), drawn from its source's mark
+  instead of a type's icon, in its source's colour (`items.ts`): a hash of bars and dots for Slack, an envelope for
+  Gmail, a branch for GitHub, a sheet for one made by hand. These marks recall the sources; they are not their logos.
+  An intake shows its source's mark in relief on its badge, `HELD` (what waits for its conversation to be quiet,
+  drawn faded in the dock) and `DROPPED` (over 24 hours). A click on an item opens its card beside it
+  (`FactoryItemPeek.tsx`): source, author, messages, its lines, and Open in <source>, Release, Archive. Opening it
+  (Enter, a double-click) opens its conversation where it lives: an item has no workbench.
+
+
 
 A station that runs something (an agent, a skill, a panel) works on as many tickets as it has places (`cap`). Nothing
 queues inside it: full, it takes nothing more and what feeds it backs up on the belts. What is done and not yet taken
@@ -501,8 +530,8 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in three tables created by migration `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`). No existing table is altered: a ticket is "handed over" when it
+Everything lives here, in `packages/web/src/factory/`, and in four tables created by migrations `045_factory`
+(`factory_floors`, `factory_tickets`, `factory_runs`) and `046_factory_items` (`factory_items`). No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -537,7 +566,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` |
+| `infrastructure/migrations/index.ts` | registers `045_factory` and `046_factory_items` |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module, exposes `container.factory` |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
@@ -561,7 +590,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migration's `down()` (`cli-migrate.ts rollback`), or drop the three tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 046 then 045), or drop the four tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step

@@ -55,6 +55,7 @@ const PATHS: Record<string, ReactNode> = {
   edit: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13 7l4 4" /></>,
   desk: <><path d="M3 11h18v3H3z" /><path d="M5 14v6M19 14v6M8 11V6h8v5" /><path d="M10.5 8.5h3" /></>,
   newticket: <><rect x="4" y="4" width="13" height="13" rx="3" /><path d="M19 15v6M16 18h6" /></>,
+  intake: <><path d="M3 9h18v10H3z" /><path d="M8 9V4h8v5M12 12v4M10 14l2 2 2-2" /></>,
   floor: <path d="M3 20V10l5 3.2V10l5 3.2V6h6v14zM3 20h18" />,
 };
 export type FactoryIconName = keyof typeof PATHS;

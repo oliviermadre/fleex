@@ -2,7 +2,7 @@
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec, type ArmCondition } from './types';
 import { relink } from './teleport';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'desk' | 'set' | 'toll' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
 
 const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -42,6 +42,8 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
     /* a dock of three by two, its mouth on the right: where a ticket created at it waits for an arm */
     case 'desk': return { id, kind: 'desk', x: x - 1, y, w: DESK_W, h: DESK_H, name: 'Desk' };
+    /* Slack until its popup says otherwise; a conversation must be quiet two minutes before its item leaves */
+    case 'intake': return { id, kind: 'intake', x: x - 1, y, w: DESK_W, h: DESK_H, name: '', source: 'slack', quietSec: 120, drop: [] };
     default: return null;
   }
 }

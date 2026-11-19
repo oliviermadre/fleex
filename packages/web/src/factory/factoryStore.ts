@@ -46,6 +46,8 @@ interface FactoryState {
   ackNotice: () => Promise<void>;
   retry: (ticketId: string) => Promise<void>;
   giveBack: (ticketId: string) => Promise<void>;
+  /** Archive an item (soft delete). */
+  archiveItem: (itemId: string) => Promise<void>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
   star: (ticketId: string, on: boolean) => Promise<void>;
 }
@@ -128,6 +130,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     ackNotice: () => act(() => factoryApi.ackNotice()),
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
+    archiveItem: (itemId) => act(() => factoryApi.archiveItem(itemId)),
     star: async (ticketId, on) => {
       try { await useTicketStore.getState().updateTicket(ticketId, { favorite: on }); } catch { toast.error('Could not change the favourite'); return; }
       await act(() => factoryApi.refreshTicket(ticketId));

@@ -11,6 +11,7 @@
 import { Children, isValidElement, type ReactNode } from 'react';
 import type { TicketType } from '@fleex/shared';
 import { TicketTypeIconSvg } from '../components/tickets/TicketTypeIconSvg';
+import { SOURCE_PARTS, sourceOfType } from './items';
 
 /** One stroke of an icon, in its 24 × 24 box. */
 export type Part =
@@ -41,6 +42,9 @@ const partsCache = new Map<string, { parts: Part[]; solid: boolean }>();
 export function shapeOf(type: string): { parts: Part[]; solid: boolean } {
   const hit = partsCache.get(type);
   if (hit) return hit;
+  /* an item: the mark of its source */
+  const source = sourceOfType(type);
+  if (source) { const out = { parts: SOURCE_PARTS[source], solid: false }; partsCache.set(type, out); return out; }
   const parts: Part[] = [];
   if (type) {
     try {

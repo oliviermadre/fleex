@@ -60,12 +60,12 @@ interface Ticket {
 }
 
 /**
- * What arms and tolls see of an item: no type, no priority, no board, and its tags with `source:<its source>` added,
- * so that "tag value source is slack" routes it.
+ * What arms and tolls see of an item: the type `src:<its source>` (what the page draws it from), no priority, no board,
+ * and its tags with `source:<its source>` added, so that "type is src:slack" or "tag value source is slack" routes it.
  */
 export function itemInfo(row: FactoryItemRow): FactoryTicketInfo {
   return {
-    id: row.id, displayId: 0, title: row.title, type: '', priority: 'none', status: 'todo', tags: [...row.tags.filter((t) => !t.startsWith('source:')), `source:${row.source}`],
+    id: row.id, displayId: 0, title: row.title, type: `src:${row.source}`, priority: 'none', status: 'todo', tags: [...row.tags.filter((t) => !t.startsWith('source:')), `source:${row.source}`],
     boardId: '', complexity: null, favorite: false, blocked: false,
   };
 }

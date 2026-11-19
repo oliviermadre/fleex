@@ -27,7 +27,9 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type DeskSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
+import { toast } from '../lib/toast';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type DeskSpec, type Dir, type DropRule, type IntakeSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -45,6 +47,7 @@ export function machineKind(m: MachineSpec): string {
   if (m.kind === 'belt' && m.set !== undefined) return 'Set gantry';
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'Gate' : m.exec === 'native' ? 'Status station' : `${m.exec[0]!.toUpperCase()}${m.exec.slice(1)} station`;
   if (m.kind === 'teleporter') return m.role === 'arrival' ? 'Arrival teleporter' : 'Departure teleporter';
+  if (m.kind === 'intake') return `${SOURCE_LABEL[m.source]} intake`;
   return m.kind === 'zone' && m.inbound ? 'Inbound zone' : `${m.kind[0]!.toUpperCase()}${m.kind.slice(1)}`;
 }
 export const machineIcon = (m: MachineSpec): string => (m.kind === 'belt' && m.toll ? 'toll' : m.kind === 'belt' && m.set !== undefined ? 'set' : m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
@@ -198,6 +201,62 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
   );
 }
 
+const RULE_FIELD: Record<DropRule['field'], string> = { author: 'From', title: 'Title', text: 'Title or text' };
+const QUIET = [0, 30, 60, 120, 300, 600, 1800, 3600];
+const quietLabel = (s: number) => (s === 0 ? 'at once' : s < 60 ? `${s} s` : s < 3600 ? `${s / 60} min` : `${s / 3600} h`);
+
+/**
+ * An intake: which source it takes items from, how long a conversation must be quiet before its item leaves, the
+ * rules that drop what is not worth a look (a newsletter, a bot), and, until the sources are connected, a way to make
+ * an item by hand to see the floor work.
+ */
+function IntakeSettings({ m, onPatch, takers, onSelect }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void }) {
+  const rules = m.drop ?? [], quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
+  const setRules = (drop: DropRule[]) => onPatch({ drop } as Partial<MachineSpec>);
+  const [test, setTest] = useState({ title: '', author: '', excerpt: '' });
+  const make = async () => {
+    try {
+      const r = await factoryApi.ingest({ source: m.source, key: `manual-${Date.now().toString(36)}`, title: test.title, author: test.author, excerpt: test.excerpt });
+      useFactoryStore.setState({ snapshot: r.snapshot });
+      if (r.status === 'dropped') toast.info('Dropped by a rule of this intake: it does not reach the floor'); else toast.success('Item made: it waits in the intake while its conversation is not quiet');
+      setTest({ title: '', author: '', excerpt: '' });
+    } catch { /* the API helper raised a toast */ }
+  };
+  return (
+    <>
+      <Hint>Where items of one source come in. An item waits here while its conversation moves, and leaves once it has been quiet for the delay below: an arm then takes it. What a rule recognises is dropped here, counted, and never reaches the floor. The sources are not connected yet: items come in through POST /api/factory/items, or by hand below.</Hint>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={SOURCE_LABEL[m.source]} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      <div className="grid grid-cols-2 gap-2">
+        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value } as Partial<MachineSpec>)}
+          options={ITEM_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))} />
+        <Select id="f-intake-quiet" label="Leaves once quiet for" value={String(quiet)} onChange={(e) => onPatch({ quietSec: Number(e.target.value) } as Partial<MachineSpec>)}
+          options={[...new Set([...QUIET, quiet])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
+      </div>
+      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Drop what matches</Head>
+      {rules.length === 0 && <Hint>No rule: everything comes in. A rule drops an item whose field contains its text, whatever the case.</Hint>}
+      {rules.map((r, i) => (
+        <div key={i} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-end gap-1.5">
+          <Select id={`f-rule-${i}-field`} label={i === 0 ? 'Field' : ''} value={r.field} onChange={(e) => setRules(rules.map((q, j) => (j === i ? { ...q, field: e.target.value as DropRule['field'] } : q)))}
+            options={(Object.keys(RULE_FIELD) as DropRule['field'][]).map((f) => ({ value: f, label: RULE_FIELD[f] }))} />
+          <CommitInput id={`f-rule-${i}-text`} label={i === 0 ? 'contains' : ''} value={r.contains} placeholder="newsletter, noreply@…" onCommit={(v) => setRules(rules.map((q, j) => (j === i ? { ...q, contains: v } : q)).filter((q) => q.contains.trim()))} />
+          <Button size="sm" variant="ghost" onClick={() => setRules(rules.filter((_, j) => j !== i))} title="Remove this rule">Remove</Button>
+        </div>
+      ))}
+      <div><Button size="sm" onClick={() => setRules([...rules, { field: 'author', contains: 'noreply' }])}>Add a rule</Button></div>
+      <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
+      {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: items will pile up. Put an arm against one of its sides.</div>}
+      {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
+      <Head>Make an item by hand</Head>
+      <div className="grid grid-cols-2 gap-2">
+        <Input id="f-test-title" label="Title" value={test.title} onChange={(e) => setTest({ ...test, title: e.target.value })} placeholder="Can you look at the cart?" />
+        <Input id="f-test-author" label="From" value={test.author} onChange={(e) => setTest({ ...test, author: e.target.value })} placeholder="Ana" />
+      </div>
+      <Input id="f-test-text" label="Text" value={test.excerpt} onChange={(e) => setTest({ ...test, excerpt: e.target.value })} placeholder="The first lines of the conversation" />
+      <div><Button size="sm" disabled={!test.title.trim()} onClick={() => void make()}>Make the item</Button></div>
+    </>
+  );
+}
+
 /**
  * A desk: its name, and what the creation form opened on it starts with (board, type, priority). Each can be changed
  * in the form; a "Bug desk" set to Fix and wired to a line of fixes routes what is created at it.
@@ -270,7 +329,7 @@ function TeleporterSettings({ m, onPatch, onSelect }: { m: TeleporterSpec; onPat
       )}
       <ColourPicker label="Teleporter colour" value={m.color} own={portOwnColor(m, find)} ownTitle={dep ? 'The colour of its destination' : 'Cyan'}
         hint={dep ? 'Automatic: the colour of its destination, so the two read as a pair.' : 'Its departures take its colour unless they have their own.'} onChange={(color) => onPatch({ color })} />
-      <Hint>{held ? `Holds #${held.info?.displayId ?? '?'} ${held.info?.title ?? ''}` : 'Holds nothing right now.'}</Hint>
+      <Hint>{held ? `Holds ${refOf(held.info)} ${held.info?.title ?? ''}` : 'Holds nothing right now.'}</Hint>
     </>
   );
 }
@@ -333,6 +392,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
         </>
       )}
       {m.kind === 'teleporter' && <TeleporterSettings m={m} onPatch={onPatch} onSelect={onSelect} />}
+      {m.kind === 'intake' && <IntakeSettings m={m} onPatch={onPatch} takers={takers} onSelect={onSelect} />}
       {m.kind === 'desk' && <DeskSettings m={m} onPatch={onPatch} takers={takers} onSelect={onSelect} />}
 
       {m.kind === 'station' && (
@@ -449,7 +509,7 @@ function Inside({ m, onOpenTicket }: { m: MachineSpec; onOpenTicket: (ticketId: 
             <li key={t.ticketId} className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--theme-border)] px-2 py-1.5">
               <TicketToken info={t.info} size={22} />
               <button type="button" onClick={() => onOpenTicket(t.ticketId)} className="min-w-0 flex-1 basis-48 text-left" title="Open the ticket">
-                <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'}</span>{t.info?.title ?? t.ticketId}</div>
+                <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">{refOf(t.info)}</span>{t.info?.title ?? t.ticketId}</div>
                 <div className={cn('truncate text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>
                   {t.phase === 'zone' && t.released ? 'released, waiting for an arm' : PHASE[t.phase]}{t.outcome ? ` · ${t.outcome}` : ''}{t.note ? ` · ${t.note}` : ''}
                 </div>
@@ -488,7 +548,7 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
   const titles = useMemo(() => {
     const out = new Map<string, string>();
     for (const t of known) out.set(t.id, `#${t.displayId} ${t.title}`);
-    for (const t of snapshot?.tickets ?? []) if (t.info) out.set(t.ticketId, `#${t.info.displayId} ${t.info.title}`);
+    for (const t of snapshot?.tickets ?? []) if (t.info) out.set(t.ticketId, `${refOf(t.info)} ${t.info.title}`);
     return out;
   }, [known, snapshot]);
   return (
