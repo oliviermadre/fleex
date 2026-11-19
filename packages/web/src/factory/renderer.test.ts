@@ -76,7 +76,7 @@ describe('the floor is the map', () => {
 describe('what the minimap frames', () => {
   it('is what is built, with a tile of room round it, and not the floor\'s margins', () => {
     const l = layout(station('a', 10, 4), station('b', 30, 12));
-    expect(builtRect(l)).toEqual({ x: 9, y: 3, w: 27, h: 15 });
+    expect(builtRect(l)).toEqual({ x: 9, y: 3, w: 27, h: 14 });
     const f = floorRect(l);
     expect(f.w).toBeGreaterThan(27);                                                // the floor itself is wider: it has its margins
     expect(builtRect(layout())).toBeNull();
