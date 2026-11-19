@@ -17,7 +17,7 @@ export const REACH_TILE = 1, REACH_QUAY = 0.5 + QUAY_IN;
 /** How many tickets are shown in line at a quay. */
 export const QUAY_ROOM = 3;
 
-export const isBoxKind = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
+export const isBoxKind = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk');
 
 /** The centre of the quay an arm picks from: on the tile behind it, against the edge it faces. */
 export function quayOf(arm: ArmSpec): { x: number; y: number } {
@@ -57,7 +57,7 @@ export interface DispatchHints {
 }
 /**
  * Which arm each ticket that is ready to leave a box will be taken by, as the engine will decide it: for a station,
- * what is done (and a question, by an arm that asks for questions); for a zone, what was released. Where several
+ * what is done (and a question, by an arm that asks for questions); for a zone, what was released; for a desk, all it holds. Where several
  * arms take the same ticket, the engine gives it to whichever is free first: here, to the one with the shortest line.
  */
 export function dispatch(box: MachineSpec, takers: readonly ArmSpec[], tickets: readonly FactoryTicket[], hints: DispatchHints = {}): Dispatch {
@@ -76,7 +76,7 @@ export function dispatch(box: MachineSpec, takers: readonly ArmSpec[], tickets: 
     if (box.kind === 'station') {
       if (t.phase === 'out') { if (!give(t, takers.filter(takes))) stuck.push(t); }
       else if (t.phase === 'question') give(t, takers.filter((a) => takesQuestions(a) && takes(a)));
-    } else if (box.kind === 'zone' && t.released) give(t, takers.filter(takes));
+    } else if ((box.kind === 'zone' || box.kind === 'desk') && t.released) give(t, takers.filter(takes));
   }
   return { byArm, quay, stuck };
 }

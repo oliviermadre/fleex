@@ -60,6 +60,7 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : m.exec === 'script' ? `Script · ${scriptSummary(m.script)}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
+  if (m.kind === 'desk') { const d = m.defaults ?? {}, with_ = [d.type, d.priority].filter(Boolean).join(', '); return `Desk · tickets are born here${with_ ? `, ${with_}` : ''}; New ticket opens the form`; }
   if (m.kind === 'teleporter') {
     if (m.role === 'arrival') return 'Arrival · receives from its departures only, one ticket at a time; an arm takes it out';
     const to = arrivalOf(m, (id) => view.machine(id));

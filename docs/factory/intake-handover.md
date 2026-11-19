@@ -7,6 +7,18 @@ session. Read this, then open `docs/factory/intake.html` in a browser (the mock-
 Nothing described here is built. Everything under "Decided" was said by the owner; everything under "Proposed" is
 the previous session's opinion and can be overturned.
 
+## Progress
+
+- **Picks (owner, 2026-11-19)**: Item: none of J1 to J3 as drawn. An item is drawn like a ticket, as an object in
+  relief from an icon, here the source's logo (Slack, Gmail, GitHub…), as tickets are from their type's icon
+  (`ticketToken.ts`). To draw on a mock-up before step 3. Intake: **I1**, a loading dock. New ticket: **N3**, a
+  Desk machine and a command on the card.
+- **Order changed**: the Desk went first (it needs no migration and no item), then items.
+- **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. Only the composer of the form
+  is mounted, not its entry screen (importing from a link or a source): to add if wanted.
+- **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
+  machines. Rename one of them before step 7.
+
 ## The aim
 
 The owner wants the Factory to be the one place where everything that may ask something of them arrives: a Slack

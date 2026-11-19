@@ -21,7 +21,7 @@ export function needKind(t: FactoryTicket): NeedKind | null {
 }
 
 const placeOf = (m: MachineSpec | undefined): string => !m ? 'Floor' : m.kind === 'belt' || m.kind === 'bridge' ? 'On a belt' : m.kind === 'arm' ? 'In an arm' : m.kind === 'teleporter' ? portName(m)
-  : m.name || (m.kind === 'station' ? (m.exec === 'human_gate' ? 'Gate' : 'Station') : m.kind === 'zone' ? 'Zone' : 'Exit');
+  : m.name || (m.kind === 'station' ? (m.exec === 'human_gate' ? 'Gate' : 'Station') : m.kind === 'zone' ? 'Zone' : m.kind === 'desk' ? 'Desk' : 'Exit');
 
 /** Where a ticket is and what happens to it there, in words: the two lines of the Factory group in a ticket's context. */
 export function standing(t: FactoryTicket, m: MachineSpec | null | undefined): { where: string; state: string } {

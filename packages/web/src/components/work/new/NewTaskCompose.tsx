@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
-import { useWorkStore } from '../../../stores/workStore';
+import { useWorkStore, type WorkDraft } from '../../../stores/workStore';
+import type { Ticket } from '@fleex/shared';
 import { toast } from '../../../lib/toast';
 import { useTicketGroupStore } from '../../../stores/ticketGroupStore';
 import { useBoardEpics } from '../../../hooks/useBoardEpics';
@@ -26,14 +27,33 @@ import { SourceChip } from './SourceChip';
  * `Start` is the single ticket-creation path: it creates the ticket (with the
  * source's links + tags), joins epics, attaches repos (with a base branch or a
  * direct checkout), and, for a GitHub issue, syncs its metadata after the fact.
+ *
+ * Mounted elsewhere than the Work view (the Factory's desks), it is given its own
+ * draft (`draftState`, so the Work view's draft is left alone), what to do with the
+ * ticket once created (`onCreated`, instead of opening it in the Work view) and
+ * where Cancel goes (`onCancel`).
  */
+export interface ComposeDraftState {
+  draft: WorkDraft;
+  update: (patch: Partial<WorkDraft>) => void;
+  reset: (boardId?: string | null) => void;
+}
 export function NewTaskCompose({
   onStartOver,
   enterStarts = true,
+  draftState,
+  onCreated,
+  onCancel,
 }: {
   onStartOver: () => void;
   /** ⏎ in the description starts the task. Off on a phone, where ⏎ is the only way to add a line. */
   enterStarts?: boolean;
+  /** A draft of its own; without one, the Work view's. */
+  draftState?: ComposeDraftState;
+  /** Called once the ticket exists, its epics and repos attached; without it, the ticket is opened in the Work view. */
+  onCreated?: (ticket: Ticket) => void | Promise<void>;
+  /** Cancel and Escape; without it, back to the Work view's task. */
+  onCancel?: () => void;
 }) {
   const boards = useTicketStore((s) => s.boards);
   const tickets = useTicketStore((s) => s.tickets);
@@ -41,10 +61,14 @@ export function NewTaskCompose({
   const addLink = useTicketStore((s) => s.addLink);
   const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
   const repositories = useRepositoryStore((s) => s.repositories);
-  const draft = useWorkStore((s) => s.draft);
-  const updateDraft = useWorkStore((s) => s.updateDraft);
-  const resetDraft = useWorkStore((s) => s.resetDraft);
+  const workDraft = useWorkStore((s) => s.draft);
+  const workUpdate = useWorkStore((s) => s.updateDraft);
+  const workReset = useWorkStore((s) => s.resetDraft);
+  const draft = draftState?.draft ?? workDraft;
+  const updateDraft = draftState?.update ?? workUpdate;
+  const resetDraft = draftState?.reset ?? workReset;
   const setView = useWorkStore((s) => s.setView);
+  const cancel = onCancel ?? (() => setView('task'));
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const pinTicket = useWorkStore((s) => s.pinTicket);
   const [creating, setCreating] = useState(false);
@@ -148,6 +172,11 @@ export function NewTaskCompose({
         }
       }
       resetDraft(effectiveBoardId);
+      if (onCreated) {
+        setProgress('Handing it over…');
+        await onCreated(ticket);
+        return;
+      }
       // Pinned, so it stays on screen even when the queue filters exclude it
       // (e.g. created on a board the queue doesn't show).
       pinTicket(ticket.id);
@@ -166,7 +195,7 @@ export function NewTaskCompose({
       e.preventDefault();
       descRef.current?.focus();
     } else if (e.key === 'Escape') {
-      setView('task');
+      cancel();
     }
   }
 
@@ -175,7 +204,7 @@ export function NewTaskCompose({
       e.preventDefault();
       void start();
     } else if (e.key === 'Escape') {
-      setView('task');
+      cancel();
     }
   }
 
@@ -361,7 +390,7 @@ export function NewTaskCompose({
           )}
           <button
             type="button"
-            onClick={() => setView('task')}
+            onClick={cancel}
             className="ml-auto rounded-md px-3 py-1 text-[12px] text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]"
           >
             Cancel

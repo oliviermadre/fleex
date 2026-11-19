@@ -77,6 +77,13 @@ describe('which arm a ticket leaves by', () => {
     expect(d.stuck).toEqual([]);
   });
 
+  it('a desk lets out what was created at it, from the quay of its arm', () => {
+    const desk: MachineSpec = { id: 'd', kind: 'desk', x: 0, y: 0, w: 3, h: 2, name: 'Desk' };
+    const a = arm('a', 3, 0, 0);
+    expect([...dispatch(desk, [a], [t('x', 'zone', '', { machineId: 'd', released: true })]).quay]).toEqual([['x', 'a']]);
+    expect(reachOf(desk, null).from).toBe(REACH_QUAY);
+  });
+
   it('between arms that take the same ticket: the shortest line, the one at rest first, and a ticket does not change quay', () => {
     const one = arm('one', 15, 21, 0), two = arm('two', 15, 22, 0), out = [t('a', 'out', 'ok'), t('b', 'out', 'ok'), t('c', 'out', 'ok')];
     expect([...dispatch(box, [one, two], out).quay.values()]).toEqual(['one', 'two', 'one']);

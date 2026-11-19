@@ -56,7 +56,13 @@ export interface BridgeSpec extends MachineBase { kind: 'bridge' }
  * that arrival's id); an arrival holds one ticket, takes nothing from the floor, and an arm takes the ticket out.
  */
 export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 'departure' | 'arrival'; to?: string; /** One of `PALETTE`; without one, see `portColor`. */ color?: string }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec;
+/**
+ * Where a ticket is born on the floor: the creation form opens on it, and the ticket it creates is handed over right
+ * there. Nothing on the floor puts a ticket into a desk; an arm takes what it holds out at once. `defaults` prefill the form.
+ */
+export interface DeskSpec extends MachineBase { kind: 'desk'; defaults?: DeskDefaults }
+export interface DeskDefaults { boardId?: string; type?: string; priority?: string }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */

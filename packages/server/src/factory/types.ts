@@ -99,7 +99,16 @@ export interface TeleporterSpec extends MachineBase {
   /** The colour it was given by hand, as `#rrggbb`: paint, nothing more. */
   color?: string;
 }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec;
+/**
+ * Where a ticket is born on the floor: the ticket creation form opens on it, and the ticket it creates is handed over
+ * to the Factory right there. Nothing on the floor can put a ticket into a desk; an arm takes what it holds out, at
+ * once. `defaults` prefill the form (board, type, priority): a "Bug desk" wired to a line of fixes routes by being used.
+ */
+export interface DeskSpec extends MachineBase {
+  kind: 'desk';
+  defaults?: { boardId?: string; type?: string; priority?: string };
+}
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec;
 
 /**
  * `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. `version` says what

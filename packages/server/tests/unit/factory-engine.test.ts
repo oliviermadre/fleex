@@ -102,6 +102,24 @@ describe('FactoryEngine', () => {
     expect(statuses).toEqual([['b', 'todo']]);
   });
 
+  it('a desk holds the ticket created at it until an arm takes it out, and takes nothing from the floor', async () => {
+    const desk = { id: 'desk', kind: 'desk', x: 1, y: 1, w: 9, h: 9, name: '  Bug desk ', defaults: { boardId: 'b1', type: 'fix', priority: 7, junk: 'x' } } as unknown as MachineSpec;
+    await boot([desk, arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 2, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });
+    await engine.transfer('a', { machineId: 'desk' });
+    await engine.transfer('b', { machineId: 'desk' });     // several can be created in a row: a desk has no capacity
+    expect(where('a')).toBe('desk:zone');
+    expect(statuses).toEqual([]);                       // being born at a desk sets nothing
+    await run(8);
+    expect(where('a')).toBe('z:zone');
+    expect(where('b')).toBe('z:zone');
+    await expect(engine.move('a', { machineId: 'desk' })).rejects.toThrow('A desk only holds the tickets created at it');
+    await expect(engine.move('a', { x: 2, y: 2 })).rejects.toThrow('A desk only holds the tickets created at it');
+    await engine.transfer('c', { machineId: 'desk' });
+    await engine.giveBack('c');
+    expect(where('c')).toBe('gone');
+  });
+
   it('a ticket handed over without a target lands in the Inbound zone, created if the floor has none', async () => {
     await boot([belt('b1', 1, 1)]);
     await engine.transfer('a');

@@ -43,6 +43,8 @@ export const kindOf = (m: StationSpec): RunKind | null => (RUNS.includes(m.exec)
  * an agent has round shoulders and an antenna, a skill cut corners (a tool), a panel is a stack of plates (several
  * personas), a script a terminal window with its title bar.
  */
+/** A desk's green, as on the mock-up it was picked on (`docs/factory/intake.html`): where tickets are born. Paint, on any theme. */
+export const DESK_COLOR = '#4ade80';
 export const KIND_LOOK: Record<RunKind, { hue: string; word: string }> = {
   agent: { hue: '#a78bfa', word: 'AGENT' },
   skill: { hue: '#38bdf8', word: 'SKILL' },

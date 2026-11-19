@@ -64,6 +64,25 @@ new ids.
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
+## Desks: where a ticket is born
+
+A **desk** (`kind: 'desk'`, Build › Area › Desk) is where a ticket is created on the floor itself, never through the
+Work view. It was picked on `docs/factory/intake.html` (I1 for its look, N3 for how it is reached): a loading dock of
+3 by 2 tiles, green, a badge with a plus, "NEW TICKET" over its name.
+
+- **New ticket** on the command card (T, at the end of the first row with nothing selected) opens the creation form
+  on the desk selected, else on the floor's first desk; with no desk on the floor the ticket is handed over without
+  a target and lands in Inbound. A desk selected has New ticket where a zone has Release. Out of build mode a
+  double-click on a desk opens the form too; its settings are Edit.
+- The form is the Work view's own (`NewTaskCompose`, mounted by `FactoryDeskForm.tsx` with a draft of its own, so the
+  Work view's draft is left alone, and with `onCreated` instead of opening the ticket in the Work view). A desk's
+  `defaults` (board, type, priority) prefill it; the rest of the form is as it is (epics, repos, complexity).
+- Once created, the ticket is handed over to the Factory at the desk (`POST …/transfer` with the desk's id). It is
+  released at once: the first arm that wants it takes it out. Nothing else can put a ticket into a desk (a drop, a
+  move, an arm, a belt): `canTake` is false for it, and `transfer` is the only way in.
+- Being born at a desk sets nothing on the ticket: its status is the form's (`doing`), its fields what was chosen.
+
+
 ## Places, set aside, and the switch
 
 A station that runs something (an agent, a skill, a panel) works on as many tickets as it has places (`cap`). Nothing
@@ -536,6 +555,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
 | web: `work/timeline/buildTimeline.ts`, `TimelineGlyph.tsx`, `useTicketTimeline.ts` | a run a station started goes by the station's name on a ticket's timeline, with the Factory's glyph, instead of "Workflow": an optional `stationRuns` source (read by `useFactoryStationRuns`, empty while the Factory is off) and a `factory` glyph |
 | web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
+| web: `work/new/NewTaskCompose.tsx` | three optional props for the desks' form: `draftState` (a draft of its own), `onCreated` (instead of opening the ticket in the Work view), `onCancel`. Unset, the composer is unchanged; they can stay |
 
 ## Removing it
 

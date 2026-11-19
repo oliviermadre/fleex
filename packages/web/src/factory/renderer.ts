@@ -10,14 +10,14 @@ import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
 import { fadeIn, floorLook, isLight, legible, luminance, MAJOR, mix, veil } from './floorLook';
 import { follow, type Track, type TrackPos } from './ticketMotion';
-import { BAR, bodyOf, CUT, inRect, KIND_LOOK, kindOf, lampOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, sortInto, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
+import { BAR, bodyOf, CUT, DESK_COLOR, inRect, KIND_LOOK, kindOf, lampOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, sortInto, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
 import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
 import { modelTag } from './stationModel';
 import { tokenSprite, type TokenLook } from './ticketToken';
-import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
+import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type DeskSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number; /** An arm about to be placed: where it would take from and drop on is shown. */ arm?: boolean }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
@@ -167,7 +167,7 @@ const PICK = '#60a5fa';
 const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
-export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
+export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk');
 
 
 export class FactoryView {
@@ -482,14 +482,14 @@ export class FactoryView {
       byId.set(t.ticketId, t);
       items.push({
         id: t.ticketId, text: `#${info.displayId} ${info.title}`, x: sx(p.x), y: sy(p.y),
-        box: m && (m.kind === 'station' || m.kind === 'zone') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
+        box: m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'desk') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
       });
     }
     if (!items.length) return;
     const ctx = this.ctx, LH = 15, PAD = 5;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = `500 11px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
+    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
     const lit = pal.light;
@@ -590,6 +590,7 @@ export class FactoryView {
       else if (m.kind === 'station') this.station(m, inside.get(m.id) ?? [], st, pal, dtReal);
       else if (m.kind === 'exit') this.exit(m, st, pal);
       else if (m.kind === 'teleporter') this.port(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
+      else if (m.kind === 'desk') this.desk(m, inside.get(m.id) ?? [], st, pal, dtReal);
     }
     for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
       const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
@@ -1267,6 +1268,30 @@ export class FactoryView {
     this.quays(takers, D, st, pal, dt, true);
   }
 
+  /**
+   * A desk, where tickets are born: a loading dock of three tiles by two (picked on `docs/factory/intake.html`, I1),
+   * its edge in the desk's green, a badge with its sign, "NEW TICKET" over its name, and what it holds at the quays of
+   * the arms that take from it. It holds a ticket only the moment an arm needs to come for it.
+   */
+  private desk(m: DeskSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
+    const ctx = this.ctx, { x, y, w, h } = m, z = this.cam.z, col = DESK_COLOR;
+    const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st);
+    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.22); ctx.fillStyle = pal.body; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 0.05; ctx.stroke();
+    /* the badge: a green square with a plus, as a ticket that is about to be */
+    const b = 0.6, bx = x + 0.24, by = y + 0.24;
+    rr(ctx, bx, by, b, b, 0.14); ctx.fillStyle = col; ctx.fill();
+    ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.beginPath();
+    ctx.moveTo(bx + b / 2, by + 0.15); ctx.lineTo(bx + b / 2, by + b - 0.15); ctx.moveTo(bx + 0.15, by + b / 2); ctx.lineTo(bx + b - 0.15, by + b / 2); ctx.stroke(); ctx.lineCap = 'butt';
+    if (z >= 7) this.label('NEW TICKET', bx + b + 0.16, by + 0.12, 0.17, col, { mono: true, weight: 700, min: 7, max: 10, fit: w - b - 0.6 });
+    this.label(m.name || 'Desk', bx + b + 0.16, by + 0.42, 0.28, pal.text, { weight: 650, min: 9, max: 15, fit: w - b - 0.6 });
+    if (z >= 14 && !takers.length) this.label('no arm takes from it', x + w / 2, y + h - 0.28, 0.16, pal.danger, { mono: true, align: 'center', fit: w - 0.3 });
+    else if (z >= 14) this.label(st.edit ? 'double-click: settings' : 'double-click: the form', x + 0.24, y + h - 0.28, 0.16, pal.text3, { mono: true, fit: w - 0.4 });
+    /* what no arm takes stays in the dock, lined up under the name */
+    tickets.filter((t) => !D.quay.has(t.ticketId)).slice(0, 4).forEach((t, i) => this.ticket(t, x + 1.1 + i * 0.42, y + h - 0.55, 0.34, st, '', dt));
+    this.quays(takers, D, st, pal, dt, false);
+  }
+
   /** A padlock, stencilled: shut and red, or open and green with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
   private padlock(x: number, y: number, open: boolean, col: string): void {
     const ctx = this.ctx, k = 1 / 40, top = y + (open ? 0.5 : 2.5) * k;
@@ -1543,7 +1568,7 @@ export class FactoryView {
    */
   private armWay(x: number, y: number, dir: number, pal: Palette, turn: boolean): void {
     const ctx = this.ctx, dx = DX[dir as 0], dy = DY[dir as 0];
-    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
+    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : m.kind === 'desk' ? 'Desk' : 'Station'));
     const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
       ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
       ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
@@ -1597,7 +1622,7 @@ export class FactoryView {
       if (m.kind === 'label') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.kind === 'desk' ? DESK_COLOR : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;

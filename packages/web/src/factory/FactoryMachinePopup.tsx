@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { TicketStatus } from '@fleex/shared';
+import { TICKET_PRIORITIES, TICKET_TYPE_LABELS, TICKET_TYPES, type TicketStatus } from '@fleex/shared';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
@@ -27,7 +27,7 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type DeskSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -199,6 +199,37 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
 }
 
 /**
+ * A desk: its name, and what the creation form opened on it starts with (board, type, priority). Each can be changed
+ * in the form; a "Bug desk" set to Fix and wired to a line of fixes routes what is created at it.
+ */
+function DeskSettings({ m, onPatch, takers, onSelect }: { m: DeskSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void }) {
+  const boards = useTicketStore((s) => s.boards), d = m.defaults ?? {};
+  const set = (k: 'boardId' | 'type' | 'priority', v: string) => {
+    const next = { ...d, [k]: v || undefined };
+    for (const key of Object.keys(next) as (keyof typeof next)[]) if (!next[key]) delete next[key];
+    onPatch({ defaults: Object.keys(next).length ? next : undefined } as Partial<MachineSpec>);
+  };
+  return (
+    <>
+      <Hint>Where tickets are born. New ticket on the command card (or a double-click on the desk) opens the creation form; the ticket it creates is handed over to the Factory here, and an arm takes it out at once.</Hint>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder="Desk" onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      <Head>The form starts with</Head>
+      <Select id="f-desk-board" label="Board" value={d.boardId ?? ''} onChange={(e) => set('boardId', e.target.value)}
+        options={[{ value: '', label: 'the first board' }, ...boards.map((b) => ({ value: b.id, label: b.name }))]} />
+      <div className="grid grid-cols-2 gap-2">
+        <Select id="f-desk-type" label="Type" value={d.type ?? ''} onChange={(e) => set('type', e.target.value)}
+          options={[{ value: '', label: 'Build (the form\'s own)' }, ...TICKET_TYPES.map((t) => ({ value: t, label: TICKET_TYPE_LABELS[t] ?? t }))]} />
+        <Select id="f-desk-priority" label="Priority" value={d.priority ?? ''} onChange={(e) => set('priority', e.target.value)}
+          options={[{ value: '', label: 'none (the form\'s own)' }, ...TICKET_PRIORITIES.filter((p) => p !== 'none').map((p) => ({ value: p, label: p }))]} />
+      </div>
+      <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
+      {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: what is created stays in the desk. Put an arm against one of its sides.</div>}
+      {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
+    </>
+  );
+}
+
+/**
  * A teleporter: its name, which of the two it is, and for a departure the arrival it leads to. An arrival has nothing
  * to point at: it lists the departures that lead to it, each of which opens. Either says what it holds.
  */
@@ -302,6 +333,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
         </>
       )}
       {m.kind === 'teleporter' && <TeleporterSettings m={m} onPatch={onPatch} onSelect={onSelect} />}
+      {m.kind === 'desk' && <DeskSettings m={m} onPatch={onPatch} takers={takers} onSelect={onSelect} />}
 
       {m.kind === 'station' && (
         <>

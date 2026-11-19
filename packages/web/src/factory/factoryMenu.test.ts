@@ -20,6 +20,7 @@ const everyMenu = (): [string, Menu][] => {
     ['ticket set aside', factoryMenu(ctx({ ticket: { phase: 'aside', released: false, favorite: false, outcomes: ['ok', 'redo', 'drop', 'later'] } }))],
     ['running ticket', factoryMenu(ctx({ ticket: { phase: 'running', released: false, favorite: false, outcomes: ['ok'], canAside: true } }))],
     ['zone', factoryMenu(ctx({ machine: { kind: 'zone', waiting: true, popup: true } }))],
+    ['desk', factoryMenu(ctx({ machine: { kind: 'desk', waiting: false, popup: true } }))],
     ['station running', factoryMenu(ctx({ machine: { kind: 'station', waiting: false, popup: true, power: 'on' } }))],
     ['station stopped', factoryMenu(ctx({ machine: { kind: 'station', waiting: false, popup: true, power: 'off' } }))],
     ['station, building', factoryMenu(ctx({ building: true, machine: { kind: 'station', waiting: false, popup: true, power: 'on' } }))],
@@ -60,13 +61,22 @@ describe('the command card', () => {
 
   it('with nothing selected: what the floor offers on the first row, and Build where Done will be', () => {
     const c = ctx(), root = factoryMenu(c);
-    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', null], [null, null, null, 'Fit', null], [null, null, null, 'Next', 'Build']]);
+    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, null, null, 'Fit', null], [null, null, null, 'Next', 'Build']]);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
     root.slots[2]!.run!(); expect(c.act.floor).toHaveBeenCalled();
     root.slots[3]!.run!(); expect(c.act.limits).toHaveBeenCalled();
+    /* T on any keyboard: a ticket is created from the floor itself, never through the Work view */
+    root.slots[4]!.run!(); expect(c.act.newTicket).toHaveBeenCalled();
     /* the way into build mode and the way out of it are the same slot, so the same key */
     root.slots[BACK_SLOT]!.run!(); expect(c.act.build).toHaveBeenCalled();
     expect(at(factoryMenu(ctx({ building: true })), BACK_SLOT)).toBe('Done');
+  });
+
+  it('a desk selected creates a ticket at it, where a zone releases and a station starts', () => {
+    const c = ctx({ machine: { kind: 'desk', waiting: false, popup: true } }), desk = factoryMenu(c);
+    expect(rows(desk)[0]).toEqual(['New ticket', null, null, null, null]);
+    desk.slots[0]!.run!(); expect(c.act.newTicket).toHaveBeenCalled();
+    expect(at(desk, 5)).toBe('Edit');
   });
 
   it('build sorts what can be placed into Move, Station and Area', () => {
@@ -75,7 +85,7 @@ describe('the command card', () => {
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
     expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
     expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], ['Status', null, null, 'Fit', null]]);
-    expect(rows(menuAt(build, ['area']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', null, null], [null, null, null, 'Fit', null]]);
+    expect(rows(menuAt(build, ['area']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Desk', null], [null, null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });
 

@@ -3,7 +3,7 @@
  *
  *   Factory ─ Build ─┬─ Move      (belt, bridge, arm, the way they face)
  *                    ├─ Station   (agent, skill, panel, gate, status)
- *                    ├─ Area      (zone, exit, label)
+ *                    ├─ Area      (zone, exit, label, desk)
  *                    └─ a selection (turn, remove)
  *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its popup)
  *
@@ -43,6 +43,8 @@ export interface MenuContext {
   mod: string;
   act: {
     build(): void; done(): void; intake(): void; fit(): void; plan(): void;
+    /** Open the ticket creation form: at the desk selected, else at the floor's first desk, else for Inbound. */
+    newTicket(): void;
     /** Open the list of the tickets on the floor. */
     tickets(): void;
     /** Take a tool in hand, or put it down when it already is. */
@@ -128,7 +130,8 @@ export function factoryMenu(c: MenuContext): Menu {
     if (c.machine) {
       const off = c.machine.power === 'off';
       return menu('Machine', {
-        0: c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
+        0: c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
+          : c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
         5: c.machine.popup && edit,
@@ -142,6 +145,7 @@ export function factoryMenu(c: MenuContext): Menu {
       1: { id: 'tickets', also: 'Tab', label: 'Tickets', icon: 'list', tone: 'ticket', title: 'Every ticket on the floor, as a list to filter and to jump from', run: a.tickets },
       2: { id: 'floor', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
       3: { id: 'limits', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
+      4: { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket on the floor: at your first desk, or in Inbound when there is none (select a desk to create at that one)', run: a.newTicket },
       [FIT_SLOT]: fit,
       [NEXT_SLOT]: next,
       /* the way into build mode is where the way out of it is */
@@ -195,6 +199,7 @@ export function factoryMenu(c: MenuContext): Menu {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),
     1: place('exit', 'Exit', 'area', 'Sets the ticket to done and hands it back to Fleex'),
     2: place('label', 'Label', 'area', 'A name on the floor'),
+    3: place('desk', 'Desk', 'area', 'Where tickets are born: New ticket opens the creation form on it, with its board, type and priority, and an arm takes the ticket out'),
   }, previous);
 
   const inHand = c.tool !== 'select';

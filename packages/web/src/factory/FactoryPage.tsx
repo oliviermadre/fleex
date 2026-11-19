@@ -36,11 +36,12 @@ import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
 import { addTo, groupOf, machineIds, machinesSel, sameSelection, ticketIds, ticketsIn, ticketsSel } from './pick';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
+import { FactoryDeskForm } from './FactoryDeskForm';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
+import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -74,6 +75,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['zone', 'D', 'Zone', 'Tickets wait here until released'],
   ['exit', 'O', 'Exit', 'Sets the ticket to done and hands it back to Fleex'],
   ['label', 'L', 'Label', 'A name on the floor'],
+  ['desk', 'K', 'Desk', 'Where tickets are born: New ticket opens the creation form on it'],
   ['erase', 'X', 'Erase', 'Click or drag to remove machines'],
 ];
 
@@ -152,6 +154,8 @@ function Floor() {
   const [dir, setDir] = useState<Dir>(0);
   const [selection, setSelection] = useState<Selection>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  /** The creation form, open on a desk (null: no desk on the floor, the ticket lands in Inbound); undefined when closed. */
+  const [deskForm, setDeskForm] = useState<{ desk: DeskSpec | null } | undefined>(undefined);
   const [groups, setGroups] = useState<Selection[]>(() => Array.from({ length: GROUPS }, () => null));
   const [finder, setFinder] = useState<Finder>(NO_FINDER);
   const [hasClip, setHasClip] = useState(clipboard !== null);
@@ -283,6 +287,7 @@ function Floor() {
     const tx = Math.floor(wx), ty = Math.floor(wy), m = v.at(tx, ty);
     if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
     if (m.kind === 'arm' || m.kind === 'label') return { target: {}, ok: false, can: false, text: 'Not on an arm' };
+    if (m.kind === 'desk') return { target: {}, ok: false, can: false, text: 'Not on a desk: tickets are born there' };
     if (m.kind === 'teleporter') {
       /* as for an arm: a departure takes one ticket, an arrival none */
       const held = !!useFactoryStore.getState().snapshot?.tickets.some((t) => t.machineId === m.id), drop = portDrop(m, held, arrivalOf(m, (id) => v.machine(id)));
@@ -453,6 +458,8 @@ function Floor() {
     if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
     /* a machine opens in its popup: its settings, what it holds, what it did. In build mode too, with nothing in hand */
     const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
+    /* a desk opens its form out of build mode, which is what it is for; its settings are Edit */
+    if (m?.kind === 'desk' && !live.current.building) { setDeskForm({ desk: m }); return; }
     if (m && hasPopup(m)) setOpenMachine(m.id);
   };
 
@@ -562,6 +569,8 @@ function Floor() {
       build: () => { setBuilding(true); setSelection(null); },
       done: () => setBuilding(false),
       intake: () => setTransferOpen(true),
+      /* at the desk selected, else at the floor's first desk, else in Inbound */
+      newTicket: () => setDeskForm({ desk: selMachine?.kind === 'desk' ? selMachine : layout?.machines.find((m): m is DeskSpec => m.kind === 'desk') ?? null }),
       tickets: () => setListOpen(true),
       fit, plan: () => setPlanOpen(true), paste,
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
@@ -637,7 +646,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || deskForm || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -677,7 +686,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, deskForm, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   const halted = snapshot?.floor.settings.halted === true;
@@ -756,6 +765,7 @@ function Floor() {
         onCancel={() => setConfirmGive(false)}
         onConfirm={() => { setConfirmGive(false); for (const t of selTickets) void store.giveBack(t.ticketId); setSelection(null); }} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
+      {deskForm && <FactoryDeskForm desk={deskForm.desk} onClose={() => setDeskForm(undefined)} />}
     </div>
   );
 }

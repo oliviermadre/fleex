@@ -120,7 +120,13 @@ export function cleanGroups(input: unknown): FactoryGroup[] {
     return null;
   });
 }
-function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit'); }
+function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit' || m.spec.kind === 'desk'); }
+/** A desk's defaults as the page sent them: short strings, and nothing else. */
+function cleanDefaults(input: unknown): { boardId?: string; type?: string; priority?: string } | undefined {
+  const d = input && typeof input === 'object' ? input as Record<string, unknown> : {}, out: Record<string, string> = {};
+  for (const k of ['boardId', 'type', 'priority'] as const) if (typeof d[k] === 'string' && d[k].trim()) out[k] = (d[k] as string).trim().slice(0, 120);
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
 export function normaliseLayout(input: FactoryLayout): FactoryLayout {
@@ -178,6 +184,12 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.release = m.release === 'auto' ? 'auto' : 'manual';
       m.inbound = m.inbound === true && !machines.some((o) => o.kind === 'zone' && o.inbound);
     } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
+    else if (m.kind === 'desk') {
+      /* a desk is a dock of three tiles by two, whatever the page sent */
+      m.w = 3; m.h = 2;
+      m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
+      const defaults = cleanDefaults(m.defaults); if (defaults) m.defaults = defaults; else delete m.defaults;
+    }
     else throw new FactoryError(`unknown machine kind "${String((m as { kind?: string }).kind)}"`);
     if ((m.kind === 'belt' || m.kind === 'arm') && ![0, 1, 2, 3].includes(m.dir)) throw new FactoryError('belts and arms need a direction 0..3');
     if (m.kind !== 'label') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
@@ -325,7 +337,7 @@ export class FactoryEngine {
     for (const t of this.tickets.values()) {
       const m = t.machineId ? this.byId.get(t.machineId) : null;
       if (m && t.s.phase === 'running' && m.spec.kind !== 'station') { t.s.phase = 'loose'; t.machineId = null; this.dirty.add(t.ticketId); continue; }
-      if (m && (m.spec.kind === 'station' || m.spec.kind === 'zone')) { t.s.x = m.spec.x; t.s.y = m.spec.y; continue; }
+      if (m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'desk')) { t.s.x = m.spec.x; t.s.y = m.spec.y; continue; }
       if (!m && t.machineId) this.dirty.add(t.ticketId);
       this.attach(t);
     }
@@ -356,6 +368,8 @@ export class FactoryEngine {
     if (m.spec.kind === 'belt') return !m.item;
     /* a departure takes one ticket; nothing on the floor goes into an arrival, which only receives from its departures */
     if (m.spec.kind === 'teleporter') return m.spec.role === 'departure' && !m.item;
+    /* a ticket is born at a desk (see `transfer`): nothing on the floor goes into one */
+    if (m.spec.kind === 'desk') return false;
     if (m.spec.kind === 'bridge') return dir !== undefined && !(dir % 2 === 0 ? m.item : m.item2);   // 0 and 2 cross east-west
     if (m.spec.kind === 'station') {
       /* its places are for what it works on; what is done waits apart, and intake stops when that piles up as high */
@@ -389,6 +403,8 @@ export class FactoryEngine {
         if (spec.sets) this.applyStatus(t, spec.sets);
       } else t.s.phase = 'wait';
     } else if (spec.kind === 'zone') { t.s.phase = 'zone'; if (spec.status) this.applyStatus(t, spec.status); }
+    /* a desk holds what was just created there, already free to go: the first arm that wants it takes it */
+    else if (spec.kind === 'desk') { t.s.phase = 'zone'; t.s.released = true; }
     else if (spec.kind === 'exit') {
       this.applyStatus(t, 'done');
       /* a row for the shipment: from hand-over to exit, which is the lead time the stats report */
@@ -451,7 +467,7 @@ export class FactoryEngine {
     }
     if (s.spec.kind === 'belt') return s.item && this.wants(arm, s.item) ? s.item : null;
     if (s.spec.kind === 'station') return this.inside(s).find((t) => ((t.s.phase === 'out' && this.rested(t)) || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
-    if (s.spec.kind === 'zone') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
+    if (s.spec.kind === 'zone' || s.spec.kind === 'desk') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
     /* out of an arrival only: what is in a departure is on its way somewhere else */
     if (s.spec.kind === 'teleporter') return s.spec.role === 'arrival' && s.item && this.ported(s.item) && this.wants(arm, s.item) ? s.item : null;
     return null;
@@ -788,7 +804,8 @@ export class FactoryEngine {
 
   /**
    * Hand a ticket over to the Factory. With no target it lands in the Inbound zone, where it waits
-   * to be dragged onto the floor; otherwise on the machine or the tile that was asked for.
+   * to be dragged onto the floor; otherwise on the machine or the tile that was asked for. A desk takes a ticket only
+   * this way: the one that was just created at it.
    */
   async transfer(ticketId: string, target: { machineId?: string; x?: number; y?: number } = {}): Promise<void> {
     if (this.tickets.has(ticketId)) throw new FactoryError('This ticket is already on the factory floor');
@@ -800,6 +817,8 @@ export class FactoryEngine {
       ticketId, machineId: null, createdAt: nowIso, info,
       s: { x: 0, y: 0, phase: 'loose', p: 0, fx: 1, fy: 0, outcome: '', released: false, since: nowIso, runId: null, note: '' },
     };
+    const desk = target.machineId ? this.byId.get(target.machineId) : undefined;
+    if (desk?.spec.kind === 'desk') { this.tickets.set(ticketId, t); this.accept(desk, t); await this.flush(); return; }
     this.tickets.set(ticketId, t);
     this.place(t, target);
     await this.flush();
@@ -808,7 +827,7 @@ export class FactoryEngine {
   private place(t: Ticket, target: { machineId?: string; x?: number; y?: number }): void {
     const m = target.machineId ? this.byId.get(target.machineId) ?? null : target.x != null && target.y != null ? this.at(Math.floor(target.x), Math.floor(target.y)) : null;
     if (target.machineId && !m) throw new FactoryError('Unknown machine');
-    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : m.spec.kind === 'bridge' ? 'A ticket cannot be dropped on a bridge: put it on the belt before it' : m.spec.kind === 'teleporter' ? (m.spec.role === 'arrival' ? 'Nothing can be dropped on an arrival: tickets come to it from its departures' : 'This teleporter already holds a ticket') : 'A ticket cannot be dropped on this machine');
+    if (m && !this.canTake(m)) throw new FactoryError(m.spec.kind === 'belt' ? 'This belt tile is taken' : m.spec.kind === 'station' ? `${m.spec.name || 'This station'} is full` : m.spec.kind === 'bridge' ? 'A ticket cannot be dropped on a bridge: put it on the belt before it' : m.spec.kind === 'teleporter' ? (m.spec.role === 'arrival' ? 'Nothing can be dropped on an arrival: tickets come to it from its departures' : 'This teleporter already holds a ticket') : m.spec.kind === 'desk' ? 'A desk only holds the tickets created at it' : 'A ticket cannot be dropped on this machine');
     this.detach(t);
     if (m) { this.accept(m, t); return; }
     t.s.phase = 'loose'; t.s.x = Math.floor(target.x ?? 0); t.s.y = Math.floor(target.y ?? 0);
