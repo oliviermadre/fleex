@@ -15,6 +15,7 @@ import { useFactoryStore } from './factoryStore';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
 import { HUD } from './hudShape';
+import { FactoryHudShadow } from './FactoryHudShadow';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
@@ -689,6 +690,8 @@ function Floor() {
             aria-label="Factory floor" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
+          {/* the console casts a shadow on the floor along its contour; the build tape lies over it */}
+          {!hudHidden && <FactoryHudShadow hud={HUD} />}
           {/* build mode says so all round the view: tape, and a plate in its corner */}
           {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
           <FactoryTicketTip ref={tipRef} />

@@ -103,6 +103,12 @@ function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: S
 /** The colour of each family of commands. `null`: the app's own neutral, accent or outline. */
 const HUE: Record<Tone, TintHue | null> = { go: null, move: 'blue', station: 'purple', area: 'teal', plan: 'yellow', ticket: 'indigo', danger: 'red', back: null, plain: null };
 
+/*
+ * The console stands over the floor: its top edge catches the light (a line stronger than a border), its surface is a
+ * little lighter at the top on a dark theme, and it casts a shadow on the floor (`FactoryHudShadow.tsx`).
+ */
+const EDGE = 'color-mix(in srgb, var(--theme-text-primary) 26%, var(--theme-border-input))', SHEEN = 'linear-gradient(to bottom, rgba(255,255,255,0.055), rgba(255,255,255,0) 64px)';
+
 /**
  * A side block of the console: taller than the middle, its inner top corner cut. The line along its edge follows
  * the cut: it is the block itself, in the border's colour, under a copy of it one pixel smaller.
@@ -110,8 +116,8 @@ const HUE: Record<Tone, TintHue | null> = { go: null, move: 'blue', station: 'pu
 function Side({ side, children }: { side: 'left' | 'right'; children: React.ReactNode }) {
   const c = HUD.cut, clip = side === 'left' ? `polygon(0 0, calc(100% - ${c}px) 0, 100% ${c}px, 100% 100%, 0 100%)` : `polygon(${c}px 0, 100% 0, 100% 100%, 0 100%, 0 ${c}px)`;
   return (
-    <div className="absolute bottom-0 bg-[var(--theme-border-input)]" style={{ [side]: 0, width: HUD[side], height: HUD.mid + HUD.step, clipPath: clip }}>
-      <div className="absolute bg-[var(--theme-bg-surface)] p-2" style={{ top: 1, bottom: 0, left: side === 'right' ? 1 : 0, right: side === 'left' ? 1 : 0, clipPath: clip }}>{children}</div>
+    <div className="absolute bottom-0" style={{ [side]: 0, width: HUD[side], height: HUD.mid + HUD.step, clipPath: clip, background: EDGE }}>
+      <div className="absolute bg-[var(--theme-bg-surface)] p-2" style={{ top: 1, bottom: 0, left: side === 'right' ? 1 : 0, right: side === 'left' ? 1 : 0, clipPath: clip, backgroundImage: SHEEN }}>{children}</div>
     </div>
   );
 }
@@ -245,7 +251,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
       </div>
 
       {/* the middle: what is selected, and its portrait against the command card */}
-      <div className="@container absolute inset-y-0 flex gap-2 border-t border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-2" style={{ left: HUD.left, right: HUD.right }}>
+      <div className="@container absolute inset-y-0 flex gap-2 border-t bg-[var(--theme-bg-surface)] p-2" style={{ left: HUD.left, right: HUD.right, borderColor: EDGE, backgroundImage: SHEEN }}>
         <div className={cn(box, 'flex min-w-0 flex-1 p-2')}>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
             {ticket ? (

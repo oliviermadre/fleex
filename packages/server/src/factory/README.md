@@ -144,6 +144,11 @@ The console is not a straight bar (`hudShape.ts`): the block of the minimap and 
 taller than its middle, their inner top corners cut, and the floor shows in the notch between them. The page gives
 the console the height of its middle; the two side blocks rise over the foot of the floor's view.
 
+The console stands over the floor instead of lying flat on it: it casts a shadow on the floor along its whole
+contour (`FactoryHudShadow.tsx`: one still shape under the console, blurred once, deep on a dark theme and light on
+a light one, so nothing in the console is filtered), its top edge is a line stronger than a border, and its surface
+is a little lighter at the top on a dark theme.
+
 - **Over the minimap**, the time it is, to the second.
 - **In the notch**, the saved selections (`Groups` in `FactoryHudBits.tsx`): ten places that never move, Shift+1 to
   Shift+0 to save. The digit selects what was saved; pressed again while it is the selection, it centres the view
