@@ -27,6 +27,11 @@ be overturned.
    and their shadow, as if the camera were tilted.
 4. **Lines are marked by platforms and guard rails** (L2 + L3 in `pixel-3d.html`). Floor paint (L1) was not picked.
 5. **The neon skin is cheap**: a palette, thicker edges, a glow. It needs no new shape.
+7. **The console takes the skin's colours** (open question 1, answered).
+8. **The skin is chosen in Settings, as the theme is** (open question 2, answered): Fleex has one user, so it is a
+   setting next to the theme, not a setting of the floor. A skin should follow the theme where it can (a pixel skin
+   with a dark floor on a dark theme, the theme's accent where the skin has one): then the console taking the skin's
+   colours stays in keeping with the rest of the app.
 6. **Working method, unchanged**: an interactive HTML mock-up drawn like the floor comes first for anything
    functional or visual, the owner picks, then "go build". One commit per lot. Replies to the owner in French,
    product text in English, never "..." in a wording.
@@ -192,6 +197,15 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
 9. **Build mode in three quarters**: ghosts stay on tiles; is the build tape enough, or does build mode go flat?
 10. **Order against the intake PR** (`docs/factory/intake-handover.md`): which comes first? They touch different
     things (items in the engine against paint in the page), but both touch the renderer's ticket drawing.
+
+## Where it stands
+
+- **Lot 0, done**: `packages/web/src/factory/shots/` and `packages/web/scripts/factory-shots/run.mjs` paint a made-up
+  floor with one of everything in eleven situations and compare two runs pixel by pixel. It is the check for every lot
+  below that should change nothing that shows.
+- **Lot 1, done**: `scene.ts` says what is shown and where, and owns everything that lives from one frame to the next
+  (easing, belts, cups, quays, exits, jumps). `renderer.ts` only paints the scene. Checked: the eleven pictures are
+  identical to the pixel to those of `main`.
 
 ## Proposed order of work
 

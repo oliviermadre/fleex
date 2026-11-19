@@ -2,23 +2,23 @@
  * The Factory floor, drawn on a canvas. World units are floor tiles; text is
  * drawn in screen space so it stays crisp. Surfaces take their colours from the
  * `--theme-*` variables, so the floor follows the active theme.
+ *
+ * What is shown and where is the scene's (`scene.ts`), rebuilt at every frame;
+ * this file paints it, and keeps nothing of the floor from one frame to the next.
  */
 import type { LensLayer } from './lens';
 import { layoutNames, tie, type NamedTicket } from './nameTags';
-import { armColor, armTag, isConditional, shortCondition } from './armRules';
-import { armDue, armShown, easeSwing } from './armMotion';
-import { bridgeFlow, type LaneFlow } from './bridges';
+import { armColor } from './armRules';
 import { fadeIn, floorLook, isLight, legible, luminance, MAJOR, mix, veil } from './floorLook';
-import { follow, type Track, type TrackPos } from './ticketMotion';
-import { BAR, bodyOf, CUT, inRect, KIND_LOOK, kindOf, lampOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, sortInto, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
-import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
-import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
-import { opText, plateLines } from './setOps';
-import { scriptPlate, scriptSummary } from './script';
+import { BAR, bodyOf, CUT, inRect, KIND_LOOK, kindOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
+import { portColor } from './teleport';
 import { modelTag } from './stationModel';
 import { tokenSprite, type TokenLook } from './ticketToken';
-import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
+import { FloorScene, isBox, type ArmView, type ArmWay, type BeltView, type BridgeView, type ExitView, type LabelView, type PortView, type Placed, type Quay, type Scene, type StationView, type StatusView, type ZoneView } from './scene';
+import { DX, DY, humanCall, type ArmSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from './types';
+import type { LaneFlow } from './bridges';
 
+export { isBox };
 export interface Ghost { cells: { x: number; y: number; w: number; h: number; dir?: number; /** An arm about to be placed: where it would take from and drop on is shown. */ arm?: boolean }[]; ok: boolean; erase?: boolean; text?: string }
 export interface DragState { ticketId: string; x: number; y: number; ok: boolean; text: string }
 export interface ViewState {
@@ -91,20 +91,10 @@ const PAINT = '#60a5fa';
 const DARK_PLATE = /^rgba\(9,9,11,/, LIGHT_PLATE = 'rgba(255,255,255,0.95)';
 /** Hazard yellow, as paint: the same on any theme. */
 const HAZARD = '#eab308';
-/** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
-const SNAP = 0.0005, SLIDE = 0.03;
 /** The colour of a Set gantry, and of everything that says what it does. */
 const SET = '#f472b6';
 /** A plate of several lines beside a machine: what it is set to do, readable from the floor. */
 interface Board { lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
-/** Seconds a ticket takes to fade once it is past an exit's frame. */
-const FADE_S = 0.75;
-/** Seconds a ticket is drawn jumping from a departure to its arrival. The engine moves it at once; this is for the eye. */
-const JUMP_S = 0.6;
-/** A ticket on its way from a departure to its arrival. */
-interface Jump { id: string; type: string; from: TeleporterSpec; to: TeleporterSpec; age: number }
-/** A ticket that has just left by an exit, drawn a moment longer: up to the frame as it was, then as an outline that fades. */
-interface Leaving { type: string; from: { x: number; y: number }; edge: EdgePoint; exit: MachineSpec; age: number; travel: number }
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
@@ -159,54 +149,26 @@ function around(layout: FactoryLayout, minW: number, minH: number, aspect = 0): 
 const Z_MAX = 80, Z_MIN = 3;
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
-/** A ticket drawn on a belt or a bridge, and where on it. */
-interface Riding { t: FactoryTicket; pos: TrackPos }
 /** The colour of a frame being dragged, and of what it takes. */
 const PICK = '#60a5fa';
 /** The arrow painted under an arm, pointing east, round the middle of its tile: narrow where it takes, wide where it drops. */
 const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
-export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
 
 
 export class FactoryView {
   cam = { x: 24, y: 15, z: 18 };
   w = 0; h = 0;
   private dpr = 1;
+  /** The floor's clock, as the scene last said. */
   private clock = 0;
   private labels: Label[] = [];
   private boards: Board[] = [];
   private pal: Palette | null = null;
   private palAt = 0;
-  private gridFor: FactoryLayout | null = null;
-  private grid = new Map<string, MachineSpec>();
-  private byId = new Map<string, MachineSpec>();
-  /** Where each ticket is drawn; eased towards where the server says it is. */
-  private shown = new Map<string, { x: number; y: number }>();
-  /** Arm id → the swing it is drawn at (0..1). */
-  private armShown = new Map<string, number>();
-  /** Ticket id → where it is drawn on the belts: it follows what the server says along them (see `ticketMotion.ts`). */
-  private drawnOn = new Map<string, TrackPos>();
-  /** Ticket id → the arm whose quay it was last sent to: it does not change quay while that arm still takes it. */
-  private quayFor = new Map<string, string>();
-  /** Ticket id → where it was at the last frame, to tell one that left by an exit from one that was taken back. */
-  private lastOn = new Map<string, { m: string | null; fx: number; fy: number; type: string }>();
-  /** Arm id → where its cup was drawn at the last frame. */
-  private handAt = new Map<string, { x: number; y: number }>();
-  private leaving: Leaving[] = [];
-  private jumps: Jump[] = [];
-  /** Machine id → the tickets it holds, at this frame. */
-  private inside = new Map<string, FactoryTicket[]>();
-  /** Where an arm points into an arrival, at this frame: a no-entry sign goes there, over the arm. */
-  private noEntry: { x: number; y: number }[] = [];
-  /** Belt id → the ticket its toll's arm is carrying, at this frame. */
-  private tollCarry = new Map<string, FactoryTicket>();
-  /** Exit id → tickets seen leaving by it since the counts were last given. */
-  private passed = new Map<string, number>();
-  private countsFrom: unknown = null;
-  /** Tickets on the floor that are being worked on or reviewed: what a zone's limit is about. */
-  private wip = 0;
+  /** What the floor shows, and what it remembers from one frame to the next. */
+  private readonly scene = new FloorScene();
   private readonly ctx: CanvasRenderingContext2D;
   /** The floor as last painted, and what it was painted for. */
   private backdrop: HTMLCanvasElement | null = null;
@@ -276,54 +238,16 @@ export class FactoryView {
     return this.pal;
   }
 
-  private index(layout: FactoryLayout): void {
-    if (this.gridFor === layout) return;
-    this.gridFor = layout; this.grid = new Map(); this.byId = new Map();
-    for (const m of layout.machines) {
-      this.byId.set(m.id, m);
-      if (m.kind === 'label') continue;
-      for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) this.grid.set(`${i},${j}`, m);
-    }
-  }
   /**
    * Read the floor from this layout. The draw loop does it at every frame; whoever asks the view a question about a
    * layout it holds (the side panel) says so first, since the page gets a fresh copy of the layout at every poll.
    */
-  use(layout: FactoryLayout): void { this.index(layout); }
-  at(x: number, y: number): MachineSpec | null { return this.grid.get(`${x},${y}`) ?? null; }
-  machine(id: string | null): MachineSpec | null { return id ? this.byId.get(id) ?? null : null; }
-  /** Does this neighbour push tickets onto the tile at (x, y)? A bridge does, unless that tile is a belt pointing back at it. */
-  private feeds(n: MachineSpec | null, x: number, y: number): boolean {
-    if (!n) return false;
-    if (n.kind === 'belt') return n.x + DX[n.dir] === x && n.y + DY[n.dir] === y;
-    if (n.kind !== 'bridge') return false;
-    const me = this.at(x, y);
-    return !(me && me.kind === 'belt' && me.x + DX[me.dir] === n.x && me.y + DY[me.dir] === n.y);
-  }
-  /** A belt fed from one side only, and not from behind, is a bend: the direction its feeder travels in, or -1. */
-  private bendOf(b: BeltSpec): number {
-    let f = -1, n = 0;
-    for (let s = 0; s < 4; s++) if (s !== b.dir && this.feeds(this.at(b.x + DX[s as 0], b.y + DY[s as 0]), b.x, b.y)) { n++; f = (s + 2) % 4; }
-    return n === 1 && f !== b.dir ? f : -1;
-  }
-  takersOf(m: MachineSpec): ArmSpec[] {
-    const out: ArmSpec[] = [];
-    for (let x = m.x - 1; x <= m.x + m.w; x++) for (let y = m.y - 1; y <= m.y + m.h; y++) {
-      const n = this.at(x, y);
-      /* by id, never by object: the machine asked about may come from another copy of the same layout */
-      if (n && n.kind === 'arm' && this.at(n.x - DX[n.dir], n.y - DY[n.dir])?.id === m.id && !out.some((q) => q.id === n.id)) out.push(n);
-    }
-    return out;
-  }
+  use(layout: FactoryLayout): void { this.scene.index(layout); }
+  at(x: number, y: number): MachineSpec | null { return this.scene.at(x, y); }
+  machine(id: string | null): MachineSpec | null { return this.scene.machine(id); }
+  takersOf(m: MachineSpec): ArmSpec[] { return this.scene.takersOf(m); }
   /** The first machine a belt leads to, following the belts as they point. */
-  leadsTo(m: MachineSpec | null, dir = 0): MachineSpec | null {
-    let guard = 0;
-    while (m && (m.kind === 'belt' || m.kind === 'bridge') && guard++ < 5000) {
-      if (m.kind === 'belt') dir = m.dir;
-      m = this.at(m.x + DX[dir as 0], m.y + DY[dir as 0]);
-    }
-    return m && m.kind !== 'belt' && m.kind !== 'bridge' ? m : null;
-  }
+  leadsTo(m: MachineSpec | null, dir = 0): MachineSpec | null { return this.scene.leadsTo(m, dir); }
 
   private label(text: string, wx: number, wy: number, size: number, color: string, opts: Label[5] = {}): void { this.labels.push([text, wx, wy, size, color, opts]); }
   private flushLabels(): void {
@@ -375,12 +299,8 @@ export class FactoryView {
     if (o.spacing) ctx.letterSpacing = '0px';
   }
 
-  private ticket(t: FactoryTicket, x: number, y: number, s: number, st: ViewState, mark: 'run' | 'human' | 'fail' | 'out' | 'wait' | '', dt: number, rate = SNAP): void {
-    const ctx = this.ctx, pal = this.palette(), cur = this.shown.get(t.ticketId), dragging = st.drag?.ticketId === t.ticketId;
-    /* ease towards where the server last said the ticket is, so a poll does not make it jump */
-    const k = cur ? 1 - Math.pow(rate, dt) : 1, px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
-    this.shown.set(t.ticketId, { x: px, y: py });
-    const picked = !!st.pickTickets?.has(t.ticketId), selected = st.selTicket === t.ticketId || !!st.selTickets?.has(t.ticketId), dim = !!st.dim?.has(t.ticketId) && !selected && !picked && !dragging;
+  private ticket(P: Placed, st: ViewState): void {
+    const ctx = this.ctx, pal = this.palette(), { t, x: px, y: py, s, mark, dragging, picked, selected, dim, call } = P;
     const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
     /*
      * A ticket is a token in the shape of its type (see `ticketToken.ts`), a little larger than the square it replaces
@@ -423,7 +343,6 @@ export class FactoryView {
     else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - B / 2 - 0.06, py - B / 2 - 0.06, B + 0.12, B + 0.12, 0.13); ctx.stroke(); }
     else if (mark === 'out') { ctx.strokeStyle = pal.text2; ctx.lineWidth = 0.04; rr(ctx, px - B / 2 - 0.04, py - B / 2 - 0.04, B + 0.08, B + 0.08, 0.1); ctx.stroke(); }
     /* a ticket waiting for a human calls for attention wherever it is: a pulsing halo and a "?" (or "!" when the run failed) */
-    const call = dragging ? null : humanCall(t);
     if (call) {
       const col = call === 'failed' ? pal.danger : pal.warn, ph = (this.clock * 0.9 + (t.ticketId.charCodeAt(0) % 10) / 10) % 1, grow = B * 0.7 * ph;
       ctx.globalAlpha = 0.85 * (1 - ph); ctx.strokeStyle = col; ctx.lineWidth = 0.07;
@@ -443,7 +362,7 @@ export class FactoryView {
       ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.3); ctx.fillStyle = pal.accent; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
       ctx.fillStyle = 'rgba(9,9,11,0.88)'; ctx.fillRect(bx - br * 0.42, by - br * 0.45, br * 0.28, br * 0.9); ctx.fillRect(bx + br * 0.14, by - br * 0.45, br * 0.28, br * 0.9);
     }
-    const found = !!st.found?.has(t.ticketId);
+    const found = P.found;
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
       if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
@@ -470,19 +389,15 @@ export class FactoryView {
    * every ticket while the key is held. Tickets of one machine, or close together on a belt, share a box that lists
    * them, and boxes keep clear of each other (see `nameTags.ts`). Drawn last, in screen pixels.
    */
-  private names(st: ViewState, pal: Palette): void {
+  private names(st: ViewState, S: Scene, pal: Palette): void {
     const all = st.allNames === true, z = this.cam.z;
     const items: NamedTicket[] = [], byId = new Map<string, FactoryTicket>();
     const sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
-    for (const t of st.tickets) {
-      const info = t.info;
-      if (!info || st.drag?.ticketId === t.ticketId || st.dim?.has(t.ticketId)) continue;
-      if (!all && !info.favorite && st.selTicket !== t.ticketId && !st.named?.has(t.ticketId)) continue;
-      const m = this.machine(t.machineId), p = this.shown.get(t.ticketId) ?? { x: t.x + 0.5, y: t.y + 0.5 };
+    for (const { t, x, y, box: m } of S.named) {
       byId.set(t.ticketId, t);
       items.push({
-        id: t.ticketId, text: `#${info.displayId} ${info.title}`, x: sx(p.x), y: sy(p.y),
-        box: m && (m.kind === 'station' || m.kind === 'zone') ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
+        id: t.ticketId, text: `#${t.info!.displayId} ${t.info!.title}`, x: sx(x), y: sy(y),
+        box: m ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
       });
     }
     if (!items.length) return;
@@ -515,108 +430,61 @@ export class FactoryView {
     ctx.restore();
   }
 
-  ticketPos(ticketId: string): { x: number; y: number } | null { return this.shown.get(ticketId) ?? null; }
+  ticketPos(ticketId: string): { x: number; y: number } | null { return this.scene.shown.get(ticketId) ?? null; }
   /** Where every ticket is drawn, for a frame to be laid over them. */
-  ticketPlaces(): Iterable<[string, { x: number; y: number }]> { return this.shown; }
+  ticketPlaces(): Iterable<[string, { x: number; y: number }]> { return this.scene.shown; }
   /** Where a ticket's machine is on screen (the ticket itself, when it stands on no box), in the canvas's own pixels: what a card about the ticket sits beside. */
   anchorOf(ticketId: string, st: ViewState): { x: number; y: number; w: number; h: number } | null {
     const t = st.tickets.find((q) => q.ticketId === ticketId); if (!t) return null;
     const z = this.cam.z, sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
-    this.index(st.layout);
+    this.use(st.layout);
     const m = this.machine(t.machineId);
     if (m && isBox(m)) return { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z };
-    const p = this.shown.get(ticketId);
+    const p = this.scene.shown.get(ticketId);
     return p ? { x: sx(p.x - 0.7), y: sy(p.y - 0.7), w: 1.4 * z, h: 1.4 * z } : null;
   }
 
   draw(st: ViewState, dtReal: number): void {
     const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, L = st.layout;
-    /* stopped, the floor's own clock stands still: chevrons do not run, rings do not turn */
-    const moving = st.halted ? 0 : dtReal;
-    this.resize(); this.index(L); this.clock += moving;
+    this.resize();
+    const S = this.scene.build(st, dtReal);
+    this.clock = S.clock;
     this.constrain(L);
     const z = cam.z;
-    const inside = new Map<string, FactoryTicket[]>();
-    for (const t of st.tickets) if (t.machineId) { const a = inside.get(t.machineId); if (a) a.push(t); else inside.set(t.machineId, [t]); }
-    for (const a of inside.values()) a.sort((p, q) => p.since.localeCompare(q.since));
-    this.inside = inside; this.noEntry.length = 0;
-    this.floor(st, inside, pal);
+    this.floor(st, S, pal);
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
     this.shadows(st, pal);
 
-    const live = new Set(st.tickets.map((t) => t.ticketId));
-    if (st.exits !== this.countsFrom) { this.countsFrom = st.exits; this.passed.clear(); }
-    for (const id of this.shown.keys()) if (!live.has(id)) { this.left(id, st); this.shown.delete(id); }
-    for (const id of this.lastOn.keys()) if (!live.has(id)) { this.lastOn.delete(id); this.quayFor.delete(id); }
-    this.wip = 0;
-    this.jumps = this.jumps.filter((j) => { j.age += dtReal; return j.age < JUMP_S && live.has(j.id); });
-    for (const t of st.tickets) {
-      const was = this.lastOn.get(t.ticketId);
-      if (was && was.m !== t.machineId) this.jumped(t, was.m);
-      this.lastOn.set(t.ticketId, { m: t.machineId, fx: t.fx, fy: t.fy, type: t.info?.type ?? '' });
-      if (t.info && (t.info.status === 'doing' || t.info.status === 'reviewing')) this.wip++;
+    for (const b of S.belts) this.beltBase(b, pal);
+    if (z >= 8) { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of S.belts) this.beltChevrons(b, pal); ctx.lineCap = 'butt'; }
+    for (const b of S.bridges) this.bridge(b, st, pal);
+    for (const v of S.boxes) {
+      if (v.kind === 'label') this.labelOf(v, pal);
+      else if (v.kind === 'zone') this.zone(v, S, st, pal);
+      else if (v.kind === 'station') this.station(v, st, pal);
+      else if (v.kind === 'status') this.statusStation(v, st, pal);
+      else if (v.kind === 'exit') this.exit(v, pal);
+      else this.port(v, st, pal);
     }
-
-    const belts = L.machines.filter((m): m is BeltSpec => m.kind === 'belt');
-    const bends = new Map<string, number>();
-    for (const b of belts) { const f = this.bendOf(b); bends.set(b.id, f); this.beltBase(b, f, pal); }
-    if (z >= 8) { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of belts) this.beltChevrons(b, bends.get(b.id) ?? -1, pal); ctx.lineCap = 'butt'; }
-
-    /*
-     * Tickets on belts and bridges are drawn moving along them at the belts' pace, towards where the server last had
-     * them: told as it is, twice a second, a ticket would stand, jump and stand again. So a ticket may be drawn on the
-     * tile before the one the server has it on.
-     */
-    const track = this.track(st), onTrack = new Map<string, Riding[]>(), riding = new Set<string>();
-    this.tollCarry.clear();
-    for (const t of st.tickets) {
-      const m = t.machineId ? this.byId.get(t.machineId) : null;
-      if (!m || (m.kind !== 'belt' && m.kind !== 'bridge')) continue;
-      /* what a toll rejected is in its arm, no longer on its belt */
-      if (t.phase === 'arm') { this.tollCarry.set(m.id, t); continue; }
-      const told: TrackPos = { id: m.id, p: t.p, fx: t.fx, fy: t.fy };
-      let pos = follow(track, this.drawnOn.get(t.ticketId), told, moving);
-      const tile = this.byId.get(pos.id);
-      if (!tile || (tile.kind !== 'belt' && tile.kind !== 'bridge')) pos = told;
-      this.drawnOn.set(t.ticketId, pos); riding.add(t.ticketId);
-      const list = onTrack.get(pos.id); if (list) list.push({ t, pos }); else onTrack.set(pos.id, [{ t, pos }]);
-    }
-    for (const id of this.drawnOn.keys()) if (!riding.has(id)) this.drawnOn.delete(id);
-
-    for (const m of L.machines) if (m.kind === 'bridge') this.bridge(m, onTrack.get(m.id) ?? [], st, pal, dtReal);
-    for (const m of L.machines) {
-      if (m.kind === 'label') this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 });
-      else if (m.kind === 'zone') this.zone(m, inside.get(m.id) ?? [], st, pal, dtReal);
-      else if (m.kind === 'station') this.station(m, inside.get(m.id) ?? [], st, pal, dtReal);
-      else if (m.kind === 'exit') this.exit(m, st, pal);
-      else if (m.kind === 'teleporter') this.port(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
-    }
-    for (const b of belts) for (const { t, pos } of onTrack.get(b.id) ?? []) {
-      const f = bends.get(b.id) ?? -1, cx = b.x + 0.5, cy = b.y + 0.5;
-      let x: number, y: number;
-      if (f >= 0 && pos.fx === DX[f as 0] && pos.fy === DY[f as 0]) {
-        const ca = Math.cos(pos.p * Math.PI / 2), sa = Math.sin(pos.p * Math.PI / 2);
-        x = cx - DX[f as 0] * 0.5 + DX[b.dir] * 0.5 + 0.5 * (DX[f as 0] * sa - DX[b.dir] * ca); y = cy - DY[f as 0] * 0.5 + DY[b.dir] * 0.5 + 0.5 * (DY[f as 0] * sa - DY[b.dir] * ca);
-      } else if (pos.p < 0.5) { x = cx - pos.fx * (0.5 - pos.p); y = cy - pos.fy * (0.5 - pos.p); }
-      else { x = cx + DX[b.dir] * (pos.p - 0.5); y = cy + DY[b.dir] * (pos.p - 0.5); }
-      this.ticket(t, x, y, 0.46, st, '', dtReal);
-    }
+    for (const b of S.belts) for (const r of b.riders) this.ticket(r, st);
     /* gantries stand over their belt: a ticket goes under the beam */
-    for (const b of belts) if (b.set !== undefined) this.gantry(b, onTrack.get(b.id) ?? [], st, pal);
-    for (const t of st.tickets) if (!t.machineId || !this.byId.has(t.machineId)) {
-      ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(t.x + 0.5, t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
-      this.ticket(t, t.x + 0.5, t.y + 0.5, 0.5, st, '', dtReal);
+    for (const b of S.belts) if (b.gantry) this.gantry(b, pal);
+    for (const p of S.loose) {
+      ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(p.t.x + 0.5, p.t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
+      this.ticket(p, st);
     }
-    for (const m of L.machines) if (m.kind === 'arm') this.arm(m, inside.get(m.id)?.[0] ?? null, st, pal, dtReal);
-    for (const b of belts) if (b.toll) this.tollArm(b, this.tollCarry.get(b.id) ?? null, st, pal, dtReal);
-    this.departures(pal, dtReal);
-    this.portLinks(st, pal);
+    for (const a of S.arms) this.arm(a, st, pal);
+    for (const b of S.belts) if (b.toll) this.tollArm(b, st, pal);
+    this.departures(S, pal);
+    this.portLinks(S, pal);
 
     if (st.lens) this.lens(st.lens, L, pal);
-    this.overlay(st, pal);
+    this.overlay(st, S, pal);
     this.flushLabels();
-    this.names(st, pal);
+    this.names(st, S, pal);
   }
+
+  private labelOf({ m }: LabelView, pal: Palette): void { this.label(m.text, m.x + 0.12, m.y + 0.5, 0.62, m.color || pal.text2, { weight: 700, min: 10, max: 24 }); }
 
   /**
    * The floor, before anything built on it. It has no edge: it is drawn as far as what is built, plus room to build
@@ -628,11 +496,10 @@ export class FactoryView {
    * theme, what a station is doing): soft light over large areas is the costliest thing on the page to paint, and it
    * changes the least. So its cost does not grow with the number of stations lit.
    */
-  private floor(st: ViewState, inside: Map<string, FactoryTicket[]>, pal: Palette): void {
+  private floor(st: ViewState, S: Scene, pal: Palette): void {
     const d = this.dpr, z = this.cam.z, L = st.layout;
     /* not in build mode, and not under a lens: there, colour is the lens's reading */
-    const lit: [MachineSpec, Lamp][] = [];
-    if (!st.edit && !st.lens) for (const m of L.machines) if (m.kind === 'station' && m.exec !== 'native') { const s = lampOf(m, inside.get(m.id) ?? []); if (s !== 'on') lit.push([m, s]); }
+    const lit: [StationSpec, Lamp][] = S.lit;
     const key: unknown[] = [this.cv.width, this.cv.height, this.cam.x, this.cam.y, z, st.edit, st.grid !== false, L, pal, lit.map(([m, s]) => `${m.id}:${s}`).join()];
     if (!this.backdrop) this.backdrop = document.createElement('canvas');
     const cv = this.backdrop;
@@ -743,8 +610,8 @@ export class FactoryView {
     }
   }
 
-  private beltBase(b: BeltSpec, f: number, pal: Palette): void {
-    const ctx = this.ctx, { x, y } = b, dx = DX[b.dir], dy = DY[b.dir];
+  private beltBase(v: BeltView, pal: Palette): void {
+    const ctx = this.ctx, b = v.m, f = v.bend, { x, y } = b, dx = DX[b.dir], dy = DY[b.dir];
     /* a fast belt has its rails in the fast colour: it reads from far, where chevrons are no longer drawn */
     ctx.strokeStyle = b.fast ? mix(pal.fast, pal.belt, 0.35) : pal.edge; ctx.lineWidth = 0.09;
     if (f >= 0) {
@@ -756,17 +623,14 @@ export class FactoryView {
     } else {
       ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
       ctx.beginPath();
-      for (let s = 0; s < 4; s++) {
-        const n = this.at(x + DX[s as 0], y + DY[s as 0]);
-        if (s === b.dir ? !!n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n) || isDeparture(n)) : this.feeds(n, x, y)) continue;
+      for (const s of v.rails) {
         if (s === 0) { ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); } else if (s === 2) { ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); }
         else if (s === 1) { ctx.moveTo(x, y + 0.955); ctx.lineTo(x + 1, y + 0.955); } else { ctx.moveTo(x, y + 0.045); ctx.lineTo(x + 1, y + 0.045); }
       }
       ctx.stroke();
     }
     /* a belt that leads nowhere says so */
-    const n = this.at(x + dx, y + dy);
-    if (!(n && (n.kind === 'belt' || n.kind === 'bridge' || isBox(n) || isDeparture(n))) && !this.takersOf(b).length) {
+    if (v.dead) {
       ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.12; ctx.beginPath();
       ctx.moveTo(x + 0.5 + dx * 0.42 - dy * 0.4, y + 0.5 + dy * 0.42 - dx * 0.4); ctx.lineTo(x + 0.5 + dx * 0.42 + dy * 0.4, y + 0.5 + dy * 0.42 + dx * 0.4); ctx.stroke();
     }
@@ -776,8 +640,8 @@ export class FactoryView {
    * The chevrons that run along a belt. A fast belt says it is one three ways: its chevrons come in pairs, in the fast
    * colour, and they run twice as fast.
    */
-  private beltChevrons(b: BeltSpec, f: number, pal: Palette): void {
-    const ctx = this.ctx, dx = DX[b.dir], dy = DY[b.dir], fx = f >= 0 ? DX[f as 0] : 0, fy = f >= 0 ? DY[f as 0] : 0;
+  private beltChevrons(v: BeltView, pal: Palette): void {
+    const ctx = this.ctx, b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = f >= 0 ? DX[f as 0] : 0, fy = f >= 0 ? DY[f as 0] : 0;
     const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
     ctx.strokeStyle = b.fast ? pal.fast : pal.chev;
     const one = (u: number) => {
@@ -787,7 +651,7 @@ export class FactoryView {
       ctx.beginPath(); ctx.moveTo(cx - tx * 0.09 + ty * 0.19, cy - ty * 0.09 - tx * 0.19); ctx.lineTo(cx + tx * 0.09, cy + ty * 0.09); ctx.lineTo(cx - tx * 0.09 - ty * 0.19, cy - ty * 0.09 + tx * 0.19); ctx.stroke();
     };
     /* where a line starts, nothing comes in from behind: the half of a pair that would be drawn before the tile is left out */
-    const fed = f >= 0 || (() => { const n = this.at(b.x - dx, b.y - dy); return !!n && (n.kind === 'bridge' || this.feeds(n, b.x, b.y)); })();
+    const fed = v.fed;
     for (let k = 0; k < 2; k++) {
       const u = off + k * 0.5;
       if (!b.fast) { one(u); continue; }
@@ -796,35 +660,22 @@ export class FactoryView {
     }
   }
 
-  /** The side of a tile a plate can stand on without covering what is next to it: the sides across the belt first. */
-  private freeSide(x: number, y: number, across: boolean): Board['side'] {
-    const order: Board['side'][] = across ? ['above', 'below', 'right', 'left'] : ['right', 'left', 'above', 'below'];
-    const free = (s: Board['side']) => !this.at(x + (s === 'right' ? 1 : s === 'left' ? -1 : 0), y + (s === 'below' ? 1 : s === 'above' ? -1 : 0));
-    return order.find(free) ?? order[0]!;
-  }
   /**
    * A Set gantry: two posts either side of the belt and a beam across it. A ticket goes under the beam, stops there
    * the time it takes to write what the gantry changes, and goes on. What the gantry does is written on a plate
    * beside it, one operation a line, so its setting is read from the floor; red when it could not write.
    */
-  private gantry(b: BeltSpec, riding: Riding[], st: ViewState, pal: Palette): void {
-    const ctx = this.ctx, { x, y } = b, across = b.dir % 2 === 0;
-    const under = riding.some((r) => Math.abs(r.pos.p - 0.5) < 0.18), failed = riding.some((r) => !!r.t.note), col = failed ? pal.danger : SET;
+  private gantry(v: BeltView, pal: Palette): void {
+    const ctx = this.ctx, b = v.m, g = v.gantry!, { x, y } = b, across = g.across;
+    const under = g.under, col = g.failed ? pal.danger : SET;
     /* laid out for a belt that runs east-west; turned a quarter for one that runs north-south */
     const box = (rx: number, ry: number, rw: number, rh: number, r: number) => { if (across) rr(ctx, x + rx, y + ry, rw, rh, r); else rr(ctx, x + ry, y + rx, rh, rw, r); };
     ctx.strokeStyle = col; ctx.lineWidth = 0.045;
     for (const off of [-0.11, 0.89]) { box(0.09, off, 0.82, 0.22, 0.07); ctx.fillStyle = pal.body; ctx.fill(); ctx.stroke(); }
     box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
-    const asked = st.selMachine === b.id || st.hoverMachine === b.id;
-    if (this.cam.z < 13 && !asked) return;
-    const ops = b.set ?? [], rejects = (b.toll?.when ?? []).map((c) => `reject: ${shortCondition(c, st.boardName)}`);
-    const set = ops.length ? plateLines(ops.map((o) => opText(o, st.boardName)), asked ? 12 : 4) : b.toll ? [] : ['nothing set yet'];
-    /* a toll says what it rejects under what it sets, in the colour of its arm */
-    const lines = [...set, ...(b.toll ? (rejects.length ? plateLines(rejects, asked ? 8 : 3) : ['rejects nothing yet']) : [])];
-    /* the plate keeps clear of the side the toll's arm works on */
-    let side = this.freeSide(b.x, b.y, across);
-    if (b.toll && side === (['right', 'below', 'left', 'above'] as const)[b.toll.out]) side = (['left', 'above', 'right', 'below'] as const)[b.toll.out];
-    this.boards.push({ lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= set.length ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
+    if (this.cam.z < 13 && !g.asked) return;
+    const lines = g.lines, side = g.side;
+    this.boards.push({ lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= g.set ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
   }
 
   /**
@@ -832,21 +683,12 @@ export class FactoryView {
    * rejects from the middle of the belt to the middle of the next tile, swinging by the way the belt runs, so it
    * does not cross what is coming.
    */
-  private tollArm(b: BeltSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, out = b.toll!.out, ox = DX[out], oy = DY[out], ex = b.x + 0.5 + ox * 0.5, ey = b.y + 0.5 + oy * 0.5;
-    const swing = (st.armSwing || 1.1) * 0.6, p = armShown(this.armShown.get(b.id), armDue(st.arms.get(b.id), st.armAge ?? 0, swing), dt, swing);
-    this.armShown.set(b.id, p);
-    const way = oy === DX[b.dir] && -ox === DY[b.dir] ? 1 : -1, th = Math.atan2(-oy, -ox) + way * Math.PI * easeSwing(p), hx = ex + Math.cos(th) * 0.5, hy = ey + Math.sin(th) * 0.5;
+  private tollArm(v: BeltView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { ex, ey, hx, hy, carried } = v.toll!;
     const col = pal.danger, steel = mix(pal.body, pal.text2, 0.38), link = (dx: number, dy: number) => { ctx.beginPath(); ctx.moveTo(ex + dx, ey + dy); ctx.lineTo(hx + dx, hy + dy); ctx.stroke(); };
     ctx.lineCap = 'round';
     if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.22; link(0.05, 0.08); }
-    const hand = this.handAt.get(b.id);
-    this.handAt.set(b.id, { x: hx, y: hy });
-    if (carried) {
-      const cur = this.shown.get(carried.ticketId);
-      if (cur && hand) this.shown.set(carried.ticketId, { x: cur.x + hx - hand.x, y: cur.y + hy - hand.y });
-      ctx.lineCap = 'butt'; this.ticket(carried, hx, hy, 0.4, st, '', dt); ctx.lineCap = 'round';
-    }
+    if (carried) { ctx.lineCap = 'butt'; this.ticket(carried, st); ctx.lineCap = 'round'; }
     ctx.strokeStyle = steel; ctx.lineWidth = 0.2; link(0, 0);
     ctx.strokeStyle = col; ctx.lineWidth = 0.06; link(0, 0);
     ctx.lineCap = 'butt';
@@ -855,34 +697,15 @@ export class FactoryView {
     ctx.beginPath(); ctx.arc(ex, ey, 0.06, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
   }
 
-  /** The belts and bridges as a track a ticket is drawn along: which tile follows which, and how fast each carries. */
-  private track(st: ViewState): Track {
-    const base = st.beltSpeed || 1.2, times = st.fastBelt || 2;
-    return {
-      next: (at) => {
-        const m = this.byId.get(at.id);
-        if (!m) return null;
-        const dx = m.kind === 'belt' ? DX[m.dir] : at.fx, dy = m.kind === 'belt' ? DY[m.dir] : at.fy, n = this.at(m.x + dx, m.y + dy);
-        return n && (n.kind === 'belt' || n.kind === 'bridge') ? { id: n.id, fx: dx, fy: dy } : null;
-      },
-      pace: (at) => {
-        const m = this.byId.get(at.id);
-        if (m?.kind === 'belt') return base * (m.fast ? times : 1);
-        if (m?.kind === 'bridge') { const f = bridgeFlow((px, py) => this.at(px, py), m); return base * ((at.fx !== 0 ? f.overFast : f.underFast) ? times : 1); }
-        return base;
-      },
-    };
-  }
-
   /** Two belts crossing: the north-south one passes under, the east-west one over it. */
-  private bridge(m: MachineSpec, tickets: Riding[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y } = m;
+  private bridge(v: BridgeView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m, riders } = v, { x, y } = m;
     /*
      * A bridge has no direction and no speed of its own: each lane is drawn the way the belts that feed it send
      * tickets across, and as fast as they do. A fast lane looks like a fast belt (paired chevrons in the fast colour,
      * running twice as fast, coloured rails), whichever lane it is, and the other lane keeps its own look.
      */
-    const flow = bridgeFlow((px, py) => this.at(px, py), m);
+    const flow = v.flow;
     const rail = (fast: boolean, plain: string) => (fast ? mix(pal.fast, pal.belt, 0.35) : plain);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
     const lane = (f: LaneFlow, horizontal: boolean, fast: boolean) => {
@@ -921,17 +744,17 @@ export class FactoryView {
       }
       ctx.lineCap = 'butt';
     };
-    const draw = ({ t, pos }: Riding) => this.ticket(t, x + 0.5 + pos.fx * (pos.p - 0.5), y + 0.5 + pos.fy * (pos.p - 0.5), 0.46, st, '', dt);
+    const draw = (r: Placed) => this.ticket(r, st);
     /* under: the north-south lane, between its two rails */
     ctx.strokeStyle = rail(flow.underFast, pal.edge); ctx.lineWidth = 0.09; ctx.beginPath(); ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); ctx.stroke();
     if (this.cam.z >= 8) lane(flow.under, false, flow.underFast);
-    for (const r of tickets) if (r.pos.fx === 0) draw(r);
+    for (const r of riders) if (r.fx === 0) draw(r);
     /* over: the deck of the east-west lane, with a shadow on the lane below */
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y + 0.1, 1, 0.8);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y + 0.16, 1.02, 0.68);
     ctx.strokeStyle = rail(flow.overFast, pal.text3); ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(x, y + 0.16); ctx.lineTo(x + 1, y + 0.16); ctx.moveTo(x, y + 0.84); ctx.lineTo(x + 1, y + 0.84); ctx.stroke();
     if (this.cam.z >= 8) lane(flow.over, true, flow.overFast);
-    for (const r of tickets) if (r.pos.fx !== 0) draw(r);
+    for (const r of riders) if (r.fx !== 0) draw(r);
   }
 
   /**
@@ -939,35 +762,15 @@ export class FactoryView {
    * an arrow in its colour says which way it works: narrow where it takes, wide where it drops, its head at the edge.
    * It is there when the arm is at rest or turned the other way, which is when one needs it.
    */
-  private arm(a: ArmSpec, carried: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir];
-    /*
-     * The half turn is drawn here, not sampled from the server: see `armMotion.ts`.
-     */
-    const swing = st.armSwing || 1.1, p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), dt, swing);
-    this.armShown.set(a.id, p);
-    const e = easeSwing(p), src = this.at(a.x - dx, a.y - dy), dst = this.at(a.x + dx, a.y + dy), R = reachOf(src, dst);
-    /*
-     * The cup goes where the ticket is: over the middle of a belt's tile, over its quay on the edge of a station or a
-     * zone (see `quays.ts`). So its reach changes while it turns, and it lifts what it is on.
-     */
-    const th = Math.atan2(dy, dx) + Math.PI * (1 - e), reach = R.from + (R.to - R.from) * e, hx = bx + Math.cos(th) * reach, hy = by + Math.sin(th) * reach;
-    const filtered = isConditional(a), col = armColor(a, { plain: pal.text2, sorts: pal.warn }), steel = mix(pal.body, pal.text2, 0.38);
+  private arm(v: ArmView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m: a, bx, by, dx, dy, hx, hy, carried, filtered } = v;
+    const col = armColor(a, { plain: pal.text2, sorts: pal.warn }), steel = mix(pal.body, pal.text2, 0.38);
     const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
     this.wayMark(bx, by, dx, dy, col, st.edit ? 1 : 0.62);
     ctx.lineCap = 'round';
     if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.31; link(0.06, 0.1); }
-    /*
-     * What it carries is held: it moves with the cup. Only what was between the two when it was lifted is closed in on,
-     * so a ticket never trails behind the arm that turns.
-     */
-    const hand = this.handAt.get(a.id);
-    this.handAt.set(a.id, { x: hx, y: hy });
-    if (carried) {
-      const cur = this.shown.get(carried.ticketId);
-      if (cur && hand) this.shown.set(carried.ticketId, { x: cur.x + hx - hand.x, y: cur.y + hy - hand.y });
-      ctx.lineCap = 'butt'; this.ticket(carried, hx, hy, 0.42, st, '', dt); ctx.lineCap = 'round';
-    }
+    /* what it carries is held: it moves with the cup */
+    if (carried) { ctx.lineCap = 'butt'; this.ticket(carried, st); ctx.lineCap = 'round'; }
     ctx.strokeStyle = steel; ctx.lineWidth = 0.29; link(0, 0);
     ctx.strokeStyle = col; ctx.lineWidth = 0.08; link(0, 0);
     ctx.lineCap = 'butt';
@@ -976,8 +779,7 @@ export class FactoryView {
     ctx.beginPath(); ctx.arc(hx, hy, 0.055, 0, 6.3); ctx.fillStyle = pal.text; ctx.fill();
     ctx.beginPath(); ctx.arc(bx, by, 0.25, 0, 6.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.068; ctx.stroke();
     ctx.beginPath(); ctx.arc(bx, by, 0.09, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
-    const tag = armTag(a, src ? this.takersOf(src) : [], st.boardName);
-    const asked = st.selMachine === a.id || st.hoverMachine === a.id;
+    const { tag, asked } = v;
     if (!tag || (!asked && (st.armTags === false || this.cam.z < 11))) return;
     /*
      * What the arm takes is written past its head, on the side it drops on: on its own row for an arm that points
@@ -989,15 +791,14 @@ export class FactoryView {
     const o = { min: 9, max: 12, mono: true, plate: pal.light ? (a.color ? mix('#ffffff', col, 0.2) : filtered ? '#fef3c7' : 'rgba(9,9,11,0.84)') : a.color ? mix('#09090b', col, 0.2) : filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' };
     const ink = pal.light ? (a.color ? col : filtered ? '#92400e' : pal.text2) : a.color ? mix(col, '#ffffff', 0.45) : filtered ? '#fde68a' : pal.text2;
     /* a teleporter is a tile a tag must not cover either: it has its ring and its own plate */
-    const solid = (m: MachineSpec | null) => isBox(m) || isPort(m);
-    if (solid(dst) && solid(src)) {
+    if (v.solidDst && v.solidSrc) {
       /* squeezed between two machines, there is no room on its own line: beside it, as a last resort */
       if (dy === 0) this.label(tag, bx, a.y - 0.28, 0.3, ink, { ...o, align: 'center' });
       else this.label(tag, a.x + 1.14, by, 0.3, ink, { ...o, fit: 6 });
       return;
     }
     /* past the head, unless that is a machine: then behind the arm, over the belt it takes from */
-    const fx = solid(dst) ? -dx : dx, fy = solid(dst) ? -dy : dy;
+    const fx = v.solidDst ? -dx : dx, fy = v.solidDst ? -dy : dy;
     if (fx > 0) this.label(tag, a.x + 1.12, by, 0.3, ink, { ...o, align: 'left', fit: 5 });
     else if (fx < 0) this.label(tag, a.x - 0.12, by, 0.3, ink, { ...o, align: 'right', fit: 5 });
     else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
@@ -1014,30 +815,20 @@ export class FactoryView {
     ctx.globalAlpha = 1; ctx.lineJoin = 'miter';
   }
 
-  /** Which arm takes each ticket that is ready to leave a box; a ticket keeps the quay it was sent to. */
-  private leavers(m: MachineSpec, takers: ArmSpec[], tickets: FactoryTicket[], st: ViewState): Dispatch {
-    const D = dispatch(m, takers, tickets, { keep: this.quayFor, busy: (id) => { const a = st.arms.get(id); return !!a && a.state !== 'rest'; } });
-    for (const [ticketId, armId] of D.quay) this.quayFor.set(ticketId, armId);
-    return D;
-  }
   /**
    * The quay of each arm that takes from a box: a notch in its edge, in the arm's colour (a painted square on a
    * zone, which is paint itself), and the tickets on their way out, in line at the quay of the arm that will take
    * them. They slide there, slowly enough to be seen going.
    */
-  private quays(takers: ArmSpec[], D: Dispatch, st: ViewState, pal: Palette, dt: number, painted: boolean): void {
+  private quays(quays: Quay[], st: ViewState, pal: Palette, painted: boolean): void {
     const ctx = this.ctx;
-    for (const a of takers) {
-      const q = quayRect(a), line = D.byArm.get(a.id) ?? [];
+    for (const { a, q, line, more, moreAt } of quays) {
       rr(ctx, q.x, q.y, q.w, q.h, 0.11);
       if (painted) { ctx.globalAlpha = 0.75; ctx.setLineDash([0.09, 0.07]); } else { ctx.fillStyle = pal.floor; ctx.fill(); }
       ctx.strokeStyle = armColor(a, { plain: pal.text2, sorts: pal.warn }); ctx.lineWidth = 0.045; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
       /* the last in line first: the one that leaves next is on top */
-      for (let i = line.length - 1; i >= 0; i--) {
-        const at = quaySpot(a, i);
-        if (i < QUAY_ROOM) this.ticket(line[i]!, at.x, at.y, i ? 0.34 : 0.4, st, '', dt, SLIDE); else this.shown.set(line[i]!.ticketId, at);
-      }
-      if (line.length > QUAY_ROOM) { const at = quaySpot(a, QUAY_ROOM - 1); this.label(`+${line.length - QUAY_ROOM}`, at.x, at.y + 0.3, 0.2, pal.text2, { mono: true, align: 'center', plate: 'rgba(9,9,11,0.84)' }); }
+      for (const p of line) this.ticket(p, st);
+      if (more > 0 && moreAt) this.label(`+${more}`, moreAt.x, moreAt.y, 0.2, pal.text2, { mono: true, align: 'center', plate: 'rgba(9,9,11,0.84)' });
     }
   }
 
@@ -1045,13 +836,9 @@ export class FactoryView {
    * A station as a machine (see `machineArt.ts`): head plate, light, places, a bay for what was set aside, and a quay
    * in front of each arm for what is done. A status station stays the small box it was: it holds nothing.
    */
-  private station(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    if (m.exec === 'native') { this.statusStation(m, tickets, st, pal, dt); return; }
-    const ctx = this.ctx, z = this.cam.z, { x, y, w, h } = m, gate = m.exec === 'human_gate', takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st);
-    const P = machineParts(m, D.stuck.length > 0), S = sortInto(m, tickets), L = lampOf(m, tickets);
-    /* a question an arm takes is on its way out: it stands at that arm's quay, not in the bay */
-    const aside = S.aside.filter((t) => !D.quay.has(t.ticketId));
-    const kind = kindOf(m), look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.amber, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
+  private station(v: StationView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, z = this.cam.z, { m, gate, parts: P, sorted: S, lamp: L } = v, { x, y, w, h } = m;
+    const kind = v.run, look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.amber, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
     /* a place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read */
     const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = pal.light ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.06)'; ctx.stroke(); };
     /* the body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
@@ -1076,7 +863,7 @@ export class FactoryView {
     const fit = P.lamp.x - P.name.x - 0.1, worded = !!look && 0.17 * z >= 6;
     if (worded) this.label(look.word, P.name.x, P.name.y - 0.13, 0.17, tint, { mono: true, weight: 700, spacing: 0.16, fit });
     this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y + (worded ? 0.14 : 0), worded ? 0.31 : 0.33, pal.text, { weight: 650, min: 9, max: 17, fit });
-    const what = gate ? 'you decide' : m.exec === 'script' ? scriptSummary(m.script) : m.ref || 'nothing chosen';
+    const what = v.what;
     this.label(worded ? what : `${gate ? 'gate' : m.exec} · ${what}`, P.name.x, P.name.y + (worded ? 0.44 : 0.36), worded ? 0.19 : 0.2, pal.text3, { fit });
     /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
     rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
@@ -1089,53 +876,45 @@ export class FactoryView {
     /* places, or what a gate decides on */
     if (gate) {
       pit(P.work); tiny(`TO DECIDE · ${S.deciding.length}`, P.work);
-      const pitch = 0.8, cols = Math.max(1, Math.floor((P.work.w - 0.2) / pitch)), rows = Math.max(1, Math.floor((P.work.h - 0.36) / pitch)), n = cols * rows;
-      S.deciding.forEach((t, i) => {
-        if (i < n) this.ticket(t, P.work.x + 0.1 + pitch / 2 + (i % cols) * pitch, P.work.y + 0.34 + pitch / 2 + Math.floor(i / cols) * pitch, 0.44, st, 'human', dt);
-        else this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + P.work.h - 0.3 });
-      });
-      if (S.deciding.length > n) this.label(`+${S.deciding.length - n}`, P.work.x + P.work.w - 0.1, P.work.y + P.work.h - 0.2, 0.22, pal.text2, { mono: true, align: 'right' });
+      for (const p of v.deciding) this.ticket(p, st);
+      if (v.decidingMore > 0) this.label(`+${v.decidingMore}`, P.work.x + P.work.w - 0.1, P.work.y + P.work.h - 0.2, 0.22, pal.text2, { mono: true, align: 'right' });
     } else {
-      P.places.forEach((c, i) => {
+      for (const { c, t: p, size, cx, cy } of v.places) {
         pit(c);
-        const t = S.places[i], size = Math.min(c.w, c.h - 0.2) * 0.52, cx = c.x + c.w / 2, cy = c.y + c.h / 2 + 0.08;
+        const t = p?.t;
         tiny(t ? (t.phase === 'running' ? 'RUNNING' : 'HELD') : 'FREE', c, t?.phase === 'running' ? pal.ok : pal.text3);
         if (!t && kind && c.w * z >= 38) this.idle(kind, cx, cy, size, c, pal.light ? mix(tint, '#000000', 0.3) : tint);
-        if (t) this.ticket(t, cx, cy, size, st, t.phase === 'running' ? 'run' : 'wait', dt);
-      });
-      S.extra.forEach((t) => this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + 0.3 }));
-      if (S.extra.length) this.label(`+${S.extra.length}`, P.work.x + P.work.w - 0.1, P.work.y + 0.2, 0.22, pal.text2, { mono: true, align: 'right', plate: 'rgba(9,9,11,0.84)' });
+        if (p) this.ticket(p, st);
+      }
+      if (v.extra) this.label(`+${v.extra}`, P.work.x + P.work.w - 0.1, P.work.y + 0.2, 0.22, pal.text2, { mono: true, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
     /* what is done and that no arm takes: it will not leave by itself, and says so in red */
     if (P.out) {
       const o = P.out;
       pit(o); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); tiny('NO ARM', o, pal.danger);
-      const os = Math.min(0.42, o.w * 0.56), room = Math.max(1, Math.floor((o.h - 0.36) / (os + 0.12)));
-      D.stuck.forEach((t, i) => { if (i < room) this.ticket(t, o.x + o.w / 2, o.y + 0.36 + os / 2 + i * (os + 0.12), os, st, 'fail', dt); else this.shown.set(t.ticketId, { x: o.x + o.w / 2, y: o.y + o.h - 0.2 }); });
-      if (D.stuck.length > room) this.label(`+${D.stuck.length - room}`, o.x + o.w / 2, o.y + o.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
+      for (const p of v.stuck) this.ticket(p, st);
+      if (v.stuckMore > 0) this.label(`+${v.stuckMore}`, o.x + o.w / 2, o.y + o.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
     }
     /* the bay: what was set aside. Hazard stripes on its edge, as a hold area has. */
     if (P.aside) {
-      const a = P.aside, band = 0.42;
+      const a = P.aside, band = 0.42, aside = v.asideCount;
       pit(a);
       ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
-      ctx.strokeStyle = veil(pal.light ? HAZARD : pal.warn, aside.length ? (pal.light ? 1 : 0.75) : pal.light ? 0.7 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
+      ctx.strokeStyle = veil(pal.light ? HAZARD : pal.warn, aside ? (pal.light ? 1 : 0.75) : pal.light ? 0.7 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
       for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
       ctx.stroke(); ctx.restore();
-      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, pal.light ? (aside.length ? pal.warn : pal.text3) : veil(pal.warn, aside.length ? 0.9 : 0.45), { weight: 700 });
-      /* the tickets stand to the right of the bay's name, apart enough for their signs not to cover one another */
-      const as = Math.min(0.44, a.h * 0.56), step = as + 0.4, x0 = a.x + band + 1.2, fit = Math.max(1, Math.floor((a.x + a.w - 0.1 - x0) / step));
-      aside.forEach((t, i) => { if (i < fit) this.ticket(t, x0 + as / 2 + i * step, a.y + a.h / 2, as, st, t.phase === 'failed' ? 'fail' : 'human', dt); else this.shown.set(t.ticketId, { x: a.x + a.w - 0.3, y: a.y + a.h / 2 }); });
-      if (aside.length > fit) this.label(`+${aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
+      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, pal.light ? (aside ? pal.warn : pal.text3) : veil(pal.warn, aside ? 0.9 : 0.45), { weight: 700 });
+      for (const p of v.aside) this.ticket(p, st);
+      if (v.asideMore > 0) this.label(`+${v.asideMore}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
     }
-    this.quays(takers, D, st, pal, dt, false);
+    this.quays(v.quays, st, pal, false);
     /* the model it runs on, under it: its own, else its persona's, or a panel's orchestrator */
-    const model = st.modelOf?.(m);
+    const model = v.model;
     if (model) { const b = bodyOf(m); this.label(modelTag(model), b.x + b.w / 2, b.y + b.h + 0.26, 0.24, pal.text2, { align: 'center', mono: true, plate: 'rgba(9,9,11,0.84)', min: 9, max: 12, fit: b.w + 1 }); }
     /* a script station says what it runs when it is pointed at: one line a command */
-    if (m.exec === 'script' && (st.selMachine === m.id || st.hoverMachine === m.id)) {
-      const lines = plateLines(scriptPlate(m.script), 9), col = tint;
+    if (v.plate) {
+      const lines = v.plate, col = tint;
       /* over the station, or under it when there is no room left above in the view */
       const above = (y - this.cam.y) * z + this.h / 2 > lines.length * 15 + 24;
       this.boards.push({ lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
@@ -1199,33 +978,26 @@ export class FactoryView {
     }
   }
 
-  private statusStation(m: StationSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y, w, h } = m, big = w >= 3, gate = false, nat = true;
-    const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st);
-    const waiting = tickets.filter((t) => t.phase !== 'out'), out = D.stuck;
-    const state = tickets.length ? pal.ok : pal.text3;
+  private statusStation(v: StatusView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m, big } = v, { x, y, w, h } = m, gate = false, nat = true;
+    const state = v.busy ? pal.ok : pal.text3;
     rr(ctx, x + 0.07, y + 0.07, w - 0.14, h - 0.14, 0.28); ctx.fillStyle = pal.body; ctx.fill();
     ctx.lineWidth = gate ? 0.12 : 0.06; ctx.strokeStyle = gate ? pal.warn : nat ? pal.ok : pal.edge;
     if (gate) ctx.setLineDash([0.3, 0.2]);
     ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = state; rr(ctx, x + 0.42, y + 0.2, w - 0.84, 0.08, 0.04); ctx.fill();
     this.label(m.name || (gate ? 'Gate' : 'Station'), x + w / 2, y + (big ? 0.62 : 0.54), big ? 0.32 : 0.26, pal.text, { align: 'center', weight: 600, min: 8, max: 14, fit: w - 0.25 });
-    const cols = big ? 4 : 3, rows = big ? 2 : 1, size = big ? 0.5 : 0.4, gap = big ? 0.1 : 0.09, n = cols * rows;
-    const x0 = x + (w - cols * size - (cols - 1) * gap) / 2, y0 = y + (big ? 0.92 : 0.8);
-    for (let i = 0; i < n; i++) {
-      const cx = x0 + (i % cols) * (size + gap), cy = y0 + Math.floor(i / cols) * (size + gap);
-      rr(ctx, cx, cy, size, size, 0.08); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
-      const t = waiting[i];
-      if (t) this.ticket(t, cx + size / 2, cy + size / 2, size * 0.86, st, t.phase === 'running' ? 'run' : t.phase === 'failed' ? 'fail' : t.phase === 'wait' ? 'wait' : 'human', dt);
+    for (const c of v.slots) {
+      rr(ctx, c.x, c.y, c.size, c.size, 0.08); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
+      if (c.t) this.ticket(c.t, st);
     }
-    for (let i = n; i < waiting.length; i++) this.shown.set(waiting[i]!.ticketId, { x: x + w / 2, y: y + h / 2 });
-    if (waiting.length > n) this.label(`+${waiting.length - n}`, x + w - 0.3, y0 - 0.12, 0.24, pal.text2, { mono: true, align: 'right' });
-    const ty = y + h - (big ? 0.86 : 0.64), th = big ? 0.56 : 0.44, ts = big ? 0.38 : 0.3, max = Math.floor((w - 0.7) / (ts + 0.08));
+    if (v.more > 0) this.label(`+${v.more}`, v.moreAt.x, v.moreAt.y, 0.24, pal.text2, { mono: true, align: 'right' });
     /* what no arm takes stays here, in red; the rest is at the quay of its arm */
-    if (out.length) { rr(ctx, x + 0.28, ty, w - 0.56, th, 0.1); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); }
-    out.forEach((t, i) => { if (i < max) this.ticket(t, x + 0.4 + ts / 2 + i * (ts + 0.08), ty + th / 2, ts, st, 'fail', dt); else this.shown.set(t.ticketId, { x: x + w - 0.5, y: ty + th / 2 }); });
-    this.quays(takers, D, st, pal, dt, false);
-    if (tickets.length >= m.cap) this.label('full', x + w / 2, y + h + 0.26, 0.26, '#fdba74', { align: 'center', plate: 'rgba(9,9,11,0.84)', min: 9, max: 12 });
+    const o = v.outBox;
+    if (o) { rr(ctx, o.x, o.y, o.w, o.h, 0.1); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); }
+    for (const p of v.out) this.ticket(p, st);
+    this.quays(v.quays, st, pal, false);
+    if (v.full) this.label('full', x + w / 2, y + h + 0.26, 0.26, '#fdba74', { align: 'center', plate: 'rgba(9,9,11,0.84)', min: 9, max: 12 });
   }
 
   /**
@@ -1234,9 +1006,8 @@ export class FactoryView {
    * itself), how many tickets it holds as a large figure on the ground, and, where it stops releasing above a number
    * of tickets in work, that number as a line that fills.
    */
-  private zone(m: ZoneSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y, w, h } = m, auto = m.release === 'auto', c = m.inbound ? pal.accent : ZONE_PAINT[m.status ?? ''] ?? PAINT;
-    const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st), held = tickets.filter((t) => !D.quay.has(t.ticketId)), stock = tickets.filter((t) => !t.released).length;
+  private zone(v: ZoneView, S: Scene, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m, stock } = v, { x, y, w, h } = m, auto = m.release === 'auto', c = m.inbound ? pal.accent : ZONE_PAINT[m.status ?? ''] ?? PAINT, wip = S.wip;
     ctx.fillStyle = c; ctx.globalAlpha = pal.light ? 0.1 : 0.055; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = c; ctx.globalAlpha = pal.light ? 0.8 : 0.45; ctx.lineWidth = 0.045; ctx.setLineDash([0.2, 0.16]); ctx.strokeRect(x + 0.035, y + 0.035, w - 0.07, h - 0.07); ctx.setLineDash([]);
     /* three corners: the fourth is the padlock's */
@@ -1249,22 +1020,16 @@ export class FactoryView {
     if (w >= 2 && h >= 2) this.stencil(String(stock).padStart(2, '0'), x + 0.2, y + h - 0.56, 0.9, c, pal.light ? (stock ? 0.4 : 0.22) : stock ? 0.3 : 0.14, { mono: true, weight: 700 });
     if (auto && m.status === 'todo') {
       /* it stops releasing while that many tickets are in work on the floor: the line is how close that is */
-      const limit = m.limit ?? 12, k = clamp(this.wip / limit, 0, 1), cc = k >= 0.8 ? pal.warn : c, x0 = x + 0.24, x1 = x + w - 0.24, ly = y + h - 0.17;
+      const limit = m.limit ?? 12, k = clamp(wip / limit, 0, 1), cc = k >= 0.8 ? pal.warn : c, x0 = x + 0.24, x1 = x + w - 0.24, ly = y + h - 0.17;
       ctx.lineCap = 'round'; ctx.lineWidth = 0.09;
       ctx.strokeStyle = c; ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.moveTo(x0, ly); ctx.lineTo(x1, ly); ctx.stroke(); ctx.globalAlpha = 1;
       if (k > 0) { ctx.strokeStyle = cc; ctx.beginPath(); ctx.moveTo(x0, ly); ctx.lineTo(x0 + (x1 - x0) * k, ly); ctx.stroke(); }
       ctx.lineCap = 'butt';
-      if (w >= 3) this.label(`IN WORK ${this.wip}/${limit}`, x1 + 0.04, y + h - 0.42, 0.19, cc, { mono: true, weight: 700, align: 'right', min: 8, max: 11 });
+      if (w >= 3) this.label(`IN WORK ${wip}/${limit}`, x1 + 0.04, y + h - 0.42, 0.19, cc, { mono: true, weight: 700, align: 'right', min: 8, max: 11 });
     }
-    const pitch = 0.5, cols = Math.max(1, Math.floor((w - 0.5) / pitch)), rows = Math.max(1, Math.floor((h - 1.05) / pitch)), n = cols * rows;
-    const ox = x + (w - cols * pitch) / 2 + pitch / 2, oy = y + 0.85 + pitch / 2;
-    held.forEach((t, i) => {
-      /* released and no arm takes it: it is marked as on its way out, and stays */
-      if (i < n) this.ticket(t, ox + (i % cols) * pitch, oy + Math.floor(i / cols) * pitch, 0.38, st, t.released ? 'out' : '', dt);
-      else this.shown.set(t.ticketId, { x: x + w - 0.5, y: y + h - 0.4 });
-    });
-    if (held.length > n) this.label(`+${held.length - n}`, x + w - 0.28, y + h - 0.72, 0.26, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
-    this.quays(takers, D, st, pal, dt, true);
+    for (const p of v.held) this.ticket(p, st);
+    if (v.more > 0) this.label(`+${v.more}`, x + w - 0.28, y + h - 0.72, 0.26, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
+    this.quays(v.quays, st, pal, true);
   }
 
   /** A padlock, stencilled: shut and red, or open and green with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
@@ -1286,8 +1051,8 @@ export class FactoryView {
    * Fleex, so it is not kept there: it fades as it crosses the frame (see `departures`). What stays is how many left
    * by it over the period the floor's figures cover.
    */
-  private exit(m: MachineSpec, st: ViewState, pal: Palette): void {
-    const ctx = this.ctx, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
+  private exit(v: ExitView, pal: Palette): void {
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
     ctx.globalAlpha = 1;
@@ -1297,9 +1062,9 @@ export class FactoryView {
     const plate = { mono: true, weight: 700, min: 9, max: 12 } as const;
     this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6) });
     if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
-    if (!st.exits) return;
+    if (v.count == null) return;
     /* how many left by it: on the top line too when there is room beside the name, under the frame otherwise */
-    const count = `${(st.exits[m.id] ?? 0) + (this.passed.get(m.id) ?? 0)} · ${st.exitDays ?? 7} d`, o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
+    const count = `${v.count} · ${v.days} d`, o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
     if (w * z >= 125) this.label(count, x + w - 0.3, y + 0.06, 0.24, ok, { ...o, align: 'right' });
     else this.label(count, x + w / 2, y + h - 0.04, 0.24, ok, { ...o, align: 'center' });
   }
@@ -1311,13 +1076,8 @@ export class FactoryView {
    * taken, and the whole pad to red when it cannot work as it is (a departure that leads nowhere, an arrival no arm
    * empties). Its name and what it leads to are on a plate beside it.
    */
-  private port(m: TeleporterSpec, held: FactoryTicket | null, st: ViewState, pal: Palette, dt: number): void {
-    const ctx = this.ctx, { x, y } = m, cx = x + 0.5, cy = y + 0.5, z = this.cam.z, find = (id: string) => this.byId.get(id), dep = m.role === 'departure';
-    const arrival = arrivalOf(m, find), state = portState(m, { arrival, arrivalHolds: !!arrival && !!this.inside.get(arrival.id)?.length, holds: held, takers: dep ? [] : this.takersOf(m) });
-    const bad = portBad(state), waiting = state === 'waiting', col = bad ? pal.danger : portColor(m, find);
-    /* a ticket on its way out of here, or into here: see `jumped` */
-    const out = this.jumps.find((j) => j.from.id === m.id), into = this.jumps.find((j) => j.to.id === m.id), w = (j: Jump) => j.age / JUMP_S;
-    const burst = out && w(out) < 0.5 ? w(out) / 0.5 : into && w(into) > 0.5 ? 1 - (w(into) - 0.5) / 0.5 : 0;
+  private port(v: PortView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m, dep, bad, waiting, burst } = v, { x, y } = m, cx = x + 0.5, cy = y + 0.5, z = this.cam.z, col = bad ? pal.danger : v.color;
     rr(ctx, x + 0.068, y + 0.068, 0.864, 0.864, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', pal.light ? 0.08 : 0.3); ctx.fill();
     ctx.strokeStyle = col; ctx.lineWidth = 0.057;
     if (dep) ctx.stroke();
@@ -1343,14 +1103,10 @@ export class FactoryView {
       }
       ctx.stroke(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     }
-    if (held) {
-      /* one that is still crossing is not here yet; it is kept in place, so it does not come sliding over the floor */
-      if (into && into.id === held.ticketId && w(into) < 0.6) this.shown.set(held.ticketId, { x: cx, y: cy });
-      else this.ticket(held, cx, cy, 0.32, st, '', dt);
-    }
-    if (out && w(out) < 0.4) {
+    if (v.held) this.ticket(v.held, st);
+    if (v.gone) {
       /* the one that has just left: it shrinks where it stood */
-      const k = 1 - w(out) / 0.4, sprite = tokenSprite(out.type, TYPE_COLORS[out.type] ?? NO_TYPE, 0.37 * z * this.dpr);
+      const out = v.gone, k = out.k, sprite = tokenSprite(out.type, TYPE_COLORS[out.type] ?? NO_TYPE, 0.37 * z * this.dpr);
       ctx.globalAlpha = Math.min(1, k * 1.5);
       if (sprite) { const size = (sprite.width / (z * this.dpr)) * k; ctx.drawImage(sprite, cx - size / 2, cy - size / 2, size, size); }
       else { rr(ctx, cx - 0.16 * k, cy - 0.16 * k, 0.32 * k, 0.32 * k, 0.07); ctx.fillStyle = TYPE_COLORS[out.type] ?? NO_TYPE; ctx.fill(); }
@@ -1363,41 +1119,22 @@ export class FactoryView {
       if (bad) this.label('!', bx, by + 0.012, 0.22, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 16 });
       else { ctx.fillStyle = 'rgba(9,9,11,0.88)'; ctx.fillRect(bx - 0.065, by - 0.07, 0.04, 0.14); ctx.fillRect(bx + 0.025, by - 0.07, 0.04, 0.14); }
     }
-    /* an arm that points into an arrival will never drop there: a no-entry sign on the side it comes from */
-    if (!dep) for (let s = 0; s < 4; s++) {
-      const n = this.at(m.x - DX[s as 0], m.y - DY[s as 0]);
-      if (n && n.kind === 'arm' && n.dir === s) this.noEntry.push({ x: cx - DX[s as 0] * 0.5, y: cy - DY[s as 0] * 0.5 });
-    }
-    const asked = st.selMachine === m.id || st.hoverMachine === m.id;
+    const asked = v.asked;
     if (z < 11 && !asked) return;
     /* the plate: under the pad, over it when something stands under, beside it when it is boxed in. Its second line is what to know now. */
-    const line = z >= 16 || asked || bad || waiting ? portLine(m, state, arrival, dep ? 0 : departuresOf(m, st.layout.machines).length) : '';
+    const line = z >= 16 || asked || bad || waiting ? v.line : '';
     const name = { mono: true, weight: 700, min: 9, max: 12, plate: 'rgba(9,9,11,0.9)' } as const, sub = { mono: true, min: 8, max: 10, plate: 'rgba(9,9,11,0.9)' } as const;
     const ink = bad ? '#fca5a5' : waiting ? pal.warn : pal.text2;
-    if (!this.at(m.x, m.y + 1)) {
-      this.label(portName(m), cx, y + 1, 0.24, col, { ...name, align: 'center', dy: 11 });
+    if (v.plate === 'below') {
+      this.label(v.name, cx, y + 1, 0.24, col, { ...name, align: 'center', dy: 11 });
       if (line) this.label(line, cx, y + 1, 0.2, ink, { ...sub, align: 'center', dy: 26 });
-    } else if (!this.at(m.x, m.y - 1)) {
-      this.label(portName(m), cx, y, 0.24, col, { ...name, align: 'center', dy: line ? -26 : -11 });
+    } else if (v.plate === 'above') {
+      this.label(v.name, cx, y, 0.24, col, { ...name, align: 'center', dy: line ? -26 : -11 });
       if (line) this.label(line, cx, y, 0.2, ink, { ...sub, align: 'center', dy: -11 });
     } else {
-      this.label(portName(m), x + 1.14, cy, 0.24, col, { ...name, dy: line ? -8 : 0 });
+      this.label(v.name, x + 1.14, cy, 0.24, col, { ...name, dy: line ? -8 : 0 });
       if (line) this.label(line, x + 1.14, cy, 0.2, ink, { ...sub, dy: 8 });
     }
-  }
-
-  /**
-   * A ticket that is now in an arrival and was, a frame ago, in a departure that leads to it (or in the arm or on
-   * the belt that fed that departure, when the page did not see it there): it jumped. It is drawn crossing.
-   */
-  private jumped(t: FactoryTicket, before: string | null): void {
-    const to = t.machineId ? this.byId.get(t.machineId) : null;
-    if (!isArrival(to)) return;
-    const was = before ? this.byId.get(before) : null;
-    const from = was && (was.kind === 'arm' || was.kind === 'belt') ? this.at(was.x + DX[was.dir], was.y + DY[was.dir]) : was;
-    if (!isDeparture(from) || from.to !== to.id) return;
-    this.jumps.push({ id: t.ticketId, type: t.info?.type ?? '', from, to, age: 0 });
-    this.shown.set(t.ticketId, { x: to.x + 0.5, y: to.y + 0.5 });
   }
 
   /**
@@ -1405,26 +1142,11 @@ export class FactoryView {
    * that is selected or pointed at (for an arrival, every departure that leads to it), and while a ticket crosses,
    * with the ticket as a dot on it. Drawn over everything, since it crosses the floor.
    */
-  private portLinks(st: ViewState, pal: Palette): void {
-    const ctx = this.ctx, find = (id: string) => this.byId.get(id), arcs = new Map<string, { from: TeleporterSpec; to: TeleporterSpec; packet: number | null }>();
-    for (const id of [st.selMachine, st.hoverMachine]) {
-      const m = id ? this.byId.get(id) : null;
-      if (!isPort(m)) continue;
-      const a = arrivalOf(m, find);
-      if (a) arcs.set(m.id, { from: m, to: a, packet: null });
-      else if (m.role === 'arrival') for (const d of departuresOf(m, st.layout.machines)) arcs.set(d.id, { from: d, to: m, packet: null });
-    }
-    for (const j of this.jumps) { const w = j.age / JUMP_S; arcs.set(j.from.id, { from: j.from, to: j.to, packet: w > 0.15 && w < 0.85 ? (w - 0.15) / 0.7 : null }); }
-    /* arcs that end on the same arrival bend one way then the other, so they do not lie on each other */
-    const seen = new Map<string, number>();
-    for (const { from, to, packet } of arcs.values()) {
-      const n = seen.get(to.id) ?? 0; seen.set(to.id, n + 1);
-      const x1 = from.x + 0.5, y1 = from.y + 0.5, x2 = to.x + 0.5, y2 = to.y + 0.5, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
-      if (L < 0.01) continue;
-      const bend = (n % 2 ? -1 : 1) * 0.2 * (1 + Math.floor(n / 2) * 0.5), qx = (x1 + x2) / 2 + dy * bend, qy = (y1 + y2) / 2 - dx * bend;
+  private portLinks(S: Scene, pal: Palette): void {
+    const ctx = this.ctx;
+    for (const { x1, y1, x2, y2, qx, qy, trim, color: col, hot, packet } of S.links) {
       const at = (u: number) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
       /* from the edge of one pad to the edge of the other */
-      const trim = Math.min(0.3, 0.6 / L), col = portColor(from, find), hot = packet != null || this.jumps.some((j) => j.from.id === from.id);
       const path = () => { ctx.beginPath(); for (let i = 0; i <= 28; i++) { const p = at(trim + (1 - 2 * trim) * (i / 28)); if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); } };
       ctx.lineCap = 'round'; ctx.setLineDash([0.07, 0.17]); ctx.lineDashOffset = -this.clock * 0.5;
       path(); ctx.strokeStyle = 'rgba(9,9,11,0.6)'; ctx.lineWidth = hot ? 0.13 : 0.1; ctx.stroke();
@@ -1441,41 +1163,28 @@ export class FactoryView {
         ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 0.1, 0, 6.3); ctx.fill();
       }
     }
-    for (const s of this.noEntry) {
+    for (const s of S.noEntry) {
       ctx.beginPath(); ctx.arc(s.x, s.y, 0.18, 0, 6.3); ctx.fillStyle = pal.danger; ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.06; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(s.x - 0.1, s.y); ctx.lineTo(s.x + 0.1, s.y); ctx.stroke(); ctx.lineCap = 'butt';
     }
   }
 
-  /** A ticket that was on its way into an exit when it left the floor: it is seen crossing the frame. Anything else that goes was taken back, and just goes. */
-  private left(ticketId: string, st: ViewState): void {
-    const was = this.lastOn.get(ticketId), from = this.shown.get(ticketId), m = was?.m ? this.byId.get(was.m) : null;
-    if (!was || !from || !m) return;
-    const to = m.kind === 'arm' || m.kind === 'belt' ? this.at(m.x + DX[m.dir], m.y + DY[m.dir]) : m.kind === 'bridge' ? this.at(m.x + was.fx, m.y + was.fy) : null;
-    if (!to || to.kind !== 'exit') return;
-    const edge = entryOf(to, from);
-    this.leaving.push({ type: was.type, from: { ...from }, edge, exit: to, age: 0, travel: Math.min(0.5, Math.hypot(edge.x - from.x, edge.y - from.y) / (st.beltSpeed || 1.2)) });
-    this.passed.set(to.id, (this.passed.get(to.id) ?? 0) + 1);
-  }
   /**
    * What leaves by an exit: the ticket goes on to the frame as it was, then it is an outline with a tick that fades
    * towards the middle, while the side it came in by lights up where it passed.
    */
-  private departures(pal: Palette, dt: number): void {
+  private departures(S: Scene, pal: Palette): void {
     const ctx = this.ctx, z = this.cam.z;
-    this.leaving = this.leaving.filter((l) => { l.age += dt; return l.age < l.travel + FADE_S && this.byId.has(l.exit.id); });
-    for (const l of this.leaving) {
-      const { exit: m, edge, from } = l;
-      if (l.age < l.travel) {
-        const k = l.age / l.travel, px = from.x + (edge.x - from.x) * k, py = from.y + (edge.y - from.y) * k, sprite = tokenSprite(l.type, TYPE_COLORS[l.type] ?? NO_TYPE, 0.53 * z * this.dpr);
+    for (const l of S.leaving) {
+      if (l.travel) {
+        const px = l.x, py = l.y, sprite = tokenSprite(l.type, TYPE_COLORS[l.type] ?? NO_TYPE, 0.53 * z * this.dpr);
         if (sprite) { const s = sprite.width / (z * this.dpr); ctx.drawImage(sprite, px - s / 2, py - s / 2, s, s); }
         else { rr(ctx, px - 0.23, py - 0.23, 0.46, 0.46, 0.1); ctx.fillStyle = TYPE_COLORS[l.type] ?? NO_TYPE; ctx.fill(); }
         continue;
       }
-      const k = (l.age - l.travel) / FADE_S, e = k * k * (3 - 2 * k), px = edge.x + (m.x + m.w / 2 - edge.x) * e, py = edge.y + (m.y + m.h / 2 - edge.y) * e;
+      const { k, x: px, y: py, edge, a0, a1 } = l;
       ctx.globalAlpha = 1 - k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       /* the side lights up where it passed, no further than the side goes */
-      const a0 = Math.max(-0.45, edge.ax ? m.x + 0.2 - edge.x : m.y + 0.2 - edge.y), a1 = Math.min(0.45, edge.ax ? m.x + m.w - 0.2 - edge.x : m.y + m.h - 0.2 - edge.y);
       ctx.strokeStyle = mix(pal.ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
       ctx.strokeStyle = pal.ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
       ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(px - 0.09, py); ctx.lineTo(px - 0.02, py + 0.07); ctx.lineTo(px + 0.1, py - 0.07); ctx.stroke();
@@ -1483,7 +1192,7 @@ export class FactoryView {
     }
   }
 
-  private overlay(st: ViewState, pal: Palette): void {
+  private overlay(st: ViewState, S: Scene, pal: Palette): void {
     const ctx = this.ctx, outline = (m: MachineSpec, color: string, lw: number) => { ctx.strokeStyle = color; ctx.lineWidth = lw; rr(ctx, m.x - 0.04, m.y - 0.04, m.w + 0.08, m.h + 0.08, m.w > 1 ? 0.32 : 0.2); ctx.stroke(); };
     const hov = this.machine(st.hoverMachine), sel = this.machine(st.selMachine);
     if (hov && hov.id !== sel?.id) outline(hov, pal.text3, 0.05);
@@ -1496,19 +1205,12 @@ export class FactoryView {
     if (sel) {
       outline(sel, pal.text, 0.08);
       /* what feeds the selected machine, and what empties it */
-      if (isBox(sel)) {
-        for (let x = sel.x - 1; x <= sel.x + sel.w; x++) for (let y = sel.y - 1; y <= sel.y + sel.h; y++) {
-          const n = this.at(x, y);
-          if (!n || n.id === sel.id) continue;
-          if ((n.kind === 'belt' || n.kind === 'arm') && this.at(n.x + DX[n.dir], n.y + DY[n.dir])?.id === sel.id) outline(n, pal.ok, 0.07);
-        }
-        for (const a of this.takersOf(sel)) outline(a, '#fb923c', 0.07);
-      }
+      for (const n of S.feeders) outline(n, pal.ok, 0.07);
+      for (const a of S.emptiers) outline(a, '#fb923c', 0.07);
     }
     /* in build mode, an arm that is selected or about to be placed says where it takes from and where it drops */
-    if (st.edit && sel?.kind === 'arm' && !st.selMany.length) this.armWay(sel.x, sel.y, sel.dir, pal, true);
+    for (const w of S.ways) this.armWay(w, pal);
     const g = st.ghost;
-    if (g && !g.erase) for (const c of g.cells) if (c.arm && c.dir != null) this.armWay(c.x, c.y, c.dir, pal, g.cells.length === 1);
     if (g) {
       for (const c of g.cells) {
         ctx.fillStyle = g.erase || !g.ok ? 'rgba(239,68,68,0.28)' : 'rgba(96,165,250,0.26)'; ctx.strokeStyle = g.erase || !g.ok ? pal.danger : '#60a5fa'; ctx.lineWidth = 0.06;
@@ -1525,7 +1227,7 @@ export class FactoryView {
     }
     const dr = st.drag;
     if (dr) {
-      const tx = Math.floor(dr.x), ty = Math.floor(dr.y), m = this.at(tx, ty), box = m && m.kind !== 'belt' ? m : { x: tx, y: ty, w: 1, h: 1 };
+      const box = S.dropBox!;
       ctx.strokeStyle = dr.ok ? pal.ok : pal.warn; ctx.lineWidth = 0.09; ctx.setLineDash(dr.ok ? [] : [0.16, 0.12]);
       rr(ctx, box.x + 0.03, box.y + 0.03, box.w - 0.06, box.h - 0.06, 0.2); ctx.stroke(); ctx.setLineDash([]);
       const t = st.tickets.find((q) => q.ticketId === dr.ticketId);
@@ -1541,19 +1243,15 @@ export class FactoryView {
    * Where an arm on that tile, pointing that way, takes from and drops on: the tile behind it in the frame's blue,
    * dashed, the tile in front of it in green, each with its name. So an arm is not put down the wrong way round.
    */
-  private armWay(x: number, y: number, dir: number, pal: Palette, turn: boolean): void {
-    const ctx = this.ctx, dx = DX[dir as 0], dy = DY[dir as 0];
-    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
+  private armWay(w: ArmWay, pal: Palette): void {
+    const ctx = this.ctx, { x, y, dir, turn, idle, shut, takes, drops } = w, dx = DX[dir as 0], dy = DY[dir as 0];
     const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
       ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
       ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
     };
-    const sx = x - dx, sy = y - dy, tx = x + dx, ty = y + dy, src = this.at(sx, sy), dst = this.at(tx, ty);
-    /* a teleporter only goes one way: nothing is taken out of a departure, nothing is put into an arrival */
-    const idle = isDeparture(src), shut = isArrival(dst), red = 'rgba(69,10,10,0.95)', pink = '#fecaca';
+    const sx = x - dx, sy = y - dy, tx = x + dx, ty = y + dy, red = 'rgba(69,10,10,0.95)', pink = '#fecaca';
     tile(sx, sy, idle ? pal.danger : PICK, true); tile(tx, ty, shut ? pal.danger : pal.ok, false);
     const o = { mono: true, weight: 700, min: 9, max: 11 } as const;
-    const takes = idle ? `TAKES NOTHING · ${nameOf(src)} is a departure` : `TAKES FROM · ${nameOf(src)}`, drops = shut ? `NO ENTRY · ${nameOf(dst)} is an arrival` : `DROPS ON · ${nameOf(dst)}`;
     const blue = { ...o, plate: idle ? red : 'rgba(23,37,84,0.95)' }, green = { ...o, plate: shut ? red : 'rgba(5,46,22,0.95)' };
     if (dy === 0) {
       /* side by side over the arm, each on its own side of it */
@@ -1597,12 +1295,12 @@ export class FactoryView {
       if (m.kind === 'label') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.scene.machine(id) ?? undefined) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;
     for (const t of st.tickets) {
-      const q = this.shown.get(t.ticketId); if (!q) continue;
+      const q = this.scene.shown.get(t.ticketId); if (!q) continue;
       if (st.dim?.has(t.ticketId)) { c.fillStyle = pal.text3; c.fillRect(ox + q.x * s - 0.5, oy + q.y * s - 0.5, 1.5, 1.5); continue; }
       const hot = !!humanCall(t) || t.phase === 'loose', big = hot || !!st.found?.has(t.ticketId) || t.info?.favorite === true;
       c.fillStyle = hot ? pal.warn : TYPE_COLORS[t.info?.type ?? ''] ?? '#8b949e';
@@ -1618,10 +1316,10 @@ export class FactoryView {
     const p = this.toWorld(sx, sy);
     if (withTickets) {
       let best: string | null = null, bd = Math.max(0.3, 9 / this.cam.z);
-      for (const t of st.tickets) { const q = this.shown.get(t.ticketId); if (!q) continue; const dd = Math.hypot(q.x - p.x, q.y - p.y); if (dd < bd) { bd = dd; best = t.ticketId; } }
+      for (const t of st.tickets) { const q = this.scene.shown.get(t.ticketId); if (!q) continue; const dd = Math.hypot(q.x - p.x, q.y - p.y); if (dd < bd) { bd = dd; best = t.ticketId; } }
       if (best) return { ticketId: best };
     }
-    this.index(st.layout);
+    this.use(st.layout);
     const m = this.at(Math.floor(p.x), Math.floor(p.y));
     /* out of build mode, the light of a machine is its own target: its switch, and what it has to say */
     if (m && withTickets && m.kind === 'station' && m.exec !== 'native' && inRect(machineParts(m).lamp, p.x, p.y)) return { lamp: m.id };

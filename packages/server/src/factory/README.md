@@ -547,8 +547,16 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Not covered by tests
 
-How the floor is painted (`renderer.ts`) is checked by eye, in a browser against a made-up server: what is tested is
-the geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
+Drawing the floor is two things. The scene (`packages/web/src/factory/scene.ts`) says what is shown at each frame and
+where, with no paint: every machine with its state, its places and what they hold, its quays, its plates' words, every
+ticket where it is drawn, every arm where its cup is. It keeps what moves from one frame to the next (tickets easing
+towards where the server says they are, riding the belts, carried by cups, sliding to quays, leaving by exits, jumping
+between teleporters), and is tested (`scene.test.ts`). The renderer (`renderer.ts`) paints that scene and keeps nothing
+of the floor: sizes, colours, fonts, and what is left out from far are its own. This split is what lets a skin be paint
+only (see `docs/factory/skins-handover.md`).
+
+How the floor is painted is checked by eye, in a browser against a made-up server: what is tested is the scene and the
+geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
 
 A change to the renderer that should show nothing is checked picture against picture. `packages/web/src/factory/shots/`
 is a made-up floor with one of everything (each kind of station in each state, zones, belts that bend, run fast and
