@@ -1,0 +1,543 @@
+<title>Factory, les skins</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&family=Silkscreen&family=Pixelify+Sans:wght@500;700&family=Fredoka:wght@500;600&family=Orbitron:wght@700;800&display=swap">
+<style>
+  /* Layout: one running factory painted in the chosen skin (switch skins, show the matrix, click a machine), the skins as cards to pick, then the study of what making the Factory skinnable would cost. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  .lede b, .rules li b { color: var(--ink); font-weight: 600; }
+  .tools .lbl { font-size: 0.8rem; color: var(--muted); }
+  .stage-wrap { width: 100%; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); line-height: 0; background: #000; }
+  #cv { display: block; width: 100%; height: auto; aspect-ratio: 32 / 15; image-rendering: pixelated; }
+  .two { align-items: stretch; }
+  .now { margin: 0; }
+  .info .mono { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+  .card.showing { border-color: var(--ink); }
+  .card .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+  table.est { font-size: 0.86rem; } table.est td { color: var(--ink); border-bottom-color: var(--line); } table.est th { color: var(--muted); border-bottom-color: var(--line); }
+  table.est td:first-child { font-family: var(--mono); color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Une Factory, plusieurs skins</h1>
+    <p class="lede">Le même plancher, la même matrice de cases, les mêmes machines et les mêmes tickets qui circulent : seule la peinture change. Bascule d'un skin à l'autre pendant que l'usine tourne, affiche la matrice pour voir qu'aucune case ne bouge, clique une machine pour voir ce qu'elle est. Plus bas, l'étude : ce que coûterait de rendre la Factory « skinnable » sans rien casser.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">L'usine qui tourne</h2>
+    <div class="tools" id="skins" role="group" aria-label="Skin"></div>
+    <div class="tools">
+      <button type="button" id="play" aria-pressed="true">Pause</button>
+      <button type="button" id="spawn">Faire entrer un ticket</button>
+      <button type="button" id="grid" aria-pressed="false">Afficher la matrice</button>
+      <button type="button" id="decor" aria-pressed="true">Décor</button>
+      <span class="lbl" id="count"></span>
+    </div>
+    <div class="stage-wrap" id="wrap"><canvas id="cv" aria-label="The factory floor, painted in the chosen skin"></canvas></div>
+    <div class="two">
+      <p class="now" id="skin-say"></p>
+      <div class="card info" id="info"><h3>Une machine</h3><p class="brief">Clique une machine sur le plancher.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-pick">
+    <h2 id="h-pick">Les skins</h2>
+    <div class="grid" id="cards"></div>
+  </section>
+
+  <section aria-labelledby="h-study">
+    <h2 id="h-study">L'étude : rendre la Factory skinnable</h2>
+    <div class="rules">
+      <div class="card"><h3>Où on en est</h3><ul>
+        <li><b>Ce qui est déjà séparé</b> : la géométrie (où sont les places d'une station, les quais des bras, les plaques) vit dans des modules à part (<code>machineArt.ts</code>, <code>quays.ts</code>, <code>bridges.ts</code>, <code>teleport.ts</code>), et c'est elle, pas la peinture, qui répond aux clics. Les tickets sont dessinés à partir des icônes de type de Fleex. Le moteur, le serveur, les routes et la mise en page ne savent rien du dessin.</li>
+        <li><b>Ce qui ne l'est pas</b> : <code>renderer.ts</code> fait 1 618 lignes, une quarantaine de méthodes de dessin et environ 200 appels de canevas où se mêlent trois choses : ce qu'il faut montrer (un ticket en cours, un bras qui porte, une place libre), où le montrer, et avec quelle peinture. Il y a 47 couleurs écrites en dur, et les règles du thème clair sont dispersées dans le code.</li>
+        <li><b>Donc</b> : changer de skin sans tout casser, c'est d'abord séparer ces trois choses. La matrice ne bouge pas, ce qui rend le travail sûr : aucune case, aucun clic, aucune règle de routage n'est touchée.</li>
+      </ul></div>
+      <div class="card"><h3>Le contrat d'un skin</h3><ul>
+        <li><b>Une scène</b>, calculée une fois par image et identique pour tous les skins : pour chaque machine, son rectangle en cases, son état (allumée, éteinte, en attente de quelqu'un), ses places et ce qu'elles contiennent ; pour chaque ticket, sa position et son état ; les plaques et leur texte.</li>
+        <li><b>Un skin</b> = un objet qui peint cette scène : le sol, le décor (les marges, jamais une case), puis un peintre par sorte d'élément : convoyeur, pont, bras, station (agent, skill, panel, script, porte, statut), zone, sortie, téléporteur, portique et péage, ticket, plaque, ruban de chantier, contour de sélection.</li>
+        <li><b>Ce qu'un skin ne touche pas</b> : la taille des cases, la géométrie des pièces, les clics, le contenu des plaques, les couleurs qui ont un sens (type de ticket, sorte de station, vert/rouge/ambre des feux) ; il les interprète, il ne les remplace pas.</li>
+        <li><b>La console</b> (HTML) suit par des variables CSS et une police par skin ; son contour et ses blocs ne changent pas.</li>
+      </ul></div>
+    </div>
+    <div class="card"><h3>Le chiffrage</h3>
+      <div class="scroll"><table class="est">
+        <thead><tr><th>Lot</th><th>Ce qu'il fait</th><th>Taille</th><th>Risque</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Extraire la scène de <code>renderer.ts</code> : un module qui dit quoi montrer, sans peindre. Le dessin actuel la lit.</td><td>gros</td><td>moyen : à faire sans changement visible, vérifié par comparaison de captures</td></tr>
+          <tr><td>2</td><td>Le dessin actuel devient le skin « Fleex », derrière une interface <code>Skin</code>. Les 47 couleurs en dur et les règles du thème clair y rentrent.</td><td>gros</td><td>moyen, même vérification</td></tr>
+          <tr><td>3</td><td>Choisir son skin (réglage du plancher ou préférence de l'utilisateur), variables CSS et police de la console par skin.</td><td>petit</td><td>faible</td></tr>
+          <tr><td>4</td><td>Un premier nouveau skin, dessiné par code (Blueprint ou Néon : traits, lueurs, pas d'images).</td><td>moyen</td><td>faible</td></tr>
+          <tr><td>5</td><td>Un skin pixel art : le dessin à demi-résolution agrandi sans lissage, une police pixel, et des sprites pour ce qui gagne à être dessiné à la main (ouvriers, robot, décor).</td><td>moyen à gros</td><td>dépend des sprites : dessinés par code (comme ici) ou commandés à quelqu'un</td></tr>
+          <tr><td>6</td><td>Le décor vivant : un calque par skin, dans les marges du plancher, qui ne prend aucune case ni aucun clic (mur, fenêtres, horloge, plantes, enseigne), plus quelques animations peu coûteuses.</td><td>moyen</td><td>faible ; à garder sous un budget de temps par image</td></tr>
+        </tbody>
+      </table></div>
+      <p class="brief">Les lots 1 et 2 sont le vrai travail : une fois faits, chaque skin est un fichier à part qu'on peut ajouter, retirer ou laisser à quelqu'un d'autre. Sans eux, chaque skin serait une copie de 1 600 lignes à maintenir en double.</p>
+    </div>
+    <div class="rules">
+      <div class="card"><h3>Ce qui peut casser, et comment on l'évite</h3><ul>
+        <li><b>La lisibilité</b> : un skin peut rendre un texte illisible (on vient de le vivre en thème clair). Le test de contraste du lot 46 s'applique à chaque skin : toutes ses encres contre tous ses fonds.</li>
+        <li><b>Le sens des couleurs</b> : le type d'un ticket, la sorte d'une station, le vert/ambre/rouge d'un feu doivent rester reconnaissables. Le skin reçoit ces couleurs ; il peut les assourdir ou les éclairer, pas les remplacer.</li>
+        <li><b>Les performances</b> : les lueurs (néon) et le flou coûtent cher sur un grand plancher. Tout ce qui ne bouge pas est peint une fois dans une image en cache, comme le sol aujourd'hui.</li>
+        <li><b>Le décor qui gêne</b> : il ne vit que dans les marges, sous les machines, et ne répond à aucun clic. On peut le couper.</li>
+        <li><b>Skin et thème</b> : un skin a son propre sol (le blueprint est bleu, le néon noir) ; la console garde le thème de l'app, ou le skin la recolore. À décider.</li>
+      </ul></div>
+      <div class="card"><h3>Ce que montre la maquette, et ce qu'elle ne montre pas</h3><ul>
+        <li>Elle est construite comme on le ferait dans Fleex : une scène commune, et cinq skins qui la peignent, chacun en une centaine de lignes. Le pixel art est obtenu en peignant à demi-résolution puis en agrandissant sans lissage.</li>
+        <li>Elle ne montre ni les ponts, ni les convoyeurs rapides, ni les plaques des portiques, ni le mode Build : un vrai skin les doit tous.</li>
+        <li>Les tickets suivent des chemins écrits à l'avance : c'est une animation, pas le moteur.</li>
+      </ul></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const T = 32, W = 32, H = 15, CW = W * T, CH = H * T;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (a, b, k) => a + (b - a) * k, ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+
+  // ---------- the floor, as a matrix: the same for every skin ----------
+  const M = [
+    { id: 'in', kind: 'zone', x: 1, y: 4, w: 3, h: 3, name: 'Inbound', what: 'Where tickets handed over to the Factory land.' },
+    ...[4, 5].map((x) => ({ id: `b${x}`, kind: 'belt', x, y: 5, dir: 'e' })),
+    { id: 'a1', kind: 'arm', x: 6, y: 5, dir: 'e' },
+    { id: 'build', kind: 'station', exec: 'agent', x: 7, y: 4, w: 5, h: 4, name: 'Build', sub: 'builder', what: 'An agent station: a persona works on the ticket.' },
+    { id: 'a2', kind: 'arm', x: 12, y: 5, dir: 'e' },
+    { id: 'b13', kind: 'belt', x: 13, y: 5, dir: 'e' }, { id: 'set', kind: 'belt', x: 14, y: 5, dir: 'e', set: true, name: 'Set gantry', what: 'Sets the status to "reviewing" on every ticket that goes under it.' }, { id: 'b15', kind: 'belt', x: 15, y: 5, dir: 'e' },
+    { id: 'a3', kind: 'arm', x: 16, y: 5, dir: 'e' },
+    { id: 'review', kind: 'station', exec: 'skill', x: 17, y: 4, w: 5, h: 4, name: 'Review', sub: 'pr-review', what: 'A skill station: one of your skills runs on the ticket.' },
+    { id: 'a4', kind: 'arm', x: 22, y: 5, dir: 'e' },
+    { id: 'gate', kind: 'station', exec: 'gate', x: 23, y: 4, w: 4, h: 4, name: 'Check spec', sub: 'you decide', what: 'A human gate: it waits for your decision, each outcome leaves by its own arm.' },
+    { id: 'a5', kind: 'arm', x: 27, y: 5, dir: 'e', col: '#22c55e' },
+    { id: 'exit', kind: 'exit', x: 28, y: 4, w: 3, h: 3, name: 'Exit', what: 'Sets the ticket to done and hands it back to Fleex.' },
+    { id: 'a6', kind: 'arm', x: 24, y: 8, dir: 's', col: '#ef4444' },
+    { id: 'c1', kind: 'belt', x: 24, y: 9, dir: 's' }, { id: 'c2', kind: 'belt', x: 24, y: 10, dir: 'w' }, { id: 'c3', kind: 'belt', x: 23, y: 10, dir: 'w' },
+    { id: 'toll', kind: 'belt', x: 22, y: 10, dir: 'w', set: true, toll: true, name: 'Toll', what: 'Counts the rounds; past three, its red arm takes the ticket off the line.' },
+    { id: 'c5', kind: 'belt', x: 21, y: 10, dir: 'w' },
+    { id: 'a7', kind: 'arm', x: 20, y: 10, dir: 'w' },
+    { id: 'tests', kind: 'station', exec: 'script', x: 15, y: 9, w: 5, h: 4, name: 'Tests', sub: 'default "test"', what: 'A script station: shell commands in the ticket\'s worktrees.' },
+    { id: 'a8', kind: 'arm', x: 14, y: 10, dir: 'w' },
+    { id: 'debate', kind: 'station', exec: 'panel', x: 9, y: 9, w: 5, h: 4, name: 'Debate', sub: 'architects', what: 'A panel station: several personas debate the ticket.' },
+    { id: 'a9', kind: 'arm', x: 8, y: 10, dir: 'w' },
+    { id: 'tp', kind: 'port', x: 7, y: 10, role: 'dep', name: 'back to start', col: '#22d3ee', what: 'A teleporter: sends its ticket to its arrival, across the floor.' },
+    { id: 'tq', kind: 'port', x: 2, y: 9, role: 'arr', name: 'start', col: '#22d3ee', what: 'The arrival of the teleporter: an arm takes the ticket out of it.' },
+    { id: 'a10', kind: 'arm', x: 2, y: 8, dir: 'n' },
+    { id: 'ra', kind: 'arm', x: 22, y: 11, dir: 's', col: '#ef4444' },
+    { id: 'needs', kind: 'zone', x: 21, y: 12, w: 3, h: 2, name: 'Needs you', what: 'A zone: what the toll rejected waits here for someone.' },
+  ].map((m) => ({ w: 1, h: 1, ...m }));
+  const byId = Object.fromEntries(M.map((m) => [m.id, m]));
+  const KIND = { agent: '#a78bfa', skill: '#38bdf8', panel: '#fb923c', script: '#a3e635', gate: '#eab308' };
+  const WORD = { agent: 'AGENT', skill: 'SKILL', panel: 'PANEL', script: 'SCRIPT', gate: 'GATE' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', review: '#facc15', think: '#60a5fa' };
+  const ICON = {
+    agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5v-6A2.5 2.5 0 0 1 7.5 8z', 'M12 8V4.6', 'M9.5 16.2h5', 'M9.200 13a.800.800 0 1 0 0.010 0M14.800 13a.800.800 0 1 0 0.010 0'],
+    skill: ['M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.3-.7-.7-2.3z'],
+    panel: ['M5 9a2.4 2.4 0 1 0 4.8 0A2.4 2.4 0 1 0 5 9', 'M14.2 9a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0', 'M9.6 16a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0'],
+    script: ['M4.5 5h15a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5z', 'M7.5 9.5l3 2.5-3 2.5', 'M12.5 15h4'],
+    gate: ['M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.5-7-4.5-7-8.8V6z', 'M8.8 12l2.3 2.3 4.2-4.4'],
+    build: ['M13.5 3.5l7 7-2.8 2.8-2.1-2.1-8.5 8.5a2 2 0 0 1-2.8-2.8l8.5-8.5-2.1-2.1z'],
+    fix: ['M12 7a4 5 0 0 1 4 5v3a4 4 0 0 1-8 0v-3a4 5 0 0 1 4-5z', 'M8 11H4.5M8 15H4.5M16 11h3.5M16 15h3.5'],
+    review: ['M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z', 'M12 9.5a2.5 2.5 0 1 0 0.010 0'],
+    think: ['M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.3 1 2.1h5c0-.8.4-1.6 1-2.1A6 6 0 0 0 12 3z', 'M9.5 18.5h5'],
+  };
+  const PATHS = Object.fromEntries(Object.entries(ICON).map(([k, v]) => [k, v.map((d) => new Path2D(d))]));
+  const glyph = (ctx, k, x, y, size, col, lw = 2) => { ctx.save(); ctx.translate(x, y); ctx.scale(size / 24, size / 24); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const p of PATHS[k]) ctx.stroke(p); ctx.restore(); };
+  const rr = (ctx, x, y, w, h, r) => { r = Math.min(r, w / 2, h / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+
+  // ---------- where tickets go: written paths, as an animation would ----------
+  const C = (id, dx = 0.5, dy = 0.5) => { const m = byId[id]; return [m.x + dx, m.y + dy]; };
+  const DIRV = { e: [1, 0], w: [-1, 0], s: [0, 1], n: [0, -1] };
+  const belt = (...pts) => pts.map((p) => ({ to: p, v: 2.2 }));
+  const arm = (id) => { const a = byId[id], [dx, dy] = DIRV[a.dir]; return [{ to: [a.x + 0.5 - dx * 0.9, a.y + 0.5 - dy * 0.9], v: 3 }, { arm: id, ms: 900 }]; };
+  const place = (id, i = 0) => { const m = byId[id]; return [m.x + 1.3 + i * 2.2, m.y + 2.3]; };
+  const work = (id, ms, state = 'running') => [{ to: place(id), v: 3 }, { at: id, ms, state }, { to: [byId[id].x + byId[id].w - 0.4, byId[id].y + 1.5], v: 3 }];
+  const START = [{ jump: C('in', 1.2, 1.4) }, { wait: 700 }, { to: C('in', 2.6, 1.5), v: 2 }, ...belt(C('b4'), C('b5')), ...arm('a1'), ...work('build', 2600), ...arm('a2'), ...belt(C('b13'), C('set')), { gantry: 'set', ms: 600 }, ...belt(C('b15')), ...arm('a3'), ...work('review', 2200), ...arm('a4'), { to: place('gate'), v: 3 }, { at: 'gate', ms: 1800, state: 'review' }];
+  const OK = [{ to: [byId.gate.x + 3.6, byId.gate.y + 1.5], v: 3 }, ...arm('a5'), { to: C('exit', 1.5, 1.5), v: 2 }, { fade: 600 }];
+  const RETURN = [{ to: [byId.gate.x + 1.5, byId.gate.y + 3.6], v: 3 }, ...arm('a6'), ...belt(C('c1'), C('c2'), C('c3'), C('toll'))];
+  const ON = [{ gantry: 'toll', ms: 600 }, ...belt(C('c5')), ...arm('a7'), ...work('tests', 2000), ...arm('a8'), ...work('debate', 2400), ...arm('a9'), { to: C('tp'), v: 3 }, { tele: 'tq', ms: 700 }, ...arm('a10'), { to: C('in', 1.5, 1.6), v: 2 }, { fade: 500 }];
+  const OUT = [{ gantry: 'toll', ms: 600 }, ...arm('ra'), { to: C('needs', 1.5 + Math.random(), 1.1), v: 2 }, { wait: 6000 }, { fade: 500 }];
+  const TYPES = ['build', 'fix', 'review', 'think'];
+  let tickets = [], seq = 0, clock = 0, playing = true;
+  function spawn() {
+    const n = seq++, type = TYPES[n % 4], k = n % 5, legs = [...START, ...(k === 3 ? [...RETURN, ...OUT] : k === 1 || k === 4 ? [...RETURN, ...ON] : OK)];
+    tickets.push({ id: n, num: 100 + n, type, legs, i: 0, t: 0, x: legs[0].jump[0], y: legs[0].jump[1], op: 1, state: '', where: '' });
+  }
+  function step(dt) {
+    clock += dt;
+    for (const tk of tickets) {
+      let left = dt;
+      while (left > 0 && tk.i < tk.legs.length) {
+        const L = tk.legs[tk.i];
+        if (L.jump) { [tk.x, tk.y] = L.jump; tk.i++; continue; }
+        if (L.to) {
+          if (L.sx == null) { L.sx = tk.x; L.sy = tk.y; L.d = Math.hypot(L.to[0] - tk.x, L.to[1] - tk.y); }
+          const need = (L.d / L.v) * 1000 || 1, k = clamp((tk.t + left) / need);
+          tk.x = lerp(L.sx, L.to[0], k); tk.y = lerp(L.sy, L.to[1], k);
+          if (k >= 1) { left = tk.t + left - need; tk.t = 0; tk.i++; L.sx = null; } else { tk.t += left; left = 0; }
+          continue;
+        }
+        const ms = L.ms ?? L.wait ?? L.fade ?? 0, k = clamp((tk.t + left) / ms);
+        tk.state = L.state ?? ''; tk.where = L.at ?? '';
+        if (L.arm) { const a = byId[L.arm], [dx, dy] = DIRV[a.dir], th = Math.atan2(dy, dx) + Math.PI * (1 - ease(k)); tk.x = a.x + 0.5 + Math.cos(th) * 0.9; tk.y = a.y + 0.5 + Math.sin(th) * 0.9; tk.arm = L.arm; tk.armK = k; }
+        if (L.fade) tk.op = 1 - k;
+        if (L.tele) { tk.op = k < 0.5 ? 1 - k * 2 : (k - 0.5) * 2; if (k >= 0.5) { const q = byId[L.tele]; tk.x = q.x + 0.5; tk.y = q.y + 0.5; } }
+        if (L.gantry) tk.gantry = L.gantry;
+        if (k >= 1) { left = tk.t + left - ms; tk.t = 0; tk.i++; tk.arm = null; tk.gantry = null; tk.state = ''; tk.where = ''; if (!L.tele && !L.fade) tk.op = Math.max(tk.op, 1); } else { tk.t += left; left = 0; }
+      }
+    }
+    tickets = tickets.filter((tk) => tk.i < tk.legs.length);
+  }
+
+  // ---------- what every skin is given: the same scene ----------
+  function scene() {
+    const armOf = {}, busy = {}, gantry = {};
+    for (const tk of tickets) { if (tk.arm) armOf[tk.arm] = tk; if (tk.where) busy[tk.where] = tk.state; if (tk.gantry) gantry[tk.gantry] = true; }
+    return { machines: M, tickets, armOf, busy, gantry, t: clock / 1000 };
+  }
+
+  // ---------- skins ----------
+  /* the words of a plate, in the skin's font */
+  let deferred = null;
+  const label = (ctx, s, text, x, y, o = {}) => { if (deferred && ctx !== deferred.ctx) { deferred.list.push([s, text, x, y, o]); return; }
+    if (s.pixel && o.size) o = { ...o, size: o.size >= 16 ? 16 : o.size >= 11 ? 13 : 8, font: o.size >= 11 && o.font !== s.labelFont ? o.font : s.labelFont }; ctx.font = `${o.weight ?? s.labelWeight ?? 700} ${o.size ?? 10}px ${o.font ?? s.labelFont}`; ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle'; if (o.plate) { const w = ctx.measureText(text).width + 10; const x0 = o.align === 'center' ? x - w / 2 : x - 5; ctx.fillStyle = o.plate; rr(ctx, x0, y - 8, w, 16, s.plateR ?? 4); ctx.fill(); if (o.plateEdge) { ctx.strokeStyle = o.plateEdge; ctx.lineWidth = 1; ctx.stroke(); } } ctx.fillStyle = o.ink ?? s.ink; ctx.fillText(text, x, y); };
+  /* a generic painter, driven by the skin's choices: a skin is a palette, a few manners, and its own floor and decor */
+  function painter(s) {
+    const P = {};
+    P.belt = (ctx, m, t, hot) => {
+      const X = m.x * T, Y = m.y * T, v = m.dir === 'n' || m.dir === 's';
+      ctx.fillStyle = s.belt; ctx.fillRect(X, Y, T, T);
+      ctx.fillStyle = s.rail; if (v) { ctx.fillRect(X, Y, 3, T); ctx.fillRect(X + T - 3, Y, 3, T); } else { ctx.fillRect(X, Y, T, 3); ctx.fillRect(X, Y + T - 3, T, 3); }
+      const [dx, dy] = DIRV[m.dir], off = ((t * 22) % 16);
+      ctx.strokeStyle = s.chev; ctx.lineWidth = s.chevW ?? 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.save(); ctx.beginPath(); ctx.rect(X, Y, T, T); ctx.clip();
+      for (let i = -1; i < 3; i++) { const o = i * 16 + off; const cx = X + T / 2 + dx * (o - 8), cy = Y + T / 2 + dy * (o - 8); ctx.beginPath(); ctx.moveTo(cx - dx * 4 - dy * 6, cy - dy * 4 - dx * 6); ctx.lineTo(cx + dx * 3, cy + dy * 3); ctx.lineTo(cx - dx * 4 + dy * 6, cy - dy * 4 + dx * 6); ctx.stroke(); }
+      ctx.restore();
+      if (m.set) { const col = m.toll ? s.danger : s.set, under = hot; ctx.fillStyle = under ? col : s.gantryBody; const bx = v ? X - 4 : X + T / 2 - 5, by = v ? Y + T / 2 - 5 : Y - 4; rr(ctx, bx, by, v ? T + 8 : 10, v ? 10 : T + 8, s.r ? 3 : 0); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); }
+    };
+    P.arm = (ctx, m, tk) => {
+      const bx = (m.x + 0.5) * T, by = (m.y + 0.5) * T, [dx, dy] = DIRV[m.dir], k = tk ? tk.armK : 0, th = Math.atan2(dy, dx) + Math.PI * (1 - ease(k)), hx = bx + Math.cos(th) * 0.9 * T, hy = by + Math.sin(th) * 0.9 * T;
+      const col = m.col ?? s.armCol;
+      ctx.lineCap = 'round';
+      if (s.shadow) { ctx.strokeStyle = s.shadow; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(bx + 2, by + 4); ctx.lineTo(hx + 2, hy + 4); ctx.stroke(); }
+      ctx.strokeStyle = s.steel; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.beginPath(); ctx.arc(hx, hy, 6, 0, 7); ctx.fillStyle = s.cupFill; ctx.fill(); ctx.strokeStyle = s.cup; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, 7.5, 0, 7); ctx.fillStyle = s.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.stroke();
+    };
+    P.station = (ctx, m, st, t) => {
+      const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T, hue = KIND[m.exec], gate = m.exec === 'gate', busy = st.busy[m.id];
+      if (s.shadow) { ctx.fillStyle = s.shadow; rr(ctx, X + 5, Y + 7, w - 6, h - 6, s.r); ctx.fill(); }
+      if (s.glow) { ctx.shadowColor = hue; ctx.shadowBlur = 14; }
+      rr(ctx, X + 3, Y + 3, w - 6, h - 6, s.r); ctx.fillStyle = s.stationFill(hue); ctx.fill();
+      ctx.lineWidth = gate ? 3 : s.edgeW ?? 2; ctx.strokeStyle = s.stationEdge(hue); if (gate) ctx.setLineDash([9, 6]); ctx.stroke(); ctx.setLineDash([]); ctx.shadowBlur = 0;
+      if (s.highlight) { rr(ctx, X + 5, Y + 5, w - 10, 10, s.r); ctx.fillStyle = s.highlight; ctx.fill(); }
+      /* the head: a badge, its word, its name */
+      rr(ctx, X + 10, Y + 10, 24, 24, s.r ? 6 : 0); ctx.fillStyle = s.badgeFill(hue); ctx.fill(); if (s.badgeEdge) { ctx.strokeStyle = s.badgeEdge(hue); ctx.lineWidth = 1.5; ctx.stroke(); }
+      glyph(ctx, m.exec, X + 13, Y + 13, 18, s.badgeInk(hue), 2.2);
+      label(ctx, s, WORD[m.exec], X + 40, Y + 15, { size: 7.5, ink: s.word(hue) });
+      label(ctx, s, m.name, X + 40, Y + 27, { size: 12, ink: s.ink, font: s.nameFont ?? s.labelFont });
+      /* the light */
+      const lx = X + w - 22, ly = Y + 9;
+      if (s.lamp !== false) { rr(ctx, lx, ly, 12, 26, 3); ctx.fillStyle = s.lampBody; ctx.fill(); [0, 1, 2].forEach((i) => { const on = i === (busy === 'review' ? 1 : 2); ctx.beginPath(); ctx.arc(lx + 6, ly + 6 + i * 7, 2.6, 0, 7); ctx.fillStyle = on ? ['#ef4444', '#eab308', '#22c55e'][i] : s.lampOff; ctx.fill(); }); }
+      /* the places */
+      const pw = (w - 30) / 2, ph = h - 58;
+      if (!gate) [0, 1].forEach((i) => { const px = X + 11 + i * (pw + 8), py = Y + 42; rr(ctx, px, py, pw, ph, s.r ? 5 : 0); ctx.fillStyle = s.pit; ctx.fill(); if (s.pitEdge) { ctx.strokeStyle = s.pitEdge; ctx.lineWidth = 1; ctx.stroke(); } label(ctx, s, i === 0 && busy === 'running' ? 'RUNNING' : 'FREE', px + 4, py + 7, { size: 6.5, ink: i === 0 && busy === 'running' ? s.ok : s.ink3 }); });
+      else { rr(ctx, X + 11, Y + 42, w - 22, h - 54, s.r ? 5 : 0); ctx.fillStyle = s.pit; ctx.fill(); label(ctx, s, busy ? 'TO DECIDE · 1' : 'TO DECIDE · 0', X + 15, Y + 49, { size: 6.5, ink: busy ? s.warn : s.ink3 }); }
+      if (!gate) { rr(ctx, X + 11, Y + h - 14, w - 22, 8, 2); ctx.fillStyle = s.pit; ctx.fill(); ctx.save(); ctx.beginPath(); ctx.rect(X + 11, Y + h - 14, 22, 8); ctx.clip(); ctx.strokeStyle = s.hazard; ctx.lineWidth = 3; for (let k = -10; k < 30; k += 6) { ctx.beginPath(); ctx.moveTo(X + 11 + k, Y + h - 6); ctx.lineTo(X + 19 + k, Y + h - 14); ctx.stroke(); } ctx.restore(); }
+      if (busy === 'running') { const [px, py] = place(m.id); ctx.beginPath(); ctx.arc(px * T, py * T, 13, t * 5, t * 5 + 2.2); ctx.strokeStyle = s.ok; ctx.lineWidth = 2.5; ctx.stroke(); }
+    };
+    P.zone = (ctx, m) => {
+      const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T, c = m.id === 'in' ? s.accent : s.zone;
+      ctx.fillStyle = s.zoneFill(c); ctx.fillRect(X + 2, Y + 2, w - 4, h - 4);
+      ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.strokeRect(X + 3, Y + 3, w - 6, h - 6); ctx.setLineDash([]);
+      label(ctx, s, m.name.toUpperCase(), X + 9, Y + 13, { size: 8.5, ink: c });
+    };
+    P.exit = (ctx, m, t) => {
+      const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T;
+      if (s.glow) { ctx.shadowColor = s.ok; ctx.shadowBlur = 18; }
+      rr(ctx, X + 4, Y + 4, w - 8, h - 8, s.r); ctx.fillStyle = s.exitFill; ctx.fill(); ctx.strokeStyle = s.ok; ctx.lineWidth = 2.5; ctx.stroke(); ctx.shadowBlur = 0;
+      label(ctx, s, 'EXIT', X + w / 2, Y + 16, { size: 9, ink: s.ok, align: 'center' });
+      label(ctx, s, `${shipped}`, X + w / 2, Y + h - 18, { size: 14, ink: s.ok, align: 'center' });
+    };
+    P.port = (ctx, m, t) => {
+      const cx = (m.x + 0.5) * T, cy = (m.y + 0.5) * T, col = m.col;
+      rr(ctx, cx - 14, cy - 14, 28, 28, s.r ? 7 : 0); ctx.fillStyle = s.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2; if (m.role === 'arr') ctx.setLineDash([10, 6]); ctx.stroke(); ctx.setLineDash([]);
+      if (s.glow) { ctx.shadowColor = col; ctx.shadowBlur = 12; }
+      ctx.beginPath(); ctx.arc(cx, cy, 8 + Math.sin(t * 3) * 1.2, 0, 7); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.shadowBlur = 0;
+      label(ctx, s, m.name, cx, cy + 24, { size: 8, ink: col, align: 'center', plate: s.plate, plateEdge: s.plateEdge });
+    };
+    P.ticket = s.ticket ?? ((ctx, tk) => {
+      const x = tk.x * T, y = tk.y * T, z = 18, col = TYPE[tk.type];
+      ctx.globalAlpha = tk.op; if (s.shadow) { rr(ctx, x - z / 2 + 2, y - z / 2 + 3, z, z, 5); ctx.fillStyle = s.shadow; ctx.fill(); }
+      rr(ctx, x - z / 2, y - z / 2, z, z, 5); ctx.fillStyle = col; ctx.fill(); glyph(ctx, tk.type, x - 7, y - 7, 14, '#18181b', 2.4); ctx.globalAlpha = 1;
+    });
+    return P;
+  }
+
+  /* the five skins: each a palette, a few manners, its floor and its decor */
+  const SKINS = {
+    fleex: {
+      name: 'Fleex aujourd\'hui', short: 'Fleex', labelFont: "'Inter', sans-serif", nameFont: "'Inter', sans-serif", ink: '#fafafa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', accent: '#4ade80', zone: '#60a5fa', set: '#f472b6', hazard: '#eab308',
+      belt: '#27272a', rail: '#3f3f46', chev: '#71717a', gantryBody: '#27272a', armCol: '#a1a1aa', steel: '#52525b', cup: '#fafafa', cupFill: 'rgba(24,24,27,0.4)', body: '#26262b', r: 10, shadow: 'rgba(0,0,0,0.45)',
+      stationFill: () => '#26262b', stationEdge: (h) => h, badgeFill: (h) => h, badgeInk: () => '#09090b', word: (h) => h, lampBody: '#0d0d10', lampOff: '#2a2a2f', pit: 'rgba(0,0,0,0.38)', zoneFill: (c) => c + '12', exitFill: '#1d2a21', plate: 'rgba(9,9,11,0.9)',
+      floor(ctx) { ctx.fillStyle = '#18181b'; ctx.fillRect(0, 0, CW, CH); ctx.fillStyle = 'rgba(255,255,255,0.13)'; for (let x = 0; x <= W; x++) for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.arc(x * T, y * T, 1, 0, 7); ctx.fill(); } },
+      decor() {},
+      say: 'Le dessin d\'aujourd\'hui, pour comparer : sombre, sobre, des teintes par sorte de station. Pas de décor : les marges sont du sol nu.',
+    },
+    pixel: {
+      name: 'Atelier pixel', short: 'Pixel', pixel: true, labelFont: "'Silkscreen', monospace", nameFont: "'Pixelify Sans', monospace", labelWeight: 400, ink: '#1d1b26', ink3: '#6b6574', ok: '#2f9e44', warn: '#c27c0e', danger: '#d9433f', accent: '#2f9e44', zone: '#3d6fd1', set: '#d6407e', hazard: '#f2b01e',
+      belt: '#56525f', rail: '#2b2833', chev: '#c9c3d1', chevW: 2, gantryBody: '#ece4d4', armCol: '#f2b01e', steel: '#3a3742', cup: '#1d1b26', cupFill: '#f2b01e', body: '#f4ecdc', r: 0, shadow: 'rgba(40,30,20,0.25)', edgeW: 3,
+      stationFill: () => '#f4ecdc', stationEdge: () => '#2b2833', badgeFill: (h) => h, badgeEdge: () => '#2b2833', badgeInk: () => '#1d1b26', word: (h) => shade(h, -0.35), highlight: null,
+      lampBody: '#2b2833', lampOff: '#4b4655', pit: '#d9cfbb', pitEdge: '#b7ab93', zoneFill: (c) => c + '1c', exitFill: '#dff0d8', plate: '#2b2833',
+      ticket(ctx, tk) { const x = Math.round(tk.x * T), y = Math.round(tk.y * T), col = TYPE[tk.type]; ctx.globalAlpha = tk.op; ctx.fillStyle = 'rgba(40,30,20,0.3)'; ctx.fillRect(x - 8, y - 5, 18, 14); ctx.fillStyle = '#c8955a'; ctx.fillRect(x - 10, y - 8, 20, 15); ctx.fillStyle = '#9c6b3a'; ctx.fillRect(x - 10, y - 2, 20, 2); ctx.fillStyle = col; ctx.fillRect(x - 10, y - 8, 20, 4); ctx.strokeStyle = '#2b2833'; ctx.lineWidth = 2; ctx.strokeRect(x - 10, y - 8, 20, 15); ctx.globalAlpha = 1; },
+      floor(ctx) { for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) { ctx.fillStyle = (x + y) % 2 ? '#efe7d6' : '#e8dfcc'; ctx.fillRect(x * T, y * T, T, T); } ctx.fillStyle = 'rgba(0,0,0,0.05)'; for (let x = 0; x <= W; x++) ctx.fillRect(x * T, 0, 1, CH); for (let y = 0; y <= H; y++) ctx.fillRect(0, y * T, CW, 1); },
+      decor(ctx, t) {
+        /* the wall: plaster, a skirting, windows, a clock, a sign, posters */
+        ctx.fillStyle = '#e9e1cf'; ctx.fillRect(0, 0, CW, 3 * T); ctx.fillStyle = '#d5c9b1'; for (let x = 0; x < CW; x += 24) for (let y = 0; y < 3 * T; y += 12) ctx.fillRect(x + ((y / 12) % 2) * 12, y, 23, 1); ctx.fillStyle = '#2b2833'; ctx.fillRect(0, 3 * T - 6, CW, 6); ctx.fillStyle = '#9e9483'; ctx.fillRect(0, 3 * T - 10, CW, 4);
+        for (const wx of [40, 200, 660, 840]) { ctx.fillStyle = '#2b2833'; ctx.fillRect(wx, 14, 92, 54); ctx.fillStyle = '#9fd8ec'; ctx.fillRect(wx + 4, 18, 40, 46); ctx.fillRect(wx + 48, 18, 40, 46); ctx.fillStyle = '#c9ecf6'; ctx.fillRect(wx + 8, 22, 10, 4); ctx.fillRect(wx + 52, 22, 10, 4); }
+        ctx.fillStyle = '#4a4552'; ctx.fillRect(352, 10, 230, 46); ctx.fillStyle = '#2b2833'; ctx.fillRect(356, 14, 222, 38); label(ctx, this, 'FLEEX FACTORY', 467, 34, { size: 18, ink: '#f2b01e', align: 'center', font: "'Pixelify Sans', monospace" });
+        ctx.fillStyle = '#fafafa'; ctx.fillRect(604, 18, 30, 30); ctx.strokeStyle = '#2b2833'; ctx.lineWidth = 3; ctx.strokeRect(604, 18, 30, 30); const a = t * 0.6; ctx.beginPath(); ctx.moveTo(619, 33); ctx.lineTo(619 + Math.cos(a) * 10, 33 + Math.sin(a) * 10); ctx.moveTo(619, 33); ctx.lineTo(619, 25); ctx.stroke();
+        ctx.fillStyle = '#d6407e'; ctx.fillRect(960, 16, 34, 44); ctx.fillStyle = '#fafafa'; ctx.fillRect(966, 24, 22, 4); ctx.fillRect(966, 32, 16, 4); ctx.fillRect(966, 40, 20, 4);
+        /* plants and a crate pile in the margins */
+        for (const [px, py] of [[10, 450], [990, 448], [6, 112]]) { ctx.fillStyle = '#9c6b3a'; ctx.fillRect(px, py, 18, 14); ctx.fillStyle = '#2f9e44'; ctx.fillRect(px + 2, py - 12, 6, 12); ctx.fillRect(px + 10, py - 16, 6, 16); ctx.fillStyle = '#4fbf5f'; ctx.fillRect(px + 4, py - 8, 4, 4); }
+        for (const [cx, cy] of [[30, 410], [50, 410], [40, 394]]) { ctx.fillStyle = '#c8955a'; ctx.fillRect(cx, cy, 18, 15); ctx.strokeStyle = '#2b2833'; ctx.lineWidth = 2; ctx.strokeRect(cx, cy, 18, 15); }
+      },
+      /* the workers: one per station that runs, at its foot */
+      extra(ctx, st, t) { for (const m of M) if (m.kind === 'station' && m.exec !== 'gate') { const x = (m.x + m.w - 1) * T, y = (m.y + m.h) * T - 4 + (st.busy[m.id] ? Math.round(Math.sin(t * 8)) : 0); worker(ctx, x, y, KIND[m.exec]); } worker(ctx, 27 * T + 8, 8 * T, '#f2b01e'); },
+      say: 'Le pixel art de ta présentation, à ma façon : sol carrelé crème, mur en fond avec fenêtres, horloge, enseigne et affiche, plantes et caisses dans les marges, un ouvrier au pied de chaque station qui s\'agite quand elle tourne. Tout est peint à demi-résolution puis agrandi sans lissage.',
+    },
+    blueprint: {
+      name: 'Blueprint', short: 'Blueprint', labelFont: "'JetBrains Mono', monospace", nameFont: "'JetBrains Mono', monospace", ink: '#f1f6ff', ink3: '#9fb6dd', ok: '#b8f2c8', warn: '#ffe08a', danger: '#ffb4b4', accent: '#ffffff', zone: '#cfe0ff', set: '#ffd1e6', hazard: '#ffe08a',
+      belt: 'rgba(255,255,255,0.06)', rail: 'rgba(255,255,255,0.7)', chev: 'rgba(255,255,255,0.55)', chevW: 1.4, gantryBody: '#1d4e8f', armCol: '#ffffff', steel: 'rgba(255,255,255,0.18)', cup: '#ffffff', cupFill: '#1d4e8f', body: '#1d4e8f', r: 2, shadow: null, edgeW: 1.6,
+      stationFill: () => 'rgba(255,255,255,0.05)', stationEdge: () => '#ffffff', badgeFill: () => 'transparent', badgeEdge: () => '#ffffff', badgeInk: () => '#ffffff', word: () => '#9fb6dd', lamp: false, pit: 'rgba(255,255,255,0.04)', pitEdge: 'rgba(255,255,255,0.45)', zoneFill: () => 'rgba(255,255,255,0.03)', exitFill: 'rgba(255,255,255,0.05)', plate: '#1d4e8f', plateEdge: 'rgba(255,255,255,0.6)', plateR: 0,
+      ticket(ctx, tk) { const x = tk.x * T, y = tk.y * T; ctx.globalAlpha = tk.op; ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fillStyle = '#1d4e8f'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.font = "700 9px 'JetBrains Mono', monospace"; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(tk.type[0].toUpperCase(), x, y + 0.5); ctx.globalAlpha = 1; },
+      floor(ctx) { ctx.fillStyle = '#1d4e8f'; ctx.fillRect(0, 0, CW, CH); ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1; for (let x = 0; x <= CW; x += T / 4) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, CH); ctx.stroke(); } for (let y = 0; y <= CH; y += T / 4) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5); ctx.stroke(); } ctx.strokeStyle = 'rgba(255,255,255,0.16)'; for (let x = 0; x <= CW; x += T) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, CH); ctx.stroke(); } for (let y = 0; y <= CH; y += T) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5); ctx.stroke(); } },
+      decor(ctx) {
+        /* a drawing's frame, its title block, a dimension line and a north arrow */
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.strokeRect(8, 8, CW - 16, CH - 16); ctx.lineWidth = 1; ctx.strokeRect(14, 14, CW - 28, CH - 28);
+        const bx = CW - 262, by = CH - 72; ctx.fillStyle = '#1d4e8f'; ctx.fillRect(bx, by, 248, 58); ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by, 248, 58); ctx.beginPath(); ctx.moveTo(bx, by + 24); ctx.lineTo(bx + 248, by + 24); ctx.moveTo(bx + 150, by + 24); ctx.lineTo(bx + 150, by + 58); ctx.stroke();
+        label(ctx, this, 'FLEEX FACTORY — LINE 01', bx + 8, by + 12, { size: 10 }); label(ctx, this, 'SCALE 1 TILE : 1 TILE', bx + 8, by + 40, { size: 8, ink: '#9fb6dd', weight: 500 }); label(ctx, this, 'REV. 48', bx + 158, by + 40, { size: 8, ink: '#9fb6dd', weight: 500 });
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.moveTo(7 * T, 2.6 * T); ctx.lineTo(12 * T, 2.6 * T); ctx.moveTo(7 * T, 2.3 * T); ctx.lineTo(7 * T, 2.9 * T); ctx.moveTo(12 * T, 2.3 * T); ctx.lineTo(12 * T, 2.9 * T); ctx.stroke(); label(ctx, this, '5 TILES', 9.5 * T, 2.25 * T, { size: 8, align: 'center', ink: '#9fb6dd' });
+        const nx = 40, ny = 60; ctx.beginPath(); ctx.moveTo(nx, ny - 20); ctx.lineTo(nx + 8, ny + 6); ctx.lineTo(nx, ny); ctx.lineTo(nx - 8, ny + 6); ctx.closePath(); ctx.strokeStyle = '#fff'; ctx.stroke(); label(ctx, this, 'N', nx, ny - 28, { size: 9, align: 'center' });
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.strokeRect(20 * T + 6, 11.5 * T, 4.6 * T, 2.8 * T); ctx.setLineDash([]); label(ctx, this, 'RESERVED · EXTENSION', 20.2 * T, 11.3 * T, { size: 7, ink: '#9fb6dd', weight: 500 });
+      },
+      say: 'Un plan technique : papier bleu quadrillé, tout en traits blancs, cartouche, cote, flèche du nord. Aucune couleur de remplissage, seuls les traits disent ce qu\'est une machine. Très lisible, très « bureau d\'études » ; les types de ticket ne se distinguent plus que par une lettre.',
+    },
+    toy: {
+      name: 'Coffre à jouets', short: 'Jouets', labelFont: "'Fredoka', sans-serif", nameFont: "'Fredoka', sans-serif", labelWeight: 600, ink: '#3b2f2a', ink3: '#9a8a80', ok: '#2f9e58', warn: '#d48a00', danger: '#e2554f', accent: '#2f9e58', zone: '#5b8def', set: '#e05a9c', hazard: '#f2b01e',
+      belt: '#d9cfc6', rail: '#b9aca1', chev: '#ffffff', chevW: 3, gantryBody: '#fff7ef', armCol: '#ff9f45', steel: '#cfc4ba', cup: '#3b2f2a', cupFill: '#fff', body: '#fffaf4', r: 16, shadow: 'rgba(110,80,60,0.22)', edgeW: 3, highlight: 'rgba(255,255,255,0.55)',
+      stationFill: (h) => mixc(h, '#ffffff', 0.78), stationEdge: (h) => mixc(h, '#000000', 0.12), badgeFill: (h) => h, badgeInk: () => '#ffffff', word: (h) => mixc(h, '#000000', 0.35), lampBody: '#fffaf4', lampOff: '#e6dcd3', pit: 'rgba(255,255,255,0.75)', zoneFill: (c) => c + '18', exitFill: '#dcf5e5', plate: '#fffaf4', plateEdge: '#e6dcd3', plateR: 8,
+      ticket(ctx, tk) { const x = tk.x * T, y = tk.y * T, col = TYPE[tk.type]; ctx.globalAlpha = tk.op; ctx.beginPath(); ctx.ellipse(x, y + 8, 9, 3, 0, 0, 7); ctx.fillStyle = 'rgba(110,80,60,0.25)'; ctx.fill(); ctx.beginPath(); ctx.arc(x, y, 10, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.beginPath(); ctx.arc(x - 3, y - 4, 3.5, 0, 7); ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill(); glyph(ctx, tk.type, x - 6, y - 5, 12, '#3b2f2a', 2.4); ctx.globalAlpha = 1; },
+      floor(ctx) { for (let y = 0; y < CH; y += 24) { ctx.fillStyle = (y / 24) % 2 ? '#f3e3cf' : '#efdcc4'; ctx.fillRect(0, y, CW, 24); ctx.fillStyle = 'rgba(160,120,80,0.18)'; ctx.fillRect(0, y, CW, 1); for (let x = ((y / 24) % 3) * 90; x < CW; x += 270) ctx.fillRect(x, y, 1, 24); } },
+      decor(ctx, t) {
+        /* a rug, potted plants, a desk lamp's light, building blocks */
+        ctx.fillStyle = 'rgba(91,141,239,0.12)'; rr(ctx, 6 * T, 0.5 * T, 20 * T, 2.6 * T, 30); ctx.fill(); ctx.strokeStyle = 'rgba(91,141,239,0.35)'; ctx.lineWidth = 3; ctx.setLineDash([2, 8]); rr(ctx, 6 * T + 8, 0.5 * T + 8, 20 * T - 16, 2.6 * T - 16, 24); ctx.stroke(); ctx.setLineDash([]);
+        label(ctx, this, 'Fleex Factory', 16 * T, 1.8 * T, { size: 26, align: 'center', ink: '#5b8def' });
+        for (const [px, py, s] of [[34, 44, 1.2], [CW - 50, 50, 1], [30, CH - 40, 1], [CW - 60, CH - 28, 0.9]]) { ctx.save(); ctx.translate(px, py); ctx.scale(s, s); ctx.fillStyle = 'rgba(110,80,60,0.2)'; ctx.beginPath(); ctx.ellipse(0, 18, 16, 5, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#e8846b'; rr(ctx, -12, 0, 24, 18, 6); ctx.fill(); for (const [lx, ly, r] of [[-8, -8, 9], [8, -10, 10], [0, -18, 10]]) { ctx.beginPath(); ctx.arc(lx, ly, r, 0, 7); ctx.fillStyle = '#59b36b'; ctx.fill(); } ctx.restore(); }
+        for (const [bx, by, c] of [[120, CH - 40, '#f2b01e'], [146, CH - 40, '#e2554f'], [133, CH - 64, '#5b8def']]) { ctx.fillStyle = 'rgba(110,80,60,0.2)'; rr(ctx, bx + 2, by + 4, 24, 22, 5); ctx.fill(); ctx.fillStyle = c; rr(ctx, bx, by, 24, 22, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(bx + 8, by + 6, 3, 0, 7); ctx.arc(bx + 16, by + 6, 3, 0, 7); ctx.fill(); }
+      },
+      say: 'Un plateau de jouets : parquet clair, pièces rondes et épaisses avec une ombre douce et un reflet, couleurs pastel, police ronde, tapis, plantes et cubes dans les marges. Chaleureux, très lisible, s\'éloigne le plus de l\'outil technique.',
+    },
+    neon: {
+      name: 'Équipe de nuit', short: 'Néon', glow: true, labelFont: "'JetBrains Mono', monospace", nameFont: "'Orbitron', sans-serif", ink: '#e9e7ff', ink3: '#6e6a8f', ok: '#39ff9c', warn: '#ffd23f', danger: '#ff4f7b', accent: '#39ff9c', zone: '#4fd1ff', set: '#ff4fd8', hazard: '#ffd23f',
+      belt: '#0e0d19', rail: '#2a2550', chev: '#4fd1ff', chevW: 1.8, gantryBody: '#0e0d19', armCol: '#ff4fd8', steel: '#1e1b36', cup: '#e9e7ff', cupFill: '#0e0d19', body: '#0e0d19', r: 6, shadow: null, edgeW: 1.8,
+      stationFill: () => '#0d0c18', stationEdge: (h) => h, badgeFill: () => 'transparent', badgeEdge: (h) => h, badgeInk: (h) => h, word: (h) => h, lampBody: '#05050a', lampOff: '#1e1b36', pit: '#08070f', pitEdge: '#2a2550', zoneFill: (c) => c + '0d', exitFill: '#07140f', plate: '#08070f', plateEdge: '#2a2550',
+      ticket(ctx, tk) { const x = tk.x * T, y = tk.y * T, col = TYPE[tk.type]; ctx.globalAlpha = tk.op; ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(x, y, 8, 0, 7); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke(); ctx.shadowBlur = 0; glyph(ctx, tk.type, x - 5, y - 5, 10, col, 2.4); ctx.globalAlpha = 1; },
+      floor(ctx) { const g = ctx.createLinearGradient(0, 0, 0, CH); g.addColorStop(0, '#0b0a16'); g.addColorStop(1, '#05050b'); ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH); ctx.strokeStyle = 'rgba(79,209,255,0.07)'; ctx.lineWidth = 1; for (let x = 0; x <= CW; x += T) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, CH); ctx.stroke(); } for (let y = 0; y <= CH; y += T) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(CW, y + 0.5); ctx.stroke(); } },
+      decor(ctx, t) {
+        /* a neon sign that flickers, light strips, scanlines */
+        const on = Math.sin(t * 13) > -0.92 || Math.sin(t * 3.1) > 0.3;
+        ctx.shadowColor = '#ff4fd8'; ctx.shadowBlur = on ? 22 : 4; label(ctx, this, 'FLEEX', 12 * T, 1.6 * T, { size: 30, ink: on ? '#ff8ae5' : '#5a2a52', font: "'Orbitron', sans-serif", align: 'center', weight: 800 });
+        ctx.shadowColor = '#4fd1ff'; ctx.shadowBlur = 20; label(ctx, this, 'FACTORY', 19.4 * T, 1.6 * T, { size: 30, ink: '#9ae8ff', font: "'Orbitron', sans-serif", align: 'center', weight: 800 }); ctx.shadowBlur = 0;
+        for (const y of [0.4 * T, 2.9 * T]) { ctx.shadowColor = '#4fd1ff'; ctx.shadowBlur = 10; ctx.fillStyle = 'rgba(79,209,255,0.6)'; ctx.fillRect(1 * T, y, CW - 2 * T, 2); } ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.025)'; for (let y = 0; y < CH; y += 3) ctx.fillRect(0, y, CW, 1);
+      },
+      say: 'Une équipe de nuit : sol presque noir, tout en tubes lumineux, enseigne qui clignote, bandes de lumière, lignes de balayage. Spectaculaire, mais les lueurs coûtent cher à peindre sur un grand plancher et fatiguent l\'œil à la longue.',
+    },
+  };
+  function shade(hex, k) { const c = parseInt(hex.slice(1), 16), f = (v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k); return `rgb(${f(c >> 16)},${f((c >> 8) & 255)},${f(c & 255)})`; }
+  function mixc(a, b, k) { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)), x = p(a), y = p(b); return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * k)).join(',')})`; }
+  function worker(ctx, x, y, shirt) { ctx.fillStyle = '#2b2833'; ctx.fillRect(x - 5, y - 18, 10, 18); ctx.fillStyle = '#f2c79e'; ctx.fillRect(x - 3, y - 16, 6, 6); ctx.fillStyle = '#f2b01e'; ctx.fillRect(x - 4, y - 19, 8, 3); ctx.fillStyle = shirt; ctx.fillRect(x - 4, y - 9, 8, 6); ctx.fillStyle = '#3d6fd1'; ctx.fillRect(x - 4, y - 3, 3, 3); ctx.fillRect(x + 1, y - 3, 3, 3); }
+
+  // ---------- drawing a frame ----------
+  const cv = $('cv'), ctx = cv.getContext('2d'), low = document.createElement('canvas'), lctx = low.getContext('2d');
+  let skin = 'pixel', showGrid = false, showDecor = true, selected = null, shipped = 31;
+  function paint() {
+    const s = SKINS[skin], P = painter(s), st = scene(), d = Math.min(2, window.devicePixelRatio || 1);
+    const pix = !!s.pixel, k = pix ? 0.5 : d, c = pix ? lctx : ctx, cw = Math.round(CW * k), ch = Math.round(CH * k);
+    if (cv.width !== CW * d) { cv.width = CW * d; cv.height = CH * d; }
+    if (pix && (low.width !== cw)) { low.width = cw; low.height = ch; }
+    deferred = pix ? { ctx, list: [] } : null;
+    c.setTransform(k, 0, 0, k, 0, 0); c.imageSmoothingEnabled = !pix;
+    s.floor.call(s, c, st.t);
+    if (showDecor) s.decor.call(s, c, st.t);
+    for (const m of M) if (m.kind === 'zone') P.zone(c, m);
+    for (const m of M) if (m.kind === 'exit') P.exit(c, m, st.t);
+    for (const m of M) if (m.kind === 'belt') P.belt(c, m, st.t, st.gantry[m.id]);
+    for (const m of M) if (m.kind === 'port') P.port(c, m, st.t);
+    for (const m of M) if (m.kind === 'station') P.station(c, m, st, st.t);
+    if (showDecor && s.extra) s.extra.call(s, c, st, st.t);
+    for (const tk of st.tickets) if (!tk.arm) P.ticket(c, tk);
+    for (const m of M) if (m.kind === 'arm') { const tk = st.armOf[m.id]; if (tk) P.ticket(c, tk); P.arm(c, m, tk); }
+    if (selected) { const m = byId[selected]; c.strokeStyle = s.ink; c.lineWidth = 2; c.setLineDash([5, 4]); c.strokeRect(m.x * T - 2, m.y * T - 2, m.w * T + 4, m.h * T + 4); c.setLineDash([]); }
+    if (showGrid) { c.strokeStyle = 'rgba(255,0,140,0.55)'; c.lineWidth = 1; for (let x = 0; x <= W; x++) { c.beginPath(); c.moveTo(x * T + 0.5, 0); c.lineTo(x * T + 0.5, CH); c.stroke(); } for (let y = 0; y <= H; y++) { c.beginPath(); c.moveTo(0, y * T + 0.5); c.lineTo(CW, y * T + 0.5); c.stroke(); } c.fillStyle = 'rgba(255,0,140,0.08)'; c.fillRect(0, 0, CW, 3 * T); }
+    if (pix) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(low, 0, 0, cv.width, cv.height); ctx.setTransform(d, 0, 0, d, 0, 0); const list = deferred.list; deferred = null; for (const [sk, text, x, y, o] of list) label(ctx, sk, text, Math.round(x), Math.round(y), o); }
+    $('count').textContent = `${tickets.length} ticket${tickets.length > 1 ? 's' : ''} sur le plancher · matrice ${W} × ${H} cases de ${T} px, identique pour chaque skin`;
+  }
+  let last = performance.now(), nextSpawn = 0;
+  function frame(now) {
+    const dt = Math.min(64, now - last); last = now;
+    if (playing) { step(dt); nextSpawn -= dt; if (nextSpawn <= 0 && tickets.length < 9) { spawn(); nextSpawn = 2600; } tickets.forEach((tk) => { if (tk.i >= tk.legs.length - 1 && tk.legs[tk.legs.length - 1].fade && tk.op < 0.05 && !tk.done) { tk.done = true; if (tk.legs.length === START.length + OK.length) shipped++; } }); }
+    paint(); requestAnimationFrame(frame);
+  }
+
+  // ---------- the controls ----------
+  const IDS = Object.keys(SKINS);
+  $('skins').innerHTML = '<span class="lbl">Skin</span>' + IDS.map((id) => `<button type="button" data-skin="${id}" aria-pressed="${id === skin}">${esc(SKINS[id].short)}</button>`).join('');
+  function setSkin(id) { skin = id; for (const b of document.querySelectorAll('[data-skin]')) b.setAttribute('aria-pressed', String(b.dataset.skin === id)); $('skin-say').innerHTML = `<b>${esc(SKINS[id].name.toUpperCase())}</b>${esc(SKINS[id].say)}`; for (const c of document.querySelectorAll('#cards .card')) c.classList.toggle('showing', c.dataset.id === id); }
+  $('skins').addEventListener('click', (e) => { const b = e.target.closest('[data-skin]'); if (b) setSkin(b.dataset.skin); });
+  $('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Lecture'; $('play').setAttribute('aria-pressed', String(playing)); });
+  $('spawn').addEventListener('click', spawn);
+  $('grid').addEventListener('click', () => { showGrid = !showGrid; $('grid').setAttribute('aria-pressed', String(showGrid)); });
+  $('decor').addEventListener('click', () => { showDecor = !showDecor; $('decor').setAttribute('aria-pressed', String(showDecor)); });
+  cv.addEventListener('click', (e) => {
+    const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * W, y = ((e.clientY - r.top) / r.height) * H;
+    const m = [...M].reverse().find((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h && q.what);
+    selected = m ? m.id : null;
+    $('info').innerHTML = m ? `<h3>${esc(m.name)}</h3><p class="brief">${esc(m.what)}</p><p class="mono">${m.w} × ${m.h} case${m.w * m.h > 1 ? 's' : ''} à (${m.x}, ${m.y}), dans tous les skins</p>` : '<h3>Une machine</h3><p class="brief">Clique une machine sur le plancher. Les trois rangées du haut sont des marges : le décor y vit, aucune machine.</p>';
+  });
+  cv.addEventListener('mousemove', (e) => { const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * W, y = ((e.clientY - r.top) / r.height) * H; cv.style.cursor = M.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h && q.what) ? 'pointer' : 'default'; });
+
+  /* the cards: each skin, its strengths and its limits, and the pick */
+  const CARDS = {
+    fleex: { mine: false, pro: 'Rien à faire : c\'est l\'état actuel.', con: 'Fonctionnel mais froid ; pas de décor, pas d\'âme.' },
+    pixel: { mine: true, pro: 'Le plus vivant et le plus « jeu » : le décor raconte une usine, les ouvriers montrent ce qui tourne. Le rendu à demi-résolution donne le pixel art presque gratuitement à partir des mêmes peintres.', con: 'Les textes doivent être courts et en police pixel ; le zoom doit tomber sur des multiples entiers pour garder des pixels nets. Le vrai charme viendra de sprites dessinés à la main.' },
+    blueprint: { mine: false, pro: 'Le plus lisible et le moins coûteux : des traits, aucun remplissage. Parle aux équipes techniques.', con: 'Monochrome : les sortes de stations et les types de tickets ne se lisent plus par la couleur.' },
+    toy: { mine: false, pro: 'Chaleureux et accessible : idéal pour montrer la Factory à des non-techniques.', con: 'Les pièces épaisses et les ombres prennent de la place ; sur un grand plancher dézoomé, ça se brouille.' },
+    neon: { mine: false, pro: 'Spectaculaire, très « salle de contrôle ».', con: 'Les lueurs coûtent cher à peindre et fatiguent à la longue ; un skin de démo plus que de tous les jours.' },
+  };
+  $('cards').innerHTML = IDS.map((id) => `<article class="card" data-id="${id}">
+      <div class="card-head"><span class="letter">${id === 'fleex' ? 'S0' : `S${IDS.indexOf(id)}`}</span><h3>${esc(SKINS[id].name)}</h3>${CARDS[id].mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+      <dl><dt>Atout</dt><dd>${esc(CARDS[id].pro)}</dd><dt>Limite</dt><dd>${esc(CARDS[id].con)}</dd></dl>
+      <div class="row"><button type="button" class="see" data-skin="${id}">Voir sur le plancher</button>${id === 'fleex' ? '' : `<button type="button" class="pick" aria-pressed="false">Choisir</button>`}</div>
+    </article>`).join('');
+  document.addEventListener('click', (e) => { const b = e.target.closest('.see'); if (b) { setSkin(b.dataset.skin); $('wrap').scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
+  const KEY = 'factory-skins-pick';
+  let picks = [];
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { picks = []; }
+  const summary = () => `Skins : ${picks.length ? picks.map((id) => `S${IDS.indexOf(id)} (${SKINS[id].name})`).join(', ') : 'aucun choisi'}`;
+  function paintPicks() {
+    for (const c of document.querySelectorAll('#cards .card')) { const b = c.querySelector('.pick'); if (!b) continue; const on = picks.includes(c.dataset.id); c.classList.toggle('picked', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? 'Choisi' : 'Choisir'; }
+    $('picks').innerHTML = `Skins <b>${picks.length ? picks.map((id) => `S${IDS.indexOf(id)}`).join(' + ') : '–'}</b>`;
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('.pick'); if (!b) return; const id = b.closest('.card').dataset.id; picks = picks.includes(id) ? picks.filter((x) => x !== id) : [...picks, id]; try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept */ } $('said').textContent = ''; paintPicks(); });
+  $('copy').addEventListener('click', () => { const said = $('said'), l = summary(); try { navigator.clipboard.writeText(l).then(() => { said.textContent = 'Copié : colle-le dans la conversation.'; }, () => { said.textContent = l; }); } catch { said.textContent = l; } });
+
+  /* a few tickets already on their way, so the floor is never empty */
+  for (let i = 0; i < 6; i++) { spawn(); step(i * 2400 + 900); }
+  setSkin(skin); paintPicks(); requestAnimationFrame(frame);
+})();
+</script>
