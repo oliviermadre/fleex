@@ -7,7 +7,12 @@ export interface RepoConfig {
    */
   postCheckoutHook?: string; // multiline shell script, empty = disabled
   hookTimeoutSeconds?: number; // default 60
+  /** What each named action (`AppConfig.namedActions`) means in this repository: action name → shell command. */
+  actions?: Record<string, string>;
 }
+
+/** An action that has a name of its own, such as "test" or "lint": each repository says what it runs. */
+export interface NamedAction { name: string; description?: string }
 
 export interface AppConfig {
   basePath: string;
@@ -91,6 +96,14 @@ export interface AppConfig {
    * about it — see `isTodoAgentAccessEnabled`.
    */
   todoAgentAccess?: boolean;
+  /**
+   * Experimental Factory (`src/factory`): a floor of machines that tickets handed
+   * over to it travel through. Unset → off: its engine does not tick, its routes
+   * answer 403 and nothing else in Fleex behaves differently.
+   */
+  factoryEnabled?: boolean;
+  /** The actions repositories can define a command for. Script stations of the Factory run them by name. */
+  namedActions?: NamedAction[];
   /**
    * Local hour (0-23) after which the nightly memory consolidation becomes due.
    * Unset → 3. The pass runs on the first tick past this hour, so a laptop that
@@ -209,4 +222,9 @@ export interface ConfigPort {
  */
 export function isTodoAgentAccessEnabled(config: Pick<AppConfig, 'todoAgentAccess'>): boolean {
   return config.todoAgentAccess === true;
+}
+
+/** Whether the experimental Factory (`src/factory`) is switched on. Off unless set. */
+export function isFactoryEnabled(config: Pick<AppConfig, 'factoryEnabled'>): boolean {
+  return config.factoryEnabled === true;
 }

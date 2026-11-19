@@ -38,7 +38,8 @@ import { useTicketDeliverables } from './panel/useTicketDeliverables';
 import { useTicketMentions } from './panel/useTicketMentions';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 
-export function WorkView() {
+/** `embedded`: shown for one ticket inside another page (the Factory's workbench), so without the queue column. */
+export function WorkView({ embedded = false }: { embedded?: boolean } = {}) {
   const queue = useWorkQueue();
   const view = useWorkStore((s) => s.view);
   const rightPanel = useEffectiveRightPanel();
@@ -125,7 +126,7 @@ export function WorkView() {
       <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto]">
         {/* The queue runs down to the bottom drawer, so the top bar starts to its right. */}
         <div className="col-start-1 row-span-2 row-start-1 flex min-h-0">
-          {queueCollapsed ? (
+          {embedded ? null : queueCollapsed ? (
             <CollapsedQueueRail counts={queue.counts} pinned={queue.pinned?.task ?? null} selectedId={view === 'task' ? selectedTaskId : null} />
           ) : (
             <WorkQueue queue={queue} onOpenExecution={openExecution} />

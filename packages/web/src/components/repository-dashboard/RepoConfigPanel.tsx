@@ -1,4 +1,5 @@
 import { RepoActionsSettings } from './worktree-settings/RepoActionsSettings';
+import { RepoNamedActions } from '../../factory/NamedActions';
 
 interface Props {
   org: string;
@@ -10,5 +11,10 @@ interface Props {
  * detected commands, options). The former post-checkout field is the Setup step.
  */
 export function RepoConfigPanel({ org, name }: Props) {
-  return <RepoActionsSettings org={org} name={name} />;
+  return (
+    <>
+      <RepoActionsSettings org={org} name={name} />
+      <RepoNamedActions org={org} name={name} />
+    </>
+  );
 }

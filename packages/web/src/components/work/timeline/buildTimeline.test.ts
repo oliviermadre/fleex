@@ -826,3 +826,64 @@ describe('buildTimeline — exchanges (compact mode)', () => {
     });
   });
 });
+
+/**
+ * Experimental Factory: a station's run is a workflow-step execution with no workflow run and no mention behind it.
+ * Alone, the timeline can only call it "Workflow"; given the station runs, it names the station.
+ */
+describe('buildTimeline — runs started by Factory stations', () => {
+  const ticket = (): TimelineSources => {
+    const src = emptySources();
+    src.names = { personas: { 'p-pm': 'Catalyst' }, panels: { council: { name: 'Council', members: ['Catalyst'] } }, skills: { 'qa-checklist': 'QA checklist' } };
+    src.executions = [
+      execution({ id: 'e-agent', startedAt: at(10, 0), completedAt: at(10, 4), mentionId: 'workflow:e-agent', costUsd: 0.4 }),
+      execution({ id: 'e-skill', startedAt: at(11, 0), completedAt: at(11, 2), mentionId: 'skill:qa-checklist' }),
+      execution({ id: 'e-panel', startedAt: at(12, 0), completedAt: at(12, 9), mentionId: 'panel:council:x1' }),
+      execution({ id: 'e-hand', startedAt: at(13, 0), completedAt: at(13, 1), mentionId: 'workflow:e-hand' }),
+    ];
+    return src;
+  };
+  const stationRuns = [
+    { executionId: 'e-agent', station: 'Triage & repro', executor: 'agent', outcome: 'bug' },
+    { executionId: 'e-skill', station: 'QA', executor: 'skill', outcome: 'ok' },
+    { executionId: 'e-panel', station: 'Review board', executor: 'panel', outcome: null },
+    { executionId: null, station: 'Check spec', executor: 'human_gate', outcome: 'approve' },
+  ];
+
+  it('without them, such a run is only a "Workflow"', () => {
+    const run = byId(buildTimeline(ticket(), NOW).events, 'run:e-agent');
+    expect(run.label).toBe('Workflow');
+    expect(run.tooltip.overline).toBe('Workflow · mention');
+  });
+
+  it('with them, the run goes by its station: its name, the Factory as its source, what ran and what it concluded', () => {
+    const events = buildTimeline({ ...ticket(), stationRuns }, NOW).events;
+    const agent = byId(events, 'run:e-agent');
+    expect(agent.label).toBe('Triage & repro');
+    expect(agent.glyph).toEqual({ type: 'factory' });
+    expect(agent.tooltip.overline).toBe('Factory · agent');
+    expect(agent.tooltip.title).toBe('Triage & repro');
+    expect(agent.tooltip.rows).toEqual(expect.arrayContaining([['Station', 'Triage & repro'], ['Sortie', 'bug'], ['Source', 'Factory'], ['Coût', '$0.40']]));
+    expect(agent.tooltip.rows.some(([k, v]) => k === 'Qui' && v.includes('Catalyst'))).toBe(true);
+    expect(agent.ariaLabel).toContain('Factory, station Triage & repro');
+    expect(agent.action).toMatchObject({ type: 'execution', executionId: 'e-agent' });
+
+    const skill = byId(events, 'run:e-skill');
+    expect(skill.label).toBe('QA');
+    expect(skill.tooltip.overline).toBe('Factory · skill');
+    expect(skill.tooltip.rows).toEqual(expect.arrayContaining([['Qui', 'QA checklist'], ['Sortie', 'ok']]));
+
+    const panel = byId(events, 'run:panel:council:x1');
+    expect(panel.label).toBe('Review board');
+    expect(panel.glyph).toEqual({ type: 'factory' });
+    expect(panel.tooltip.overline).toBe('Factory · panel');
+    expect(panel.tooltip.rows).toEqual(expect.arrayContaining([['Station', 'Review board'], ['Qui', 'Council'], ['Source', 'Factory']]));
+  });
+
+  it('leaves alone a run no station started', () => {
+    const hand = byId(buildTimeline({ ...ticket(), stationRuns }, NOW).events, 'run:e-hand');
+    expect(hand.label).toBe('Workflow');
+    expect(hand.glyph).toEqual({ type: 'primitive', kind: 'workflow' });
+    expect(hand.tooltip.rows).toContainEqual(['Source', 'Mention']);
+  });
+});

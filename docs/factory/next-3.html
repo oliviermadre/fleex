@@ -1,0 +1,527 @@
+<title>Factory, péage et script</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the concept running in one large scene, then its states, its settings (a form that drives a preview), two things to pick, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  code { font-family: var(--mono); font-size: 0.88em; }
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  body { padding-bottom: 40px; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Péage et poste script : deuxième tour</h1>
+    <p class="lede">Retenu : le portique Set (P1), le péage (K2), la remise à zéro par une machine sur le retour (Z1), l'action par défaut avec exceptions (X2). Ici, le péage tel que tu l'as redéfini, et le poste script sans action par défaut obligatoire. Rien n'est dans le code.</p>
+    <div class="tools">
+      <button type="button" id="anim" aria-pressed="true">Animations</button>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-loop">
+    <h2 id="h-loop">Le péage : un portique Set, une condition de rejet, un bras</h2>
+    <p class="brief">Le péage est le portique Set avec une ligne de plus, « reject », et un bras rouge dessous. Il applique ses opérations, puis teste sa condition : si elle est vraie, le bras sort le ticket. Change la condition et le ticket, puis joue. La remise à zéro est un portique Set ordinaire, sur la sortie de la zone.</p>
+    <div class="app">
+      <div class="row"><h4>Toll · operations</h4><span class="tag kv"><b>passes</b> +1</span>
+        <h4 style="margin-left:10px">Reject when</h4>
+        <select id="lp-cond" aria-label="Reject when"><option value="passes">passes &gt; 3</option><option value="type">type is not build</option><option value="both">passes &gt; 3, or priority is urgent</option></select>
+        <span style="flex:1"></span><span class="mono" id="lp-count"></span>
+      </div>
+      <div class="row"><h4>Ticket</h4>
+        <button type="button" data-type="fix" aria-pressed="true">type fix</button><button type="button" data-type="build" aria-pressed="false">type build</button>
+        <button type="button" data-prio="urgent" aria-pressed="false">priority urgent</button>
+      </div>
+      <div class="scene" id="lp-scene"></div>
+      <div class="row">
+        <button type="button" class="stop" id="lp-ko">Review says ko</button>
+        <button type="button" class="go" id="lp-ok">Review says ok</button>
+        <button type="button" id="lp-release">Release from the zone</button>
+        <button type="button" id="lp-new">New ticket</button>
+      </div>
+      <ul class="log" id="lp-log" aria-live="polite"></ul>
+    </div>
+    <div class="rules">
+      <div class="card"><h3>Ce que ça implique</h3><ul>
+        <li><b>L'ordre</b> : les opérations d'abord, la condition ensuite. Avec « passes +1 » puis « passes &gt; 3 », le ticket fait trois tours et sort au quatrième ko.</li>
+        <li><b>La condition</b> est celle des bras, avec en plus les tags <code>clef:valeur</code> comparés comme des nombres. Plusieurs conditions : il suffit qu'une soit vraie pour rejeter.</li>
+        <li><b>Le bras fait partie du péage</b> : on choisit de quel côté il sort, et il se pose avec lui.</li>
+      </ul></div>
+      <div class="card"><h3>Une question avant de construire</h3><ul>
+        <li>Un portique Set suivi d'un bras ordinaire à condition, posé contre la même case, ferait exactement la même chose : un bras prend déjà sur un convoyeur ce qui remplit sa condition. <b>Le péage peut donc être un simple raccourci</b> qui pose les deux d'un coup et les règle dans une seule popup, sans nouvelle machine dans le moteur. C'est ce que je propose, sauf si tu veux une machine à part.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-script">
+    <h2 id="h-script">Le poste script : n'importe quelle commande, avec ou sans action par défaut</h2>
+    <p class="brief">Oui, tu as bien compris : la liste du poste ne contient que ce qui s'écarte de l'action par défaut. Et cette action est facultative : avec « none », le poste ne joue que ses propres lignes. Une ligne vise un dépôt, ou « any repository » pour une commande à jouer dans chaque worktree du ticket, quelle qu'elle soit (ouvrir un navigateur, prévenir quelqu'un, lancer un build).</p>
+    <div class="app">
+      <div class="two">
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <h4>Script station · settings</h4>
+          <div class="row" id="sc-default"></div>
+          <div id="sc-rows"></div>
+          <div class="row"><select id="sc-addrepo" aria-label="Repository"></select><button type="button" id="sc-add">Add a repository</button></div>
+          <div class="row"><label class="hint" for="sc-missing">A repository with no command here</label>
+            <select id="sc-missing"><option value="ignore">is ignored</option><option value="ko">counts as a failure</option><option value="own">leaves by "unconfigured"</option></select></div>
+          <div class="row"><label class="hint" for="sc-fail">On a failure</label>
+            <select id="sc-fail"><option value="all">run the others anyway</option><option value="stop">stop there</option></select></div>
+          <p class="hint">Success and failure are the station's two outcomes, "ok" and "ko": an arm for each, as on every station.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <h4>Repository view · named actions</h4>
+          <div class="scroll"><table id="sc-named"></table></div>
+          <p class="hint">Defined once per repository, usable anywhere in Fleex.</p>
+        </div>
+      </div>
+      <div class="row"><h4>Ticket</h4><select id="sc-ticket" aria-label="Ticket"></select><span id="sc-fails" class="row"></span><button type="button" class="go" id="sc-run">Run</button></div>
+      <div class="scene" id="sc-scene"></div>
+    </div>
+    <div class="rules"><div class="card"><h3>Ce que j'ai supposé</h3><ul>
+      <li>Une commande tourne <b>dans le worktree</b> du dépôt, avec le numéro et le titre du ticket en variables d'environnement.</li>
+      <li>Code retour 0 : réussi ; autre chose, ou délai dépassé : échec. La sortie de la commande est gardée sur le run du poste.</li>
+      <li>Pour chaque dépôt du ticket, dans l'ordre : sa ligne dans le poste, sinon la ligne « any repository », sinon l'action par défaut de la vue dépôt, sinon « pas de commande ».</li>
+      <li>Un ticket <b>sans worktree</b> n'a rien à jouer : je propose qu'il suive la règle « pas de commande ». Dis-moi si tu veux qu'une commande puisse tourner sans dépôt.</li>
+    </ul></div></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ---------- the floor's own look (the app's dark theme) ----------
+  const T = 44;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#202024', panel: '#131316', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', steel: '#52525b' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', think: '#60a5fa', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc' };
+  /* the sixteen colours an arm can already be given: a teleporter picks among the same */
+  const PALETTE = [['Grey', '#a1a1aa'], ['White', '#f4f4f5'], ['Red', '#ef4444'], ['Rose', '#fb7185'], ['Orange', '#fb923c'], ['Amber', '#f59e0b'], ['Yellow', '#facc15'], ['Lime', '#a3e635'], ['Green', '#22c55e'], ['Teal', '#2dd4bf'], ['Cyan', '#22d3ee'], ['Sky', '#38bdf8'], ['Blue', '#60a5fa'], ['Indigo', '#818cf8'], ['Purple', '#c084fc'], ['Pink', '#f472b6']];
+  const PINK = '#f472b6', SKY = '#38bdf8', PLAIN = '#22d3ee';
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"";
+  const SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10, r2 = (n) => Math.round(n * 100) / 100;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function floor(w, h) {
+    let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`;
+    for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    return s;
+  }
+  const svg = (w, h, label, inner) => `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${floor(w, h)}${inner}</svg>`;
+  const chevron = (cx, cy, rot = 0) => `<path transform="rotate(${rot} ${cx} ${cy})" d="M${cx - 4} ${cy - 8} L${cx + 4} ${cy} L${cx - 4} ${cy + 8}" fill="none" stroke="${C.chev}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt going east: `n` tiles from tile (x, y). */
+  function belt(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${n * T}" height="${T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T} ${y * T + 2} H${(x + n) * T} M${x * T} ${(y + 1) * T - 2} H${(x + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron((x + i) * T + 12, y * T + T / 2) + chevron((x + i) * T + 34, y * T + T / 2);
+    return s;
+  }
+  /** A belt going south: `n` tiles down from tile (x, y). */
+  function beltV(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${T}" height="${n * T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T + 2} ${y * T} V${(y + n) * T} M${(x + 1) * T - 2} ${y * T} V${(y + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron(x * T + T / 2, (y + i) * T + 12, 90) + chevron(x * T + T / 2, (y + i) * T + 34, 90);
+    return s;
+  }
+  /** A ticket: an object with some thickness, its shape and colour saying its type. */
+  function token(cx, cy, type, s = 16, opacity = 1) {
+    const col = TYPE[type], h = s / 2, dark = 'rgba(0,0,0,0.45)';
+    const shape = (dy, fill) => type === 'think' ? `<circle cx="${r1(cx)}" cy="${r1(cy + dy)}" r="${r1(h)}" fill="${fill}"/>`
+      : type === 'fix' ? `<path d="M${r1(cx - h)} ${r1(cy - h * 0.5 + dy)} L${r1(cx - h * 0.45)} ${r1(cy - h + dy)} H${r1(cx + h * 0.45)} L${r1(cx + h)} ${r1(cy - h * 0.5 + dy)} V${r1(cy + h * 0.5 + dy)} L${r1(cx + h * 0.45)} ${r1(cy + h + dy)} H${r1(cx - h * 0.45)} L${r1(cx - h)} ${r1(cy + h * 0.5 + dy)} Z" fill="${fill}"/>`
+      : `<rect x="${r1(cx - h)}" y="${r1(cy - h + dy)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.26)}" fill="${fill}"/>`;
+    return `<g opacity="${r2(opacity)}">${shape(2.5, dark)}${shape(0, col)}<circle cx="${r1(cx - h * 0.3)}" cy="${r1(cy - h * 0.3)}" r="${r1(s * 0.11)}" fill="rgba(255,255,255,0.55)"/></g>`;
+  }
+  const text = (x, y, str, o = {}) => `<text x="${r1(x)}" y="${r1(y)}" ${o.sans ? SANS : MONO} font-size="${o.size ?? 10}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''}>${esc(str)}</text>`;
+  /** The plate under a teleporter: its name in its colour, and a smaller line under it (where it leads, or what is wrong). */
+  function plate(cx, y, name, sub, col, subFill = C.ink2, fromLeft = false) {
+    const w = Math.max(name.length * 6.1, (sub || '').length * 5.2) + 14, h = sub ? 28 : 17;
+    if (fromLeft) cx += w / 2;
+    let s = `<rect x="${r1(cx - w / 2)}" y="${y}" width="${r1(w)}" height="${h}" rx="4" fill="rgba(9,9,11,0.9)" stroke="${col}" stroke-opacity="0.5"/>`;
+    s += text(cx, y + 12, name, { weight: 700, fill: col, anchor: 'middle' });
+    if (sub) s += text(cx, y + 23, sub, { size: 8.5, fill: subFill, anchor: 'middle' });
+    return s;
+  }
+
+  // ---------- the teleporter ----------
+  /** Four chevrons round the ring, one per side: they point in on a departure (a ticket goes in), out on an arrival. */
+  const signs = (cx, cy, d, inward, col) => [0, 90, 180, 270].map((a) => {
+    const px = cx + Math.cos(a * Math.PI / 180) * d, py = cy + Math.sin(a * Math.PI / 180) * d;
+    return `<path transform="translate(${r1(px)} ${r1(py)}) rotate(${a + (inward ? 180 : 0)})" d="M-2 -4.6 L2.2 0 L-2 4.6" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+  /** The frame of a pad: closed on a departure; on an arrival, four corners only, open in the middle of each side, where its chevrons come out. */
+  function frame(x, y, role, col) {
+    const a = x + 3, b = y + 3, e = T - 6, leg = 12;
+    let s = `<rect x="${a}" y="${b}" width="${e}" height="${e}" rx="9" fill="${C.panel}" ${role === 'dep' ? `stroke="${col}" stroke-width="2.5"` : ''}/>`;
+    if (role !== 'dep') for (const [px, py, sx, sy] of [[a, b, 1, 1], [a + e, b, -1, 1], [a + e, b + e, -1, -1], [a, b + e, 1, -1]])
+      s += `<path d="M${px} ${py + sy * leg} V${py + sy * 9} Q${px} ${py} ${px + sx * 9} ${py} H${px + sx * leg}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+    return s;
+  }
+  /** The ring where the ticket stands, with what it says: dashed amber while it waits, a burst as a ticket goes or comes. */
+  function ring(cx, cy, r, o) {
+    const col = o.bad ? C.danger : o.col, k = o.k ?? 1;
+    let s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}" fill-opacity="${r2(0.1 + 0.3 * (o.burst ?? 0))}"/>`;
+    s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${o.wait ? C.warn : col}" stroke-width="2" ${o.wait ? `stroke-dasharray="5 4" transform="rotate(${r1(((o.t ?? 0) * 50) % 360)} ${cx} ${cy})"` : ''}/>`;
+    if (o.burst) s += `<circle cx="${cx}" cy="${cy}" r="${r1(r + 13 * o.burst)}" fill="none" stroke="${col}" stroke-width="2" opacity="${r2(1 - o.burst)}"/>`;
+    if (o.ticket && k > 0.03) s += `<g transform="translate(${cx} ${cy}) scale(${r2(k)}) translate(${-cx} ${-cy})">${token(cx, cy, o.ticket, 14, Math.min(1, k * 1.5))}</g>`;
+    return s;
+  }
+  /** A mark on the corner of a pad: "!" when it cannot work, a pause sign while it holds its ticket back. */
+  const badge = (x, y, col, sign) => `<circle cx="${x}" cy="${y}" r="6.5" fill="${col}" stroke="#09090b" stroke-width="1.5"/>`
+    + (sign === 'pause' ? `<path d="M${x - 2} ${y - 3} V${y + 3} M${x + 2} ${y - 3} V${y + 3}" stroke="#09090b" stroke-width="2" stroke-linecap="round"/>` : text(x, y + 3.4, sign, { size: 9, weight: 700, fill: '#09090b', anchor: 'middle' }));
+  /**
+   * A teleporter on one tile. `role` is 'dep' (chevrons going in) or 'arr' (chevrons coming out); `ticket` the type of
+   * the ticket it holds, `k` how much of it is there (it shrinks as it goes), `wait` it holds its ticket because the
+   * arrival is taken, `bad` it cannot work as it is.
+   */
+  function pad(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T / 2, cy = y + T / 2, col = o.bad ? C.danger : o.col;
+    let s = frame(x, y, o.role, col);
+    s += ring(cx, cy, 11.5, o) + signs(cx, cy, 16.3, o.role === 'dep', col);
+    if (o.wait) s += badge(x + T - 6, y + 6, C.warn, 'pause');
+    if (o.bad) s += badge(x + T - 6, y + 6, C.danger, '!');
+    if (o.selected) s += `<rect x="${x - 1}" y="${y - 1}" width="${T + 2}" height="${T + 2}" rx="11" fill="none" stroke="${C.ink}" stroke-width="2.5"/>`;
+    return s;
+  }
+  /** The same, as a cabin of two tiles by two that carries its own name. */
+  function cabin(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T, cy = y + T + 13, col = o.bad ? C.danger : o.col;
+    let s = `<rect x="${x + 3}" y="${y + 3}" width="${2 * T - 6}" height="${2 * T - 6}" rx="12" fill="${C.body}" stroke="${col}" stroke-width="2.5"/>`;
+    s += text(x + 10, y + 16, o.role === 'dep' ? 'DEPARTURE' : 'ARRIVAL', { size: 7.5, weight: 700, fill: col });
+    const name = o.name.length > 12 ? `${o.name.slice(0, 11)}…` : o.name;
+    s += text(x + 10, y + 28, name, { weight: 700, fill: C.ink });
+    s += `<rect x="${cx - 23}" y="${cy - 23}" width="46" height="46" rx="10" fill="${C.panel}"/>` + ring(cx, cy, 14, o) + signs(cx, cy, 19.5, o.role === 'dep', col);
+    return s;
+  }
+  /**
+   * The link from a departure to its arrival: a dashed arc in the teleporter's colour, that bends away from the
+   * straight line so two of them do not lie on each other. `packet` (0 to 1) is a ticket on its way.
+   */
+  function link(a, b, col, o = {}) {
+    const x1 = a[0] * T, y1 = a[1] * T, x2 = b[0] * T, y2 = b[1] * T, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), bend = (o.bend ?? 0.2) * L;
+    const qx = (x1 + x2) / 2 + dy / L * bend, qy = (y1 + y2) / 2 - dx / L * bend;
+    const at = (u) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
+    const hot = o.packet != null;
+    let s = `<path d="M${r1(x1)} ${r1(y1)} Q${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}" fill="none" stroke="${col}" stroke-width="${hot ? 2.6 : 1.8}" stroke-dasharray="3 7" stroke-dashoffset="${r1(-(o.t ?? 0) * 22)}" stroke-linecap="round" opacity="${hot ? 1 : o.opacity ?? 0.6}"/>`;
+    if (hot) { const p = at(o.packet); s += `<circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="10" fill="${col}" fill-opacity="0.28"/><circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="4.5" fill="${col}"/>`; }
+    return s;
+  }
+  /** A transfer `w` of the way done (0 to 1): the ticket shrinks in the departure, crosses, and grows in the arrival. */
+  const sending = (w) => ({ out: 1 - clamp(w / 0.4), packet: w > 0.15 && w < 0.85 ? (w - 0.15) / 0.7 : null, into: clamp((w - 0.6) / 0.4), burstOut: w < 0.5 ? clamp(w / 0.5) : 0, burstIn: w > 0.5 ? 1 - clamp((w - 0.5) / 0.5) : 0 });
+
+  // ---------- arms and stations, as on the floor since lot 28 ----------
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  /** The arm from its base to its cup, with its shadow, its band and the ticket under the cup. */
+  function robot(bx, by, hx, hy, carry, col) {
+    let s = `<path d="M${r1(bx + 3)} ${r1(by + 5)} L${r1(hx + 3)} ${r1(hy + 5)}" stroke="rgba(0,0,0,0.42)" stroke-width="14" stroke-linecap="round"/>`;
+    if (carry) s += token(hx, hy, carry, 16);
+    s += `<path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${C.steel}" stroke-width="13" stroke-linecap="round"/><path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${col}" stroke-width="3.5" stroke-linecap="round"/>`;
+    s += `<circle cx="${r1(hx)}" cy="${r1(hy)}" r="9" fill="rgba(24,24,27,0.3)" stroke="${C.ink}" stroke-width="2.4"/><circle cx="${r1(hx)}" cy="${r1(hy)}" r="2.5" fill="${C.ink}"/>`;
+    s += `<circle cx="${bx}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${bx}" cy="${by}" r="4" fill="${C.steel}"/>`;
+    return s;
+  }
+  /**
+   * An arm on tile (tx, ty) pointing `dir`, `e` of its half turn done (0 where it takes, 1 where it drops). `from`
+   * and `to` are how far its cup reaches on each side, in tiles: 1 over the middle of a tile, 0.76 over a quay.
+   */
+  function arm(tx, ty, dir, col, e, carry, from = 1, to = 1) {
+    const [dx, dy] = DIRS[dir], bx = (tx + 0.5) * T, by = (ty + 0.5) * T, a = Math.atan2(dy, dx) + Math.PI * (1 - e), r = lerp(from, to, e) * T;
+    const way = [[-21, -8.5], [6, -11.5], [6, -18.5], [22, 0], [6, 18.5], [6, 11.5], [-21, 8.5]].map(([u, v]) => `${r1(bx + u * dx - v * dy)} ${r1(by + u * dy + v * dx)}`).join(' L');
+    return `<path d="M${way} Z" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"/>` + robot(bx, by, bx + Math.cos(a) * r, by + Math.sin(a) * r, carry, col);
+  }
+  function station(x, y, w, h, name, sub) {
+    let s = `<rect x="${x * T + 3}" y="${y * T + 3}" width="${w * T - 6}" height="${h * T - 6}" rx="12" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${x * T + 12}" y="${y * T + 12}" width="22" height="22" rx="6" fill="rgba(192,132,252,0.16)" stroke="rgba(192,132,252,0.55)"/>`;
+    s += text(x * T + 42, y * T + 22, name, { sans: true, size: 12, weight: 600 }) + text(x * T + 42, y * T + 34, sub, { sans: true, size: 9, fill: C.ink3 });
+    s += `<rect x="${x * T + 12}" y="${y * T + 46}" width="${w * T - 24}" height="${h * T - 58}" rx="7" fill="rgba(0,0,0,0.38)"/>`;
+    return s;
+  }
+  /** The quay of an arm that takes from a box: a notch in its edge, on the tile behind the arm. */
+  const quay = (tx, ty, dir, col) => { const [dx, dy] = DIRS[dir], cx = (tx + 0.5 - dx * 0.76) * T, cy = (ty + 0.5 - dy * 0.76) * T; return `<rect x="${r1(cx - 11)}" y="${r1(cy - 11)}" width="22" height="22" rx="5" fill="${C.floor}" stroke="${col}" stroke-width="2"/>`; };
+  const noEntry = (x, y) => `<circle cx="${x}" cy="${y}" r="8" fill="${C.danger}" stroke="#09090b" stroke-width="1.5"/><path d="M${x - 4.5} ${y} H${x + 4.5}" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>`;
+
+
+  const $ = (id) => document.getElementById(id);
+  const VIOLET = '#a78bfa', SETC = '#f472b6';
+  /** Lines of settings on a dark plate: what a machine does, readable from the floor. `max` lines, then "+n". */
+  function chips(x, y, lines, col, o = {}) {
+    const max = o.max ?? 4, shown = lines.slice(0, max), more = lines.length - shown.length, all = more > 0 ? [...shown, `+${more} more`] : shown;
+    const w = Math.max(...all.map((l) => l.length)) * 5.6 + 14, h = all.length * 12 + 8, x0 = o.center ? x - w / 2 : x;
+    let s = `<rect x="${r1(x0)}" y="${y}" width="${r1(w)}" height="${h}" rx="4" fill="rgba(9,9,11,0.92)" stroke="${col}" stroke-opacity="0.55"/>`;
+    all.forEach((l, i) => { s += text(x0 + 7, y + 13 + i * 12, l, { size: 9, weight: i < shown.length ? 700 : 500, fill: i < shown.length ? col : C.ink3 }); });
+    return s;
+  }
+  /** A ticket that was changed carries a mark. */
+  const marked = (cx, cy, type, on, opacity = 1) => token(cx, cy, type, 16, opacity) + (on ? `<circle cx="${r1(cx + 7)}" cy="${r1(cy - 7)}" r="4" fill="${SETC}" stroke="#09090b" stroke-width="1.2" opacity="${opacity}"/>` : '');
+  /** A gantry over one belt tile: two posts and a beam; the ticket goes under it without stopping. */
+  function gantry(tx, ty, col, label, o = {}) {
+    const x = tx * T, y = ty * T;
+    let s = `<rect x="${x + 4}" y="${y - 5}" width="${T - 8}" height="9" rx="3" fill="${C.body}" stroke="${col}" stroke-width="2"/><rect x="${x + 4}" y="${y + T - 4}" width="${T - 8}" height="9" rx="3" fill="${C.body}" stroke="${col}" stroke-width="2"/>`;
+    s += `<rect x="${x + T / 2 - 6}" y="${y - 3}" width="12" height="${T + 6}" rx="4" fill="${col}" fill-opacity="${o.flash ? 0.85 : 0.3}" stroke="${col}" stroke-width="1.5"/>`;
+    if (label) s += text(x + T / 2, y + T / 2 + 3, label, { size: 8, weight: 700, fill: '#09090b', anchor: 'middle' });
+    return s;
+  }
+  const OPS = ['board → Bugfix', 'priority → high', 'type:major', 'passes +1'];
+
+  // ---------- the loop ----------
+  const LW = 17 * T, LH = 8.2 * T, LIMIT = 3;
+  let mech = 'toll', reset = 'machine', count = 0, at = 'review', pos = { x: 3, y: 2.5 }, route = [], flashAt = null, lpLog = [], cond = 'passes', ttype = 'fix', urgent = false;
+  const condText = () => ({ passes: [`passes > ${LIMIT}`], type: ['type is not build'], both: [`passes > ${LIMIT}`, 'priority is urgent'] }[cond]);
+  const rejects = () => (cond === 'passes' ? count > LIMIT : cond === 'type' ? ttype !== 'build' : count > LIMIT || urgent);
+  const say = (s) => { lpLog.unshift(s); lpLog = lpLog.slice(0, 5); $('lp-log').innerHTML = lpLog.map((l) => `<li>${esc(l)}</li>`).join(''); };
+  const P = { review: [3, 2.5], bugfix: [11.5, 2.5], zone: [8, 6.4], exit: [5.5, 0.5] };
+  function loopScene(t) {
+    const tag = mech === 'tag', ko = '#ef4444';
+    let s = station(1, 1, 4, 3, 'Review', 'agent · reviewer') + station(9.5, 1, 4, 3, 'Bugfix', 'agent · fixer');
+    /* ok: out by the top */
+    s += `<rect x="${5 * T + 3}" y="3" width="${T - 6}" height="${T - 6}" rx="8" fill="${C.panel}" stroke="${C.ok}" stroke-width="2.5"/>` + text(5.5 * T, 0.5 * T + 3, 'EXIT', { size: 8, weight: 700, fill: C.ok, anchor: 'middle' });
+    s += belt(6, 2, 3.5) + quay(5, 2, 0, ko);
+    /* back to Review: a departure after Bugfix, an arrival under Review */
+    s += pad(14.5, 2, { role: 'dep', col: PINK }) + pad(2, 5, { role: 'arr', col: PINK }) + plate(15 * T, 3 * T + 4, 'back to review', '', PINK) + plate(2.5 * T, 6 * T + 4, 'review in', '', PINK);
+    /* the zone, and the way out of it */
+    s += `<rect x="${6 * T}" y="${5.4 * T}" width="${4 * T}" height="${2 * T}" fill="${ko}" fill-opacity="0.06"/><rect x="${6 * T + 1.5}" y="${5.4 * T + 1.5}" width="${4 * T - 3}" height="${2 * T - 3}" fill="none" stroke="${ko}" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="9 7"/>` + text(6 * T + 9, 5.4 * T + 16, 'NEEDS YOU', { size: 10, weight: 700, fill: ko });
+    s += belt(11, 5.9, 3) + pad(14, 5.9, { role: 'dep', col: PINK });
+    /* the toll: the Set gantry, with what it rejects written under what it sets */
+    s += gantry(7, 2, SETC, '', { flash: flashAt === 'count' }) + beltV(7, 4, 1.4);
+    { const lines = ['passes +1', ...condText().map((c) => `reject: ${c}`)], w = Math.max(...lines.map((l) => l.length)) * 5.6 + 14, x0 = 7.5 * T - w / 2, y0 = 1.72 * T - lines.length * 12 - 8;
+      s += `<rect x="${r1(x0)}" y="${r1(y0)}" width="${r1(w)}" height="${lines.length * 12 + 8}" rx="4" fill="rgba(9,9,11,0.92)" stroke="${SETC}" stroke-opacity="0.55"/>`;
+      lines.forEach((l, i) => { s += text(x0 + 7, y0 + 13 + i * 12, l, { size: 9, weight: 700, fill: i ? ko : SETC }); }); }
+    if (reset === 'machine') s += gantry(12, 5.9, SETC, '', { flash: flashAt === 'reset' }) + chips(12.5 * T, 7.05 * T, ['passes ✕'], SETC, { center: true });
+    /* the ticket */
+    if (at !== 'gone') s += marked(pos.x * T, pos.y * T, ttype, false) + (count ? `<rect x="${r1(pos.x * T + 10)}" y="${r1(pos.y * T - 20)}" width="56" height="13" rx="6" fill="#09090b" stroke="${SETC}" stroke-opacity="0.7"/>` + text(pos.x * T + 15, pos.y * T - 10.5, `passes:${count}`, { size: 8.5, weight: 700, fill: SETC }) : '');
+    /* the arms, over everything */
+    s += arm(5, 1, 3, C.ok, 0, null, 0.76, 1) + plateTag(6.1 * T, 0.25 * T, 'ok', C.ok);
+    s += arm(5, 2, 0, ko, 0, null, 0.76, 1) + plateTag(5.5 * T - 10, 3 * T + 4, 'ko', ko);
+    s += arm(13.5, 2, 0, C.ink2, 0, null, 0.76, 1) + arm(2, 4, 3, C.ink2, 0, null, 1, 0.76) + arm(10, 5.9, 0, C.ink2, 0, null, 0.76, 1);
+    s += arm(7, 3, 1, ko, 0, null, 1, 1) + plateTag(8 * T + 4, 3.5 * T - 7, 'reject', ko);
+    return s;
+  }
+  const plateTag = (x, y, str, col) => `<rect x="${r1(x)}" y="${r1(y)}" width="${str.length * 5.6 + 10}" height="14" rx="4" fill="rgba(9,9,11,0.92)" stroke="${col}" stroke-opacity="0.55"/>` + text(x + 5, y + 10.2, str, { size: 9, weight: 700, fill: col });
+  /* where the ticket goes for each thing that happens, as points to ride through; `fx` is what happens on the way */
+  function go(points, done) { route = points.map((p) => ({ x: p[0], y: p[1], jump: p[2] === 'jump', fx: p[3] })); route.done = done; $('lp-ko').disabled = $('lp-ok').disabled = $('lp-release').disabled = true; if (!playing) finish(); }
+  function finish() { for (const p of route) { if (p.fx) p.fx(); pos = { x: p.x, y: p.y }; } const d = route.done; route = []; if (d) d(); if (route.length) finish(); else paintLoop(); }
+  function stepLoop(dt) {
+    let left = dt * 6;
+    while (route.length && left > 0) {
+      const p = route[0];
+      if (p.jump) { pos = { x: p.x, y: p.y }; route.shift(); if (p.fx) p.fx(); continue; }
+      const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+      if (d <= left) { pos = { x: p.x, y: p.y }; left -= d; route.shift(); if (p.fx) p.fx(); if (!route.length) { const done = route.done; if (done) done(); if (!route.length) paintLoop(); } }
+      else { pos = { x: pos.x + (p.x - pos.x) / d * left, y: pos.y + (p.y - pos.y) / d * left }; left = 0; }
+    }
+  }
+  const flash = (what) => { flashAt = what; setTimeout(() => { flashAt = null; drawLoop(); }, 350); };
+  const backHome = [[14.5, 2.5], [2.5, 5.5, 'jump'], [2.5, 4.5], P.review];
+  function paintLoop() {
+    const idle = !route.length;
+    $('lp-ko').disabled = $('lp-ok').disabled = !(idle && at === 'review');
+    $('lp-release').disabled = !(idle && at === 'zone');
+    $('lp-count').textContent = `passes:${count}`;
+    for (const b of document.querySelectorAll('[data-type]')) b.setAttribute('aria-pressed', String(b.dataset.type === ttype));
+    document.querySelector('[data-prio]').setAttribute('aria-pressed', String(urgent));
+    drawLoop();
+  }
+  let now = 0;
+  const drawLoop = () => { $('lp-scene').innerHTML = svg(LW, LH, 'La boucle Review, Bugfix, Review avec son compteur', loopScene(now)); };
+  $('lp-ko').addEventListener('click', () => {
+    /* under the toll: its operations first, then what it rejects */
+    go([[5.5, 2.5], [7.5, 2.5, '', () => { count++; flash('count'); }]], () => {
+      if (rejects()) { say(`ko: under the toll passes becomes ${count}; "${condText().join('" or "')}" holds, the arm takes it out to the zone.`); go([[7.5, 5.2], P.zone], () => { at = 'zone'; }); }
+      else { say(`ko: under the toll passes becomes ${count}; nothing to reject. Bugfix, then back to Review.`); go([P.bugfix, ...backHome], () => { at = 'review'; }); }
+    });
+  });
+  $('lp-ok').addEventListener('click', () => { say('ok: it leaves by the exit.'); go([[5.5, 1.5], P.exit], () => { at = 'gone'; }); });
+  $('lp-release').addEventListener('click', () => {
+    go([[10.5, 6.4], [12.5, 6.4, '', () => { count = 0; flash('reset'); say('On the way back, the Set gantry removes "passes": it starts again from nothing.'); }], [14.5, 6.4], [2.5, 5.5, 'jump'], [2.5, 4.5], P.review], () => { at = 'review'; });
+  });
+  const fresh = () => { count = 0; at = 'review'; pos = { x: P.review[0], y: P.review[1] }; route = []; lpLog = []; $('lp-log').innerHTML = ''; paintLoop(); };
+  $('lp-new').addEventListener('click', fresh);
+  document.addEventListener('click', (e) => {
+    const ty = e.target.closest('[data-type]'), pr = e.target.closest('[data-prio]');
+    if (ty) { ttype = ty.dataset.type; paintLoop(); } else if (pr) { urgent = !urgent; paintLoop(); }
+  });
+  $('lp-cond').addEventListener('change', (e) => { cond = e.target.value; paintLoop(); });
+
+  // ---------- the script station ----------
+  const named = { 'odys-api': { test: 'make test', lint: 'make lint' }, 'odys-front': { test: 'pnpm test --run', lint: 'pnpm lint' }, 'agentic-dmc-2': { test: '', lint: 'uv run ruff check' }, 'odys-mobile': { test: 'yarn jest', lint: '' } };
+  const scTickets = { '#201 · odys-api': ['odys-api'], '#202 · odys-api + odys-front': ['odys-api', 'odys-front'], '#203 · agentic-dmc-2': ['agentic-dmc-2'], '#205 · odys-mobile (a repository added last week)': ['odys-mobile'] };
+  let model = 'default', scDefault = '', rows = [{ repo: '*', kind: 'custom', value: 'open http://localhost:3000' }], scFails = new Set(), result = null;
+  const cmdFor = (repo) => {
+    const row = rows.find((r) => r.repo === repo);
+    const hit = row ?? rows.find((r) => r.repo === '*');
+    if (hit) return hit.kind === 'named' ? { cmd: named[repo]?.[hit.value] || '', from: `station${hit.repo === '*' ? ' · any repository' : ''} · action "${hit.value}"` } : { cmd: hit.value, from: `station${hit.repo === '*' ? ' · any repository' : ''} · command` };
+    if (scDefault) return { cmd: named[repo]?.[scDefault] || '', from: `repository · action "${scDefault}"` };
+    return { cmd: '', from: 'not in the list' };
+  };
+  function showScript() {
+    $('sc-default').innerHTML = `<label class="hint" for="sc-def">Default action</label><select id="sc-def">${['', 'test', 'lint'].map((a) => `<option value="${a}"${a === scDefault ? ' selected' : ''}>${a || 'none'}</option>`).join('')}</select><span class="hint">${scDefault ? 'for every repository that has no line below' : 'only the lines below are run'}</span>`;
+    $('sc-rows').innerHTML = rows.length ? rows.map((r, i) => `<div class="row" style="margin-bottom:6px"><b class="mono" style="min-width:104px">${r.repo === '*' ? 'any repository' : r.repo}</b>
+      <select data-i="${i}" data-k="kind" aria-label="Kind"><option value="named"${r.kind === 'named' ? ' selected' : ''}>named action</option><option value="custom"${r.kind === 'custom' ? ' selected' : ''}>command</option></select>
+      ${r.kind === 'named' ? `<select data-i="${i}" data-k="value" aria-label="Action">${['test', 'lint'].map((a) => `<option${a === r.value ? ' selected' : ''}>${a}</option>`).join('')}</select>` : `<input class="mono" data-i="${i}" data-k="value" value="${esc(r.value)}" aria-label="Command" size="22">`}
+      <button type="button" data-del="${i}" aria-label="Remove ${r.repo}">×</button></div>`).join('') : `<p class="hint">${scDefault ? 'No line: every repository runs its own action.' : 'No line and no default action: nothing is run.'}</p>`;
+    const free = ['*', ...Object.keys(named)].filter((r) => !rows.some((x) => x.repo === r));
+    $('sc-addrepo').innerHTML = free.map((r) => `<option value="${r}">${r === '*' ? 'any repository' : r}</option>`).join(''); $('sc-add').disabled = !free.length;
+    $('sc-named').innerHTML = '<tr><th>Repository</th><th>test</th><th>lint</th></tr>' + Object.entries(named).map(([r, c]) => `<tr><td class="mono">${r}</td>${['test', 'lint'].map((k) => `<td><input class="mono" data-repo="${r}" data-cmd="${k}" value="${esc(c[k])}" aria-label="${k} for ${r}" placeholder="none"></td>`).join('')}</tr>`).join('');
+    const wts = scTickets[$('sc-ticket').value] || [];
+    $('sc-fails').innerHTML = '<span class="hint">fails in:</span>' + wts.map((w) => `<button type="button" data-fail="${w}" aria-pressed="${scFails.has(w)}">${w}</button>`).join('');
+    drawScript();
+  }
+  const scW = 13 * T, scH = 5 * T;
+  function drawScript() {
+    const col = '#38bdf8', wts = scTickets[$('sc-ticket').value] || [], missing = $('sc-missing').value;
+    let s = belt(0, 2, 2) + arm(2, 2, 0, C.ink2, 0, null, 1, 0.76);
+    s += `<rect x="${3 * T + 3}" y="${0.5 * T + 3}" width="${6 * T - 6}" height="${4 * T - 6}" rx="12" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${3 * T + 12}" y="${0.5 * T + 12}" width="22" height="22" rx="6" fill="rgba(56,189,248,0.16)" stroke="rgba(56,189,248,0.6)"/>` + text(3 * T + 16, 0.5 * T + 27, '>_', { size: 9, weight: 700, fill: col });
+    s += text(3 * T + 42, 0.5 * T + 22, 'On arrival', { sans: true, size: 12, weight: 600 }) + text(3 * T + 42, 0.5 * T + 34, `script · ${[scDefault ? `default "${scDefault}"` : '', rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' + ') || 'nothing set'}`, { sans: true, size: 9, fill: C.ink3 });
+    /* the screen: one line per repository of the ticket, with what is run and how it went */
+    s += `<rect x="${3 * T + 12}" y="${0.5 * T + 44}" width="${6 * T - 24}" height="${4 * T - 78}" rx="6" fill="#0b0b0d" stroke="#27272a"/>`;
+    wts.forEach((w, i) => {
+      const c = cmdFor(w), r = result?.lines[w], y = 0.5 * T + 60 + i * 24, mark = !r ? '·' : r === 'ok' ? '✓' : r === 'ko' ? '✗' : r === 'skip' ? '–' : '?', fill = !r ? C.ink3 : r === 'ok' ? C.ok : r === 'ko' ? C.danger : C.warn;
+      s += text(3 * T + 20, y, mark, { size: 11, weight: 700, fill }) + text(3 * T + 34, y, `${w} $ ${c.cmd || '(no command)'}`.slice(0, 40), { size: 9, weight: 700, fill: c.cmd ? C.ink : C.warn }) + text(3 * T + 34, y + 10.5, c.from, { size: 7.5, fill: C.ink3 });
+    });
+    s += text(3 * T + 14, 4.5 * T - 12, `no command: ${missing === 'ignore' ? 'ignored' : missing === 'ko' ? 'failure' : 'own way out'}`, { size: 8, fill: C.ink3 });
+    /* the ways out: ok, ko, and its own when a repository has no command */
+    const outs = [['ok', C.ok, 1.2], ['ko', C.danger, 2.5]].concat(missing === 'own' ? [['unconfigured', C.warn, 3.5]] : []);
+    for (const [name, c, row] of outs) { const on = result?.outcome === name; s += quay(9, row, 0, c) + arm(9, row, 0, c, 0, on ? 'fix' : null, 0.76, 1) + belt(10, row, 2) + plateTag(10 * T + 6, row * T - 12, name, c) + (on ? `<rect x="${9 * T + 1}" y="${row * T + 1}" width="${3 * T - 2}" height="${T - 2}" rx="8" fill="none" stroke="${c}" stroke-width="2"/>` : ''); }
+    if (!result) s += token(1 * T, 2.5 * T, 'fix');
+    $('sc-scene').innerHTML = svg(scW, scH, 'Le poste script et ses sorties', s);
+  }
+  function runScript() {
+    const wts = scTickets[$('sc-ticket').value] || [], missing = $('sc-missing').value, stop = $('sc-fail').value === 'stop', lines = {};
+    let ko = false, none = false;
+    for (const w of wts) {
+      if (ko && stop) { lines[w] = 'skip'; continue; }
+      const c = cmdFor(w);
+      if (!c.cmd) { lines[w] = missing === 'ignore' ? 'skip' : 'none'; none = true; continue; }
+      if (scFails.has(w)) { lines[w] = 'ko'; ko = true; } else lines[w] = 'ok';
+    }
+    result = { lines, outcome: ko ? 'ko' : none && missing === 'ko' ? 'ko' : none && missing === 'own' ? 'unconfigured' : 'ok' };
+    drawScript();
+  }
+  $('sc-ticket').innerHTML = Object.keys(scTickets).map((t) => `<option>${t}</option>`).join('');
+  const again = () => { result = null; showScript(); };
+  document.addEventListener('click', (e) => {
+    const f = e.target.closest('[data-fail]'), d = e.target.closest('#sc-rows [data-del]');
+    if (f) { const w = f.dataset.fail; if (scFails.has(w)) scFails.delete(w); else scFails.add(w); again(); }
+    else if (d) { rows.splice(Number(d.dataset.del), 1); again(); }
+  });
+  $('sc-add').addEventListener('click', () => { const r = $('sc-addrepo').value; if (r) { rows.push(r === '*' ? { repo: r, kind: 'custom', value: '' } : { repo: r, kind: 'named', value: 'test' }); again(); } });
+  $('sc-rows').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i == null) return; rows[i][e.target.dataset.k] = e.target.value; if (e.target.dataset.k === 'kind') rows[i].value = e.target.value === 'named' ? 'test' : ''; again(); });
+  $('sc-default').addEventListener('change', (e) => { if (e.target.id === 'sc-def') { scDefault = e.target.value; again(); } });
+  $('sc-named').addEventListener('change', (e) => { const d = e.target.dataset; if (d.repo) { named[d.repo][d.cmd] = e.target.value.trim(); result = null; drawScript(); } });
+  for (const id of ['sc-ticket', 'sc-missing', 'sc-fail']) $(id).addEventListener('change', () => { if (id === 'sc-ticket') scFails = new Set(); again(); });
+  $('sc-run').addEventListener('click', runScript);
+
+  // ---------- the page ----------
+  fresh(); showScript();
+
+  // what moves: the four Set stations, and the ticket of the loop
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var playing = !still;
+  let last = performance.now();
+  const anim = $('anim');
+  anim.setAttribute('aria-pressed', String(playing));
+  anim.addEventListener('click', () => { playing = !playing; anim.setAttribute('aria-pressed', String(playing)); if (playing) { last = performance.now(); requestAnimationFrame(tick); } else if (route.length) finish(); });
+  function tick(t) {
+    if (!playing) return;
+    const dt = Math.min(0.1, (t - last) / 1000); last = t; now += dt;
+    if (route.length) { stepLoop(dt); drawLoop(); }
+    requestAnimationFrame(tick);
+  }
+  if (playing) requestAnimationFrame(tick);
+})();
+</script>

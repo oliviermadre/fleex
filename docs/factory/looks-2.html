@@ -1,0 +1,488 @@
+<title>Zone peinte, portail, robot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: second round on the three looks that were kept; each open question is a row of cards around a scene of the floor; a bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #15803d; --accent-soft: #dcfce7; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #4ade80; --accent-soft: #12301f; --on-accent: #062b14; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #4ade80; --accent-soft: #12301f; --on-accent: #062b14; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .kept { font-size: 0.86rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 76ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card button { align-self: flex-start; margin-top: auto; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Zone peinte, portail, robot à ventouse : deuxième tour</h1>
+    <p class="lede">On repart de ta présélection et de tes remarques. Chaque rangée répond à une question encore ouverte, avec des variantes à départager. Toujours rien dans le code : c'est la maquette qui décide.</p>
+    <div class="tools">
+      <button type="button" id="anim" aria-pressed="true">Animations</button>
+      <span class="said">Les scènes tournent en boucle. Coupe l'animation pour comparer les dessins à l'arrêt.</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-zone">
+    <h2 id="h-zone">Zone peinte : où mettre le cadenas et le compteur</h2>
+    <p class="kept">Retenu : le marquage au sol. Retiré : la voie de départ (les tickets s'entassent dans la zone). Repris des casiers : le cadenas (libère à la main ou toute seule) et le compteur de stock.</p>
+    <p class="brief">Chaque scène montre la même zone dans deux états : à gauche, libération à la main, 5 tickets, pas de limite ; à droite, libération automatique, 11 tickets sur une limite de 12 (le compteur passe à l'ambre en approchant).</p>
+    <div class="grid" id="zones"></div>
+  </section>
+
+  <section aria-labelledby="h-exit">
+    <h2 id="h-exit">Portail : le ticket s'efface, le compteur reste</h2>
+    <p class="kept">Retenu : le ticket qui devient un contour coché puis disparaît en passant la ligne. Retiré : tout stock de tickets sortis. Ajouté : le nombre de sorties sur 7 jours.</p>
+    <p class="brief">Un point à trancher : aujourd'hui une sortie est une case (ou plusieurs) dans laquelle on arrive de n'importe quel côté, par un convoyeur ou par un bras. Une arche en travers d'un convoyeur ne couvre qu'un sens ; les deux autres variantes acceptent une arrivée de tous les côtés.</p>
+    <div class="grid" id="exits"></div>
+  </section>
+
+  <section aria-labelledby="h-dir">
+    <h2 id="h-dir">Robot à ventouse : rendre le sens évident</h2>
+    <p class="kept">Problème : on ne voit pas d'où il prend ni où il dépose, surtout au repos et en mode build.</p>
+    <p class="brief">Le bras du haut prend « ok » et tourne ; celui du bas prend le reste et attend. Regarde surtout celui du bas : c'est au repos que le sens doit se lire.</p>
+    <div class="grid" id="dirs"></div>
+  </section>
+
+  <section aria-labelledby="h-reach">
+    <h2 id="h-reach">Robot à ventouse : aller chercher le ticket là où il est</h2>
+    <p class="kept">Problème : on pose des bras tout autour d'un poste, mais le ticket terminé est dessiné à un seul endroit (le bac OUT). Le bras fait son geste dans le vide, puis le ticket se téléporte dans sa ventouse.</p>
+    <p class="brief">Même poste, deux bras : un à droite qui prend « ok », un en bas à gauche qui prend « ko ». Suis le ticket rouge, qui sort par le bras du bas.</p>
+    <div class="grid" id="reach"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- the floor's own look (the app's dark theme) ----------
+  const T = 44;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#202024', panel: '#161618', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', blue: '#60a5fa', purple: '#c084fc', steel: '#52525b', steel2: '#3a3a40', dark: '#0b0f1a' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', think: '#60a5fa', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"";
+  const SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+
+  function floor(w, h) {
+    let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`;
+    for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    return s;
+  }
+  const chevron = (cx, cy, color = C.chev, w = 2.4, rot = 0) => `<path transform="rotate(${rot} ${cx} ${cy})" d="M${cx - 4} ${cy - 8} L${cx + 4} ${cy} L${cx - 4} ${cy + 8}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt going east: `n` tiles from tile (x, y). */
+  function belt(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${n * T}" height="${T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T} ${y * T + 2} H${(x + n) * T} M${x * T} ${(y + 1) * T - 2} H${(x + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron((x + i) * T + 12, y * T + T / 2) + chevron((x + i) * T + 34, y * T + T / 2);
+    return s;
+  }
+  /** A belt going north (`up`) or south: `n` tiles down from tile (x, y). */
+  function beltV(x, y, n, up) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${T}" height="${n * T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T + 2} ${y * T} V${(y + n) * T} M${(x + 1) * T - 2} ${y * T} V${(y + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron(x * T + T / 2, (y + i) * T + 12, C.chev, 2.4, up ? -90 : 90) + chevron(x * T + T / 2, (y + i) * T + 34, C.chev, 2.4, up ? -90 : 90);
+    return s;
+  }
+  /** A ticket: an object with some thickness, its shape and colour saying its type. */
+  function token(cx, cy, type, s = 18, o = {}) {
+    const col = TYPE[type], h = s / 2, dark = 'rgba(0,0,0,0.45)';
+    const shape = (dy, fill) => type === 'think' ? `<circle cx="${r1(cx)}" cy="${r1(cy + dy)}" r="${r1(h)}" fill="${fill}"/>`
+      : type === 'review' ? `<path d="M${r1(cx)} ${r1(cy - h + dy)} L${r1(cx + h)} ${r1(cy + dy)} L${r1(cx)} ${r1(cy + h + dy)} L${r1(cx - h)} ${r1(cy + dy)} Z" fill="${fill}"/>`
+      : type === 'fix' ? `<path d="M${r1(cx - h)} ${r1(cy - h * 0.5 + dy)} L${r1(cx - h * 0.45)} ${r1(cy - h + dy)} H${r1(cx + h * 0.45)} L${r1(cx + h)} ${r1(cy - h * 0.5 + dy)} V${r1(cy + h * 0.5 + dy)} L${r1(cx + h * 0.45)} ${r1(cy + h + dy)} H${r1(cx - h * 0.45)} L${r1(cx - h)} ${r1(cy + h * 0.5 + dy)} Z" fill="${fill}"/>`
+      : `<rect x="${r1(cx - h)}" y="${r1(cy - h + dy)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.26)}" fill="${fill}"/>`;
+    return `<g opacity="${r1(o.opacity ?? 1)}">${shape(2.5, dark)}${shape(0, col)}<circle cx="${r1(cx - h * 0.3)}" cy="${r1(cy - h * 0.3)}" r="${r1(s * 0.11)}" fill="rgba(255,255,255,0.55)"/></g>`;
+  }
+  /** What a ticket becomes past the line: its outline, checked, on its way out. */
+  const gone = (cx, cy, opacity, s = 18) => `<g opacity="${r1(clamp(opacity))}"><rect x="${r1(cx - s / 2)}" y="${r1(cy - s / 2)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.28)}" fill="none" stroke="${C.ok}" stroke-width="1.8"/><path d="M${r1(cx - s * 0.22)} ${r1(cy)} l${r1(s * 0.17)} ${r1(s * 0.17)} l${r1(s * 0.28)} ${r1(-s * 0.34)}" fill="none" stroke="${C.ok}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+  const text = (x, y, str, o = {}) => `<text x="${r1(x)}" y="${r1(y)}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.spacing ? `letter-spacing="${o.spacing}"` : ''} ${o.opacity ? `opacity="${o.opacity}"` : ''}>${str}</text>`;
+  const svg = (w, h, label, inner, box) => `<svg viewBox="${box ?? `0 0 ${w} ${h}`}" role="img" aria-label="${label}">${floor(w, h)}${inner}</svg>`;
+  /** A padlock: shut when the zone releases by hand, open (with a chevron) when it releases by itself. */
+  function lock(x, y, open, col) {
+    let s = `<rect x="${x}" y="${y + 5}" width="11" height="9" rx="2" fill="${col}"/><path d="M${x + 2.5} ${y + 5} v${open ? -4.5 : -2.5} a3 3 0 0 1 6 0 v${open ? 1 : 2.5}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linecap="round"/>`;
+    if (open) s += `<path d="M${x + 15} ${y + 5.5} l4 4 l-4 4 M${x + 20} ${y + 5.5} l4 4 l-4 4" fill="none" stroke="${col}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    return s;
+  }
+
+  // ---------- zones: painted on the floor, with the padlock and the count ----------
+  const TYPES = ['build', 'fix', 'think', 'review', 'ops', 'lead'];
+  function paintedZone(v, x0, y0, w, h, o) {
+    const c = C.blue, hot = !!o.limit && o.count / o.limit >= 0.8, cc = hot ? C.warn : c, count = String(o.count).padStart(2, '0'), stock = o.limit ? `${count}/${o.limit}` : count;
+    let s = `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${c}" fill-opacity="0.05"/>`;
+    s += `<rect x="${x0 + 1.5}" y="${y0 + 1.5}" width="${w - 3}" height="${h - 3}" fill="none" stroke="${c}" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="9 7"/>`;
+    const corner = (x, y, dx, dy) => `<path d="M${x + dx * 18} ${y + dy * 2.5} H${x + dx * 2.5} V${y + dy * 18}" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="square"/>`;
+    const corners = { tl: corner(x0, y0, 1, 1), tr: corner(x0 + w, y0, -1, 1), bl: corner(x0, y0 + h, 1, -1), br: corner(x0 + w, y0 + h, -1, -1) };
+    let top = 30;
+    if (v === 'ZA') {
+      /* two painted plates over the top line: the name, and the padlock with the stock */
+      s += corners.bl + corners.br;
+      const nw = o.name.length * 7.4 + 14, sw = stock.length * 7.4 + (o.auto ? 46 : 32);
+      s += `<rect x="${x0 + 8}" y="${y0 - 9}" width="${nw}" height="19" rx="3" fill="${c}"/>` + text(x0 + 15, y0 + 4.5, o.name, { mono: true, size: 11, weight: 700, fill: C.dark, spacing: 1 });
+      s += `<rect x="${x0 + w - sw - 8}" y="${y0 - 9}" width="${sw}" height="19" rx="3" fill="${cc}"/>` + lock(x0 + w - sw - 2, y0 - 7.5, o.auto, C.dark) + text(x0 + w - 14, y0 + 4.5, stock, { mono: true, size: 11, weight: 700, fill: C.dark, anchor: 'end' });
+      top = 30;
+    } else if (v === 'ZB') {
+      /* the top side is a full painted band, as on a road: name on the left, padlock and stock on the right */
+      s += corners.bl + corners.br + `<rect x="${x0}" y="${y0}" width="${w}" height="22" fill="${c}"/>`;
+      s += text(x0 + 9, y0 + 15, o.name, { mono: true, size: 11.5, weight: 700, fill: C.dark, spacing: 1 });
+      const sw = stock.length * 7.4 + 8;
+      if (hot) s += `<rect x="${x0 + w - sw - 5}" y="${y0 + 3}" width="${sw}" height="16" rx="3" fill="${C.warn}"/>`;
+      s += text(x0 + w - 9, y0 + 15, stock, { mono: true, size: 11.5, weight: 700, fill: C.dark, anchor: 'end' }) + lock(x0 + w - sw - (o.auto ? 36 : 22), y0 + 2.5, o.auto, C.dark);
+      top = 40;
+    } else {
+      /* stencils only: the name, the padlock in a corner, the stock as a giant figure on the ground, and the limit as a line that fills */
+      s += corners.tl + corners.bl + corners.br;
+      s += text(x0 + 12, y0 + 20, o.name, { mono: true, size: 12, weight: 700, fill: c, spacing: 2 });
+      s += lock(x0 + w - (o.auto ? 36 : 22), y0 + 5, o.auto, c);
+      s += text(x0 + 10, y0 + h - 16, count, { mono: true, size: 42, weight: 700, fill: cc, opacity: hot ? 0.55 : 0.28 });
+      if (o.limit) {
+        s += text(x0 + 64, y0 + h - 18, `/${o.limit}`, { mono: true, size: 13, weight: 700, fill: cc, opacity: 0.6 });
+        s += `<path d="M${x0 + 10} ${y0 + h - 8} H${x0 + w - 10}" stroke="${c}" stroke-opacity="0.25" stroke-width="4" stroke-linecap="round"/><path d="M${x0 + 10} ${y0 + h - 8} H${r1(x0 + 10 + (w - 20) * o.count / o.limit)}" stroke="${cc}" stroke-width="4" stroke-linecap="round"/>`;
+      }
+      top = 38;
+    }
+    const cols = Math.floor((w - 24) / 24);
+    for (let i = 0; i < o.count; i++) s += token(x0 + 22 + (i % cols) * 24, y0 + top + 10 + Math.floor(i / cols) * 24, TYPES[(i * 5 + 1) % 6], 16);
+    return s;
+  }
+  const ZW = 11 * T, ZH = 5 * T, ZBOX = `${T / 2} ${T / 2} ${ZW - T} ${ZH - T}`;
+  const zoneScene = (v) => paintedZone(v, T, T, 4 * T, 3 * T, { name: 'PR OK', count: 5, auto: false }) + paintedZone(v, 6 * T, T, 4 * T, 3 * T, { name: 'TODO', count: 11, limit: 12, auto: true });
+  const zones = [
+    { id: 'ZA', name: 'Deux plaques peintes', mine: true,
+      idea: 'Le nom et le stock sont deux plaques peintes posées sur la ligne du haut. Le cadenas est dans la plaque du stock.',
+      reads: 'Cadenas fermé : rien ne part sans toi. Cadenas ouvert et chevrons : ça part tout seul. La plaque du stock vire à l’ambre près de la limite.',
+      limit: 'Deux plaques à dessiner par zone ; sur une zone très étroite elles se touchent.' },
+    { id: 'ZB', name: 'Bandeau peint',
+      idea: 'Tout le côté haut devient une bande pleine, comme un marquage routier : nom à gauche, cadenas et stock à droite.',
+      reads: 'Le plus visible de loin : la bande colorée se repère avant même de lire. Seul le stock s’allume en ambre.',
+      limit: 'Plus massif : on s’éloigne un peu du trait fin du marquage au sol.' },
+    { id: 'ZC', name: 'Tout au pochoir',
+      idea: 'Aucune plaque : nom et cadenas au pochoir, le stock en chiffre géant peint au sol, la limite en ligne qui se remplit.',
+      reads: 'Le chiffre géant se lit de très loin. La ligne du bas donne le remplissage sans calcul.',
+      limit: 'Le chiffre passe sous les tickets quand la zone est pleine ; le cadenas est petit.' },
+  ];
+
+  // ---------- exits: the ticket fades as it passes; the count of the last 7 days stays ----------
+  const EW = 10 * T, EH = 5 * T, EBOX = `${T / 2} ${T / 2} ${EW - T} ${EH - T}`;
+  const counter = (x, y, n = 9) => `<rect x="${x}" y="${y - 9}" width="58" height="18" rx="4" fill="${C.panel}" stroke="${C.ok}" stroke-opacity="0.55"/>` + text(x + 6, y + 4, String(n), { mono: true, size: 11, weight: 700, fill: C.ok }) + text(x + 52, y + 3.5, '· 7 d', { mono: true, size: 9, fill: C.ink2, anchor: 'end' });
+  const glow = `<defs><linearGradient id="curt" x1="0" x2="1"><stop offset="0" stop-color="rgba(34,197,94,0)"/><stop offset="0.5" stop-color="rgba(34,197,94,0.55)"/><stop offset="1" stop-color="rgba(34,197,94,0)"/></linearGradient><radialGradient id="pad"><stop offset="0" stop-color="rgba(34,197,94,0.22)"/><stop offset="1" stop-color="rgba(34,197,94,0)"/></radialGradient></defs>`;
+  const exits = [
+    { id: 'PA', name: 'Arche en travers',
+      idea: 'Deux montants et un rideau de lumière en travers du convoyeur. Le compteur est une plaque accrochée au montant du haut.',
+      reads: 'Le passage se voit sur le ticket : plein avant le rideau, contour coché après, puis plus rien.',
+      limit: 'Ne marche que dans l’axe d’un convoyeur. Un bras qui dépose par le côté n’a pas de rideau à traverser.',
+      draw: (t) => {
+        const x = 5.5 * T, y = 2.5 * T, u = (t % 4) / 4, tx = lerp(0.6 * T, 7 * T, u);
+        let s = glow + belt(0, 2, 6) + `<rect x="${5 * T}" y="${T}" width="${T}" height="${3 * T}" fill="${C.ok}" fill-opacity="0.04"/>`;
+        s += `<rect x="${x - 16}" y="${T + 16}" width="32" height="${3 * T - 32}" fill="url(#curt)"/><path d="M${x} ${T + 16} V${4 * T - 16}" stroke="${C.ok}" stroke-width="2"/>`;
+        for (const py of [T + 4, 4 * T - 18]) s += `<rect x="${x - 12}" y="${py}" width="24" height="14" rx="4" fill="${C.body}" stroke="${C.ok}" stroke-width="2"/><circle cx="${x}" cy="${py + 7}" r="2.5" fill="${C.ok}"/>`;
+        s += tx < x ? token(tx, y, 'fix') : gone(tx, y, 1 - (tx - x) / (1.4 * T));
+        s += text(x + 18, T + 15, 'EXIT', { mono: true, size: 11, weight: 700, fill: C.ok, spacing: 2 }) + counter(x + 58, T + 11) + text(x + 18, 4 * T - 7, '→ done', { mono: true, size: 9.5, fill: C.ink2 });
+        return s;
+      } },
+    { id: 'PB', name: 'Cadre lumineux', mine: true,
+      idea: 'La sortie garde son emprise de cases, mais c’est un cadre de lumière : on y entre par n’importe quel côté et on s’efface en le franchissant.',
+      reads: 'Même effet que l’arche, quel que soit le côté d’arrivée, convoyeur ou bras. Le bord s’allume là où le ticket passe.',
+      limit: 'Garde une grande surface vide ; à réduire à 2 par 2 si ça prend trop de place.',
+      draw: (t) => {
+        const x0 = 5 * T, y0 = T, w = 3 * T, cx = x0 + w / 2, cy = y0 + w / 2;
+        let s = glow + belt(0, 2, 5) + beltV(6, 4, 1, true);
+        for (const [sw, op] of [[14, 0.07], [8, 0.14]]) s += `<rect x="${x0}" y="${y0}" width="${w}" height="${w}" rx="8" fill="none" stroke="${C.ok}" stroke-opacity="${op}" stroke-width="${sw}"/>`;
+        s += `<rect x="${x0}" y="${y0}" width="${w}" height="${w}" rx="8" fill="${C.panel}" stroke="${C.ok}" stroke-width="2.5"/><circle cx="${cx}" cy="${cy}" r="${w * 0.46}" fill="url(#pad)"/>`;
+        /* one ticket by the belt on the left, one by the belt underneath */
+        const one = (u, from, edge) => {
+          const k = clamp((u - 0.55) / 0.45), into = u >= 0.55;
+          const px = into ? lerp(edge.x, cx, ease(k)) : lerp(from.x, edge.x, u / 0.55), py = into ? lerp(edge.y, cy, ease(k)) : lerp(from.y, edge.y, u / 0.55);
+          let o = into ? gone(px, py, 1 - k) : token(px, py, from.type);
+          if (into) o += `<path d="M${edge.x - edge.nx * 20} ${edge.y - edge.ny * 20} L${edge.x + edge.nx * 20} ${edge.y + edge.ny * 20}" stroke="#bbf7d0" stroke-width="4" stroke-linecap="round" opacity="${r1(1 - k)}"/>`;
+          return o;
+        };
+        s += one((t % 4) / 4, { x: 0.6 * T, y: 2.5 * T, type: 'fix' }, { x: x0, y: 2.5 * T, nx: 0, ny: 1 });
+        s += one(((t + 2) % 4) / 4, { x: 6.5 * T, y: 5 * T, type: 'build' }, { x: 6.5 * T, y: y0 + w, nx: 1, ny: 0 });
+        s += `<rect x="${x0 + 8}" y="${y0 - 9}" width="44" height="18" rx="4" fill="${C.ok}"/>` + text(x0 + 30, y0 + 4, 'EXIT', { mono: true, size: 11, weight: 700, fill: '#052e16', anchor: 'middle', spacing: 1.5 });
+        s += counter(x0 + w - 66, y0) + text(cx, y0 + w - 10, 'done · handed back to Fleex', { mono: true, size: 8, fill: C.ink3, anchor: 'middle' });
+        return s;
+      } },
+    { id: 'PC', name: 'Plot de sortie',
+      idea: 'Une seule case : un plot rond au sol, le ticket se pose dessus, rétrécit et s’efface dans un anneau qui s’élargit.',
+      reads: 'Très compact et accessible de tous les côtés. Le rond se distingue de tout le reste du sol.',
+      limit: 'Petit : moins repérable de loin que le cadre ; le compteur est une plaque à côté.',
+      draw: (t) => {
+        const cx = 5.5 * T, cy = 2.5 * T;
+        let s = glow + belt(0, 2, 5) + beltV(5, 3, 2, true);
+        s += `<circle cx="${cx}" cy="${cy}" r="30" fill="url(#pad)"/><circle cx="${cx}" cy="${cy}" r="19" fill="${C.panel}" stroke="${C.ok}" stroke-width="2.5"/><circle cx="${cx}" cy="${cy}" r="12" fill="none" stroke="${C.ok}" stroke-opacity="0.4" stroke-width="1.5"/><circle cx="${cx}" cy="${cy}" r="5" fill="none" stroke="${C.ok}" stroke-opacity="0.25" stroke-width="1.5"/>`;
+        const one = (u, from, type) => {
+          const k = clamp((u - 0.6) / 0.4);
+          if (u < 0.6) return token(lerp(from.x, cx, u / 0.6), lerp(from.y, cy, u / 0.6), type);
+          return `<circle cx="${cx}" cy="${cy}" r="${r1(19 + k * 16)}" fill="none" stroke="${C.ok}" stroke-width="2" opacity="${r1(1 - k)}"/>` + gone(cx, cy, 1 - k, 18 - k * 9);
+        };
+        s += one((t % 4) / 4, { x: 0.6 * T, y: cy }, 'fix') + one(((t + 2) % 4) / 4, { x: cx, y: 5 * T }, 'build');
+        s += text(cx + 30, cy - 12, 'EXIT', { mono: true, size: 11, weight: 700, fill: C.ok, spacing: 2 }) + counter(cx + 30, cy + 6) + text(cx + 30, cy + 28, '→ done', { mono: true, size: 9.5, fill: C.ink2 });
+        return s;
+      } },
+  ];
+
+  // ---------- the suction robot: one drawing, whatever it reaches for ----------
+  /** The arm from its base to its hand, with its shadow, the band of its condition, and the ticket under the cup. */
+  function robot(bx, by, hx, hy, carry, col, o = {}) {
+    let s = `<path d="M${r1(bx + 3)} ${r1(by + 5)} L${r1(hx + 3)} ${r1(hy + 5)}" stroke="rgba(0,0,0,0.42)" stroke-width="14" stroke-linecap="round"/>`;
+    if (carry) s += token(hx, hy, carry, 16);
+    s += `<path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${C.steel}" stroke-width="13" stroke-linecap="round"/><path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${col}" stroke-width="3.5" stroke-linecap="round"/>`;
+    s += `<circle cx="${r1(hx)}" cy="${r1(hy)}" r="9" fill="${carry ? 'rgba(24,24,27,0.35)' : C.floor}" stroke="${C.ink}" stroke-width="2.4"/><circle cx="${r1(hx)}" cy="${r1(hy)}" r="2.5" fill="${C.ink}"/>`;
+    s += o.base ?? `<circle cx="${bx}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${bx}" cy="${by}" r="4" fill="${C.steel}"/>`;
+    return s;
+  }
+  /** Where the hand is, `e` of the way (0 to 1) from where it takes to where it drops: it turns round the base and its reach changes on the way. */
+  function reach(b, src, dst, e, side = 1) {
+    const aS = Math.atan2(src.y - b.y, src.x - b.x), aD = Math.atan2(dst.y - b.y, dst.x - b.x);
+    let d = aD - aS; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    if (Math.abs(Math.abs(d) - Math.PI) < 0.05) d = Math.PI * side;
+    const a = aS + d * e, r = lerp(Math.hypot(src.x - b.x, src.y - b.y), Math.hypot(dst.x - b.x, dst.y - b.y), e);
+    return { x: b.x + Math.cos(a) * r, y: b.y + Math.sin(a) * r };
+  }
+  /** A loop of 3.6 s: out with the ticket, a pause, back empty, a pause. */
+  function phase(t) {
+    const u = (t % 3.6) / 3.6;
+    if (u < 0.4) return { e: ease(u / 0.4), carry: true };
+    if (u < 0.5) return { e: 1, carry: false };
+    if (u < 0.9) return { e: 1 - ease((u - 0.5) / 0.4), carry: false };
+    return { e: 0, carry: true };
+  }
+  const plate = (x, y, str, col) => `<rect x="${x}" y="${y - 9}" width="${str.length * 7 + 10}" height="18" rx="4" fill="#3a2f0b" stroke="${col}" stroke-opacity="0.5"/>` + text(x + 5, y + 4, str, { mono: true, size: 11, weight: 700, fill: col });
+
+  // direction: what says "takes here, drops there" (the arm goes from the left, towards the right)
+  const AW = 8 * T, AH = 4 * T, BX = 2.5 * T, ROWS = [1.5 * T, 2.5 * T];
+  function stationStub() {
+    let s = `<path d="M0 6 H${2 * T - 2} a8 8 0 0 1 8 8 V${AH - 14} a8 8 0 0 1 -8 8 H0 Z" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${T + 4}" y="${T - 8}" width="${T - 4}" height="${2 * T + 16}" rx="6" fill="${C.panel}"/>` + text(T + 10, T + 4, 'OUT', { mono: true, size: 7.5, fill: C.ink3, spacing: 1 });
+    s += `<rect x="6" y="${T - 8}" width="${T - 8}" height="${2 * T + 16}" rx="6" fill="${C.panel}"/>` + text(12, T + 4, 'FREE', { mono: true, size: 7.5, fill: C.ink3, spacing: 1 });
+    return s;
+  }
+  const dirs = [
+    { id: 'S1', name: 'Flèche peinte au sol', mine: true,
+      idea: 'Sous le bras, sa case porte une flèche peinte dans sa couleur : fine côté prise, large côté dépose, pointe au bord.',
+      reads: 'Le sens est écrit au sol, donc visible même quand le bras est ailleurs ou au repos. Même langage que les zones peintes.',
+      limit: 'Une marque de plus par bras ; à atténuer hors mode build si le sol devient chargé.',
+      under: (bx, by, col) => `<path d="M${bx - 22} ${by - 9} L${bx + 7} ${by - 12} V${by - 19} L${bx + 26} ${by} L${bx + 7} ${by + 19} V${by + 12} L${bx - 22} ${by + 9} Z" fill="${col}" fill-opacity="0.26" stroke="${col}" stroke-opacity="0.7" stroke-width="1.5" stroke-linejoin="round"/>` },
+    { id: 'S2', name: 'Socle en pointe',
+      idea: 'Le socle n’est plus un rond : c’est une plaque en forme de flèche, creusée côté prise, pointue côté dépose.',
+      reads: 'Le bras lui-même dit son sens : rien à lire ailleurs, et ça tourne avec lui quand on le pivote.',
+      limit: 'Le bras au repos recouvre le creux côté prise ; reste la pointe.',
+      base: (bx, by, col) => `<path d="M${bx - 12} ${by - 12} H${bx + 4} L${bx + 18} ${by} L${bx + 4} ${by + 12} H${bx - 12} a12 12 0 0 0 0 -24 Z" fill="${C.body}" stroke="${col}" stroke-width="3" stroke-linejoin="round"/><path d="M${bx + 3} ${by - 4} l4 4 l-4 4" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` },
+    { id: 'S3', name: 'Prise et dépose marquées',
+      idea: 'Deux petites marques aux bords de sa case : un anneau en pointillé là où il prend, un triangle plein là où il dépose.',
+      reads: 'Discret et précis : on voit exactement les deux points. L’anneau est aussi l’endroit où le ticket l’attend.',
+      limit: 'Petit : demande de s’approcher, donc moins utile en vue d’ensemble.',
+      under: (bx, by, col) => `<circle cx="${bx - 20}" cy="${by}" r="6" fill="none" stroke="${col}" stroke-width="2" stroke-dasharray="3 3"/><path d="M${bx + 15} ${by - 7} L${bx + 24} ${by} L${bx + 15} ${by + 7} Z" fill="${col}"/>` },
+  ];
+  function dirScene(d, t) {
+    const p = phase(t), src = (y) => ({ x: BX - T, y }), dst = (y) => ({ x: BX + T, y });
+    let s = stationStub() + belt(3, 1, 5) + belt(3, 2, 5) + token(1.5 * T + 2, ROWS[1], 'fix', 16);
+    for (const [i, col] of [[0, C.warn], [1, C.ink2]]) if (d.under) s += d.under(BX, ROWS[i], col);
+    const top = reach({ x: BX, y: ROWS[0] }, src(ROWS[0]), dst(ROWS[0]), p.e, -1);
+    s += robot(BX, ROWS[0], top.x, top.y, p.carry ? 'build' : null, C.warn, { base: d.base?.(BX, ROWS[0], C.warn) });
+    s += robot(BX, ROWS[1], BX - T, ROWS[1], null, C.ink2, { base: d.base?.(BX, ROWS[1], C.ink2) });
+    return s + plate(3 * T + 6, T - 13, 'ok', C.warn);
+  }
+
+  // reach: a whole station, an arm on its right that takes "ok", one under its left that takes "ko"
+  const RW = 10 * T, RH = 7 * T, RBOX = `${T / 2} ${T / 2} ${RW - T} ${RH - T}`;
+  const SX = T, SY = T, SWd = 5 * T, SHt = 4 * T;
+  const PLACE = [{ x: SX + 44, y: SY + 78 }, { x: SX + 112, y: SY + 78 }];
+  const ARM_R = { b: { x: 6.5 * T, y: 2.5 * T }, dst: { x: 7.5 * T, y: 2.5 * T } }, ARM_B = { b: { x: 2.5 * T, y: 5.5 * T }, dst: { x: 2.5 * T, y: 6.5 * T } };
+  function stationBody(withTray) {
+    let s = `<rect x="${SX + 2}" y="${SY + 2}" width="${SWd - 4}" height="${SHt - 4}" rx="10" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${SX + 10}" y="${SY + 9}" width="24" height="24" rx="6" fill="rgba(192,132,252,0.18)" stroke="${C.purple}" stroke-width="1.5"/><path d="M${SX + 16} ${SY + 25} l10 -10 m-3 -2 a4 4 0 0 1 5 5" fill="none" stroke="${C.purple}" stroke-width="2" stroke-linecap="round"/>`;
+    s += text(SX + 42, SY + 21, 'PR Review', { size: 12, weight: 600 }) + text(SX + 42, SY + 32, 'skill · pr-review', { size: 8.5, fill: C.ink3 });
+    s += `<rect x="${SX + SWd - 22}" y="${SY + 8}" width="12" height="28" rx="4" fill="${C.panel}"/><circle cx="${SX + SWd - 16}" cy="${SY + 29}" r="3.5" fill="${C.ok}"/>`;
+    for (const [i, p] of PLACE.entries()) s += `<rect x="${p.x - 30}" y="${p.y - 36}" width="60" height="72" rx="6" fill="${C.panel}"/>` + text(p.x - 24, p.y - 25, i ? 'PLACE 2' : 'PLACE 1', { mono: true, size: 7, fill: C.ink3, spacing: 1 });
+    if (withTray) s += `<rect x="${SX + SWd - 68}" y="${SY + 42}" width="56" height="72" rx="6" fill="${C.panel}"/>` + text(SX + SWd - 62, SY + 53, 'OUT', { mono: true, size: 7, fill: C.ink3, spacing: 1 });
+    s += `<rect x="${SX + 10}" y="${SY + SHt - 46}" width="${SWd - 20}" height="34" rx="6" fill="${C.panel}"/>` + text(SX + 28, SY + SHt - 34, 'SET ASIDE', { mono: true, size: 7, fill: C.warn, spacing: 1, opacity: 0.8 });
+    for (let i = 0; i < 4; i++) s += `<path d="M${SX + 12 + i * 4} ${SY + SHt - 14} l10 -30" stroke="${C.warn}" stroke-opacity="0.5" stroke-width="2.5"/>`;
+    return s;
+  }
+  const armsBelts = () => belt(7, 2, 3) + beltV(2, 6, 1, false);
+  const reachOpts = [
+    { id: 'R1', name: 'Un quai par bras', mine: true,
+      idea: 'Le bac OUT disparaît. Chaque bras collé au poste y fait naître un petit quai au bord, à son étiquette. Un ticket terminé glisse jusqu’au quai du bras qui le prendra.',
+      reads: 'On voit par où le ticket va sortir avant qu’il sorte. Le bras ne fait jamais qu’un pas : du quai à la case d’à côté, et il touche toujours son ticket.',
+      limit: 'Si aucun bras ne prend la sortie, le ticket reste dans sa place, marqué en rouge. Vaut aussi pour les zones : le ticket libéré glisse au bord, près du bras.',
+      draw: (t) => {
+        const u = (t % 8) / 8, dockR = { x: SX + SWd - 14, y: 2.5 * T }, dockB = { x: 2.5 * T, y: SY + SHt - 14 };
+        let s = stationBody(false) + armsBelts();
+        /* the quays: a notch in the edge, at each arm, carrying its label */
+        s += `<rect x="${dockR.x - 13}" y="${dockR.y - 14}" width="26" height="28" rx="5" fill="${C.floor}" stroke="${C.warn}" stroke-width="2"/>` + text(dockR.x, dockR.y - 18, 'ok', { mono: true, size: 9, weight: 700, fill: C.warn, anchor: 'middle' });
+        s += `<rect x="${dockB.x - 14}" y="${dockB.y - 13}" width="28" height="26" rx="5" fill="${C.floor}" stroke="${C.danger}" stroke-width="2"/>` + text(dockB.x + 20, dockB.y + 3, 'ko', { mono: true, size: 9, weight: 700, fill: C.danger });
+        /* the green ticket: place 2, then the quay on the right, then the arm, then the belt */
+        const stage = (a, b) => clamp((u - a) / (b - a));
+        const pR = phaseOn(u, 0.22, 0.42), pB = phaseOn(u, 0.5, 0.7);
+        let g = null, r = null;
+        if (u < 0.1) g = PLACE[1]; else if (u < 0.22) { const k = ease(stage(0.1, 0.22)); g = { x: lerp(PLACE[1].x, dockR.x, k), y: lerp(PLACE[1].y, dockR.y, k) }; }
+        else if (u >= 0.32 && u < 0.6) g = { x: lerp(ARM_R.dst.x, 10 * T, stage(0.32, 0.6)), y: ARM_R.dst.y };
+        if (u < 0.3) r = PLACE[0]; else if (u < 0.5) { const k = ease(stage(0.3, 0.5)); r = { x: lerp(PLACE[0].x, dockB.x, k), y: lerp(PLACE[0].y, dockB.y, k) }; }
+        else if (u >= 0.6 && u < 0.8) r = { x: ARM_B.dst.x, y: lerp(ARM_B.dst.y, 7.4 * T, stage(0.6, 0.8)) };
+        if (g) s += token(g.x, g.y, 'build', 16);
+        if (r) s += token(r.x, r.y, 'fix', 16);
+        const hR = reach(ARM_R.b, dockR, ARM_R.dst, pR.e, -1), hB = reach(ARM_B.b, dockB, ARM_B.dst, pB.e, 1);
+        s += robot(ARM_R.b.x, ARM_R.b.y, hR.x, hR.y, pR.carry ? 'build' : null, C.warn) + robot(ARM_B.b.x, ARM_B.b.y, hB.x, hB.y, pB.carry ? 'fix' : null, C.danger);
+        return s;
+      } },
+    { id: 'R2', name: 'Bras télescopique',
+      idea: 'Le poste garde son bac OUT unique. C’est le bras qui s’allonge jusqu’au ticket, où qu’il soit, puis se rétracte en tournant.',
+      reads: 'Rien à changer dans le poste, et le bras touche bien son ticket.',
+      limit: 'Un bras placé loin du bac traverse tout le poste, par-dessus les places et les autres tickets. Plus il y a de bras, plus ça se croise.',
+      draw: (t) => {
+        const u = (t % 8) / 8, tray = { x: SX + SWd - 40, y: SY + 88 }, tray2 = { x: SX + SWd - 40, y: SY + 66 };
+        let s = stationBody(true) + armsBelts();
+        const stage = (a, b) => clamp((u - a) / (b - a));
+        const pR = phaseOn(u, 0.22, 0.42), pB = phaseOn(u, 0.5, 0.74);
+        let g = null, r = null;
+        if (u < 0.1) g = PLACE[1]; else if (u < 0.22) { const k = ease(stage(0.1, 0.22)); g = { x: lerp(PLACE[1].x, tray.x, k), y: lerp(PLACE[1].y, tray.y, k) }; }
+        else if (u >= 0.32 && u < 0.6) g = { x: lerp(ARM_R.dst.x, 10 * T, stage(0.32, 0.6)), y: ARM_R.dst.y };
+        if (u < 0.3) r = PLACE[0]; else if (u < 0.5) { const k = ease(stage(0.3, 0.5)); r = { x: lerp(PLACE[0].x, tray2.x, k), y: lerp(PLACE[0].y, tray2.y, k) }; }
+        else if (u >= 0.62 && u < 0.84) r = { x: ARM_B.dst.x, y: lerp(ARM_B.dst.y, 7.4 * T, stage(0.62, 0.84)) };
+        if (g) s += token(g.x, g.y, 'build', 16);
+        if (r) s += token(r.x, r.y, 'fix', 16);
+        const drawnIn = (arm, to) => { const d = Math.hypot(to.x - arm.b.x, to.y - arm.b.y); return { x: arm.b.x + (to.x - arm.b.x) / d * T * 0.8, y: arm.b.y + (to.y - arm.b.y) / d * T * 0.8 }; };
+        const tele = (arm, to, p, a, side) => {
+          const rest = drawnIn(arm, to), out = ease(stage(a - 0.1, a));
+          if (u < a) return { x: lerp(rest.x, to.x, out), y: lerp(rest.y, to.y, out) };
+          return p.carry ? reach(arm.b, to, arm.dst, p.e, side) : reach(arm.b, rest, arm.dst, p.e, side);
+        };
+        const hR = tele(ARM_R, tray, pR, 0.22, -1), hB = tele(ARM_B, tray2, pB, 0.5, 1);
+        s += robot(ARM_R.b.x, ARM_R.b.y, hR.x, hR.y, pR.carry ? 'build' : null, C.warn) + robot(ARM_B.b.x, ARM_B.b.y, hB.x, hB.y, pB.carry ? 'fix' : null, C.danger);
+        s += plate(7 * T + 6, 2 * T - 13, 'ok', C.warn) + plate(3 * T + 6, 6 * T + 6, 'ko', C.danger);
+        return s;
+      } },
+    { id: 'B1', name: 'En mode build : la pose', info: true,
+      idea: 'Pendant qu’on pose ou qu’on sélectionne un bras, ses deux cases s’allument : celle où il prend et celle où il dépose, nommées, avec la flèche entre les deux.',
+      reads: 'Impossible de le poser à l’envers sans le voir : « TAKES FROM PR Review » d’un côté, « DROPS ON belt » de l’autre. R le retourne.',
+      limit: 'S’ajoute à la variante de sens choisie plus haut, sans la remplacer : c’est l’aide à la pose, pas le dessin permanent.',
+      draw: () => {
+        const b = { x: 6.5 * T, y: 2.5 * T };
+        let s = stationBody(false) + belt(7, 2, 3);
+        s += `<rect x="${5 * T + 2}" y="${2 * T + 2}" width="${T - 4}" height="${T - 4}" rx="5" fill="${C.blue}" fill-opacity="0.16" stroke="${C.blue}" stroke-width="2" stroke-dasharray="5 4"/>`;
+        s += `<rect x="${7 * T + 2}" y="${2 * T + 2}" width="${T - 4}" height="${T - 4}" rx="5" fill="${C.ok}" fill-opacity="0.16" stroke="${C.ok}" stroke-width="2"/>`;
+        s += `<rect x="${6 * T + 2}" y="${2 * T + 2}" width="${T - 4}" height="${T - 4}" rx="5" fill="none" stroke="${C.ink}" stroke-opacity="0.5" stroke-width="1.5" stroke-dasharray="3 4"/>`;
+        s += dirs[0].under(b.x, b.y, C.warn);
+        s += `<g opacity="0.8">${robot(b.x, b.y, b.x - T, b.y, null, C.warn)}</g>`;
+        s += `<path d="M${5.5 * T} ${2 * T - 2} V${T + 36}" fill="none" stroke="${C.blue}" stroke-width="1.5"/>` + `<rect x="${5.5 * T - 20}" y="${T + 16}" width="150" height="20" rx="4" fill="${C.panel}" stroke="${C.blue}" stroke-opacity="0.6"/>` + text(5.5 * T - 13, T + 30, 'TAKES FROM · PR Review', { mono: true, size: 9.5, weight: 700, fill: C.blue });
+        s += `<path d="M${7.5 * T} ${3 * T + 6} V${4 * T + 4}" fill="none" stroke="${C.ok}" stroke-width="1.5"/>` + `<rect x="${7.5 * T - 60}" y="${4 * T + 4}" width="120" height="20" rx="4" fill="${C.panel}" stroke="${C.ok}" stroke-opacity="0.6"/>` + text(7.5 * T, 4 * T + 18, 'DROPS ON · belt →', { mono: true, size: 9.5, weight: 700, fill: C.ok, anchor: 'middle' });
+        s += `<rect x="${6.5 * T - 34}" y="${5 * T + 4}" width="68" height="20" rx="4" fill="${C.panel}" stroke="${C.edge}"/>` + text(6.5 * T, 5 * T + 18, 'R · turn', { mono: true, size: 9.5, fill: C.ink2, anchor: 'middle' });
+        return s;
+      } },
+  ];
+  /** An arm's stroke inside a longer loop: out with the ticket between `a` and `b`, then back empty over the same time. */
+  function phaseOn(u, a, b) {
+    const d = b - a;
+    if (u < a) return { e: 0, carry: false };
+    if (u < b) return { e: ease((u - a) / d), carry: true };
+    if (u < b + d) return { e: 1 - ease((u - b) / d), carry: false };
+    return { e: 0, carry: false };
+  }
+
+  // ---------- the page ----------
+  const KEY = 'factory-looks-2-picks';
+  let picks = { zone: '', exit: '', dir: '', reach: '' };
+  try { picks = { ...picks, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* no storage here: the picks live for the visit */ }
+  const families = [
+    { key: 'zone', host: 'zones', list: zones, label: 'Zone', render: (z) => svg(ZW, ZH, `Zone, variante ${z.name}`, zoneScene(z.id), ZBOX) },
+    { key: 'exit', host: 'exits', list: exits, label: 'Sortie', render: (x, t) => svg(EW, EH, `Sortie, variante ${x.name}`, x.draw(t), EBOX), moves: true },
+    { key: 'dir', host: 'dirs', list: dirs, label: 'Sens', render: (d, t) => svg(AW, AH, `Sens du bras, variante ${d.name}`, dirScene(d, t)), moves: true },
+    { key: 'reach', host: 'reach', list: reachOpts, label: 'Prise', render: (r, t) => svg(RW, RH, `Prise du ticket, variante ${r.name}`, r.draw(t), RBOX), moves: true },
+  ];
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const STILL = 1.1;
+  for (const f of families) {
+    document.getElementById(f.host).innerHTML = f.list.map((it) => `
+      <article class="card" data-family="${f.key}" data-id="${it.id}">
+        <div class="card-head"><span class="letter">${it.id}</span><h3>${esc(it.name)}</h3>${it.mine ? '<span class="mine">Ma préférence</span>' : it.info ? '<span class="mine">En plus</span>' : ''}</div>
+        <div class="scene" data-scene="${it.id}">${f.render(it, STILL)}</div>
+        <dl><dt>Idée</dt><dd>${esc(it.idea)}</dd><dt>Se lit</dt><dd>${esc(it.reads)}</dd><dt>Limite</dt><dd>${esc(it.limit)}</dd></dl>
+        ${it.info ? '' : `<button type="button" id="pick-${it.id}" aria-pressed="false">Choisir ${it.id}</button>`}
+      </article>`).join('');
+  }
+  const nameOf = (f) => f.list.find((x) => x.id === picks[f.key])?.name;
+  const summary = () => families.map((f) => `${f.label} : ${picks[f.key] ? `${picks[f.key]} (${nameOf(f) ?? '?'})` : 'pas encore choisi'}`).join(' · ');
+  function paint() {
+    for (const card of document.querySelectorAll('.card')) {
+      const b = card.querySelector('button'); if (!b) continue;
+      const on = picks[card.dataset.family] === card.dataset.id;
+      card.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    document.getElementById('picks').innerHTML = families.map((f) => `${f.label} <b>${picks[f.key] || '–'}</b>`).join(' &nbsp;·&nbsp; ');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card button'); if (!b) return;
+    const card = b.closest('.card'), k = card.dataset.family;
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    document.getElementById('said').textContent = '';
+    paint();
+  });
+  document.getElementById('copy').addEventListener('click', () => {
+    const said = document.getElementById('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint();
+
+  // what moves: the exits, the arms
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let playing = !still, t0 = performance.now();
+  const anim = document.getElementById('anim');
+  anim.setAttribute('aria-pressed', String(playing));
+  anim.addEventListener('click', () => { playing = !playing; anim.setAttribute('aria-pressed', String(playing)); if (playing) { t0 = performance.now(); requestAnimationFrame(tick); } });
+  const moving = families.filter((f) => f.moves).flatMap((f) => f.list.map((it) => [f, it, document.querySelector(`[data-scene="${it.id}"]`)]));
+  function tick(now) {
+    if (!playing) return;
+    const t = (now - t0) / 1000;
+    for (const [f, it, host] of moving) host.innerHTML = f.render(it, t);
+    requestAnimationFrame(tick);
+  }
+  if (playing) requestAnimationFrame(tick);
+})();
+</script>

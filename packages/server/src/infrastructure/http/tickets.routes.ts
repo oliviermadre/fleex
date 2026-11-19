@@ -15,7 +15,7 @@ import { registerFocusRoutes } from './focus.routes.js';
 import { registerTodoRoutes } from './todos.routes.js';
 import { resolveTodoActor } from './todo-actor.js';
 import { parseDeliverableBody } from './deliverable-body.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError, WorkflowRefusedError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
 import type { DeliverableQueryFilters } from '../../application/ports/deliverable-store.port.js';
@@ -1594,6 +1594,10 @@ export function ticketRoutes(container: Container) {
       async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        // A ticket on the factory floor runs no workflow: refuse before the comment exists, so nothing is left pending.
+        const refusal = TicketCommentEntity.extractWorkflowMentions(request.body.body).length ? container.factory?.refusesWorkflow(request.params.id) : null;
+        if (refusal) throw new WorkflowRefusedError(refusal);
 
         // ── Resolve mention conflicts before creating the new comment ──
         const ticketMentions = await container.mentionStore.getByTicket(request.params.id);

@@ -1,0 +1,245 @@
+<title>Factory, le mode Build</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the page as it is today, then four ways to mark build mode, each a small page that flips between floor and build. A bar at the bottom keeps the pick. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  .modes { display: flex; gap: 6px; }
+  .modes button { padding: 3px 10px; font-size: 0.78rem; }
+  .card > button.pick { align-self: flex-start; }
+  .lede b { color: var(--ink); font-weight: 600; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Voir qu'on est en mode Build</h1>
+    <p class="lede">Aujourd'hui le passage du plancher au mode Build ne change presque rien : la grille apparaît, la lumière du sol s'éteint, et c'est tout. Quatre façons de le dire plus fort. Chaque scène bascule : clique sur <b>Floor</b> et <b>Build</b>, ou appuie sur B pour tout basculer d'un coup.</p>
+    <div class="tools"><button type="button" id="all">Tout basculer (B)</button></div>
+  </header>
+
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Aujourd'hui</h2>
+    <div class="grid" id="now"></div>
+  </section>
+
+  <section aria-labelledby="h-props">
+    <h2 id="h-props">Les propositions</h2>
+    <div class="grid" id="props"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const C = { bg: '#0f0f11', floor: '#18181b', dot: 'rgba(255,255,255,0.14)', grid: 'rgba(255,255,255,0.09)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#26262b', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', accent: '#4ade80', surface: '#131316' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"", SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const text = (x, y, str, o = {}) => `<text x="${x}" y="${y}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 10}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.spacing ? `letter-spacing="${o.spacing}"` : ''}>${esc(str)}</text>`;
+  const W = 640, HEAD = 26, VIEW = 262, CON = 92, H = HEAD + VIEW + CON, T = 26;
+  let uid = 0;
+
+  /** The machines of a small floor, the same in every scene. */
+  function machines(build, blue) {
+    const ox = 70, oy = HEAD + 70, body = blue ? 'rgba(147,197,253,0.08)' : C.body;
+    let s = '';
+    /* a zone, a belt, an agent station, an arm, a skill station */
+    s += `<rect x="${ox}" y="${oy}" width="${3 * T}" height="${3 * T}" rx="4" fill="rgba(96,165,250,0.06)" stroke="#60a5fa" stroke-opacity="0.7" stroke-width="1.500" stroke-dasharray="7 5"/>` + text(ox + 8, oy + 15, 'TODO', { mono: true, size: 7.500, weight: 700, fill: '#60a5fa', spacing: 1.500 });
+    s += `<rect x="${ox + 4 * T}" y="${oy + T}" width="${3 * T}" height="${T}" fill="${blue ? 'rgba(147,197,253,0.1)' : C.belt}"/><path d="M${ox + 4 * T} ${oy + T + 1.500} h${3 * T} M${ox + 4 * T} ${oy + 2 * T - 1.500} h${3 * T}" stroke="${blue ? '#93c5fd' : C.edge}" stroke-width="2.500"/>`;
+    for (let i = 0; i < 6; i++) s += `<path d="M${ox + 4 * T + 6 + i * 13} ${oy + T + 7} l5 6 -5 6" fill="none" stroke="${blue ? '#93c5fd' : C.chev}" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const st = (x, hue, word, name, round) => `${build || blue ? '' : `<rect x="${x + 5}" y="${oy - T + 9}" width="${5 * T - 4}" height="${4 * T - 4}" rx="12" fill="rgba(0,0,0,0.35)"/>`}<rect x="${x + 2}" y="${oy - T + 2}" width="${5 * T - 4}" height="${4 * T - 4}" rx="${round}" fill="${body}" stroke="${hue}" stroke-width="1.600"/><rect x="${x + 9}" y="${oy - T + 9}" width="17" height="17" rx="4.500" fill="${hue}"/>${text(x + 31, oy - T + 15, word, { mono: true, size: 5.500, weight: 700, fill: hue, spacing: 1 })}${text(x + 31, oy - T + 25, name, { size: 9, weight: 650 })}<rect x="${x + 9}" y="${oy - T + 33}" width="${5 * T - 18}" height="${4 * T - 62}" rx="5" fill="rgba(0,0,0,0.38)"/><rect x="${x + 9}" y="${oy + 3 * T - 24}" width="${5 * T - 18}" height="16" rx="4" fill="rgba(0,0,0,0.38)"/>`;
+    s += st(ox + 8 * T, '#a78bfa', 'AGENT', 'Build', 14) + st(ox + 15 * T, '#38bdf8', 'SKILL', 'Review', 8);
+    /* the arm between the two stations */
+    const ax = ox + 13.5 * T, ay = oy + 1.5 * T;
+    s += `<path d="M${ax - 10} ${ay} h22" stroke="#52525b" stroke-width="7" stroke-linecap="round"/><circle cx="${ax + 14}" cy="${ay}" r="5" fill="none" stroke="${C.ink}" stroke-width="1.600"/><circle cx="${ax - 8}" cy="${ay}" r="6.500" fill="${C.body}" stroke="${C.ink2}" stroke-width="1.800"/>`;
+    if (!build) s += `<rect x="${ox + 5.200 * T}" y="${oy + T + 5}" width="14" height="14" rx="4" fill="#4ade80"/><rect x="${ox + 8 * T + 22}" y="${oy + 14}" width="15" height="15" rx="4" fill="#f87171"/>`;
+    return s;
+  }
+  /** The console along the bottom: minimap, what is selected, the command card. */
+  function consoleOf(build, o) {
+    const y = HEAD + VIEW;
+    let s = `<rect x="0" y="${y}" width="${W}" height="${CON}" fill="${C.surface}"/><path d="M0 ${y} H${W}" stroke="${o.tape ? 'none' : C.edge}"/>`;
+    s += `<rect x="6" y="${y + 6}" width="120" height="${CON - 12}" rx="6" fill="#09090b" stroke="${C.edge}"/><rect x="24" y="${y + 30}" width="84" height="44" fill="${C.floor}"/>`;
+    s += `<rect x="132" y="${y + 6}" width="330" height="${CON - 12}" rx="6" fill="#09090b" stroke="${C.edge}"/>` + text(146, y + 30, build ? 'Build' : 'Factory floor', { size: 11, weight: 650 }) + text(146, y + 45, build ? 'Pick a machine to place, or double-click one to set it up.' : 'Click to select, drag a ticket to move it.', { size: 7.500, fill: C.ink3 });
+    s += `<rect x="468" y="${y + 6}" width="166" height="${CON - 12}" rx="6" fill="#09090b" stroke="${build && o.card ? C.warn : C.edge}"/>` + text(476, y + 18, build ? 'BUILD' : 'FACTORY', { mono: true, size: 6.500, weight: 700, fill: build && o.card ? C.warn : C.ink2, spacing: 1 });
+    const labels = build ? ['Move', 'Station', 'Area', 'Plan', 'Erase', '', 'Undo', 'Redo', '', '', '', 'Done'] : ['Build', 'Intake', 'Fit', 'Tickets', 'Stats', 'Limits', '', '', 'Next', '', '', ''];
+    labels.forEach((l, i) => { const cx = 474 + (i % 4) * 39, cy = y + 23 + Math.floor(i / 4) * 21, hot = (!build && i === 0) || (build && i === 11); s += `<rect x="${cx}" y="${cy}" width="36" height="18" rx="3.500" fill="${l ? (hot ? (build ? '#3f3f46' : C.ok) : '#18181b') : 'none'}" stroke="${l ? '#2f2f35' : '#1c1c20'}" ${l ? '' : 'stroke-dasharray="2 2"'}/>` + (l ? text(cx + 18, cy + 12, l, { size: 6.500, weight: 600, fill: hot && !build ? '#052e16' : C.ink, anchor: 'middle' }) : ''); });
+    return s;
+  }
+  /** One page, in floor or build mode, as an option draws build mode. `o`: frame, band, plate, corners, blue, tape, card, head. */
+  function page(build, o) {
+    const id = `hz${uid++}`, y0 = HEAD, on = build;
+    let s = `<defs><pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#18181b"/><rect width="7" height="14" fill="${C.warn}"/></pattern><clipPath id="${id}c"><rect x="0" y="${y0}" width="${W}" height="${VIEW}"/></clipPath></defs>`;
+    s += `<rect width="${W}" height="${H}" fill="${C.bg}"/>`;
+    /* the floor */
+    const blue = on && o.blue, fl = blue ? '#0f1b33' : C.floor;
+    s += `<g clip-path="url(#${id}c)"><rect x="0" y="${y0}" width="${W}" height="${VIEW}" fill="${fl}"/>`;
+    if (on) { let g = ''; for (let x = 18; x < W; x += T) g += `M${x} ${y0} v${VIEW} `; for (let y = y0 + 18; y < y0 + VIEW; y += T) g += `M0 ${y} h${W} `; s += `<path d="${g}" stroke="${blue ? 'rgba(147,197,253,0.2)' : C.grid}" stroke-width="1"/>`; }
+    else { s += `<radialGradient id="${id}l" cx="50%" cy="50%" r="60%"><stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/><stop offset="1" stop-color="#000000" stop-opacity="0.25"/></radialGradient><rect x="0" y="${y0}" width="${W}" height="${VIEW}" fill="url(#${id}l)"/>`; for (let x = 18; x < W; x += T) for (let y = y0 + 18; y < y0 + VIEW; y += T) s += `<circle cx="${x}" cy="${y}" r="0.9" fill="${C.dot}"/>`; }
+    s += machines(on, blue) + '</g>';
+    /* what says "build" */
+    if (on && o.frame) s += `<rect x="${o.frame / 2}" y="${y0 + o.frame / 2}" width="${W - o.frame}" height="${VIEW - o.frame}" fill="none" stroke="url(#${id})" stroke-width="${o.frame}"/>`;
+    if (on && o.band) s += `<rect x="0" y="${y0}" width="${W}" height="${o.band}" fill="url(#${id})"/>`;
+    if (on && o.corners) for (const [cx, cy, sx, sy] of [[0, y0, 1, 1], [W, y0, -1, 1], [W, y0 + VIEW, -1, -1], [0, y0 + VIEW, 1, -1]]) s += `<path d="M${cx + sx * 5} ${cy + sy * 46} V${cy + sy * 5} H${cx + sx * 46}" fill="none" stroke="url(#${id})" stroke-width="10"/>`;
+    if (on && o.plate) { const pw = 178, px = o.plate === 'left' ? (o.frame ?? 0) + 8 : W / 2 - pw / 2, py = y0 + (o.band ? o.band - 3 : (o.frame ?? 0) + 8); s += `<rect x="${px}" y="${py}" width="${pw}" height="20" rx="4" fill="${C.warn}"/>` + text(px + 9, py + 13.500, 'BUILD MODE', { mono: true, size: 8.500, weight: 700, fill: '#18181b', spacing: 1.200 }) + text(px + 82, py + 13.500, 'the floor keeps running', { size: 7.500, weight: 600, fill: '#3f3408' }); }
+    /* the header */
+    s += `<rect x="0" y="0" width="${W}" height="${HEAD}" fill="${on && o.head ? C.warn : C.bg}"/><path d="M0 ${HEAD} H${W}" stroke="${C.edge}"/>` + text(10, 17, 'Factory', { size: 10, fill: on && o.head ? '#18181b' : C.ink });
+    if (on) s += text(60, 17, on && o.head ? 'BUILD MODE · the floor keeps running' : 'Building — the floor keeps running', { size: 7.500, weight: on && o.head ? 700 : 500, fill: on && o.head ? '#18181b' : C.accent });
+    s += `<rect x="${W - 86}" y="6" width="78" height="15" rx="4" fill="#ef4444"/>` + text(W - 47, 16.500, 'Emergency stop', { size: 7, weight: 600, anchor: 'middle' });
+    s += consoleOf(on, o);
+    if (on && o.tape) s += `<rect x="0" y="${HEAD + VIEW - 3}" width="${W}" height="6" fill="url(#${id})"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${on ? 'The page in build mode' : 'The page out of build mode'}">${s}</svg>`;
+  }
+
+  const NOW = [{ id: 'B0', key: {}, name: 'Ce qui change aujourd\'hui', idea: 'La grille remplace les points, la lumière du sol et les ombres s\'éteignent, les tickets ne sont plus montrés, une ligne verte dans l\'en-tête, et la carte de commandes change de menu.', reads: '', limit: 'Rien de tout cela ne se voit du coin de l\'œil : il faut lire pour savoir dans quel mode on est.' }];
+  const PROPS = [
+    { id: 'B1', mine: true, key: { frame: 9, plate: 'left' }, name: 'Un ruban de chantier tout autour', idea: 'Ton idée : un liseré jaune et noir en diagonale sur tout le contour de la vue, comme la baie « SET ASIDE », avec une plaque « BUILD MODE » dans le coin.', reads: 'Impossible à manquer, d\'où qu\'on regarde. Le vocabulaire existe déjà sur le plancher.', limit: 'Mange 9 px sur chaque bord. Le jaune est aussi celui des portes humaines et de « waiting for you ».' },
+    { id: 'B2', key: { band: 12, plate: 'center', tape: true }, name: 'Un ruban en haut et en bas', idea: 'Un ruban sous l\'en-tête avec la plaque au milieu, et un filet de ruban sur le bord de la console. Les côtés restent libres.', reads: 'Aussi lisible, moins envahissant sur les côtés.', limit: 'Moins « cadre » : en vue très large, le milieu de l\'écran ne dit rien.' },
+    { id: 'B3', key: { blue: true }, name: 'Le sol devient un plan', idea: 'Le plancher vire au bleu d\'architecte, la grille s\'éclaircit, les machines deviennent des tracés. Pas de ruban.', reads: 'Le changement touche tout l\'écran, sans rien ajouter par-dessus.', limit: 'Les teintes des postes et des zones se lisent moins bien sur du bleu, alors qu\'on vient de les différencier.' },
+    { id: 'B4', key: { corners: true, head: true, card: true }, name: 'Des coins de chantier, et l\'en-tête en jaune', idea: 'Quatre équerres de ruban aux coins de la vue, l\'en-tête passe en jaune avec « BUILD MODE », et la carte de commandes prend un filet jaune.', reads: 'Léger sur le plancher, et l\'en-tête jaune se voit même la console cachée.', limit: 'Trois signes plus petits au lieu d\'un grand.' },
+  ];
+  const card = (p, pickable) => `
+    <article class="card" data-id="${p.id}">
+      <div class="card-head"><span class="letter">${p.id}</span><h3>${esc(p.name)}</h3>${p.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+      <div class="row modes" role="group" aria-label="Mode"><button type="button" data-mode="floor" aria-pressed="true">Floor</button><button type="button" data-mode="build" aria-pressed="false">Build</button></div>
+      <div class="scene" data-scene></div>
+      <dl><dt>Idée</dt><dd>${esc(p.idea)}</dd>${p.reads ? `<dt>Atout</dt><dd>${esc(p.reads)}</dd>` : ''}<dt>Limite</dt><dd>${esc(p.limit)}</dd></dl>
+      ${pickable ? `<button type="button" class="pick" aria-pressed="false">Choisir ${p.id}</button>` : ''}
+    </article>`;
+  $('now').innerHTML = NOW.map((p) => card(p, false)).join('');
+  $('props').innerHTML = PROPS.map((p) => card(p, true)).join('');
+  const ALL = [...NOW, ...PROPS], mode = Object.fromEntries(ALL.map((p) => [p.id, 'floor']));
+  function show(id) {
+    const c = document.querySelector(`.card[data-id="${id}"]`), p = ALL.find((q) => q.id === id);
+    c.querySelector('[data-scene]').innerHTML = page(mode[id] === 'build', p.key);
+    for (const b of c.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode[id]));
+  }
+  const flipAll = () => { const to = Object.values(mode).every((m) => m === 'build') ? 'floor' : 'build'; for (const id of Object.keys(mode)) { mode[id] = to; show(id); } };
+  for (const p of ALL) show(p.id);
+  /* the proposals open in build mode: that is what is being chosen */
+  for (const p of PROPS) { mode[p.id] = 'build'; show(p.id); }
+
+  const KEY = 'factory-build-mode-pick';
+  let pick = '';
+  try { pick = localStorage.getItem(KEY) || ''; } catch { /* the pick lives for the visit */ }
+  const summary = () => { const p = PROPS.find((x) => x.id === pick); return `Mode Build : ${p ? `${p.id} (${p.name})` : 'pas encore choisi'}`; };
+  function paint() {
+    for (const c of document.querySelectorAll('#props .card')) { const on = pick === c.dataset.id, b = c.querySelector('.pick'); c.classList.toggle('picked', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${c.dataset.id} choisi` : `Choisir ${c.dataset.id}`; }
+    $('picks').innerHTML = `Mode Build <b>${pick || '–'}</b>`;
+  }
+  document.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-mode]');
+    if (m) { const id = m.closest('.card').dataset.id; mode[id] = m.dataset.mode; show(id); return; }
+    const b = e.target.closest('.pick'); if (!b) return;
+    const id = b.closest('.card').dataset.id; pick = pick === id ? '' : id;
+    try { localStorage.setItem(KEY, pick); } catch { /* not kept, that is all */ }
+    $('said').textContent = ''; paint();
+  });
+  $('all').addEventListener('click', flipAll);
+  document.addEventListener('keydown', (e) => { if ((e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.altKey && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) flipAll(); });
+  $('copy').addEventListener('click', () => {
+    const said = $('said'), line = summary();
+    try { navigator.clipboard.writeText(line).then(() => { said.textContent = 'Copié : colle-le dans la conversation.'; }, () => { said.textContent = line; }); } catch { said.textContent = line; }
+  });
+  paint();
+})();
+</script>

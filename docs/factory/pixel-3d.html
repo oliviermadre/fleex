@@ -1,0 +1,538 @@
+<title>Factory, pixel trois-quarts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&family=Silkscreen&family=Pixelify+Sans:wght@500;700&family=Fredoka:wght@500;600&family=Orbitron:wght@700;800&display=swap">
+<style>
+  /* Layout: one running factory in pixel art, flat or seen from three quarters, with three ways to mark its lines; the ways to pick; then how it is done without rewriting the renderer. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  .lede b, .rules li b { color: var(--ink); font-weight: 600; }
+  .tools .lbl { font-size: 0.8rem; color: var(--muted); }
+  .stage-wrap { width: 100%; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); line-height: 0; background: #000; }
+  #cv { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; image-rendering: pixelated; }
+  .two { align-items: stretch; }
+  .now { margin: 0; }
+  .info .mono { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+  .card.showing { border-color: var(--ink); }
+  .card .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+  table.est { font-size: 0.86rem; } table.est td { color: var(--ink); border-bottom-color: var(--line); } table.est th { color: var(--muted); border-bottom-color: var(--line); }
+  table.est td:first-child { font-family: var(--mono); color: var(--accent); }
+  .seg { display: inline-flex; gap: 4px; flex-wrap: wrap; } .seg button { padding: 3px 10px; font-size: 0.78rem; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Pixel, en trois-quarts</h1>
+    <p class="lede">La même usine, la même matrice, le même skin pixel, mais vue de trois-quarts : chaque machine se lève de son emplacement, on voit sa face avant, ses pieds et son ombre, comme si la caméra était inclinée. Et trois façons de matérialiser les lignes de production et l'allée entre elles. Bascule « À plat » / « Trois-quarts » pendant que l'usine tourne.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">L'usine</h2>
+    <div class="tools">
+      <span class="lbl">Vue</span><span class="seg" id="view"><button type="button" data-view="flat" aria-pressed="false">À plat</button><button type="button" data-view="tq" aria-pressed="true">Trois-quarts</button></span>
+      <span class="lbl" style="margin-left:10px">Lignes</span><span class="seg" id="lanes"><button type="button" data-lane="paint" aria-pressed="true">L1 Marquage au sol</button><button type="button" data-lane="slab" aria-pressed="false">L2 Estrades</button><button type="button" data-lane="rail" aria-pressed="true">L3 Garde-corps</button></span>
+    </div>
+    <div class="tools">
+      <button type="button" id="play" aria-pressed="true">Pause</button>
+      <button type="button" id="spawn">Faire entrer un ticket</button>
+      <button type="button" id="hits" aria-pressed="false">Montrer les zones de clic</button>
+      <button type="button" id="layers" aria-pressed="false">Montrer les couches</button>
+      <button type="button" id="grid" aria-pressed="false">Afficher la matrice</button>
+      <button type="button" id="decor" aria-pressed="true">Décor</button>
+    </div>
+    <div class="stage-wrap"><canvas id="cv" aria-label="The factory floor in pixel art, seen from three quarters"></canvas></div>
+    <div class="two">
+      <p class="now" id="say"></p>
+      <div class="card info" id="info"><h3>Une machine</h3><p class="brief">Clique une machine : en trois-quarts, sa face avant et son dessus répondent aussi.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-lanes">
+    <h2 id="h-lanes">Délimiter les lignes</h2>
+    <div class="grid" id="cards"></div>
+    <div class="rules"><div class="card"><h3>Ce que je propose pour les lignes dans Fleex</h3><ul>
+      <li><b>Une « ligne » est un élément de décor qu'on pose en mode Build</b> (Build › Area › Line) : un rectangle de cases, un nom (« Bugfix line »), une couleur, un style (marquage, estrade, garde-corps). Elle ne prend aucune case : les machines se posent dessus. Elle ne change rien au routage.</li>
+      <li><b>L'allée entre deux lignes n'a pas à être posée</b> : c'est le sol nu entre deux lignes, que le skin habille (marquage de passage piéton, ouvriers qui y circulent).</li>
+      <li><b>Plus tard, une ligne pourrait avoir un sens</b> : ses propres chiffres, une limite d'en-cours, un nom dans la minimap. C'est la question de l'incarnation : on parle d'une ligne comme d'un lieu de l'usine, pas d'un groupe de machines.</li>
+      <li><b>Les garde-corps s'ouvrent seuls</b> là où un bras ou un convoyeur traverse la limite d'une ligne : rien à régler.</li>
+    </ul></div></div>
+  </section>
+
+  <section aria-labelledby="h-how">
+    <h2 id="h-how">Comment on y arrive sans tout changer</h2>
+    <div class="rules">
+      <div class="card"><h3>Le principe</h3><ul>
+        <li><b>La matrice ne bouge pas.</b> Chaque machine garde son emplacement au sol (ses cases), là où vont son ombre et ses pieds. Ce qui change : son dessus est peint un peu plus haut, d'une hauteur propre à sa sorte (une station 16 px, un convoyeur 8, une zone 0), et sa face avant remplit l'écart.</li>
+        <li><b>L'ordre de peinture</b> devient celui de la profondeur : ce qui est plus bas sur l'écran passe devant. Une station cache un peu ce qui est sur la rangée au-dessus d'elle.</li>
+        <li><b>Ce qui est posé sur quelque chose prend sa hauteur</b> : un ticket sur un convoyeur est levé de 8, dans une station de 16, porté par un bras de la hauteur du bras.</li>
+        <li><b>Les clics</b> visent ce qu'on voit : le dessus et la face avant, du plus proche au plus lointain. Les dépôts (un ticket lâché, une machine posée) restent sur les cases.</li>
+      </ul></div>
+      <div class="card"><h3>L'ordre de rendu : quatre couches</h3><ul>
+        <li><b>1. Le sol</b> : carrelage, marquage des lignes, zones, tapis de la sortie. Rien n'y passe devant rien.</li>
+        <li><b>2. Ce qui est debout, par profondeur</b> : chaque chose a pour clé le bas de son emplacement ; ce qui est plus bas sur l'écran passe devant. Une chose à cheval est coupée en morceaux à leur propre profondeur : le pied d'un bras, le poteau arrière et le poteau avant d'un portique, les poteaux d'une sortie.</li>
+        <li><b>Ce qui est porté suit son porteur</b> : un ticket n'a pas sa propre profondeur, il prend celle de ce qui le porte, juste après lui (après les convoyeurs de sa rangée, après sa station). C'est ce qui manquait : un ticket glissait sous le convoyeur voisin.</li>
+        <li><b>3. Ce qui est en l'air, après tout ce qui est debout</b> : la flèche et la ventouse des bras avec leur ticket, la barre des portiques, le linteau de la sortie. Un bras passe donc au-dessus d'une station au lieu de s'y enfoncer, et une barre de portique est fine pour qu'on voie le ticket dessous.</li>
+        <li><b>4. Les mots</b>, à la fin, par-dessus tout. Le bouton « Montrer les couches » colore en magenta ce qui est en l'air et en cyan ce qui suit son porteur.</li>
+      </ul></div>
+      <div class="card"><h3>Ce que ça touche dans le code</h3><ul>
+        <li><b>Après la refonte en skins</b> (les lots 1 et 2 de l'étude des skins), c'est une option du skin : une hauteur par sorte d'élément, la face avant et les pieds dans chaque peintre, un tri par profondeur dans la boucle de dessin, et <code>pick()</code> qui teste les boîtes vues. Un lot moyen.</li>
+        <li><b>Sans la refonte</b>, il faudrait toucher chacune des quarante méthodes de <code>renderer.ts</code> pour leur ajouter une face avant et un décalage, et réordonner tout le dessin : faisable, mais c'est le même travail que la refonte, sans en garder le bénéfice.</li>
+        <li><b>Ce qui ne change pas</b> : le moteur, la géométrie des pièces, les quais, les règles des bras, le mode Build (ses fantômes restent sur les cases), la minimap.</li>
+        <li><b>Chaque peintre déclare ses morceaux</b> et leur couche (debout ou en l'air), et ce qu'il porte : la boucle de dessin les trie. C'est la seule vraie règle à poser dans le contrat d'un skin pour le trois-quarts ; un skin à plat n'a qu'une couche debout et ne change rien.</li>
+        <li><b>Le risque</b> : la hauteur masque un peu la rangée du dessus. On le garde sous la moitié d'une case, et un ticket masqué reste visible par sa plaque de nom.</li>
+      </ul></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const T = 32, W = 32, H = 16, CW = W * T, CH = H * T;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (a, b, k) => a + (b - a) * k, ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+
+  // ---------- the floor: the matrix of the skins page, one row lower for the wall ----------
+  const M = [
+    { id: 'in', kind: 'zone', x: 1, y: 4, w: 3, h: 3, name: 'Inbound', what: 'Where tickets handed over to the Factory land.' },
+    { id: 'b4', kind: 'belt', x: 4, y: 5, dir: 'e' }, { id: 'b5', kind: 'belt', x: 5, y: 5, dir: 'e' },
+    { id: 'a1', kind: 'arm', x: 6, y: 5, dir: 'e' },
+    { id: 'build', kind: 'station', exec: 'agent', x: 7, y: 4, w: 5, h: 4, name: 'Build', what: 'An agent station: a persona works on the ticket.' },
+    { id: 'a2', kind: 'arm', x: 12, y: 5, dir: 'e' },
+    { id: 'b13', kind: 'belt', x: 13, y: 5, dir: 'e' }, { id: 'set', kind: 'belt', x: 14, y: 5, dir: 'e', set: true, name: 'Set gantry', what: 'Sets the status on every ticket that goes under it.' }, { id: 'b15', kind: 'belt', x: 15, y: 5, dir: 'e' },
+    { id: 'a3', kind: 'arm', x: 16, y: 5, dir: 'e' },
+    { id: 'review', kind: 'station', exec: 'skill', x: 17, y: 4, w: 5, h: 4, name: 'Review', what: 'A skill station: one of your skills runs on the ticket.' },
+    { id: 'a4', kind: 'arm', x: 22, y: 5, dir: 'e' },
+    { id: 'gate', kind: 'station', exec: 'gate', x: 23, y: 4, w: 4, h: 4, name: 'Check spec', what: 'A human gate: it waits for your decision.' },
+    { id: 'a5', kind: 'arm', x: 27, y: 5, dir: 'e', col: '#2f9e44' },
+    { id: 'exit', kind: 'exit', x: 28, y: 4, w: 3, h: 3, name: 'Exit', what: 'Sets the ticket to done and hands it back to Fleex.' },
+    { id: 'a6', kind: 'arm', x: 24, y: 8, dir: 's', col: '#d9433f' },
+    { id: 'c1', kind: 'belt', x: 24, y: 9, dir: 's' }, { id: 'c2', kind: 'belt', x: 24, y: 10, dir: 'w' }, { id: 'c3', kind: 'belt', x: 23, y: 10, dir: 'w' },
+    { id: 'toll', kind: 'belt', x: 22, y: 10, dir: 'w', set: true, toll: true, name: 'Toll', what: 'Counts the rounds; past three, its red arm takes the ticket off the line.' },
+    { id: 'c5', kind: 'belt', x: 21, y: 10, dir: 'w' },
+    { id: 'a7', kind: 'arm', x: 20, y: 10, dir: 'w' },
+    { id: 'tests', kind: 'station', exec: 'script', x: 15, y: 9, w: 5, h: 4, name: 'Tests', what: 'A script station: shell commands in the ticket\'s worktrees.' },
+    { id: 'a8', kind: 'arm', x: 14, y: 10, dir: 'w' },
+    { id: 'debate', kind: 'station', exec: 'panel', x: 9, y: 9, w: 5, h: 4, name: 'Debate', what: 'A panel station: several personas debate the ticket.' },
+    { id: 'a9', kind: 'arm', x: 8, y: 10, dir: 'w' },
+    { id: 'tp', kind: 'port', x: 7, y: 10, role: 'dep', name: 'back to start', col: '#1fb5d6', what: 'A teleporter: sends its ticket to its arrival.' },
+    { id: 'tq', kind: 'port', x: 2, y: 9, role: 'arr', name: 'start', col: '#1fb5d6', what: 'The arrival of the teleporter.' },
+    { id: 'a10', kind: 'arm', x: 2, y: 8, dir: 'n' },
+    { id: 'ra', kind: 'arm', x: 22, y: 11, dir: 's', col: '#d9433f' },
+    { id: 'needs', kind: 'zone', x: 21, y: 12, w: 3, h: 2, name: 'Needs you', what: 'A zone: what the toll rejected waits here.' },
+  ].map((m) => ({ w: 1, h: 1, ...m }));
+  const byId = Object.fromEntries(M.map((m) => [m.id, m]));
+  /* the two lines and the aisle between them: decor, not machines */
+  const LANES = [{ name: 'BUILD LINE', x: 0.5, y: 3.3, w: 31, h: 4.9, col: '#3d6fd1' }, { name: 'REWORK LINE', x: 0.5, y: 8.9, w: 25, h: 5.3, col: '#d6407e' }];
+  const AISLE = { y: 8.2, h: 0.7 };
+  const KIND = { agent: '#8b7cf6', skill: '#38a8e8', panel: '#f08a3c', script: '#7cc43a', gate: '#e6a817' };
+  const WORD = { agent: 'AGENT', skill: 'SKILL', panel: 'PANEL', script: 'SCRIPT', gate: 'GATE' };
+  const TYPE = { build: '#4fbf5f', fix: '#e2554f', review: '#e6c229', think: '#4f8ee6' };
+  const ICON = {
+    agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5v-6A2.5 2.5 0 0 1 7.5 8z', 'M12 8V4.6', 'M9.5 16.2h5'],
+    skill: ['M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.3-.7-.7-2.3z'],
+    panel: ['M5 9a2.4 2.4 0 1 0 4.8 0A2.4 2.4 0 1 0 5 9', 'M14.2 9a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0', 'M9.6 16a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0'],
+    script: ['M4.5 5h15a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5z', 'M7.5 9.5l3 2.5-3 2.5', 'M12.5 15h4'],
+    gate: ['M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.5-7-4.5-7-8.8V6z', 'M8.8 12l2.3 2.3 4.2-4.4'],
+  };
+  const PATHS = Object.fromEntries(Object.entries(ICON).map(([k, v]) => [k, v.map((d) => new Path2D(d))]));
+  const glyph = (c, k, x, y, size, col, lw = 2.4) => { c.save(); c.translate(x, y); c.scale(size / 24, size / 24); c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round'; for (const p of PATHS[k]) c.stroke(p); c.restore(); };
+  function sh(hex, k) { const p = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return `rgb(${p.map((v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k)).join(',')})`; }
+
+  // ---------- the tickets' paths: as on the skins page ----------
+  const DIRV = { e: [1, 0], w: [-1, 0], s: [0, 1], n: [0, -1] };
+  const C = (id, dx = 0.5, dy = 0.5) => { const m = byId[id]; return [m.x + dx, m.y + dy]; };
+  const belt = (...pts) => pts.map((p) => ({ to: p, v: 2.2 }));
+  const arm = (id) => { const a = byId[id], [dx, dy] = DIRV[a.dir]; return [{ to: [a.x + 0.5 - dx * 0.9, a.y + 0.5 - dy * 0.9], v: 3 }, { arm: id, ms: 900 }]; };
+  const place = (id) => { const m = byId[id]; return [m.x + 1.3, m.y + 2.3]; };
+  const work = (id, ms, state = 'running') => [{ to: place(id), v: 3 }, { at: id, ms, state }, { to: [byId[id].x + byId[id].w - 0.4, byId[id].y + 1.5], v: 3 }];
+  const START = [{ jump: C('in', 1.2, 1.4) }, { wait: 700 }, { to: C('in', 2.6, 1.5), v: 2 }, ...belt(C('b4'), C('b5')), ...arm('a1'), ...work('build', 2600), ...arm('a2'), ...belt(C('b13'), C('set')), { gantry: 'set', ms: 600 }, ...belt(C('b15')), ...arm('a3'), ...work('review', 2200), ...arm('a4'), { to: place('gate'), v: 3 }, { at: 'gate', ms: 1800, state: 'review' }];
+  const OK = [{ to: [byId.gate.x + 3.6, byId.gate.y + 1.5], v: 3 }, ...arm('a5'), { to: C('exit', 1.5, 1.5), v: 2 }, { fade: 600 }];
+  const RETURN = [{ to: [byId.gate.x + 1.5, byId.gate.y + 3.6], v: 3 }, ...arm('a6'), ...belt(C('c1'), C('c2'), C('c3'), C('toll'))];
+  const ON = [{ gantry: 'toll', ms: 600 }, ...belt(C('c5')), ...arm('a7'), ...work('tests', 2000), ...arm('a8'), ...work('debate', 2400), ...arm('a9'), { to: C('tp'), v: 3 }, { tele: 'tq', ms: 700 }, ...arm('a10'), { to: C('in', 1.5, 1.6), v: 2 }, { fade: 500 }];
+  const REJECT = [{ gantry: 'toll', ms: 600 }, ...arm('ra'), { to: C('needs', 1.2 + Math.random(), 1.1), v: 2 }, { wait: 6000 }, { fade: 500 }];
+  const TYPES = ['build', 'fix', 'review', 'think'];
+  let tickets = [], seq = 0, clock = 0, playing = true, shipped = 31;
+  function spawn() { const n = seq++, k = n % 5, legs = [...START, ...(k === 3 ? [...RETURN, ...REJECT] : k === 1 || k === 4 ? [...RETURN, ...ON] : OK)]; tickets.push({ id: n, type: TYPES[n % 4], legs, i: 0, t: 0, x: legs[0].jump[0], y: legs[0].jump[1], op: 1 }); }
+  function step(dt) {
+    clock += dt;
+    for (const tk of tickets) {
+      let left = dt;
+      while (left > 0 && tk.i < tk.legs.length) {
+        const L = tk.legs[tk.i];
+        if (L.jump) { [tk.x, tk.y] = L.jump; tk.i++; continue; }
+        if (L.to) {
+          if (L.sx == null || L.owner !== tk.id) { L.owner = tk.id; L.sx = tk.x; L.sy = tk.y; L.d = Math.hypot(L.to[0] - tk.x, L.to[1] - tk.y); }
+          const need = (L.d / L.v) * 1000 || 1, k = clamp((tk.t + left) / need);
+          tk.x = lerp(L.sx, L.to[0], k); tk.y = lerp(L.sy, L.to[1], k);
+          if (k >= 1) { left = tk.t + left - need; tk.t = 0; tk.i++; L.sx = null; } else { tk.t += left; left = 0; }
+          continue;
+        }
+        const ms = L.ms ?? L.wait ?? L.fade ?? 0, k = clamp((tk.t + left) / ms);
+        tk.state = L.state ?? ''; tk.where = L.at ?? '';
+        if (L.arm) { const a = byId[L.arm], [dx, dy] = DIRV[a.dir], th = Math.atan2(dy, dx) + Math.PI * (1 - ease(k)); tk.x = a.x + 0.5 + Math.cos(th) * 0.9; tk.y = a.y + 0.5 + Math.sin(th) * 0.9; tk.arm = L.arm; tk.armK = k; }
+        if (L.fade) tk.op = 1 - k;
+        if (L.tele) { tk.op = k < 0.5 ? 1 - k * 2 : (k - 0.5) * 2; tk.beam = L.tele; tk.beamK = k; if (k >= 0.5) { const q = byId[L.tele]; tk.x = q.x + 0.5; tk.y = q.y + 0.5; } }
+        if (L.gantry) tk.gantry = L.gantry;
+        if (k >= 1) { left = tk.t + left - ms; tk.t = 0; tk.i++; tk.arm = null; tk.gantry = null; tk.beam = null; tk.state = ''; tk.where = ''; } else { tk.t += left; left = 0; }
+      }
+      if (tk.i >= tk.legs.length && !tk.done) { tk.done = true; if (tk.legs.length === START.length + OK.length) shipped++; }
+    }
+    tickets = tickets.filter((tk) => tk.i < tk.legs.length);
+  }
+
+  // ---------- the people who walk the aisle ----------
+  const WALKERS = [{ x: 3, v: 0.9, shirt: '#3d6fd1' }, { x: 18, v: -0.7, shirt: '#d6407e' }, { x: 27, v: 0.5, shirt: '#2f9e44', clip: true }];
+
+  // ---------- painting, at half resolution, enlarged without smoothing ----------
+  const cv = $('cv'), ctx = cv.getContext('2d'), low = document.createElement('canvas'), c = low.getContext('2d');
+  let tq = true, lanes = new Set(['paint', 'rail']), showHits = false, showLayers = false, showGrid = false, showDecor = true, selected = null;
+  const LIFT = { station: 16, belt: 8, arm: 12, exit: 0, zone: 0, port: 4 };
+  const lift = (m) => (tq ? LIFT[m.kind] ?? 0 : 0);
+  const words = [];
+  const say = (text, x, y, o = {}) => words.push([text, x, y, o]);
+  const INK = '#1d1b26', OUT = '#2b2833';
+  const box = (x, y, w, h, fill, edge = OUT, ew = 2) => { c.fillStyle = fill; c.fillRect(x, y, w, h); if (edge) { c.strokeStyle = edge; c.lineWidth = ew; c.strokeRect(x + ew / 2, y + ew / 2, w - ew, h - ew); } };
+  /* what a ticket stands on, for how high it is drawn */
+  function under(x, y) { const m = M.find((q) => q.kind !== 'zone' && x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h); return m ? lift(m) : 0; }
+
+  function floor() {
+    for (let x = 0; x < W; x++) for (let y = 3; y < H; y++) { c.fillStyle = (x + y) % 2 ? '#efe7d6' : '#e8dfcc'; c.fillRect(x * T, y * T, T, T); }
+    c.fillStyle = 'rgba(0,0,0,0.05)'; for (let x = 0; x <= W; x++) c.fillRect(x * T, 3 * T, 1, CH); for (let y = 3; y <= H; y++) c.fillRect(0, y * T, CW, 1);
+  }
+  function wall(t) {
+    c.fillStyle = '#e4dac4'; c.fillRect(0, 0, CW, 3 * T); c.fillStyle = '#d3c6ac'; for (let x = 0; x < CW; x += 24) for (let y = 0; y < 3 * T - 12; y += 12) c.fillRect(x + ((y / 12) % 2) * 12, y, 23, 1);
+    /* the top of the wall, its skirting and a pipe along it */
+    c.fillStyle = '#c8b994'; c.fillRect(0, 0, CW, 6); c.fillStyle = '#9e9483'; c.fillRect(0, 3 * T - 14, CW, 6); c.fillStyle = OUT; c.fillRect(0, 3 * T - 8, CW, 8);
+    c.fillStyle = '#8a8f99'; c.fillRect(0, 74, CW, 5); c.fillStyle = '#6b707a'; c.fillRect(0, 78, CW, 2); for (let x = 30; x < CW; x += 120) { c.fillStyle = '#5d6169'; c.fillRect(x, 72, 6, 9); }
+    for (const wx of [30, 196, 664, 836]) { box(wx, 12, 96, 54, '#9fd8ec'); c.fillStyle = OUT; c.fillRect(wx + 46, 12, 4, 54); c.fillStyle = '#c9ecf6'; c.fillRect(wx + 8, 18, 12, 4); c.fillRect(wx + 56, 18, 12, 4); c.fillStyle = '#b5a98e'; c.fillRect(wx - 3, 64, 102, 5); }
+    box(350, 8, 236, 48, '#3a3742', '#4a4552', 4); say('FLEEX FACTORY', 468, 33, { size: 16, ink: '#f2b01e', align: 'center', font: "'Pixelify Sans', monospace" });
+    box(606, 16, 32, 32, '#fafafa'); const a = t * 0.6; c.strokeStyle = OUT; c.lineWidth = 2; c.beginPath(); c.moveTo(622, 32); c.lineTo(622 + Math.cos(a) * 10, 32 + Math.sin(a) * 10); c.moveTo(622, 32); c.lineTo(622, 24); c.stroke();
+    box(960, 14, 34, 44, '#d6407e'); c.fillStyle = '#fafafa'; c.fillRect(966, 22, 22, 4); c.fillRect(966, 30, 16, 4); c.fillRect(966, 38, 20, 4);
+    /* a door in the wall, on the right, and an extinguisher */
+    box(1000, 30, 22, 66, '#8a6a4a'); c.fillStyle = '#f2b01e'; c.fillRect(1016, 62, 3, 3);
+    box(150, 54, 10, 22, '#d9433f'); c.fillStyle = OUT; c.fillRect(152, 50, 6, 4);
+  }
+  function lanePaint() {
+    for (const L of LANES) {
+      const X = L.x * T, Y = L.y * T, w = L.w * T, h = L.h * T;
+      if (lanes.has('slab')) { const d = tq ? 8 : 0; c.fillStyle = sh(L.col, 0.82); c.fillRect(X, Y - d, w, h); c.fillStyle = sh(L.col, -0.15); c.fillRect(X, Y + h - d, w, d + 2); c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(X, Y + h + 2, w, 4); }
+      if (lanes.has('paint')) {
+        c.fillStyle = 'rgba(80,70,60,0.08)'; c.fillRect(X, Y, w, h);
+        /* a hazard line round the line, in its colour on the inner edge */
+        c.save(); c.beginPath(); c.rect(X, Y, w, 4); c.rect(X, Y + h - 4, w, 4); c.rect(X, Y, 4, h); c.rect(X + w - 4, Y, 4, h); c.clip(); for (let k = -h; k < w + h; k += 8) { c.fillStyle = (k / 8) % 2 ? '#f2b01e' : OUT; c.beginPath(); c.moveTo(X + k, Y); c.lineTo(X + k + 4, Y); c.lineTo(X + k + 4 - h, Y + h); c.lineTo(X + k - h, Y + h); c.fill(); } c.restore();
+        c.fillStyle = L.col; c.fillRect(X + 4, Y + 4, w - 8, 2);
+      }
+      say(L.name, X + 10, Y + h - 10, { size: 8, ink: sh(L.col, -0.3) });
+    }
+    /* the aisle: a walkway with its arrows */
+    const ay = AISLE.y * T, ah = AISLE.h * T; c.fillStyle = 'rgba(242,176,30,0.12)'; c.fillRect(0, ay, CW, ah);
+    if (lanes.has('paint')) { c.fillStyle = '#f2b01e'; for (let x = 8; x < CW; x += 28) c.fillRect(x, ay + ah / 2 - 1, 14, 2); for (let x = 60; x < CW; x += 220) { c.fillStyle = 'rgba(43,40,51,0.35)'; c.fillRect(x, ay + 4, 4, 4); c.fillRect(x + 8, ay + 8, 4, 4); c.fillRect(x + 16, ay + 4, 4, 4); } }
+  }
+  /* the guard rails: posts and a bar along a line's edges, open where something crosses */
+  function railsAt(edgeY, x0, x1, gaps) {
+    const out = [];
+    for (let x = x0; x < x1; x += 0.5) {
+      const gap = gaps.some((g) => x >= g - 0.5 && x < g + 1.5); if (gap) continue;
+      out.push({ y: edgeY, draw: () => { const X = x * T, Y = edgeY * T, hh = tq ? 14 : 4; c.fillStyle = '#f2b01e'; c.fillRect(X, Y - hh, 16, 3); c.fillStyle = OUT; c.fillRect(X, Y - hh + 3, 16, 1); if ((x * 2) % 2 === 0) { c.fillStyle = '#c98f10'; c.fillRect(X, Y - hh, 3, hh); c.fillStyle = 'rgba(0,0,0,0.15)'; c.fillRect(X + 3, Y - 1, 4, 2); } } });
+    }
+    return out;
+  }
+  function rails() {
+    if (!lanes.has('rail')) return [];
+    return [...railsAt(LANES[0].y + LANES[0].h, 0.5, 31.5, [2, 24]), ...railsAt(LANES[1].y, 0.5, 25.5, [2, 24]), ...railsAt(LANES[1].y + LANES[1].h, 0.5, 25.5, [])];
+  }
+
+  /* a thing that stands: its shadow and its feet on its tiles, its front face, then its top raised by its lift */
+  function stand(X, Y, w, h, L, body, legs = true) {
+    if (!tq || !L) return;
+    c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X + 4, Y + h - 3, w - 2, 5);
+    if (legs) { c.fillStyle = OUT; c.fillRect(X + 4, Y + h - 6, 5, 6); c.fillRect(X + w - 9, Y + h - 6, 5, 6); }
+    c.fillStyle = sh(body, -0.28); c.fillRect(X, Y + h - L - 2, w, L - 4); c.fillStyle = OUT; c.fillRect(X, Y + h - 6, w, 2); c.fillRect(X, Y + h - L - 2, 2, L - 4); c.fillRect(X + w - 2, Y + h - L - 2, 2, L - 4);
+    c.fillStyle = 'rgba(0,0,0,0.12)'; for (let x = X + 10; x < X + w - 8; x += 14) c.fillRect(x, Y + h - L + 1, 2, L - 9);
+  }
+  function station(m, busy, t) {
+    const L = lift(m), X = m.x * T, Y0 = m.y * T, w = m.w * T, h = m.h * T, Y = Y0 - L, hue = KIND[m.exec], gate = m.exec === 'gate', body = '#f4ecdc';
+    stand(X, Y0, w, h, L, gate ? '#efe2c0' : body);
+    box(X, Y, w, h - (tq ? 4 : 0), gate ? '#f5ead0' : body, OUT, 3);
+    if (gate) { c.strokeStyle = '#e6a817'; c.lineWidth = 3; c.setLineDash([8, 6]); c.strokeRect(X + 5, Y + 5, w - 10, h - 14); c.setLineDash([]); }
+    box(X + 9, Y + 9, 24, 24, hue); glyph(c, m.exec, X + 12, Y + 12, 18, INK);
+    say(WORD[m.exec], X + 40, Y + 15, { size: 8, ink: sh(hue, -0.4) }); say(m.name, X + 40, Y + 28, { size: 13, ink: INK, font: "'Pixelify Sans', monospace" });
+    box(X + w - 22, Y + 8, 13, 26, OUT, null); [0, 1, 2].forEach((i) => { c.fillStyle = i === (busy === 'review' ? 1 : 2) ? ['#d9433f', '#f2b01e', '#2f9e44'][i] : '#4b4655'; c.fillRect(X + w - 18, Y + 12 + i * 7, 5, 5); });
+    if (!gate) { const pw = (w - 30) / 2; [0, 1].forEach((i) => { const px = X + 11 + i * (pw + 8), py = Y + 42; box(px, py, pw, h - 64, '#d9cfbb', '#b7ab93', 2); say(i === 0 && busy === 'running' ? 'RUNNING' : 'FREE', px + 4, py + 8, { size: 8, ink: i === 0 && busy === 'running' ? '#2f9e44' : '#6b6574' }); }); box(X + 11, Y + h - 20, w - 22, 8, '#d9cfbb', null); c.fillStyle = '#f2b01e'; for (let k = 0; k < 4; k++) c.fillRect(X + 13 + k * 6, Y + h - 18, 3, 4); }
+    else { box(X + 11, Y + 42, w - 22, h - 58, '#e8dcbc', '#c9b98f', 2); say(busy ? 'TO DECIDE · 1' : 'TO DECIDE · 0', X + 15, Y + 50, { size: 8, ink: busy ? '#a86d00' : '#6b6574' }); }
+    if (busy === 'running') { const [px, py] = place(m.id); c.strokeStyle = '#2f9e44'; c.lineWidth = 3; c.beginPath(); c.arc(px * T, py * T - L, 13, t * 5, t * 5 + 2.2); c.stroke(); }
+  }
+  function beltTile(m, t, hot) {
+    const L = lift(m), X = m.x * T, Y0 = m.y * T, Y = Y0 - L, v = m.dir === 'n' || m.dir === 's';
+    if (tq) { c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X + 2, Y0 + T - 3, T, 5); c.fillStyle = '#3a3742'; c.fillRect(X, Y0 + T - L, T, L); c.fillStyle = '#56525f'; for (let x = X + 3; x < X + T; x += 8) c.fillRect(x, Y0 + T - L + 2, 4, 3); if ((m.x + m.y) % 2 === 0) { c.fillStyle = OUT; c.fillRect(X + 4, Y0 + T - 4, 4, 4); c.fillRect(X + T - 8, Y0 + T - 4, 4, 4); } }
+    c.fillStyle = '#56525f'; c.fillRect(X, Y, T, T); c.fillStyle = OUT; if (v) { c.fillRect(X, Y, 3, T); c.fillRect(X + T - 3, Y, 3, T); } else { c.fillRect(X, Y, T, 3); c.fillRect(X, Y + T - 3, T, 3); }
+    const [dx, dy] = DIRV[m.dir], off = (t * 22) % 16; c.save(); c.beginPath(); c.rect(X, Y, T, T); c.clip(); c.strokeStyle = '#c9c3d1'; c.lineWidth = 2; for (let i = -1; i < 3; i++) { const o = i * 16 + off, cx = X + T / 2 + dx * (o - 8), cy = Y + T / 2 + dy * (o - 8); c.beginPath(); c.moveTo(cx - dx * 4 - dy * 6, cy - dy * 4 - dx * 6); c.lineTo(cx + dx * 3, cy + dy * 3); c.lineTo(cx - dx * 4 + dy * 6, cy - dy * 4 + dx * 6); c.stroke(); } c.restore();
+  }
+  /*
+   * A gantry is three things at three depths: the post behind the belt (drawn before what rides on it), the post in
+   * front (drawn after), and the bar over it (overhead, drawn after everything that stands).
+   */
+  const GANTRY_H = 30;
+  function gantryPost(m, front) {
+    const X = m.x * T, Y0 = m.y * T, v = m.dir === 'n' || m.dir === 's', col = m.toll ? '#d9433f' : '#d6407e';
+    if (!tq) return;
+    if (v) { const px = front ? X + T : X - 6; box(px, Y0 + T / 2 - GANTRY_H + 4, 6, GANTRY_H, sh(col, -0.2)); return; }
+    const fy = front ? Y0 + T : Y0 + 2; c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X + 12, fy - 1, 10, 3); box(X + 13, fy - GANTRY_H, 6, GANTRY_H, sh(col, front ? -0.1 : -0.3));
+  }
+  function gantryBar(m, hot) {
+    const X = m.x * T, Y0 = m.y * T, v = m.dir === 'n' || m.dir === 's', col = m.toll ? '#d9433f' : '#d6407e', bar = hot ? col : '#ece4d4';
+    if (!tq) { /* flat: a bar across the belt, hollow so what rides under it shows */ c.strokeStyle = col; c.lineWidth = 3; c.strokeRect(X + T / 2 - 5, Y0 - 3, 10, T + 6); if (hot) { c.fillStyle = col; c.fillRect(X + T / 2 - 5, Y0 - 3, 10, 5); c.fillRect(X + T / 2 - 5, Y0 + T - 2, 10, 5); } return; }
+    if (v) box(X - 6, Y0 + T / 2 - GANTRY_H, T + 12, 7, bar, OUT, 2);
+    else box(X + 12, Y0 + 2 - GANTRY_H, 8, T + 2, bar, OUT, 2);
+  }
+  /* an arm: its pillar stands on the floor; its boom, its cup and what it carries swing overhead */
+  function armBase(m) {
+    const L = lift(m), bx = (m.x + 0.5) * T, by0 = (m.y + 0.5) * T, col = m.col ?? '#f2b01e';
+    if (tq) { c.fillStyle = 'rgba(40,30,20,0.22)'; c.fillRect(bx - 8, by0 + 4, 18, 5); box(bx - 6, by0 - L, 12, L + 6, sh(col, -0.25)); }
+  }
+  function armDraw(m, tk) {
+    const L = lift(m), bx = (m.x + 0.5) * T, by0 = (m.y + 0.5) * T, by = by0 - L, [dx, dy] = DIRV[m.dir], k = tk ? tk.armK : 0, th = Math.atan2(dy, dx) + Math.PI * (1 - ease(k)), hx = bx + Math.cos(th) * 0.9 * T, hy = by + Math.sin(th) * 0.9 * T, col = m.col ?? '#f2b01e';
+    if (tk) ticket(tk, hx, hy);
+    c.strokeStyle = OUT; c.lineWidth = 9; c.lineCap = 'square'; c.beginPath(); c.moveTo(bx, by); c.lineTo(hx, hy); c.stroke(); c.strokeStyle = col; c.lineWidth = 5; c.stroke();
+    c.globalAlpha = 0.85; box(hx - 6, hy - 6, 12, 12, '#fafafa'); c.globalAlpha = 1; box(bx - 8, by - 8, 16, 16, col);
+  }
+  function zone(m) { const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T, col = m.id === 'in' ? '#2f9e44' : '#3d6fd1'; c.fillStyle = col + '1c'; c.fillRect(X + 2, Y + 2, w - 4, h - 4); c.strokeStyle = col; c.lineWidth = 2; c.setLineDash([8, 6]); c.strokeRect(X + 3, Y + 3, w - 6, h - 6); c.setLineDash([]); say(m.name.toUpperCase(), X + 9, Y + 12, { size: 8, ink: sh(col, -0.25) }); }
+  function exitMat(m) { const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T; c.fillStyle = '#dff0d8'; c.fillRect(X + 4, Y + 4, w - 8, h - 8); c.fillStyle = '#2f9e44'; for (let x = X + 8; x < X + w - 8; x += 10) c.fillRect(x, Y + h - 12, 6, 4); if (tq) say(String(shipped), X + w / 2, Y + h / 2 + 4, { size: 16, ink: '#2f9e44', align: 'center' }); }
+  function exitLintel(m) { if (!tq) return; const X = m.x * T, Y = m.y * T, w = m.w * T; box(X, Y - 26, w, 14, '#2f9e44'); say('EXIT', X + w / 2, Y - 19, { size: 8, ink: '#fafafa', align: 'center' }); }
+  function exitDraw(m) {
+    const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T;
+    if (tq) { /* a doorway: two posts standing at its front corners; its mat and its lintel are drawn apart */ box(X + 2, Y - 20, 8, h - 2, '#4a7f4f'); box(X + w - 10, Y - 20, 8, h - 2, '#4a7f4f'); return; }
+    else { c.strokeStyle = '#2f9e44'; c.lineWidth = 3; c.strokeRect(X + 4, Y + 4, w - 8, h - 8); say('EXIT', X + w / 2, Y + 14, { size: 8, ink: '#2f9e44', align: 'center' }); }
+    say(String(shipped), X + w / 2, Y + h / 2 + 4, { size: 16, ink: '#2f9e44', align: 'center' });
+  }
+  function port(m, t, beam) {
+    const L = lift(m), cx = (m.x + 0.5) * T, cy0 = (m.y + 0.5) * T, cy = cy0 - L;
+    if (tq) { c.fillStyle = sh(m.col, -0.35); c.fillRect(cx - 14, cy0 + 10, 28, L + 4); }
+    box(cx - 14, cy - 14, 28, 28, '#2b2833', m.col, 2);
+    c.fillStyle = m.col; const r = 7 + Math.round(Math.sin(t * 3)); c.fillRect(cx - r, cy - 2, r * 2, 4); c.fillRect(cx - 2, cy - r, 4, r * 2);
+    if (beam && tq) { c.fillStyle = m.col; c.globalAlpha = 0.35 * (1 - Math.abs(beam - 0.5) * 2); c.fillRect(cx - 10, cy - 70, 20, 70); c.globalAlpha = 1; }
+    say(m.name, cx, cy0 + 24, { size: 8, ink: '#fafafa', align: 'center', plate: '#2b2833' });
+  }
+  function ticket(tk, cx, cy) {
+    const L = cx != null ? 0 : under(tk.x, tk.y), x = Math.round(cx ?? tk.x * T), y = Math.round((cy != null ? cy + 4 : tk.y * T)) - L, col = TYPE[tk.type];
+    c.globalAlpha = tk.op; if (tq && L) { c.fillStyle = 'rgba(40,30,20,0.25)'; c.fillRect(x - 8, y + L - 2, 18, 4); }
+    c.fillStyle = '#c8955a'; c.fillRect(x - 10, y - 8, 20, 15); c.fillStyle = '#9c6b3a'; c.fillRect(x - 10, y - 2, 20, 2); c.fillStyle = col; c.fillRect(x - 10, y - 8, 20, 4); c.strokeStyle = OUT; c.lineWidth = 2; c.strokeRect(x - 9, y - 7, 18, 13); c.globalAlpha = 1;
+  }
+  function worker(x, y, shirt, t, walking, clip) {
+    const f = walking ? Math.floor(t * 6) % 2 : 0;
+    c.fillStyle = 'rgba(40,30,20,0.22)'; c.fillRect(x - 6, y - 1, 12, 3);
+    c.fillStyle = '#3d4a7a'; c.fillRect(x - 4, y - 7, 3, 7 - f * 2); c.fillRect(x + 1, y - 7, 3, 5 + f * 2);
+    c.fillStyle = shirt; c.fillRect(x - 5, y - 15, 10, 9); c.fillStyle = '#f2c79e'; c.fillRect(x - 3, y - 21, 6, 6); c.fillStyle = '#f2b01e'; c.fillRect(x - 4, y - 23, 8, 3);
+    if (clip) { c.fillStyle = '#c8955a'; c.fillRect(x + 4, y - 14, 5, 7); c.fillStyle = '#fafafa'; c.fillRect(x + 5, y - 13, 3, 4); }
+  }
+  function decorProps(t) {
+    const out = [];
+    for (const [px, py] of [[0.3, 14.6], [30.6, 14.6], [27.8, 9.2], [29.6, 9.2]]) out.push({ y: py, draw: () => { const X = px * T, Y = py * T; c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X, Y - 2, 22, 4); box(X + 2, Y - 14, 18, 14, '#9c6b3a'); c.fillStyle = '#2f9e44'; c.fillRect(X + 4, Y - 28, 6, 14); c.fillRect(X + 12, Y - 32, 6, 18); c.fillStyle = '#4fbf5f'; c.fillRect(X + 6, Y - 24, 4, 4); c.fillRect(X + 14, Y - 28, 4, 4); } });
+    for (const [px, py] of [[27.2, 12.6], [28.1, 12.6], [27.65, 12.1]]) out.push({ y: py + (px === 27.65 ? -0.01 : 0), draw: () => { const X = px * T, Y = py * T; box(X, Y - 15, 22, 17, '#c8955a'); c.fillStyle = '#9c6b3a'; c.fillRect(X + 2, Y - 8, 18, 2); } });
+    /* a desk with a screen where the gate's decisions are made, and the one who decides */
+    out.push({ y: 9.8, draw: () => { const X = 26.6 * T, Y = 9.8 * T; c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X, Y - 2, 60, 4); box(X, Y - 18, 60, 12, '#b98a5a'); c.fillStyle = OUT; c.fillRect(X + 4, Y - 6, 4, 6); c.fillRect(X + 52, Y - 6, 4, 6); box(X + 18, Y - 34, 24, 16, OUT); c.fillStyle = '#9fd8ec'; c.fillRect(X + 21, Y - 31, 18, 10); } });
+    for (const w of WALKERS) out.push({ y: AISLE.y + 0.55, draw: () => worker(Math.round(w.x * T), Math.round((AISLE.y + 0.55) * T), w.shirt, t, true, w.clip) });
+    for (const m of M) if (m.kind === 'station' && m.exec !== 'gate') out.push({ y: m.y + m.h + 0.4, draw: () => worker((m.x + m.w - 0.6) * T, (m.y + m.h + 0.4) * T, KIND[m.exec], t, false) });
+    return out;
+  }
+
+  function paint() {
+    const t = clock / 1000, d = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== CW * d) { cv.width = CW * d; cv.height = CH * d; }
+    if (low.width !== CW / 2) { low.width = CW / 2; low.height = CH / 2; }
+    words.length = 0; c.setTransform(0.5, 0, 0, 0.5, 0, 0); c.imageSmoothingEnabled = false;
+    floor(); if (showDecor) wall(t); else { c.fillStyle = '#efe7d6'; c.fillRect(0, 0, CW, 3 * T); }
+    if (showDecor) lanePaint();
+    for (const m of M) if (m.kind === 'zone') zone(m);
+    /* everything that stands, by depth: what is lower on the screen passes in front */
+    const armOf = {}, busy = {}, gantry = {}, beam = {};
+    for (const tk of tickets) { if (tk.arm) armOf[tk.arm] = tk; if (tk.where) busy[tk.where] = tk.state; if (tk.gantry) gantry[tk.gantry] = true; if (tk.beam) beam[tk.beam] = tk.beamK; }
+    /*
+     * 1. the floor: tiles, lines, zones, the exit's mat (done above, and here).
+     * 2. what stands, by depth (the foot of each thing: lower on the screen passes in front); what rides on a thing is
+     *    drawn just after that thing, never on its own depth: a ticket on a belt after the belts of its row, in a
+     *    station after the station.
+     * 3. what is overhead: arms' booms and what they carry, gantries' bars, an exit's lintel, by depth among themselves.
+     * 4. the words, last, over everything (after the picture is enlarged).
+     */
+    for (const m of M) if (m.kind === 'exit') exitMat(m);
+    const items = [], over = [], carried = [];
+    const keyOf = (m) => (m.kind === 'belt' ? m.y + 1 - 0.01 : m.kind === 'arm' ? m.y + 1 + 0.02 : m.y + m.h);
+    for (const m of M) {
+      const k = keyOf(m);
+      if (m.kind === 'station') items.push({ y: k, draw: () => station(m, busy[m.id], t) });
+      else if (m.kind === 'belt') { items.push({ y: k, draw: () => beltTile(m, t, gantry[m.id]) }); if (m.set) { items.push({ y: m.y + 0.02, draw: () => gantryPost(m, false) }); items.push({ y: k + 0.005, draw: () => gantryPost(m, true) }); over.push({ y: k, box: [m.x, m.y - 1, 1, 2], draw: () => gantryBar(m, gantry[m.id]) }); } }
+      else if (m.kind === 'arm') { items.push({ y: k, draw: () => armBase(m) }); over.push({ y: k, box: [m.x - 1, m.y - 1, 3, 3], draw: () => armDraw(m, armOf[m.id]) }); }
+      else if (m.kind === 'exit') { items.push({ y: k, draw: () => exitDraw(m) }); over.push({ y: k, box: [m.x, m.y - 1, m.w, 1], draw: () => exitLintel(m) }); }
+      else if (m.kind === 'port') items.push({ y: k, draw: () => port(m, t, beam[m.id]) });
+    }
+    /* a ticket rides on what is under it, and is drawn just after it */
+    for (const tk of tickets) if (!tk.arm) {
+      const host = M.find((q) => q.kind !== 'zone' && q.kind !== 'arm' && tk.x >= q.x && tk.x < q.x + q.w && tk.y + 0.3 >= q.y && tk.y + 0.3 < q.y + q.h);
+      const y = host ? keyOf(host) + 0.004 : tk.y + 0.45;
+      items.push({ y, draw: () => ticket(tk) }); carried.push([tk, host]);
+    }
+    if (showDecor) items.push(...rails(), ...decorProps(t));
+    items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+    over.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+    if (showLayers) {
+      /* what is overhead, in magenta; what rides on something, in cyan */
+      c.lineWidth = 2; c.setLineDash([4, 3]);
+      c.strokeStyle = '#d6407e'; for (const o of over) if (o.box) c.strokeRect(o.box[0] * T, o.box[1] * T - (tq ? 8 : 0), o.box[2] * T, o.box[3] * T);
+      c.strokeStyle = '#1fb5d6'; for (const [tk, host] of carried) if (host) { const L = under(tk.x, tk.y); c.strokeRect(tk.x * T - 12, tk.y * T - L - 10, 24, 20); }
+      c.setLineDash([]);
+    }
+    if (selected) { const m = byId[selected], L = lift(m); c.strokeStyle = '#d6407e'; c.lineWidth = 3; c.setLineDash([6, 4]); c.strokeRect(m.x * T - 3, m.y * T - L - 3, m.w * T + 6, m.h * T + L + 6); c.setLineDash([]); }
+    if (showHits) for (const m of M) { const L = lift(m); c.fillStyle = 'rgba(214,64,126,0.18)'; c.fillRect(m.x * T, m.y * T - L, m.w * T, m.h * T + L); c.strokeStyle = 'rgba(29,27,38,0.7)'; c.lineWidth = 1; c.strokeRect(m.x * T + 0.5, m.y * T + 0.5, m.w * T - 1, m.h * T - 1); }
+    if (showGrid) { c.strokeStyle = 'rgba(214,64,126,0.6)'; c.lineWidth = 2; for (let x = 0; x <= W; x++) { c.beginPath(); c.moveTo(x * T, 0); c.lineTo(x * T, CH); c.stroke(); } for (let y = 0; y <= H; y++) { c.beginPath(); c.moveTo(0, y * T); c.lineTo(CW, y * T); c.stroke(); } }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(low, 0, 0, cv.width, cv.height);
+    /* the words, crisp over the enlarged picture */
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    for (const [text, x, y, o] of words) {
+      ctx.font = `${o.size >= 13 ? 700 : 400} ${o.size ?? 8}px ${o.font ?? "'Silkscreen', monospace"}`; ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
+      if (o.plate) { const w = ctx.measureText(text).width + 10, x0 = o.align === 'center' ? x - w / 2 : x - 5; ctx.fillStyle = o.plate; ctx.fillRect(Math.round(x0), Math.round(y - 7), Math.round(w), 14); }
+      ctx.fillStyle = o.ink ?? INK; ctx.fillText(text, Math.round(x), Math.round(y));
+    }
+  }
+  let last = performance.now(), next = 0;
+  function frame(now) {
+    const dt = Math.min(64, now - last); last = now;
+    if (playing) { step(dt); next -= dt; if (next <= 0 && tickets.length < 9) { spawn(); next = 2600; } for (const w of WALKERS) { w.x += (w.v * dt) / 1000; if (w.x > 31) w.v = -Math.abs(w.v); if (w.x < 1) w.v = Math.abs(w.v); } }
+    paint(); requestAnimationFrame(frame);
+  }
+
+  // ---------- the controls ----------
+  const SAY = { tq: 'Trois-quarts : chaque machine se lève de son emplacement. Une station a 16 px de hauteur, un convoyeur 8, un bras 12 ; on voit leur face avant, leurs pieds, leur ombre. Ce qui est plus bas sur l\'écran passe devant. Les tickets prennent la hauteur de ce qui les porte.', flat: 'À plat : le skin pixel de la page des skins, vu d\'au-dessus. Même matrice, mêmes machines : seule la peinture diffère.' };
+  function setView(v) { tq = v === 'tq'; for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === v)); $('say').innerHTML = `<b>${tq ? 'TROIS-QUARTS' : 'À PLAT'}</b>${esc(SAY[v])}`; }
+  $('view').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); });
+  $('lanes').addEventListener('click', (e) => { const b = e.target.closest('[data-lane]'); if (!b) return; const k = b.dataset.lane; if (lanes.has(k)) lanes.delete(k); else lanes.add(k); b.setAttribute('aria-pressed', String(lanes.has(k))); });
+  $('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Lecture'; $('play').setAttribute('aria-pressed', String(playing)); });
+  $('spawn').addEventListener('click', spawn);
+  for (const [id, set] of [['layers', (v) => { showLayers = v; }], ['hits', (v) => { showHits = v; }], ['grid', (v) => { showGrid = v; }], ['decor', (v) => { showDecor = v; }]]) $(id).addEventListener('click', () => { const v = $(id).getAttribute('aria-pressed') !== 'true'; set(v); $(id).setAttribute('aria-pressed', String(v)); });
+  /* a click hits what is seen: the top and the front face, nearest first */
+  cv.addEventListener('click', (e) => {
+    const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * CW, y = ((e.clientY - r.top) / r.height) * CH;
+    const hit = [...M].filter((m) => m.what).sort((a, b) => (b.y + b.h) - (a.y + a.h)).find((m) => { const L = lift(m); return x >= m.x * T && x < (m.x + m.w) * T && y >= m.y * T - L && y < (m.y + m.h) * T; });
+    selected = hit ? hit.id : null;
+    $('info').innerHTML = hit ? `<h3>${esc(hit.name)}</h3><p class="brief">${esc(hit.what)}</p><p class="mono">${hit.w} × ${hit.h} case${hit.w * hit.h > 1 ? 's' : ''} à (${hit.x}, ${hit.y}) · hauteur peinte ${lift(hit)} px</p>` : '<h3>Une machine</h3><p class="brief">Clique une machine : en trois-quarts, sa face avant et son dessus répondent aussi.</p>';
+  });
+
+  /* the ways to mark the lines, to pick */
+  const CARDS = [
+    { id: 'L1', name: 'Marquage au sol', idea: 'Le sol de chaque ligne est un peu plus sombre, bordé d\'un ruban jaune et noir avec un liseré de la couleur de la ligne ; son nom est peint dans un coin. L\'allée a ses pointillés et des pas.', pro: 'Le moins de place prise, lisible même dézoomé, et ça marche aussi à plat.', con: 'Plat : ne donne pas de relief.' },
+    { id: 'L2', name: 'Estrades', idea: 'Chaque ligne est posée sur une estrade de sa couleur, un peu surélevée, dont on voit le bord en trois-quarts.', pro: 'Le plus « lieu » des trois : chaque ligne est une plateforme qu\'on identifie d\'un coup d\'œil, par sa couleur.', con: 'Beaucoup de couleur au sol, qui entre en concurrence avec celle des stations.' },
+    { id: 'L3', name: 'Garde-corps', idea: 'Des barrières jaunes avec leurs poteaux le long des lignes, ouvertes là où un bras ou un convoyeur traverse.', pro: 'Le plus vivant en trois-quarts, et ça dessine vraiment une allée entre les lignes.', con: 'Prend un peu de hauteur et peut masquer le bas d\'une station de la ligne du dessous.', mine: true },
+  ];
+  $('cards').innerHTML = CARDS.map((p) => `<article class="card" data-id="${p.id}"><div class="card-head"><span class="letter">${p.id}</span><h3>${esc(p.name)}</h3>${p.mine ? '<span class="mine">Ma préférence, avec L1</span>' : ''}</div><dl><dt>Idée</dt><dd>${esc(p.idea)}</dd><dt>Atout</dt><dd>${esc(p.pro)}</dd><dt>Limite</dt><dd>${esc(p.con)}</dd></dl><button type="button" class="pick" aria-pressed="false">Choisir ${p.id}</button></article>`).join('');
+  const KEY = 'factory-pixel3d-picks';
+  let picks = [];
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { picks = []; }
+  const summary = () => `Pixel trois-quarts — Lignes : ${picks.length ? picks.map((id) => `${id} (${CARDS.find((x) => x.id === id).name})`).join(', ') : 'aucune choisie'}`;
+  function paintPicks() { for (const card of document.querySelectorAll('#cards .card')) { const on = picks.includes(card.dataset.id), b = card.querySelector('.pick'); card.classList.toggle('picked', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`; } $('picks').innerHTML = `Lignes <b>${picks.length ? picks.join(' + ') : '–'}</b>`; }
+  document.addEventListener('click', (e) => { const b = e.target.closest('.pick'); if (!b) return; const id = b.closest('.card').dataset.id; picks = picks.includes(id) ? picks.filter((x) => x !== id) : [...picks, id]; try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept */ } $('said').textContent = ''; paintPicks(); });
+  $('copy').addEventListener('click', () => { const s = $('said'), l = summary(); try { navigator.clipboard.writeText(l).then(() => { s.textContent = 'Copié : colle-le dans la conversation.'; }, () => { s.textContent = l; }); } catch { s.textContent = l; } });
+
+  for (let i = 0; i < 6; i++) { spawn(); step(i * 2400 + 900); }
+  setView('tq'); paintPicks(); requestAnimationFrame(frame);
+})();
+</script>

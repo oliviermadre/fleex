@@ -1,3 +1,4 @@
+import { createFactoryModule } from '../factory/factory.module.js';
 import { hostname } from 'node:os';
 import { existsSync, realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -178,6 +179,7 @@ export async function createContainer() {
     agentTokenStore,
     commentStore,
     annotationStore,
+    factoryStore,
     todoStore,
     mentionStore,
     deliverableStore,
@@ -472,6 +474,19 @@ export async function createContainer() {
   const createTicket = new CreateTicketUseCase(ticketStore_, eventBus);
   const applyTicketMutation = new ApplyTicketMutationUseCase(ticketStore_, eventBus);
 
+  // Experimental Factory (src/factory), behind `factoryEnabled`. Null where the storage driver has no factory tables.
+  const factory = createFactoryModule({
+    store: factoryStore, config, ticketStore: ticketStore_, skillStore, personaStore: personaStore_, agentEventStore: agentEventStore_,
+    executeAgent, runPanel, applyTicketMutation, submitDeliverable, postComment, eventBus, logger,
+    /* script stations: the host's shell, and where a ticket's workspace and worktrees are */
+    host: {
+      shell: (command, options) => shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs }),
+      exists: (path) => hostFs.exists(path),
+      workspacePath: (id) => resolver.workspacePath(id),
+      workspaceRepoPath: (id, name) => resolver.workspaceRepoPath(id, name),
+    },
+  });
+
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
 
@@ -731,7 +746,7 @@ export async function createContainer() {
     // Resolve circular dep: runWorkflowStep.deps.orchestrator = workflowOrchestrator
     (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
 
-    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
+    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment, (ticketId) => factory?.refusesWorkflow(ticketId) ?? null);
 
     // Close the lazy loop opened above. Slug → template resolution lives here
     // rather than in the operation so the operation stays a pure planner.
@@ -968,6 +983,7 @@ export async function createContainer() {
     manageDeliverableTypes,
     createTicket,
     applyTicketMutation,
+    factory,
     getTicketContext,
     personaStore: personaStore_,
     createPersona,

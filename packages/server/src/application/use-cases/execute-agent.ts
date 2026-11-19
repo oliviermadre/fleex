@@ -2225,6 +2225,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     onExecutionStarted?: (executionId: string) => void | Promise<void>;
     /** Who the run acts as for the CLI/MCP (FLEEX_ACTOR_NAME): `workflow:<template> → <step>`. */
     actorName?: string;
+    /** Runs this step on another model than the persona's. Empty or absent: the persona's own. */
+    model?: string | null;
   }): Promise<{
     structuredOutput: Record<string, unknown> | null;
     rawText: string;
@@ -2232,6 +2234,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }> {
     const persona = await this.personaStore.getByName(params.personaName);
     if (!persona) throw new AgentPersonaNotFoundError(params.personaName);
+    const model = params.model?.trim() || persona.model;
 
     // Hold a global SDK slot for the whole step (worktree setup + query), so
     // concurrent workflow runs are throttled by the one global limit rather than
@@ -2269,7 +2272,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Start tracking
       await this.agentEventStore.startExecution({
         executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: workflowExecKey,
-        model: persona.model,
+        model: model,
       });
 
       // Surface the live executionId to the orchestrator so it can persist
@@ -2322,7 +2325,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         personaName: persona.name,
         ticketId: params.ticketId,
         mentionId: `workflow:${executionId}`,
-        model: persona.model,
+        model: model,
         effectiveMode,
         worktreePath,
         kind: 'workflow_step',
@@ -2344,7 +2347,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         systemPrompt,
         promptBlocks: userPromptBlocks,
         manifest: userPromptManifest,
-        model: persona.model,
+        model: model,
         effectiveMode,
         maxTurns: wfMaxTurns,
         memoryEngine: context?.memoryEngine,
@@ -2353,7 +2356,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
       // SDK query
       const queryOptions = buildSdkOptions(effectiveMode, {
-        model: persona.model, systemPrompt, cwd: worktreePath,
+        model: model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
         maxTurns: this.config.get().agentMaxTurns,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
@@ -2414,7 +2417,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           throw new ExecutionCancelledError(executionId);
         }
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: model });
         finalStatus = 'failed';
         throw err;
       }
@@ -2428,7 +2431,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // A run that did nothing is not a completion: fail the step instead of routing on a fallback `ko`.
       if (!resultText.trim() && !structuredOutput && !sdkNumTurns) {
         await emitEvent('error', { error: CRASH_MESSAGES.empty_result! });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: model });
         finalStatus = 'failed';
         throw new Error(CRASH_MESSAGES.empty_result!);
       }
@@ -2441,7 +2444,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       await emitEvent('execution_end', {
-        status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode,
+        status: 'completed', ticketId: params.ticketId, model, effectiveMode,
         resultLength: resultText.length,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
@@ -2453,7 +2456,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         maxTurns: wfMaxTurns,
       });
       await this.agentEventStore.completeExecution(executionId, 'completed', {
-        model: persona.model,
+        model,
         effectiveMode,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,

@@ -1,0 +1,468 @@
+<title>Zones, sorties et bras</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: three families, five proposals each, as a grid of cards around a scene of the floor; a bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #15803d; --accent-soft: #dcfce7; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #4ade80; --accent-soft: #12301f; --on-accent: #062b14; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #4ade80; --accent-soft: #12301f; --on-accent: #062b14; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 68ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 72ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card button { align-self: flex-start; margin-top: auto; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Zones, sorties et bras : 5 pistes chacun</h1>
+    <p class="lede">Chaque piste est dessinée sur le sol de l'usine, à l'échelle des cases, avec les convoyeurs et les tickets actuels autour. Rien n'est encore dans le code. Choisis une piste par famille (ou dis-moi lesquelles mélanger), et je l'implémente dans le rendu.</p>
+    <div class="tools">
+      <button type="button" id="anim" aria-pressed="true">Animation des bras</button>
+      <span class="said">Les bras tournent en boucle : un aller avec le ticket, un retour à vide.</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-zone">
+    <h2 id="h-zone">Zones</h2>
+    <p class="brief">Une zone doit dire d'un coup d'œil : son nom, combien de tickets elle contient, lesquels sont libérés (prêts à partir), le statut qu'elle pose, et si elle libère à la main ou toute seule. Aujourd'hui c'est un rectangle noir avec un titre.</p>
+    <div class="grid" id="zones"></div>
+  </section>
+
+  <section aria-labelledby="h-exit">
+    <h2 id="h-exit">Sorties</h2>
+    <p class="brief">Une sortie passe le ticket à « done » et le rend à Fleex. Elle doit se repérer de loin comme la fin de la ligne, et idéalement montrer que ça sort vraiment. Aujourd'hui c'est un cadre vert avec « Exit / done ».</p>
+    <div class="grid" id="exits"></div>
+  </section>
+
+  <section aria-labelledby="h-arm">
+    <h2 id="h-arm">Bras</h2>
+    <p class="brief">Un bras prend sur la case derrière lui et pose sur la case devant. Il doit montrer son sens, ce qu'il prend (sa condition : ici « ok » en haut, sans condition en bas), et le ticket qu'il porte. Aujourd'hui c'est un rond et une tige.</p>
+    <div class="grid" id="arms"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- the floor's own look (the app's dark theme) ----------
+  const T = 44;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#202024', panel: '#161618', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', blue: '#60a5fa', purple: '#c084fc', steel: '#52525b', steel2: '#3a3a40' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', think: '#60a5fa', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"";
+  const SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10;
+
+  function floor(w, h) {
+    let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`;
+    for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    return s;
+  }
+  const chevron = (cx, cy, color = C.chev, w = 2.4) => `<path d="M${cx - 4} ${cy - 8} L${cx + 4} ${cy} L${cx - 4} ${cy + 8}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt going east: `n` tiles from tile (x, y). */
+  function belt(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${n * T}" height="${T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T} ${y * T + 2} H${(x + n) * T} M${x * T} ${(y + 1) * T - 2} H${(x + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron((x + i) * T + 12, y * T + T / 2) + chevron((x + i) * T + 34, y * T + T / 2);
+    return s;
+  }
+  /** A ticket: an object with some thickness, its shape and colour saying its type. */
+  function token(cx, cy, type, s = 18, o = {}) {
+    const col = TYPE[type], h = s / 2, dark = 'rgba(0,0,0,0.45)';
+    const shape = (dy, fill) => type === 'think' ? `<circle cx="${cx}" cy="${cy + dy}" r="${h}" fill="${fill}"/>`
+      : type === 'review' ? `<path d="M${cx} ${cy - h + dy} L${cx + h} ${cy + dy} L${cx} ${cy + h + dy} L${cx - h} ${cy + dy} Z" fill="${fill}"/>`
+      : type === 'fix' ? `<path d="M${cx - h} ${cy - h * 0.5 + dy} L${cx - h * 0.45} ${cy - h + dy} H${cx + h * 0.45} L${cx + h} ${cy - h * 0.5 + dy} V${cy + h * 0.5 + dy} L${cx + h * 0.45} ${cy + h + dy} H${cx - h * 0.45} L${cx - h} ${cy + h * 0.5 + dy} Z" fill="${fill}"/>`
+      : `<rect x="${cx - h}" y="${cy - h + dy}" width="${s}" height="${s}" rx="${s * 0.26}" fill="${fill}"/>`;
+    let out = `<g opacity="${o.opacity ?? 1}">${shape(2.5, dark)}${shape(0, col)}<circle cx="${cx - h * 0.3}" cy="${cy - h * 0.3}" r="${s * 0.11}" fill="rgba(255,255,255,0.55)"/>`;
+    if (o.check) out += `<path d="M${cx - 4} ${cy} l3 3 l5 -6" fill="none" stroke="#052e16" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    return out + '</g>';
+  }
+  /** Today's arm, greyed: in the zone and exit scenes only the zone or the exit changes. */
+  function plainArm(x, y) {
+    const cx = x * T + T / 2, cy = y * T + T / 2;
+    return `<path d="M${cx - 16} ${cy} H${cx + 10}" stroke="${C.steel}" stroke-width="5" stroke-linecap="round"/><circle cx="${cx + 10}" cy="${cy}" r="9" fill="${C.floor}" stroke="${C.steel}" stroke-width="4"/><circle cx="${cx + 10}" cy="${cy}" r="3" fill="${C.steel}"/>`;
+  }
+  const text = (x, y, str, o = {}) => `<text x="${x}" y="${y}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.spacing ? `letter-spacing="${o.spacing}"` : ''} ${o.opacity ? `opacity="${o.opacity}"` : ''}>${str}</text>`;
+  const svg = (w, h, label, inner, box) => `<svg viewBox="${box ?? `0 0 ${w} ${h}`}" role="img" aria-label="${label}">${floor(w, h)}${inner}</svg>`;
+
+  // ---------- zones: a 4 by 3 zone between two belts; 5 tickets, 2 of them released ----------
+  const ZW = 440, ZH = 220, ZX = 3 * T, ZY = T, ZWd = 4 * T, ZHt = 3 * T;
+  const zoneFrame = (inner) => belt(0, 2, 2) + plainArm(2, 2) + inner + plainArm(7, 2) + belt(8, 2, 2);
+  const HELD = ['build', 'fix', 'think'], OUT = ['review', 'build'];
+
+  const zones = [
+    { id: 'Z1', name: 'Marquage au sol', mine: true,
+      idea: 'La zone n’est pas une machine : c’est un emplacement peint au sol, avec une voie de départ côté sortie.',
+      reads: 'Nom et compteur au pochoir ; les tickets libérés avancent dans la voie fléchée, les autres restent sur l’aire.',
+      limit: 'Plus discret qu’une boîte : compte sur la couleur du marquage pour se voir de loin.',
+      draw: () => {
+        const c = C.blue;
+        let s = `<rect x="${ZX}" y="${ZY}" width="${ZWd}" height="${ZHt}" fill="rgba(96,165,250,0.05)"/>`;
+        s += `<rect x="${ZX + 1.5}" y="${ZY + 1.5}" width="${ZWd - 3}" height="${ZHt - 3}" fill="none" stroke="${c}" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="9 7"/>`;
+        for (const [x, y, dx, dy] of [[ZX, ZY, 1, 1], [ZX + ZWd, ZY, -1, 1], [ZX, ZY + ZHt, 1, -1], [ZX + ZWd, ZY + ZHt, -1, -1]]) s += `<path d="M${x + dx * 18} ${y + dy * 2.5} H${x + dx * 2.5} V${y + dy * 18}" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="square"/>`;
+        /* the departure lane: the last column, hatched with chevrons */
+        s += `<rect x="${ZX + 3 * T}" y="${ZY + 6}" width="${T - 6}" height="${ZHt - 12}" fill="rgba(34,197,94,0.08)"/><path d="M${ZX + 3 * T} ${ZY + 8} V${ZY + ZHt - 8}" stroke="${C.ok}" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="4 5"/>`;
+        s += chevron(ZX + 3 * T + 30, ZY + 22, 'rgba(34,197,94,0.5)', 2) + chevron(ZX + 3 * T + 30, ZY + ZHt - 22, 'rgba(34,197,94,0.5)', 2);
+        s += text(ZX + 12, ZY + 22, 'PR OK', { mono: true, size: 12, weight: 700, fill: c, spacing: 2 });
+        s += text(ZX + 12, ZY + ZHt - 12, '05', { mono: true, size: 30, weight: 700, fill: c, opacity: 0.22 });
+        s += text(ZX + 3 * T - 10, ZY + ZHt - 12, '→ todo', { mono: true, size: 9.5, fill: c, anchor: 'end', opacity: 0.8 });
+        HELD.forEach((t, i) => { s += token(ZX + 30 + i * 30, ZY + 62, t); });
+        OUT.forEach((t, i) => { s += token(ZX + 3 * T + 14, ZY + 50 + i * 34, t); });
+        return s;
+      } },
+    { id: 'Z2', name: 'Casiers',
+      idea: 'Un meuble à cases vu de dessus : un ticket par case, l’entête porte le nom, le compteur et le mode de libération.',
+      reads: 'Le remplissage se lit comme une jauge (cases prises / libres) ; une case libérée s’allume en vert.',
+      limit: 'Le nombre de cases dessinées plafonne : au-delà il faut un « +12 ».',
+      draw: () => {
+        let s = `<rect x="${ZX + 2}" y="${ZY + 2}" width="${ZWd - 4}" height="${ZHt - 4}" rx="9" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+        s += `<path d="M${ZX + 2} ${ZY + 30} H${ZX + ZWd - 2}" stroke="${C.edge}" stroke-width="1.5"/>`;
+        s += text(ZX + 12, ZY + 21, 'PR OK', { size: 12, weight: 600 });
+        s += `<rect x="${ZX + ZWd - 62}" y="${ZY + 9}" width="30" height="16" rx="8" fill="${C.panel}" stroke="${C.edge}"/>` + text(ZX + ZWd - 47, ZY + 21, '5/8', { mono: true, size: 9.5, fill: C.ink2, anchor: 'middle' });
+        /* padlock: released by hand */
+        s += `<rect x="${ZX + ZWd - 24}" y="${ZY + 15}" width="11" height="9" rx="2" fill="${C.ink3}"/><path d="M${ZX + ZWd - 21.5} ${ZY + 15} v-3 a3 3 0 0 1 6 0 v3" fill="none" stroke="${C.ink3}" stroke-width="1.8"/>`;
+        const all = [...HELD, ...OUT];
+        for (let i = 0; i < 8; i++) {
+          const cx = ZX + 12 + (i % 4) * 39, cy = ZY + 38 + Math.floor(i / 4) * 44, out = i >= 3 && i < 5;
+          s += `<rect x="${cx}" y="${cy}" width="35" height="38" rx="5" fill="${C.panel}" stroke="${out ? C.ok : C.edge}" stroke-width="${out ? 2 : 1}"/>`;
+          if (i < all.length) s += token(cx + 17.5, cy + 18, all[i]);
+          if (out) s += `<path d="M${cx + 26} ${cy + 31} h5 m-2.5 -2.5 l2.5 2.5 l-2.5 2.5" fill="none" stroke="${C.ok}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+        }
+        return s;
+      } },
+    { id: 'Z3', name: 'Cuve à niveau',
+      idea: 'Un tampon avec une jauge sur le côté : la jauge monte vers la limite de la zone et change de couleur en approchant.',
+      reads: 'D’abord le niveau (5 sur 12), ensuite le contenu. La vanne ouverte ou fermée dit si elle libère seule.',
+      limit: 'Surtout parlante pour les zones à limite ; sur une zone sans limite la jauge ne dit rien.',
+      draw: () => {
+        let s = `<rect x="${ZX + 2}" y="${ZY + 2}" width="${ZWd - 4}" height="${ZHt - 4}" rx="12" fill="${C.panel}" stroke="${C.edge}" stroke-width="2"/>`;
+        /* the gauge */
+        const gx = ZX + 12, gy = ZY + 14, gh = ZHt - 28, lvl = 5 / 12;
+        s += `<rect x="${gx}" y="${gy}" width="9" height="${gh}" rx="4.5" fill="${C.belt}"/><rect x="${gx}" y="${r1(gy + gh * (1 - lvl))}" width="9" height="${r1(gh * lvl)}" rx="4.5" fill="${C.ok}"/>`;
+        for (let i = 1; i < 4; i++) s += `<path d="M${gx + 12} ${r1(gy + gh * i / 4)} h5" stroke="${C.ink3}" stroke-width="1.2"/>`;
+        s += `<path d="M${gx - 2} ${gy + 2} h13" stroke="${C.danger}" stroke-width="2"/>`;
+        s += text(ZX + 36, ZY + 24, 'PR OK', { size: 12, weight: 600 }) + text(ZX + 36, ZY + 38, '5 / 12 · sets todo', { mono: true, size: 9, fill: C.ink3 });
+        /* an open valve on the way out: it releases by itself */
+        s += `<circle cx="${ZX + ZWd - 20}" cy="${ZY + 22}" r="9" fill="none" stroke="${C.ok}" stroke-width="2"/><path d="M${ZX + ZWd - 24} ${ZY + 22} h8 m-3 -3 l3 3 l-3 3" fill="none" stroke="${C.ok}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+        HELD.forEach((t, i) => { s += token(ZX + 48 + i * 26, ZY + ZHt - 24, t); });
+        OUT.forEach((t, i) => { s += token(ZX + 61 + i * 26, ZY + ZHt - 48, t) + `<circle cx="${ZX + 69 + i * 26}" cy="${ZY + ZHt - 57}" r="3.5" fill="${C.ok}" stroke="${C.panel}" stroke-width="1.5"/>`; });
+        return s;
+      } },
+    { id: 'Z4', name: 'Parking',
+      idea: 'Des places numérotées peintes au sol, une barrière côté sortie : baissée quand on libère à la main, levée en automatique.',
+      reads: 'La barrière dit le mode sans un mot ; un ticket libéré quitte sa place pour l’allée de sortie.',
+      limit: 'Le plus chargé graphiquement ; les numéros ne servent à rien d’autre qu’au décor.',
+      draw: () => {
+        let s = `<rect x="${ZX + 2}" y="${ZY + 2}" width="${ZWd - 4}" height="${ZHt - 4}" rx="4" fill="rgba(255,255,255,0.025)" stroke="${C.edge}" stroke-width="2"/>`;
+        s += text(ZX + 10, ZY + 17, 'PR OK · 5', { mono: true, size: 10.5, weight: 700, fill: C.ink2, spacing: 1 });
+        for (let i = 0; i < 4; i++) {
+          const bx = ZX + 8 + i * 30;
+          s += `<path d="M${bx} ${ZY + 26} V${ZY + 70} M${bx} ${ZY + 82} V${ZY + ZHt - 8}" stroke="${C.ink3}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+          if (i < 3) s += text(bx + 15, ZY + 34, `${i + 1}`, { mono: true, size: 8, fill: C.ink3, anchor: 'middle' }) + text(bx + 15, ZY + ZHt - 10, `${i + 4}`, { mono: true, size: 8, fill: C.ink3, anchor: 'middle' });
+        }
+        HELD.forEach((t, i) => { s += token(ZX + 23 + i * 30, ZY + 54, t); });
+        /* the way out, and its barrier down */
+        s += `<rect x="${ZX + 3 * T - 4}" y="${ZY + 24}" width="${T - 2}" height="${ZHt - 30}" fill="rgba(255,255,255,0.03)"/>`;
+        OUT.forEach((t, i) => { s += token(ZX + 3 * T + 12, ZY + 50 + i * 34, t); });
+        const px = ZX + ZWd - 8, py = ZY + T + T / 2;
+        s += `<rect x="${px - 3}" y="${py - 26}" width="7" height="10" rx="2" fill="${C.ink2}"/><path d="M${px} ${py - 18} V${py + 22}" stroke="#f4f4f5" stroke-width="5" stroke-linecap="round"/><path d="M${px} ${py - 10} V${py - 2} M${px} ${py + 6} V${py + 14}" stroke="${C.danger}" stroke-width="5"/>`;
+        return s;
+      } },
+    { id: 'Z5', name: 'Bac à onglet',
+      idea: 'Un bac à rebord avec un onglet de dossier : la couleur de l’onglet est celle du statut que la zone pose.',
+      reads: 'L’onglet donne nom, compteur et statut ; un ticket libéré est soulevé (ombre) avec une pastille verte.',
+      limit: 'Le plus proche de l’actuel : gagne en finition, moins en caractère.',
+      draw: () => {
+        const c = C.blue;
+        let s = `<path d="M${ZX + 6} ${ZY + 22} V${ZY + 9} a7 7 0 0 1 7 -7 h76 a7 7 0 0 1 7 7 V${ZY + 22}" fill="${c}"/>`;
+        s += text(ZX + 16, ZY + 16, 'PR OK', { size: 11, weight: 600, fill: '#0b1f3a' }) + `<rect x="${ZX + 66}" y="${ZY + 6}" width="22" height="13" rx="6.5" fill="rgba(11,31,58,0.25)"/>` + text(ZX + 77, ZY + 16, '5', { mono: true, size: 9.5, weight: 700, fill: '#0b1f3a', anchor: 'middle' });
+        s += `<rect x="${ZX + 2}" y="${ZY + 20}" width="${ZWd - 4}" height="${ZHt - 22}" rx="10" fill="${C.body}" stroke="${c}" stroke-opacity="0.7" stroke-width="2"/>`;
+        s += `<rect x="${ZX + 9}" y="${ZY + 27}" width="${ZWd - 18}" height="${ZHt - 36}" rx="6" fill="${C.panel}" stroke="rgba(0,0,0,0.5)" stroke-width="2"/>`;
+        s += text(ZX + ZWd - 16, ZY + ZHt - 16, 'manual release', { mono: true, size: 8.5, fill: C.ink3, anchor: 'end' });
+        HELD.forEach((t, i) => { s += token(ZX + 34 + i * 32, ZY + 56 + (i % 2) * 10, t); });
+        OUT.forEach((t, i) => { const x = ZX + 126 + i * 26, y = ZY + 84; s += `<ellipse cx="${x + 2}" cy="${y + 13}" rx="10" ry="3" fill="rgba(0,0,0,0.5)"/>` + token(x, y - 2, t) + `<circle cx="${x + 9}" cy="${y - 12}" r="4" fill="${C.ok}" stroke="${C.panel}" stroke-width="1.5"/>`; });
+        return s;
+      } },
+  ];
+
+  // ---------- exits: a 3 by 3 exit at the end of a belt ----------
+  const EX = 5 * T, EY = T, EW = 3 * T;
+  const exitFrame = (inner) => belt(0, 2, 4) + token(1 * T + 22, 2 * T + 22, 'ops') + token(3 * T + 12, 2 * T + 22, 'build') + plainArm(4, 2) + inner;
+  const exits = [
+    { id: 'E1', name: 'Quai d’expédition', mine: true,
+      idea: 'Un quai de chargement : seuil rayé jaune et noir, un conteneur ouvert derrière, le compteur de ce qui est parti.',
+      reads: 'De loin, les rayures de sécurité disent « fin de ligne » ; de près, le conteneur se remplit.',
+      limit: 'Demande de la place : lisible en 3 par 3, tassé en dessous.',
+      draw: () => {
+        let s = `<rect x="${EX + 2}" y="${EY + 2}" width="${EW - 4}" height="${EW - 4}" rx="8" fill="${C.panel}" stroke="${C.ok}" stroke-width="2.5"/>`;
+        s += `<clipPath id="e1c"><rect x="${EX + 8}" y="${EY + 30}" width="16" height="${EW - 60}" rx="2"/></clipPath><rect x="${EX + 8}" y="${EY + 30}" width="16" height="${EW - 60}" rx="2" fill="${C.warn}"/><g clip-path="url(#e1c)">`;
+        for (let i = -2; i < 9; i++) s += `<path d="M${EX + 4} ${EY + 30 + i * 12} l24 -12" stroke="#18181b" stroke-width="5"/>`;
+        s += `</g>`;
+        /* the container, its doors open towards the dock */
+        s += `<rect x="${EX + 34}" y="${EY + 32}" width="${EW - 46}" height="${EW - 64}" rx="3" fill="${C.body}" stroke="${C.steel}" stroke-width="2"/>`;
+        for (let i = 1; i < 5; i++) s += `<path d="M${EX + 34 + i * 17} ${EY + 35} V${EY + EW - 35}" stroke="${C.steel2}" stroke-width="1.5"/>`;
+        s += `<path d="M${EX + 34} ${EY + 32} l-7 -8 M${EX + 34} ${EY + EW - 32} l-7 8" stroke="${C.steel}" stroke-width="2.5" stroke-linecap="round"/>`;
+        s += token(EX + 56, EY + 56, 'fix', 15, { check: true }) + token(EX + 78, EY + 56, 'build', 15, { check: true }) + token(EX + 56, EY + 78, 'think', 15, { check: true });
+        s += text(EX + 10, EY + 20, 'EXIT', { mono: true, size: 11, weight: 700, fill: C.ok, spacing: 2 }) + text(EX + EW - 10, EY + 20, 'done', { mono: true, size: 9.5, fill: C.ink2, anchor: 'end' });
+        s += text(EX + EW / 2, EY + EW - 12, '9 shipped · 7 d', { mono: true, size: 9, fill: C.ink3, anchor: 'middle' });
+        return s;
+      } },
+    { id: 'E2', name: 'Trappe',
+      idea: 'Une trappe ronde dans le sol : des anneaux qui se resserrent, le ticket rétrécit et disparaît dedans.',
+      reads: 'Forme ronde unique sur un sol de rectangles : impossible à confondre avec une zone ou un poste.',
+      limit: 'Ne montre rien de ce qui est sorti ; le compteur doit vivre ailleurs (HUD).',
+      draw: () => {
+        const cx = EX + EW / 2, cy = EY + EW / 2 - 6;
+        let s = `<defs><radialGradient id="e2g"><stop offset="0" stop-color="#000"/><stop offset="0.7" stop-color="#0c0c0e"/><stop offset="1" stop-color="#1f1f23"/></radialGradient></defs>`;
+        s += `<circle cx="${cx}" cy="${cy}" r="52" fill="${C.body}" stroke="${C.ok}" stroke-width="3"/><circle cx="${cx}" cy="${cy}" r="42" fill="url(#e2g)" stroke="${C.steel}" stroke-width="1.5"/>`;
+        for (const r of [32, 22, 13]) s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(34,197,94,${r1(0.5 - r / 90)})" stroke-width="1.5"/>`;
+        for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + 0.5; s += `<circle cx="${r1(cx + Math.cos(a) * 47)}" cy="${r1(cy + Math.sin(a) * 47)}" r="2" fill="${C.ink3}"/>`; }
+        s += token(cx - 18, cy + 2, 'build', 15, { opacity: 0.9 }) + token(cx - 2, cy - 2, 'fix', 10, { opacity: 0.6 }) + token(cx + 6, cy - 4, 'think', 6, { opacity: 0.35 });
+        s += text(cx, EY + EW - 4, 'Exit · done', { size: 11, weight: 600, fill: C.ok, anchor: 'middle' });
+        return s;
+      } },
+    { id: 'E3', name: 'Ligne d’arrivée',
+      idea: 'Un damier en travers du convoyeur, puis la pile de ce qui est arrivé, coché.',
+      reads: 'Le damier se reconnaît à n’importe quel zoom ; la pile grandit avec ce qui sort.',
+      limit: 'Le registre « course » détonne un peu avec l’usine.',
+      draw: () => {
+        let s = `<rect x="${EX + 2}" y="${EY + 2}" width="${EW - 4}" height="${EW - 4}" rx="8" fill="${C.panel}" stroke="${C.edge}" stroke-width="2"/>`;
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 9; j++) s += `<rect x="${EX + 8 + i * 12}" y="${EY + 12 + j * 12}" width="12" height="12" fill="${(i + j) % 2 ? '#f4f4f5' : '#0a0a0b'}"/>`;
+        s += `<path d="M${EX + 46} ${EY + 16} V${EY + 44}" stroke="${C.ink2}" stroke-width="2" stroke-linecap="round"/><path d="M${EX + 47} ${EY + 17} h20 l-5 6 l5 6 h-20 z" fill="${C.ok}"/>`;
+        s += text(EX + 76, EY + 30, 'done', { mono: true, size: 10, fill: C.ink2 });
+        for (let i = 0; i < 4; i++) s += token(EX + 64 + (i % 2) * 26, EY + 96 - Math.floor(i / 2) * 22 - (i % 2) * 3, ['build', 'fix', 'think', 'review'][i], 17, { check: true });
+        s += text(EX + EW - 12, EY + EW - 12, '9', { mono: true, size: 20, weight: 700, fill: C.ok, anchor: 'end', opacity: 0.85 });
+        return s;
+      } },
+    { id: 'E4', name: 'Portail',
+      idea: 'Deux montants et un rideau de lumière verte : le ticket le traverse et ressort en contour coché, puis s’efface.',
+      reads: 'Le plus « magique » : on voit le passage à done se faire sur le ticket lui-même.',
+      limit: 'Prend la place d’une case ou deux seulement, donc moins visible de loin.',
+      draw: () => {
+        const x = EX + 34;
+        let s = `<defs><linearGradient id="e4g" x1="0" x2="1"><stop offset="0" stop-color="rgba(34,197,94,0)"/><stop offset="0.5" stop-color="rgba(34,197,94,0.55)"/><stop offset="1" stop-color="rgba(34,197,94,0)"/></linearGradient></defs>`;
+        s += `<rect x="${EX}" y="${EY + T}" width="${EW}" height="${T}" fill="${C.belt}"/><path d="M${EX} ${EY + T + 2} H${EX + EW} M${EX} ${EY + 2 * T - 2} H${EX + EW}" stroke="${C.edge}" stroke-width="4"/>`;
+        s += `<rect x="${x - 16}" y="${EY + 14}" width="32" height="${EW - 28}" fill="url(#e4g)"/><path d="M${x} ${EY + 14} V${EY + EW - 14}" stroke="${C.ok}" stroke-width="2" stroke-opacity="0.9"/>`;
+        for (const y of [EY + 8, EY + EW - 20]) s += `<rect x="${x - 11}" y="${y}" width="22" height="12" rx="4" fill="${C.body}" stroke="${C.ok}" stroke-width="2"/><circle cx="${x}" cy="${y + 6}" r="2.5" fill="${C.ok}"/>`;
+        s += token(EX + 12, EY + T + 22, 'fix');
+        for (const [dx, o] of [[30, 0.85], [58, 0.5], [84, 0.22]]) s += `<g opacity="${o}"><rect x="${x + dx - 9}" y="${EY + T + 13}" width="18" height="18" rx="5" fill="none" stroke="${C.ok}" stroke-width="1.8"/><path d="M${x + dx - 4} ${EY + T + 22} l3 3 l5 -6" fill="none" stroke="${C.ok}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+        s += text(x + 22, EY + 24, 'EXIT', { mono: true, size: 11, weight: 700, fill: C.ok, spacing: 2 }) + text(x + 22, EY + EW - 12, '→ done', { mono: true, size: 9.5, fill: C.ink2 });
+        return s;
+      } },
+    { id: 'E5', name: 'Poste tampon',
+      idea: 'Une machine dans la langue des postes : elle tamponne « ✓ » sur le ticket et l’empile dans son bac de sortie.',
+      reads: 'Cohérent avec les postes (badge, nom, zones internes) ; la pile cochée montre le travail fait.',
+      limit: 'Ressemble à un poste : on peut le prendre pour une étape de plus plutôt que pour la fin.',
+      draw: () => {
+        let s = `<rect x="${EX + 2}" y="${EY + 2}" width="${EW - 4}" height="${EW - 4}" rx="10" fill="${C.body}" stroke="${C.ok}" stroke-width="2.5"/>`;
+        s += `<rect x="${EX + 9}" y="${EY + 9}" width="22" height="22" rx="6" fill="rgba(34,197,94,0.18)" stroke="${C.ok}" stroke-width="1.5"/><path d="M${EX + 15} ${EY + 20} l4 4 l7 -8" fill="none" stroke="${C.ok}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+        s += text(EX + 38, EY + 20, 'Exit', { size: 12, weight: 600 }) + text(EX + 38, EY + 31, 'sets done', { size: 8.5, fill: C.ink3 });
+        s += `<rect x="${EX + 9}" y="${EY + 40}" width="62" height="${EW - 50}" rx="6" fill="${C.panel}"/>` + text(EX + 14, EY + 51, 'STAMP', { mono: true, size: 7, fill: C.ink3, spacing: 1 });
+        s += token(EX + 40, EY + 92, 'build', 20) + `<path d="M${EX + 40} ${EY + 58} V${EY + 74}" stroke="${C.steel}" stroke-width="5"/><rect x="${EX + 28}" y="${EY + 72}" width="24" height="9" rx="3" fill="${C.ok}"/>`;
+        s += `<rect x="${EX + 77}" y="${EY + 40}" width="${EW - 86}" height="${EW - 50}" rx="6" fill="${C.panel}"/>` + text(EX + 82, EY + 51, 'OUT · 9', { mono: true, size: 7, fill: C.ink3, spacing: 1 });
+        for (let i = 0; i < 3; i++) s += token(EX + 100, EY + 108 - i * 15, ['think', 'fix', 'review'][i], 16, { check: true });
+        return s;
+      } },
+  ];
+
+  // ---------- arms: out of a station's tray, onto a belt; the one above takes "ok" and carries, the one below takes anything and rests ----------
+  const AW = 352, AH = 176, BX = 2 * T + T / 2, ROWS = [T + T / 2, 2 * T + T / 2];
+  const station = () => {
+    let s = `<path d="M0 6 H${2 * T - 2} a8 8 0 0 1 8 8 V${AH - 14} a8 8 0 0 1 -8 8 H0 Z" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${T + 4}" y="${T - 8}" width="${T - 4}" height="${2 * T + 16}" rx="6" fill="${C.panel}"/>` + text(T + 10, T + 4, 'OUT', { mono: true, size: 7.5, fill: C.ink3, spacing: 1 });
+    s += `<rect x="6" y="${T - 8}" width="${T - 8}" height="${2 * T + 16}" rx="6" fill="${C.panel}"/>` + text(12, T + 4, 'FREE', { mono: true, size: 7.5, fill: C.ink3, spacing: 1 });
+    return s;
+  };
+  const armsBack = () => station() + belt(3, 1, 5) + belt(3, 2, 5);
+  /** A label plate where the ticket lands, as today. */
+  const plate = (x, y, str, col) => `<rect x="${x}" y="${y - 9}" width="${str.length * 7 + 10}" height="18" rx="4" fill="#3a2f0b" stroke="${col}" stroke-opacity="0.5"/>` + text(x + 5, y + 4, str, { mono: true, size: 11, weight: 700, fill: col });
+  /** How far the arm has turned (0 at the tray, 1 over the belt) and whether it holds a ticket, `t` seconds into its loop. */
+  function phase(t) {
+    const u = (t % 3.6) / 3.6, ease = (k) => k * k * (3 - 2 * k);
+    if (u < 0.4) return { e: ease(u / 0.4), carry: true };
+    if (u < 0.5) return { e: 1, carry: false };
+    if (u < 0.9) return { e: 1 - ease((u - 0.5) / 0.4), carry: false };
+    return { e: 0, carry: true };
+  }
+  /** Where the hand is: a half turn from the tray (left) to the belt (right), over the top for the upper arm, under for the lower. */
+  const hand = (by, e, up, reach = T, lift = 0.5) => { const a = Math.PI * (1 - e); return { x: BX + Math.cos(a) * reach, y: by - (up ? 1 : -1) * Math.sin(a) * reach * lift, a }; };
+
+  const arms = [
+    { id: 'A1', name: 'Bras à coude et pince',
+      idea: 'Un vrai bras articulé : tourelle, deux segments, un coude, une pince qui s’ouvre et se ferme sur le ticket.',
+      reads: 'Le plus proche de « bras robotisé » ; la pince fermée dit qu’il porte, ouverte qu’il attend.',
+      limit: 'Fin et détaillé : en dézoom il redevient un trait.',
+      draw: (by, e, carry, col, up) => {
+        const h = hand(by, e, up, T, 0.55), mx = (BX + h.x) / 2, my = (by + h.y) / 2, len = Math.hypot(h.x - BX, h.y - by) || 1;
+        const nx = -(h.y - by) / len, ny = (h.x - BX) / len, bend = (up ? -1 : 1) * 13 * (1 - Math.abs(2 * e - 1) * 0.35), ex = mx + nx * bend, ey = my + ny * bend;
+        const fa = Math.atan2(h.y - ey, h.x - ex), open = carry ? 0.42 : 0.85;
+        let s = `<path d="M${BX} ${by} L${r1(ex)} ${r1(ey)}" stroke="${C.steel}" stroke-width="7" stroke-linecap="round"/><path d="M${r1(ex)} ${r1(ey)} L${r1(h.x)} ${r1(h.y)}" stroke="${col}" stroke-width="5" stroke-linecap="round"/>`;
+        s += `<circle cx="${r1(ex)}" cy="${r1(ey)}" r="4.5" fill="${C.floor}" stroke="${C.ink2}" stroke-width="2"/>`;
+        if (carry) s += token(h.x + Math.cos(fa) * 9, h.y + Math.sin(fa) * 9, 'build', 15);
+        for (const sgn of [-1, 1]) s += `<path d="M${r1(h.x)} ${r1(h.y)} L${r1(h.x + Math.cos(fa + sgn * open) * 13)} ${r1(h.y + Math.sin(fa + sgn * open) * 13)}" stroke="${C.ink}" stroke-width="2.6" stroke-linecap="round"/>`;
+        s += `<circle cx="${BX}" cy="${by}" r="10" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${BX}" cy="${by}" r="3" fill="${col}"/>`;
+        return s;
+      } },
+    { id: 'A2', name: 'Robot à ventouse', mine: true,
+      idea: 'Un bras plat vu de dessus (type SCARA) avec son ombre au sol, et une ventouse ronde qui tient le ticket.',
+      reads: 'L’ombre donne la hauteur : on voit qu’il passe au-dessus. La bande de couleur sur le bras est sa condition.',
+      limit: 'Un seul segment : moins « articulé » que le coude, mais lisible de loin.',
+      draw: (by, e, carry, col, up) => {
+        const h = hand(by, e, up, T, 0.5);
+        let s = `<path d="M${BX + 3} ${by + 5} L${r1(h.x + 3)} ${r1(h.y + 5)}" stroke="rgba(0,0,0,0.42)" stroke-width="14" stroke-linecap="round"/>`;
+        if (carry) s += token(h.x, h.y, 'build', 16);
+        s += `<path d="M${BX} ${by} L${r1(h.x)} ${r1(h.y)}" stroke="${C.steel}" stroke-width="13" stroke-linecap="round"/><path d="M${BX} ${by} L${r1(h.x)} ${r1(h.y)}" stroke="${col}" stroke-width="3.5" stroke-linecap="round"/>`;
+        s += `<circle cx="${r1(h.x)}" cy="${r1(h.y)}" r="9" fill="${carry ? 'rgba(24,24,27,0.35)' : C.floor}" stroke="${C.ink}" stroke-width="2.4"/><circle cx="${r1(h.x)}" cy="${r1(h.y)}" r="2.5" fill="${C.ink}"/>`;
+        s += `<circle cx="${BX}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${BX}" cy="${by}" r="4" fill="${C.steel}"/>`;
+        return s;
+      } },
+    { id: 'A3', name: 'Navette sur rail',
+      idea: 'Pas de rotation : un rail court de la case source à la case cible, et un chariot qui fait l’aller-retour.',
+      reads: 'Le sens est évident (le rail pointe la cible) et le mouvement ne déborde jamais sur les voisins.',
+      limit: 'Ce n’est plus un bras : on perd l’image du robot.',
+      draw: (by, e, carry, col) => {
+        const x0 = BX - T, x1 = BX + T, cx = x0 + (x1 - x0) * e;
+        let s = `<path d="M${x0} ${by - 8} H${x1} M${x0} ${by + 8} H${x1}" stroke="${C.steel}" stroke-width="3" stroke-linecap="round"/><path d="M${x0} ${by - 12} V${by + 12}" stroke="${C.ink3}" stroke-width="3" stroke-linecap="round"/>`;
+        s += `<path d="M${x1 - 2} ${by - 12} L${x1 + 8} ${by} L${x1 - 2} ${by + 12}" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+        s += `<rect x="${r1(cx - 13)}" y="${by - 13}" width="26" height="26" rx="6" fill="${C.body}" stroke="${col}" stroke-width="2.5"/>`;
+        if (carry) s += token(cx, by, 'build', 15);
+        return s;
+      } },
+    { id: 'A4', name: 'Aiguillage à palette',
+      idea: 'Une palette de tri qui pivote, large à la base et fine au bout, et pousse le ticket devant elle.',
+      reads: 'Forme pleine et simple : c’est un trieur. La couleur de la palette entière est sa condition.',
+      limit: 'Le ticket est poussé, pas porté : le geste raconte moins « je prends celui-ci ».',
+      draw: (by, e, carry, col, up) => {
+        const h = hand(by, e, up, T - 6, 0.5), len = Math.hypot(h.x - BX, h.y - by) || 1, nx = -(h.y - by) / len, ny = (h.x - BX) / len;
+        let s = `<path d="M${r1(BX + nx * 10)} ${r1(by + ny * 10)} L${r1(h.x + nx * 3)} ${r1(h.y + ny * 3)} L${r1(h.x - nx * 3)} ${r1(h.y - ny * 3)} L${r1(BX - nx * 10)} ${r1(by - ny * 10)} Z" fill="${col}" fill-opacity="0.28" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>`;
+        if (carry) s += token(h.x + (h.x - BX) / len * 6, h.y + (h.y - by) / len * 6, 'build', 15);
+        s += `<circle cx="${BX}" cy="${by}" r="10" fill="${C.body}" stroke="${col}" stroke-width="3"/><path d="M${BX - 4} ${by} h8 m-3 -3 l3 3 l-3 3" fill="none" stroke="${col}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+        return s;
+      } },
+    { id: 'A5', name: 'Tourniquet',
+      idea: 'Une barre à deux berceaux qui traverse la case : quand un bout dépose, l’autre est déjà revenu chercher.',
+      reads: 'Symétrique et rythmé ; le moyeu porte une flèche gravée vers la cible.',
+      limit: 'Le retour à vide existe toujours côté moteur : ici il devient un demi-tour de plus, à expliquer.',
+      draw: (by, e, carry, col, up, t, rest) => {
+        /* a whole turn per loop: half of it with the ticket, half of it empty */
+        const u = (t % 3.6) / 3.6, turn = rest ? 0 : u < 0.4 ? (u / 0.4) * 0.5 : u < 0.5 ? 0.5 : u < 0.9 ? 0.5 + ((u - 0.5) / 0.4) * 0.5 : 1;
+        const a = Math.PI * (1 - turn * 2) * (up ? 1 : -1), R = T, ax = Math.cos(a) * R, ay = -Math.sin(a) * R * 0.5;
+        let s = `<path d="M${r1(BX + ax)} ${r1(by + ay)} L${r1(BX - ax)} ${r1(by - ay)}" stroke="${C.steel}" stroke-width="6" stroke-linecap="round"/>`;
+        if (!rest && (u < 0.4 || u >= 0.9)) s += token(BX + ax, by + ay, 'build', 15);
+        for (const k of [1, -1]) s += `<circle cx="${r1(BX + k * ax)}" cy="${r1(by + k * ay)}" r="10" fill="none" stroke="${col}" stroke-width="2.5"/>`;
+        s += `<circle cx="${BX}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><path d="M${BX - 4} ${by} h8 m-3 -3 l3 3 l-3 3" fill="none" stroke="${C.ink}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+        return s;
+      } },
+  ];
+  /** One arm scene at time `t`: the arm above carries on "ok", the one below rests and takes anything. */
+  function armScene(arm, t) {
+    const p = phase(t);
+    let s = armsBack();
+    s += token(T + T / 2 + 2, ROWS[1], 'fix', 16);
+    s += arm.draw(ROWS[0], p.e, p.carry, C.warn, true, t);
+    s += arm.draw(ROWS[1], 0, false, C.ink2, false, 0, true);
+    s += plate(3 * T + 6, T - 13, 'ok', C.warn);
+    return s;
+  }
+
+  // ---------- the page ----------
+  /* zones and exits are framed on their four rows, without the empty floor above and below */
+  const CLOSE = `${T / 2} ${T / 2} ${ZW - T} ${ZH - T}`;
+  const KEY = 'factory-looks-picks';
+  let picks = { zone: '', exit: '', arm: '' };
+  try { picks = { ...picks, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* no storage here: the picks live for the visit */ }
+  const families = [
+    { key: 'zone', host: 'zones', list: zones, label: 'Zones', render: (z) => svg(ZW, ZH, `Zone, piste ${z.name}`, zoneFrame(z.draw()), CLOSE) },
+    { key: 'exit', host: 'exits', list: exits, label: 'Sorties', render: (x) => svg(ZW, ZH, `Sortie, piste ${x.name}`, exitFrame(x.draw()), CLOSE) },
+    { key: 'arm', host: 'arms', list: arms, label: 'Bras', render: (a) => svg(AW, AH, `Bras, piste ${a.name}`, armScene(a, 0.9)) },
+  ];
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  for (const f of families) {
+    document.getElementById(f.host).innerHTML = f.list.map((it) => `
+      <article class="card" data-family="${f.key}" data-id="${it.id}">
+        <div class="card-head"><span class="letter">${it.id}</span><h3>${esc(it.name)}</h3>${it.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+        <div class="scene" data-scene="${it.id}">${f.render(it)}</div>
+        <dl><dt>Idée</dt><dd>${esc(it.idea)}</dd><dt>Se lit</dt><dd>${esc(it.reads)}</dd><dt>Limite</dt><dd>${esc(it.limit)}</dd></dl>
+        <button type="button" id="pick-${it.id}" aria-pressed="false">Choisir ${it.id}</button>
+      </article>`).join('');
+  }
+  const summary = () => families.map((f) => `${f.label} : ${picks[f.key] ? `${picks[f.key]} (${f.list.find((x) => x.id === picks[f.key])?.name ?? '?'})` : 'pas encore choisi'}`).join(' · ');
+  function paint() {
+    for (const card of document.querySelectorAll('.card')) {
+      const on = picks[card.dataset.family] === card.dataset.id;
+      card.classList.toggle('picked', on);
+      const b = card.querySelector('button'); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    document.getElementById('picks').innerHTML = families.map((f) => `${f.label} <b>${picks[f.key] || '–'}</b>`).join(' &nbsp;·&nbsp; ');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card button'); if (!b) return;
+    const card = b.closest('.card'), k = card.dataset.family;
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    document.getElementById('said').textContent = '';
+    paint();
+  });
+  document.getElementById('copy').addEventListener('click', () => {
+    const said = document.getElementById('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint();
+
+  // the arms turn: an outward stroke with the ticket, then back empty
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let playing = !still, t0 = performance.now();
+  const anim = document.getElementById('anim');
+  anim.setAttribute('aria-pressed', String(playing));
+  anim.addEventListener('click', () => { playing = !playing; anim.setAttribute('aria-pressed', String(playing)); if (playing) { t0 = performance.now(); requestAnimationFrame(tick); } });
+  const scenes = arms.map((a) => [a, document.querySelector(`[data-scene="${a.id}"]`)]);
+  function tick(now) {
+    if (!playing) return;
+    const t = (now - t0) / 1000;
+    for (const [a, host] of scenes) host.innerHTML = svg(AW, AH, `Bras, piste ${a.name}`, armScene(a, t));
+    requestAnimationFrame(tick);
+  }
+  if (playing) requestAnimationFrame(tick);
+})();
+</script>

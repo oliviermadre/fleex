@@ -123,6 +123,22 @@ describe('ExecuteAgentUseCase.executeForWorkflowStep — cost/token attribution'
     expect(updateSessionId).toHaveBeenCalledWith(expect.any(String), 'sess-abc-123');
   });
 
+  it('runs on the persona\'s model unless the step asks for another', async () => {
+    /* the model the SDK query was started with, wherever the options carry it */
+    const ranOn = () => /"model":"([^"]+)"/.exec(JSON.stringify(mockedStream.mock.calls.at(-1)))?.[1];
+    const { useCase } = makeUseCase();
+    const step = { personaName: 'Builder', ticketId: 'T1', outputFormat: {} as never, workflowContextPrompt: 'context', mode: 'edit' as const };
+
+    await useCase.executeForWorkflowStep(step);
+    expect(ranOn()).toBe('claude-opus-4-8');
+
+    await useCase.executeForWorkflowStep({ ...step, model: 'claude-haiku-5-5' });
+    expect(ranOn()).toBe('claude-haiku-5-5');
+
+    await useCase.executeForWorkflowStep({ ...step, model: '  ' });   // blank means "the persona's own"
+    expect(ranOn()).toBe('claude-opus-4-8');
+  });
+
   it('records only this run\'s share when the SDK session was resumed', async () => {
     // The SDK reports SESSION totals: a resumed session starts from what its
     // transcript saved. Ticket #636: runs displayed $8.23 → $8.39 → … → $14.40

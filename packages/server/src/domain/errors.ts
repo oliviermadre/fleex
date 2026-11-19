@@ -226,6 +226,13 @@ export class SubworkflowExpansionFailedError extends DomainError {
   }
 }
 
+/** A workflow asked for on a ticket something else is already routing (the experimental Factory). The message says why. */
+export class WorkflowRefusedError extends DomainError {
+  constructor(reason: string) {
+    super(reason, 'WORKFLOW_REFUSED');
+  }
+}
+
 export class WorkflowTemplateNotFoundError extends DomainError {
   constructor(slugOrId: string) {
     super(`Workflow template not found: ${slugOrId}`, 'WORKFLOW_TEMPLATE_NOT_FOUND');

@@ -1,0 +1,661 @@
+<title>Factory, trois prototypes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the concept running in one large scene, then its states, its settings (a form that drives a preview), two things to pick, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  code { font-family: var(--mono); font-size: 0.88em; }
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .box .tok { color: #18181b; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Poste Set, boucle, poste script : les prototypes</h1>
+    <p class="lede">Trois choses à voir tourner sur le plancher avant de les construire. Tout est dessiné comme dans la Factory ; rien n'est dans le code.</p>
+    <div class="tools">
+      <button type="button" id="anim" aria-pressed="true">Animations</button>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-set">
+    <h2 id="h-set">Le poste Set : à quoi il ressemble</h2>
+    <p class="brief">Même réglage dans les quatre scènes : board Bugfix, priorité high, tag <code>type:major</code>, compteur <code>passes +1</code>. La question : lit-on ce réglage sans ouvrir la popup ? Le ticket ressort avec une pastille rose quand il a été modifié.</p>
+    <div class="grid" id="sets"></div>
+  </section>
+
+  <section aria-labelledby="h-loop">
+    <h2 id="h-loop">La boucle : tag compteur ou péage, et où remettre à zéro</h2>
+    <p class="brief">Joue la boucle Review → Bugfix → Review. Change de mécanisme et de remise à zéro, puis rejoue : le plancher change sous tes yeux. Le ticket a droit à 3 tours ; au ko suivant il part attendre dans la zone.</p>
+    <div class="app">
+      <div class="row"><h4>Mechanism</h4>
+        <button type="button" data-mech="tag" aria-pressed="true">Tag counter + Set + arms</button>
+        <button type="button" data-mech="toll" aria-pressed="false">Toll</button>
+        <span style="flex:1"></span><span class="mono" id="lp-count"></span>
+      </div>
+      <div class="row"><h4>Reset</h4>
+        <button type="button" data-reset="machine" aria-pressed="true">A machine on the way back</button>
+        <button type="button" data-reset="release" aria-pressed="false">When I release it from the zone</button>
+        <button type="button" data-reset="manual" aria-pressed="false">Only by hand</button>
+      </div>
+      <div class="scene" id="lp-scene"></div>
+      <div class="row">
+        <button type="button" class="stop" id="lp-ko">Review says ko</button>
+        <button type="button" class="go" id="lp-ok">Review says ok</button>
+        <button type="button" id="lp-release">Release from the zone</button>
+        <button type="button" id="lp-reset">Reset its count</button>
+        <button type="button" id="lp-new">New ticket</button>
+      </div>
+      <ul class="log" id="lp-log" aria-live="polite"></ul>
+    </div>
+    <div class="grid" id="mechs"></div>
+    <div class="grid" id="resets"></div>
+  </section>
+
+  <section aria-labelledby="h-script">
+    <h2 id="h-script">Le poste script : libre, mais sans tout ressaisir</h2>
+    <p class="brief">Ton idée : le poste liste ses dépôts, chacun avec sa commande, saisie ou choisie parmi les actions nommées de la vue dépôt. Mon objection : chaque nouveau dépôt devient « non configuré » dans chaque poste script, et dix postes font dix listes à tenir. Ma variante : le poste a une <b>action par défaut</b> (« test »), résolue par la vue dépôt, et sa liste ne contient que les <b>exceptions</b>. Bascule entre les deux et fais arriver le ticket du dépôt tout neuf.</p>
+    <div class="app">
+      <div class="row"><h4>Station model</h4>
+        <button type="button" data-model="list" aria-pressed="false">Explicit list per station</button>
+        <button type="button" data-model="default" aria-pressed="true">Default action + exceptions</button>
+      </div>
+      <div class="two">
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <h4>Script station · settings</h4>
+          <div class="row" id="sc-default"></div>
+          <div id="sc-rows"></div>
+          <div class="row"><select id="sc-addrepo" aria-label="Repository"></select><button type="button" id="sc-add">Add a repository</button></div>
+          <div class="row"><label class="hint" for="sc-missing">A repository with no command here</label>
+            <select id="sc-missing"><option value="ignore">is ignored</option><option value="ko">counts as a failure</option><option value="own">leaves by "unconfigured"</option></select></div>
+          <div class="row"><label class="hint" for="sc-fail">On a failure</label>
+            <select id="sc-fail"><option value="all">run the others anyway</option><option value="stop">stop there</option></select></div>
+          <p class="hint">Success and failure are the station's two outcomes, "ok" and "ko": an arm for each, as on every station.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <h4>Repository view · named actions</h4>
+          <div class="scroll"><table id="sc-named"></table></div>
+          <p class="hint">Defined once per repository, usable anywhere in Fleex.</p>
+        </div>
+      </div>
+      <div class="row"><h4>Ticket</h4><select id="sc-ticket" aria-label="Ticket"></select><span id="sc-fails" class="row"></span><button type="button" class="go" id="sc-run">Run</button></div>
+      <div class="scene" id="sc-scene"></div>
+    </div>
+    <div class="grid" id="models"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- the floor's own look (the app's dark theme) ----------
+  const T = 44;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#202024', panel: '#131316', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', steel: '#52525b' };
+  const TYPE = { build: '#4ade80', fix: '#f87171', think: '#60a5fa', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc' };
+  /* the sixteen colours an arm can already be given: a teleporter picks among the same */
+  const PALETTE = [['Grey', '#a1a1aa'], ['White', '#f4f4f5'], ['Red', '#ef4444'], ['Rose', '#fb7185'], ['Orange', '#fb923c'], ['Amber', '#f59e0b'], ['Yellow', '#facc15'], ['Lime', '#a3e635'], ['Green', '#22c55e'], ['Teal', '#2dd4bf'], ['Cyan', '#22d3ee'], ['Sky', '#38bdf8'], ['Blue', '#60a5fa'], ['Indigo', '#818cf8'], ['Purple', '#c084fc'], ['Pink', '#f472b6']];
+  const PINK = '#f472b6', SKY = '#38bdf8', PLAIN = '#22d3ee';
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"";
+  const SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10, r2 = (n) => Math.round(n * 100) / 100;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function floor(w, h) {
+    let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`;
+    for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    return s;
+  }
+  const svg = (w, h, label, inner) => `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${floor(w, h)}${inner}</svg>`;
+  const chevron = (cx, cy, rot = 0) => `<path transform="rotate(${rot} ${cx} ${cy})" d="M${cx - 4} ${cy - 8} L${cx + 4} ${cy} L${cx - 4} ${cy + 8}" fill="none" stroke="${C.chev}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt going east: `n` tiles from tile (x, y). */
+  function belt(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${n * T}" height="${T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T} ${y * T + 2} H${(x + n) * T} M${x * T} ${(y + 1) * T - 2} H${(x + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron((x + i) * T + 12, y * T + T / 2) + chevron((x + i) * T + 34, y * T + T / 2);
+    return s;
+  }
+  /** A belt going south: `n` tiles down from tile (x, y). */
+  function beltV(x, y, n) {
+    let s = `<rect x="${x * T}" y="${y * T}" width="${T}" height="${n * T}" fill="${C.belt}"/>`;
+    s += `<path d="M${x * T + 2} ${y * T} V${(y + n) * T} M${(x + 1) * T - 2} ${y * T} V${(y + n) * T}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) s += chevron(x * T + T / 2, (y + i) * T + 12, 90) + chevron(x * T + T / 2, (y + i) * T + 34, 90);
+    return s;
+  }
+  /** A ticket: an object with some thickness, its shape and colour saying its type. */
+  function token(cx, cy, type, s = 16, opacity = 1) {
+    const col = TYPE[type], h = s / 2, dark = 'rgba(0,0,0,0.45)';
+    const shape = (dy, fill) => type === 'think' ? `<circle cx="${r1(cx)}" cy="${r1(cy + dy)}" r="${r1(h)}" fill="${fill}"/>`
+      : type === 'fix' ? `<path d="M${r1(cx - h)} ${r1(cy - h * 0.5 + dy)} L${r1(cx - h * 0.45)} ${r1(cy - h + dy)} H${r1(cx + h * 0.45)} L${r1(cx + h)} ${r1(cy - h * 0.5 + dy)} V${r1(cy + h * 0.5 + dy)} L${r1(cx + h * 0.45)} ${r1(cy + h + dy)} H${r1(cx - h * 0.45)} L${r1(cx - h)} ${r1(cy + h * 0.5 + dy)} Z" fill="${fill}"/>`
+      : `<rect x="${r1(cx - h)}" y="${r1(cy - h + dy)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.26)}" fill="${fill}"/>`;
+    return `<g opacity="${r2(opacity)}">${shape(2.5, dark)}${shape(0, col)}<circle cx="${r1(cx - h * 0.3)}" cy="${r1(cy - h * 0.3)}" r="${r1(s * 0.11)}" fill="rgba(255,255,255,0.55)"/></g>`;
+  }
+  const text = (x, y, str, o = {}) => `<text x="${r1(x)}" y="${r1(y)}" ${o.sans ? SANS : MONO} font-size="${o.size ?? 10}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''}>${esc(str)}</text>`;
+  /** The plate under a teleporter: its name in its colour, and a smaller line under it (where it leads, or what is wrong). */
+  function plate(cx, y, name, sub, col, subFill = C.ink2, fromLeft = false) {
+    const w = Math.max(name.length * 6.1, (sub || '').length * 5.2) + 14, h = sub ? 28 : 17;
+    if (fromLeft) cx += w / 2;
+    let s = `<rect x="${r1(cx - w / 2)}" y="${y}" width="${r1(w)}" height="${h}" rx="4" fill="rgba(9,9,11,0.9)" stroke="${col}" stroke-opacity="0.5"/>`;
+    s += text(cx, y + 12, name, { weight: 700, fill: col, anchor: 'middle' });
+    if (sub) s += text(cx, y + 23, sub, { size: 8.5, fill: subFill, anchor: 'middle' });
+    return s;
+  }
+
+  // ---------- the teleporter ----------
+  /** Four chevrons round the ring, one per side: they point in on a departure (a ticket goes in), out on an arrival. */
+  const signs = (cx, cy, d, inward, col) => [0, 90, 180, 270].map((a) => {
+    const px = cx + Math.cos(a * Math.PI / 180) * d, py = cy + Math.sin(a * Math.PI / 180) * d;
+    return `<path transform="translate(${r1(px)} ${r1(py)}) rotate(${a + (inward ? 180 : 0)})" d="M-2 -4.6 L2.2 0 L-2 4.6" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+  /** The frame of a pad: closed on a departure; on an arrival, four corners only, open in the middle of each side, where its chevrons come out. */
+  function frame(x, y, role, col) {
+    const a = x + 3, b = y + 3, e = T - 6, leg = 12;
+    let s = `<rect x="${a}" y="${b}" width="${e}" height="${e}" rx="9" fill="${C.panel}" ${role === 'dep' ? `stroke="${col}" stroke-width="2.5"` : ''}/>`;
+    if (role !== 'dep') for (const [px, py, sx, sy] of [[a, b, 1, 1], [a + e, b, -1, 1], [a + e, b + e, -1, -1], [a, b + e, 1, -1]])
+      s += `<path d="M${px} ${py + sy * leg} V${py + sy * 9} Q${px} ${py} ${px + sx * 9} ${py} H${px + sx * leg}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"/>`;
+    return s;
+  }
+  /** The ring where the ticket stands, with what it says: dashed amber while it waits, a burst as a ticket goes or comes. */
+  function ring(cx, cy, r, o) {
+    const col = o.bad ? C.danger : o.col, k = o.k ?? 1;
+    let s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}" fill-opacity="${r2(0.1 + 0.3 * (o.burst ?? 0))}"/>`;
+    s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${o.wait ? C.warn : col}" stroke-width="2" ${o.wait ? `stroke-dasharray="5 4" transform="rotate(${r1(((o.t ?? 0) * 50) % 360)} ${cx} ${cy})"` : ''}/>`;
+    if (o.burst) s += `<circle cx="${cx}" cy="${cy}" r="${r1(r + 13 * o.burst)}" fill="none" stroke="${col}" stroke-width="2" opacity="${r2(1 - o.burst)}"/>`;
+    if (o.ticket && k > 0.03) s += `<g transform="translate(${cx} ${cy}) scale(${r2(k)}) translate(${-cx} ${-cy})">${token(cx, cy, o.ticket, 14, Math.min(1, k * 1.5))}</g>`;
+    return s;
+  }
+  /** A mark on the corner of a pad: "!" when it cannot work, a pause sign while it holds its ticket back. */
+  const badge = (x, y, col, sign) => `<circle cx="${x}" cy="${y}" r="6.5" fill="${col}" stroke="#09090b" stroke-width="1.5"/>`
+    + (sign === 'pause' ? `<path d="M${x - 2} ${y - 3} V${y + 3} M${x + 2} ${y - 3} V${y + 3}" stroke="#09090b" stroke-width="2" stroke-linecap="round"/>` : text(x, y + 3.4, sign, { size: 9, weight: 700, fill: '#09090b', anchor: 'middle' }));
+  /**
+   * A teleporter on one tile. `role` is 'dep' (chevrons going in) or 'arr' (chevrons coming out); `ticket` the type of
+   * the ticket it holds, `k` how much of it is there (it shrinks as it goes), `wait` it holds its ticket because the
+   * arrival is taken, `bad` it cannot work as it is.
+   */
+  function pad(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T / 2, cy = y + T / 2, col = o.bad ? C.danger : o.col;
+    let s = frame(x, y, o.role, col);
+    s += ring(cx, cy, 11.5, o) + signs(cx, cy, 16.3, o.role === 'dep', col);
+    if (o.wait) s += badge(x + T - 6, y + 6, C.warn, 'pause');
+    if (o.bad) s += badge(x + T - 6, y + 6, C.danger, '!');
+    if (o.selected) s += `<rect x="${x - 1}" y="${y - 1}" width="${T + 2}" height="${T + 2}" rx="11" fill="none" stroke="${C.ink}" stroke-width="2.5"/>`;
+    return s;
+  }
+  /** The same, as a cabin of two tiles by two that carries its own name. */
+  function cabin(tx, ty, o) {
+    const x = tx * T, y = ty * T, cx = x + T, cy = y + T + 13, col = o.bad ? C.danger : o.col;
+    let s = `<rect x="${x + 3}" y="${y + 3}" width="${2 * T - 6}" height="${2 * T - 6}" rx="12" fill="${C.body}" stroke="${col}" stroke-width="2.5"/>`;
+    s += text(x + 10, y + 16, o.role === 'dep' ? 'DEPARTURE' : 'ARRIVAL', { size: 7.5, weight: 700, fill: col });
+    const name = o.name.length > 12 ? `${o.name.slice(0, 11)}…` : o.name;
+    s += text(x + 10, y + 28, name, { weight: 700, fill: C.ink });
+    s += `<rect x="${cx - 23}" y="${cy - 23}" width="46" height="46" rx="10" fill="${C.panel}"/>` + ring(cx, cy, 14, o) + signs(cx, cy, 19.5, o.role === 'dep', col);
+    return s;
+  }
+  /**
+   * The link from a departure to its arrival: a dashed arc in the teleporter's colour, that bends away from the
+   * straight line so two of them do not lie on each other. `packet` (0 to 1) is a ticket on its way.
+   */
+  function link(a, b, col, o = {}) {
+    const x1 = a[0] * T, y1 = a[1] * T, x2 = b[0] * T, y2 = b[1] * T, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), bend = (o.bend ?? 0.2) * L;
+    const qx = (x1 + x2) / 2 + dy / L * bend, qy = (y1 + y2) / 2 - dx / L * bend;
+    const at = (u) => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2, y: (1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2 });
+    const hot = o.packet != null;
+    let s = `<path d="M${r1(x1)} ${r1(y1)} Q${r1(qx)} ${r1(qy)} ${r1(x2)} ${r1(y2)}" fill="none" stroke="${col}" stroke-width="${hot ? 2.6 : 1.8}" stroke-dasharray="3 7" stroke-dashoffset="${r1(-(o.t ?? 0) * 22)}" stroke-linecap="round" opacity="${hot ? 1 : o.opacity ?? 0.6}"/>`;
+    if (hot) { const p = at(o.packet); s += `<circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="10" fill="${col}" fill-opacity="0.28"/><circle cx="${r1(p.x)}" cy="${r1(p.y)}" r="4.5" fill="${col}"/>`; }
+    return s;
+  }
+  /** A transfer `w` of the way done (0 to 1): the ticket shrinks in the departure, crosses, and grows in the arrival. */
+  const sending = (w) => ({ out: 1 - clamp(w / 0.4), packet: w > 0.15 && w < 0.85 ? (w - 0.15) / 0.7 : null, into: clamp((w - 0.6) / 0.4), burstOut: w < 0.5 ? clamp(w / 0.5) : 0, burstIn: w > 0.5 ? 1 - clamp((w - 0.5) / 0.5) : 0 });
+
+  // ---------- arms and stations, as on the floor since lot 28 ----------
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  /** The arm from its base to its cup, with its shadow, its band and the ticket under the cup. */
+  function robot(bx, by, hx, hy, carry, col) {
+    let s = `<path d="M${r1(bx + 3)} ${r1(by + 5)} L${r1(hx + 3)} ${r1(hy + 5)}" stroke="rgba(0,0,0,0.42)" stroke-width="14" stroke-linecap="round"/>`;
+    if (carry) s += token(hx, hy, carry, 16);
+    s += `<path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${C.steel}" stroke-width="13" stroke-linecap="round"/><path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${col}" stroke-width="3.5" stroke-linecap="round"/>`;
+    s += `<circle cx="${r1(hx)}" cy="${r1(hy)}" r="9" fill="rgba(24,24,27,0.3)" stroke="${C.ink}" stroke-width="2.4"/><circle cx="${r1(hx)}" cy="${r1(hy)}" r="2.5" fill="${C.ink}"/>`;
+    s += `<circle cx="${bx}" cy="${by}" r="11" fill="${C.body}" stroke="${col}" stroke-width="3"/><circle cx="${bx}" cy="${by}" r="4" fill="${C.steel}"/>`;
+    return s;
+  }
+  /**
+   * An arm on tile (tx, ty) pointing `dir`, `e` of its half turn done (0 where it takes, 1 where it drops). `from`
+   * and `to` are how far its cup reaches on each side, in tiles: 1 over the middle of a tile, 0.76 over a quay.
+   */
+  function arm(tx, ty, dir, col, e, carry, from = 1, to = 1) {
+    const [dx, dy] = DIRS[dir], bx = (tx + 0.5) * T, by = (ty + 0.5) * T, a = Math.atan2(dy, dx) + Math.PI * (1 - e), r = lerp(from, to, e) * T;
+    const way = [[-21, -8.5], [6, -11.5], [6, -18.5], [22, 0], [6, 18.5], [6, 11.5], [-21, 8.5]].map(([u, v]) => `${r1(bx + u * dx - v * dy)} ${r1(by + u * dy + v * dx)}`).join(' L');
+    return `<path d="M${way} Z" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"/>` + robot(bx, by, bx + Math.cos(a) * r, by + Math.sin(a) * r, carry, col);
+  }
+  function station(x, y, w, h, name, sub) {
+    let s = `<rect x="${x * T + 3}" y="${y * T + 3}" width="${w * T - 6}" height="${h * T - 6}" rx="12" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${x * T + 12}" y="${y * T + 12}" width="22" height="22" rx="6" fill="rgba(192,132,252,0.16)" stroke="rgba(192,132,252,0.55)"/>`;
+    s += text(x * T + 42, y * T + 22, name, { sans: true, size: 12, weight: 600 }) + text(x * T + 42, y * T + 34, sub, { sans: true, size: 9, fill: C.ink3 });
+    s += `<rect x="${x * T + 12}" y="${y * T + 46}" width="${w * T - 24}" height="${h * T - 58}" rx="7" fill="rgba(0,0,0,0.38)"/>`;
+    return s;
+  }
+  /** The quay of an arm that takes from a box: a notch in its edge, on the tile behind the arm. */
+  const quay = (tx, ty, dir, col) => { const [dx, dy] = DIRS[dir], cx = (tx + 0.5 - dx * 0.76) * T, cy = (ty + 0.5 - dy * 0.76) * T; return `<rect x="${r1(cx - 11)}" y="${r1(cy - 11)}" width="22" height="22" rx="5" fill="${C.floor}" stroke="${col}" stroke-width="2"/>`; };
+  const noEntry = (x, y) => `<circle cx="${x}" cy="${y}" r="8" fill="${C.danger}" stroke="#09090b" stroke-width="1.5"/><path d="M${x - 4.5} ${y} H${x + 4.5}" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>`;
+
+
+  const $ = (id) => document.getElementById(id);
+  const VIOLET = '#a78bfa', SETC = '#f472b6';
+  /** Lines of settings on a dark plate: what a machine does, readable from the floor. `max` lines, then "+n". */
+  function chips(x, y, lines, col, o = {}) {
+    const max = o.max ?? 4, shown = lines.slice(0, max), more = lines.length - shown.length, all = more > 0 ? [...shown, `+${more} more`] : shown;
+    const w = Math.max(...all.map((l) => l.length)) * 5.6 + 14, h = all.length * 12 + 8, x0 = o.center ? x - w / 2 : x;
+    let s = `<rect x="${r1(x0)}" y="${y}" width="${r1(w)}" height="${h}" rx="4" fill="rgba(9,9,11,0.92)" stroke="${col}" stroke-opacity="0.55"/>`;
+    all.forEach((l, i) => { s += text(x0 + 7, y + 13 + i * 12, l, { size: 9, weight: i < shown.length ? 700 : 500, fill: i < shown.length ? col : C.ink3 }); });
+    return s;
+  }
+  /** A ticket that was changed carries a mark. */
+  const marked = (cx, cy, type, on, opacity = 1) => token(cx, cy, type, 16, opacity) + (on ? `<circle cx="${r1(cx + 7)}" cy="${r1(cy - 7)}" r="4" fill="${SETC}" stroke="#09090b" stroke-width="1.2" opacity="${opacity}"/>` : '');
+  /** A gantry over one belt tile: two posts and a beam; the ticket goes under it without stopping. */
+  function gantry(tx, ty, col, label, o = {}) {
+    const x = tx * T, y = ty * T;
+    let s = `<rect x="${x + 4}" y="${y - 5}" width="${T - 8}" height="9" rx="3" fill="${C.body}" stroke="${col}" stroke-width="2"/><rect x="${x + 4}" y="${y + T - 4}" width="${T - 8}" height="9" rx="3" fill="${C.body}" stroke="${col}" stroke-width="2"/>`;
+    s += `<rect x="${x + T / 2 - 6}" y="${y - 3}" width="12" height="${T + 6}" rx="4" fill="${col}" fill-opacity="${o.flash ? 0.85 : 0.3}" stroke="${col}" stroke-width="1.5"/>`;
+    if (label) s += text(x + T / 2, y + T / 2 + 3, label, { size: 8, weight: 700, fill: '#09090b', anchor: 'middle' });
+    return s;
+  }
+  const OPS = ['board → Bugfix', 'priority → high', 'type:major', 'passes +1'];
+
+  // ---------- the Set station: four looks ----------
+  const SW = 10 * T, SH = 4.6 * T;
+  /* a ticket rides the scene from left to right in 4 s: `u` is how far (0 to 1), the machine is in the middle */
+  const ride = (t) => (t % 4) / 4;
+  const sets = [
+    { id: 'P1', name: 'Portique sur le convoyeur', mine: true,
+      idea: 'Une case de convoyeur avec un portique. Le ticket passe dessous sans s\'arrêter et ressort modifié. Le réglage est écrit sur une plaque au-dessus.',
+      reads: 'Aucun bras, aucune attente : une case, zéro transition. Se pose n\'importe où sur une ligne, y compris sur un retour de boucle.',
+      limit: 'Au-delà de quatre opérations la plaque dit « +2 more » : il faut ouvrir pour tout lire. Ne peut pas avoir deux sorties, donc pas d\'ajout de worktree ici.',
+      draw: (t) => { const u = ride(t), x = lerp(0.3, 9.7, u) * T, hit = u > 0.5; return belt(0, 2.6, 10) + marked(x, 3.1 * T, 'fix', hit) + gantry(4.6, 2.6, SETC, '', { flash: Math.abs(u - 0.5) < 0.04 }) + chips(5.1 * T, 0.5 * T, OPS, SETC, { center: true }) + `<path d="M${5.1 * T} ${0.5 * T + 56} V${2.6 * T - 6}" stroke="${SETC}" stroke-opacity="0.5" stroke-dasharray="2 3"/>`; } },
+    { id: 'P2', name: 'Presse à tampon',
+      idea: 'Un poste de deux cases sur deux, avec ses bras. Le ticket se pose sous la presse, reçoit le coup de tampon, repart. Le réglage est écrit dans le poste.',
+      reads: 'Un vrai poste, cohérent avec les autres : il peut avoir deux sorties (ok, ko), donc faire les opérations qui peuvent rater.',
+      limit: 'Deux bras et quatre cases pour un changement instantané : c\'est de la transition en plus, ce qu\'on cherche à réduire.',
+      draw: (t) => { const u = ride(t), inside = u > 0.42 && u < 0.58, x = u < 0.42 ? lerp(0.3, 2.5, u / 0.42) : u < 0.58 ? 5 : lerp(7.5, 9.7, (u - 0.58) / 0.42), press = inside ? 1 - Math.abs(u - 0.5) / 0.08 : 0;
+        let s = belt(0, 2.6, 3) + belt(7, 2.6, 3) + `<rect x="${4 * T + 3}" y="${1.6 * T + 3}" width="${2 * T - 6}" height="${2 * T - 6}" rx="12" fill="${C.body}" stroke="${SETC}" stroke-width="2.5"/>`;
+        s += `<circle cx="${5 * T}" cy="${3.1 * T}" r="15" fill="${C.panel}" stroke="${SETC}" stroke-opacity="0.6"/>` + marked(x * T, 3.1 * T, 'fix', u >= 0.5);
+        s += `<rect x="${5 * T - 13}" y="${r1(1.75 * T + press * 16)}" width="26" height="13" rx="3" fill="${SETC}"/><rect x="${5 * T - 3}" y="${1.7 * T}" width="6" height="${r1(4 + press * 16)}" fill="${SETC}"/>`;
+        return s + arm(3, 2.6, 0, C.ink2, 0, null, 1, 0.76) + arm(6, 2.6, 0, C.ink2, 0, null, 0.76, 1) + chips(5 * T, 0.25 * T, OPS, SETC, { center: true }); } },
+    { id: 'P3', name: 'Cabine de peinture',
+      idea: 'Un tunnel de trois cases posé sur le convoyeur. Le ticket y disparaît et en ressort repeint. Le réglage est écrit sur le toit, une opération par ligne.',
+      reads: 'La place qu\'il prend sert à écrire : le toit accueille plus de lignes qu\'une plaque. Se voit de loin.',
+      limit: 'Trois cases de convoyeur immobilisées, et on ne voit pas le ticket pendant qu\'il est dedans.',
+      draw: (t) => { const u = ride(t), x = lerp(0.3, 9.7, u), hidden = x > 3.7 && x < 6.5; let s = belt(0, 2.6, 10) + (hidden ? '' : marked(x * T, 3.1 * T, 'fix', x >= 6.5));
+        s += `<rect x="${3.5 * T}" y="${2.6 * T - 8}" width="${3 * T}" height="${T + 16}" rx="10" fill="${C.body}" stroke="${SETC}" stroke-width="2.5"/>`;
+        OPS.forEach((l, i) => { s += text(3.5 * T + 9, 2.6 * T + 6 + i * 11.5, l, { size: 8.5, weight: 700, fill: SETC }); });
+        for (const ex of [3.5 * T, 6.5 * T]) s += `<path d="M${ex} ${2.6 * T + 2} V${3.6 * T - 2}" stroke="#09090b" stroke-width="5"/><path d="M${ex} ${2.6 * T + 2} V${3.6 * T - 2}" stroke="${SETC}" stroke-width="2" stroke-dasharray="3 3"/>`;
+        return s + text(5 * T, 2.6 * T - 14, 'SET', { size: 9, weight: 700, fill: SETC, anchor: 'middle' }); } },
+    { id: 'P4', name: 'Étiqueteuse au bord',
+      idea: 'Une machine d\'une case à côté du convoyeur, avec une buse tournée vers lui. Le ticket passe devant et reçoit son étiquette. Le réglage est le ruban de papier qui sort de la machine.',
+      reads: 'Le convoyeur reste libre, et le ruban se lit comme un ticket de caisse : une opération par ligne, autant qu\'il en faut.',
+      limit: 'Il faut une case libre à côté de la ligne. Le lien entre la machine et la case qu\'elle marque est moins évident qu\'un portique.',
+      draw: (t) => { const u = ride(t), x = lerp(0.3, 9.7, u) * T, hit = u > 0.5, fly = Math.abs(u - 0.47) < 0.04; let s = belt(0, 3.1, 10) + marked(x, 3.6 * T, 'fix', hit);
+        s += `<rect x="${4.6 * T + 3}" y="${2.1 * T + 3}" width="${T - 6}" height="${T - 6}" rx="9" fill="${C.body}" stroke="${SETC}" stroke-width="2.5"/><path d="M${5.1 * T - 7} ${3.1 * T - 3} L${5.1 * T} ${3.1 * T + 6} L${5.1 * T + 7} ${3.1 * T - 3} Z" fill="${SETC}"/>`;
+        s += text(5.1 * T, 2.6 * T + 3, 'SET', { size: 9, weight: 700, fill: SETC, anchor: 'middle' });
+        if (fly) s += `<rect x="${5.1 * T - 6}" y="${3.3 * T}" width="12" height="8" rx="2" fill="${SETC}"/>`;
+        /* the paper tape: every operation, one per line */
+        s += `<rect x="${5.7 * T}" y="${0.35 * T}" width="118" height="${OPS.length * 12 + 12}" rx="2" fill="#f4f4f5"/>`;
+        OPS.forEach((l, i) => { s += text(5.7 * T + 7, 0.35 * T + 15 + i * 12, l, { size: 9, weight: 700, fill: '#18181b' }); });
+        return s + `<path d="M${5.4 * T} ${2.15 * T} Q${5.5 * T} ${1.7 * T} ${5.72 * T} ${1.55 * T}" fill="none" stroke="#f4f4f5" stroke-width="3"/>`; } },
+  ];
+
+  // ---------- the loop ----------
+  const LW = 17 * T, LH = 8.2 * T, LIMIT = 3;
+  let mech = 'tag', reset = 'machine', count = 0, at = 'review', pos = { x: 3, y: 2.5 }, route = [], flashAt = null, lpLog = [];
+  const mechs = [
+    { id: 'K1', name: 'Tag compteur + portique Set + bras', mine: true,
+      idea: 'Un portique Set sur le retour fait « passes +1 ». Review a deux bras « ko » : un pour passes < 3 (la boucle), un pour passes ≥ 3 (la zone).',
+      reads: 'Rien de nouveau à apprendre : des tags, des portiques, des bras. Le compte est sur le ticket, donc visible dans Work et filtrable.',
+      limit: 'La limite est écrite deux fois (sur les deux bras), et le compteur à un autre endroit que la décision.' },
+    { id: 'K2', name: 'Péage',
+      idea: 'Une machine d\'une case sur le retour. Elle affiche sa limite et le compte du ticket qui passe ; au-delà, son propre bras « over » sort le ticket.',
+      reads: 'Tout est au même endroit : la limite, le compte, la sortie. Review garde un seul bras « ko ».',
+      limit: 'Un type de machine de plus. Le compte vit dans le péage : on ne le voit pas sur le ticket ailleurs.' },
+  ];
+  const resets = [
+    { id: 'Z1', name: 'Une machine sur le chemin du retour', mine: true,
+      idea: 'Tu poses la remise à zéro sur le plancher : un portique « passes ✕ » (ou « reset toll ») sur la sortie de la zone.',
+      reads: 'On voit où le compteur repart. Tu peux décider qu\'un autre chemin de retour ne remet pas à zéro.',
+      limit: 'Une machine de plus à poser, et si tu l\'oublies le ticket ressort aussitôt.' },
+    { id: 'Z2', name: 'En libérant le ticket de la zone',
+      idea: 'Libérer un ticket d\'une zone remet ses compteurs à zéro. Rien à poser.',
+      reads: 'Le geste « je le relâche » veut dire « je l\'ai réparé ».',
+      limit: 'Implicite : rien sur le plancher ne le dit. Et une zone en libération automatique remettrait à zéro toute seule.' },
+    { id: 'Z3', name: 'Seulement à la main',
+      idea: 'Une action « Reset its count » sur le ticket, dans la carte de commandes. Sans elle, le compteur reste.',
+      reads: 'Aucune surprise : rien ne se remet à zéro sans toi.',
+      limit: 'Un geste de plus à chaque fois. Si tu l\'oublies, le ticket repart et revient dans la zone au premier ko.' },
+  ];
+  const say = (s) => { lpLog.unshift(s); lpLog = lpLog.slice(0, 5); $('lp-log').innerHTML = lpLog.map((l) => `<li>${esc(l)}</li>`).join(''); };
+  const P = { review: [3, 2.5], bugfix: [11.5, 2.5], zone: [8, 6.4], exit: [8.5, 0.9] };
+  function loopScene(t) {
+    const tag = mech === 'tag', ko = '#ef4444';
+    let s = station(1, 1, 4, 3, 'Review', 'agent · reviewer') + station(9.5, 1, 4, 3, 'Bugfix', 'agent · fixer');
+    /* ok: out by the top */
+    s += belt(6, 0.4, 2) + `<rect x="${8 * T + 3}" y="${0.4 * T + 3}" width="${T - 6}" height="${T - 6}" rx="8" fill="${C.panel}" stroke="${C.ok}" stroke-width="2.5"/>` + text(8.5 * T, 0.9 * T + 3, 'EXIT', { size: 8, weight: 700, fill: C.ok, anchor: 'middle' });
+    s += belt(6, 2, 3.5) + quay(5, 2, 0, ko);
+    /* back to Review: a departure after Bugfix, an arrival under Review */
+    s += pad(14.5, 2, { role: 'dep', col: PINK }) + pad(2, 5, { role: 'arr', col: PINK }) + plate(15 * T, 3 * T + 4, 'back to review', '', PINK) + plate(2.5 * T, 6 * T + 4, 'review in', '', PINK);
+    /* the zone, and the way out of it */
+    s += `<rect x="${6 * T}" y="${5.4 * T}" width="${4 * T}" height="${2 * T}" fill="${ko}" fill-opacity="0.06"/><rect x="${6 * T + 1.5}" y="${5.4 * T + 1.5}" width="${4 * T - 3}" height="${2 * T - 3}" fill="none" stroke="${ko}" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="9 7"/>` + text(6 * T + 9, 5.4 * T + 16, 'NEEDS YOU', { size: 10, weight: 700, fill: ko });
+    s += belt(11, 5.9, 3) + pad(14, 5.9, { role: 'dep', col: PINK });
+    if (tag) {
+      /* the counter: a gantry on the way back; the decision: two arms on Review */
+      s += gantry(7, 2, SETC, '+1', { flash: flashAt === 'count' }) + chips(7.5 * T, 1.47 * T, ['passes +1'], SETC, { center: true });
+      s += beltV(4, 5, 1) + belt(5, 5.9, 1) + quay(4, 4, 1, VIOLET);
+    } else {
+      s += `<rect x="${7 * T + 3}" y="${2 * T + 3}" width="${T - 6}" height="${T - 6}" rx="8" fill="${C.body}" stroke="${VIOLET}" stroke-width="2.5"/>` + text(7.5 * T, 2.5 * T - 2, 'TOLL', { size: 8, weight: 700, fill: VIOLET, anchor: 'middle' }) + text(7.5 * T, 2.5 * T + 10, `${Math.min(count, LIMIT)}/${LIMIT}`, { size: 10, weight: 700, fill: count >= LIMIT ? C.warn : C.ink, anchor: 'middle' });
+      s += beltV(7, 4, 1.4);
+    }
+    if (reset === 'machine') s += gantry(12, 5.9, tag ? SETC : VIOLET, '✕', { flash: flashAt === 'reset' }) + chips(12.5 * T, 7.05 * T, [tag ? 'passes ✕' : 'reset toll'], tag ? SETC : VIOLET, { center: true });
+    /* the ticket */
+    if (at !== 'gone') s += marked(pos.x * T, pos.y * T, 'fix', false) + (tag && count ? `<rect x="${r1(pos.x * T + 10)}" y="${r1(pos.y * T - 20)}" width="56" height="13" rx="6" fill="#09090b" stroke="${SETC}" stroke-opacity="0.7"/>` + text(pos.x * T + 15, pos.y * T - 10.5, `passes:${count}`, { size: 8.5, weight: 700, fill: SETC }) : '');
+    /* the arms, over everything */
+    s += arm(5, 1, 3, C.ok, 0, null, 0.76, 1) + plateTag(5.5 * T + 16, 1.5 * T - 14, 'ok', C.ok);
+    s += arm(5, 2, 0, ko, 0, null, 0.76, 1) + plateTag(5.5 * T - 2, 3 * T + 4, tag ? `ko · passes < ${LIMIT}` : 'ko', ko);
+    s += arm(13.5, 2, 0, C.ink2, 0, null, 0.76, 1) + arm(2, 4, 3, C.ink2, 0, null, 1, 0.76) + arm(10, 5.9, 0, C.ink2, 0, null, 0.76, 1);
+    if (tag) s += arm(4, 4, 1, VIOLET, 0, null, 0.76, 1) + plateTag(5 * T + 6, 4.5 * T - 7, `ko · passes ≥ ${LIMIT}`, VIOLET);
+    else s += arm(7, 3, 1, VIOLET, 0, null, 1, 1) + plateTag(8 * T + 4, 3.5 * T - 7, 'over', VIOLET);
+    return s;
+  }
+  const plateTag = (x, y, str, col) => `<rect x="${r1(x)}" y="${r1(y)}" width="${str.length * 5.6 + 10}" height="14" rx="4" fill="rgba(9,9,11,0.92)" stroke="${col}" stroke-opacity="0.55"/>` + text(x + 5, y + 10.2, str, { size: 9, weight: 700, fill: col });
+  /* where the ticket goes for each thing that happens, as points to ride through; `fx` is what happens on the way */
+  function go(points, done) { route = points.map((p) => ({ x: p[0], y: p[1], jump: p[2] === 'jump', fx: p[3] })); route.done = done; $('lp-ko').disabled = $('lp-ok').disabled = $('lp-release').disabled = true; if (!playing) finish(); }
+  function finish() { for (const p of route) { if (p.fx) p.fx(); pos = { x: p.x, y: p.y }; } const d = route.done; route = []; if (d) d(); paintLoop(); }
+  function stepLoop(dt) {
+    let left = dt * 6;
+    while (route.length && left > 0) {
+      const p = route[0];
+      if (p.jump) { pos = { x: p.x, y: p.y }; route.shift(); if (p.fx) p.fx(); continue; }
+      const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+      if (d <= left) { pos = { x: p.x, y: p.y }; left -= d; route.shift(); if (p.fx) p.fx(); if (!route.length) { const done = route.done; if (done) done(); paintLoop(); } }
+      else { pos = { x: pos.x + (p.x - pos.x) / d * left, y: pos.y + (p.y - pos.y) / d * left }; left = 0; }
+    }
+  }
+  const flash = (what) => { flashAt = what; setTimeout(() => { flashAt = null; drawLoop(); }, 350); };
+  const backHome = [[14.5, 2.5], [2.5, 5.5, 'jump'], [2.5, 4.5], P.review];
+  function paintLoop() {
+    const idle = !route.length;
+    $('lp-ko').disabled = $('lp-ok').disabled = !(idle && at === 'review');
+    $('lp-release').disabled = !(idle && at === 'zone');
+    $('lp-reset').hidden = reset !== 'manual'; $('lp-reset').disabled = at === 'gone' || count === 0;
+    $('lp-count').textContent = `${mech === 'tag' ? 'passes' : 'toll'}: ${count} / ${LIMIT}`;
+    for (const b of document.querySelectorAll('[data-mech]')) b.setAttribute('aria-pressed', String(b.dataset.mech === mech));
+    for (const b of document.querySelectorAll('[data-reset]')) b.setAttribute('aria-pressed', String(b.dataset.reset === reset));
+    drawLoop();
+  }
+  let now = 0;
+  const drawLoop = () => { $('lp-scene').innerHTML = svg(LW, LH, 'La boucle Review, Bugfix, Review avec son compteur', loopScene(now)); };
+  $('lp-ko').addEventListener('click', () => {
+    const over = count >= LIMIT;
+    if (mech === 'tag') {
+      if (over) { say(`ko: passes is ${count}, the arm "passes ≥ ${LIMIT}" takes it to the zone.`); go([[4.5, 3.6], [4.5, 5.5], [4.5, 6.4], [6.5, 6.4], P.zone], () => { at = 'zone'; }); }
+      else go([[5.5, 2.5], [7.5, 2.5, '', () => { count++; flash('count'); say(`ko: under the gantry, passes becomes ${count}. Bugfix, then back to Review.`); }], P.bugfix, ...backHome], () => { at = 'review'; });
+    } else if (over) { say(`ko: the toll has seen it ${LIMIT} times, its arm "over" takes it to the zone.`); go([[5.5, 2.5], [7.5, 2.5], [7.5, 5.2], P.zone], () => { at = 'zone'; }); }
+    else go([[5.5, 2.5], [7.5, 2.5, '', () => { count++; flash('count'); say(`ko: the toll counts ${count} of ${LIMIT}. Bugfix, then back to Review.`); }], P.bugfix, ...backHome], () => { at = 'review'; });
+  });
+  $('lp-ok').addEventListener('click', () => { say('ok: it leaves by the exit.'); go([[5.5, 1.5], [5.5, 0.9], P.exit], () => { at = 'gone'; }); });
+  $('lp-release').addEventListener('click', () => {
+    if (reset === 'release') { count = 0; say('Released: releasing it reset its count. It goes back for three more tries.'); }
+    else if (reset === 'manual') say(count ? `Released with its count still at ${count}: at the next ko it comes straight back here.` : 'Released, count already reset by hand.');
+    go([[10.5, 6.4], [12.5, 6.4, '', () => { if (reset === 'machine') { count = 0; flash('reset'); say('On the way back, the reset machine clears its count: three more tries.'); } }], [14.5, 6.4], [2.5, 5.5, 'jump'], [2.5, 4.5], P.review], () => { at = 'review'; });
+  });
+  $('lp-reset').addEventListener('click', () => { count = 0; say('Count reset by hand.'); paintLoop(); });
+  const fresh = () => { count = 0; at = 'review'; pos = { x: P.review[0], y: P.review[1] }; route = []; lpLog = []; $('lp-log').innerHTML = ''; paintLoop(); };
+  $('lp-new').addEventListener('click', fresh);
+  document.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-mech]'), r = e.target.closest('[data-reset]');
+    if (m) { mech = m.dataset.mech; fresh(); } else if (r) { reset = r.dataset.reset; fresh(); }
+  });
+
+  // ---------- the script station ----------
+  const named = { 'odys-api': { test: 'make test', lint: 'make lint' }, 'odys-front': { test: 'pnpm test --run', lint: 'pnpm lint' }, 'agentic-dmc-2': { test: '', lint: 'uv run ruff check' }, 'odys-mobile': { test: 'yarn jest', lint: '' } };
+  const scTickets = { '#201 · odys-api': ['odys-api'], '#202 · odys-api + odys-front': ['odys-api', 'odys-front'], '#203 · agentic-dmc-2': ['agentic-dmc-2'], '#205 · odys-mobile (a repository added last week)': ['odys-mobile'] };
+  const models = [
+    { id: 'X1', name: 'Liste explicite par poste',
+      idea: 'Le poste ne connaît que les dépôts de sa liste, chacun avec une commande saisie ou une action nommée.',
+      reads: 'Tout ce que fait le poste est écrit dans le poste. Liberté totale.',
+      limit: 'Chaque nouveau dépôt est « non configuré » dans chaque poste script jusqu\'à ce que tu les ouvres un par un. Dix postes, dix listes.' },
+    { id: 'X2', name: 'Action par défaut + exceptions', mine: true,
+      idea: 'Le poste nomme une action (« test »). Pour chaque dépôt du ticket, il joue l\'exception du poste s\'il y en a une, sinon l\'action nommée de la vue dépôt.',
+      reads: 'Un dépôt qui définit « test » marche partout sans toucher aux postes. La liste du poste reste courte : seulement ce qui diffère.',
+      limit: 'Deux endroits à regarder pour savoir ce qui tourne ; le poste l\'affiche ligne par ligne pour compenser.' },
+  ];
+  let model = 'default', scDefault = 'test', rows = [{ repo: 'odys-front', kind: 'custom', value: 'pnpm test --run --coverage' }], scFails = new Set(), result = null;
+  const cmdFor = (repo) => {
+    const row = rows.find((r) => r.repo === repo);
+    if (row) return row.kind === 'named' ? { cmd: named[repo]?.[row.value] || '', from: `station · action "${row.value}"` } : { cmd: row.value, from: 'station · custom' };
+    if (model === 'default') return { cmd: named[repo]?.[scDefault] || '', from: `repository · action "${scDefault}"` };
+    return { cmd: '', from: 'not in the list' };
+  };
+  function showScript() {
+    for (const b of document.querySelectorAll('[data-model]')) b.setAttribute('aria-pressed', String(b.dataset.model === model));
+    $('sc-default').innerHTML = model === 'default' ? `<label class="hint" for="sc-def">Default action</label><select id="sc-def">${['test', 'lint'].map((a) => `<option${a === scDefault ? ' selected' : ''}>${a}</option>`).join('')}</select><span class="hint">for every repository that has no line below</span>` : '<span class="hint">Only the repositories listed below are run.</span>';
+    $('sc-rows').innerHTML = rows.length ? rows.map((r, i) => `<div class="row" style="margin-bottom:6px"><b class="mono" style="min-width:104px">${r.repo}</b>
+      <select data-i="${i}" data-k="kind" aria-label="Kind"><option value="named"${r.kind === 'named' ? ' selected' : ''}>named action</option><option value="custom"${r.kind === 'custom' ? ' selected' : ''}>command</option></select>
+      ${r.kind === 'named' ? `<select data-i="${i}" data-k="value" aria-label="Action">${['test', 'lint'].map((a) => `<option${a === r.value ? ' selected' : ''}>${a}</option>`).join('')}</select>` : `<input class="mono" data-i="${i}" data-k="value" value="${esc(r.value)}" aria-label="Command" size="22">`}
+      <button type="button" data-del="${i}" aria-label="Remove ${r.repo}">×</button></div>`).join('') : `<p class="hint">${model === 'default' ? 'No exception: every repository runs its own action.' : 'Empty list: nothing is run.'}</p>`;
+    const free = Object.keys(named).filter((r) => !rows.some((x) => x.repo === r));
+    $('sc-addrepo').innerHTML = free.map((r) => `<option>${r}</option>`).join(''); $('sc-add').disabled = !free.length;
+    $('sc-named').innerHTML = '<tr><th>Repository</th><th>test</th><th>lint</th></tr>' + Object.entries(named).map(([r, c]) => `<tr><td class="mono">${r}</td>${['test', 'lint'].map((k) => `<td><input class="mono" data-repo="${r}" data-cmd="${k}" value="${esc(c[k])}" aria-label="${k} for ${r}" placeholder="none"></td>`).join('')}</tr>`).join('');
+    const wts = scTickets[$('sc-ticket').value] || [];
+    $('sc-fails').innerHTML = '<span class="hint">fails in:</span>' + wts.map((w) => `<button type="button" data-fail="${w}" aria-pressed="${scFails.has(w)}">${w}</button>`).join('');
+    drawScript();
+  }
+  const scW = 13 * T, scH = 5 * T;
+  function drawScript() {
+    const col = '#38bdf8', wts = scTickets[$('sc-ticket').value] || [], missing = $('sc-missing').value;
+    let s = belt(0, 2, 2) + arm(2, 2, 0, C.ink2, 0, null, 1, 0.76);
+    s += `<rect x="${3 * T + 3}" y="${0.5 * T + 3}" width="${6 * T - 6}" height="${4 * T - 6}" rx="12" fill="${C.body}" stroke="${C.edge}" stroke-width="2"/>`;
+    s += `<rect x="${3 * T + 12}" y="${0.5 * T + 12}" width="22" height="22" rx="6" fill="rgba(56,189,248,0.16)" stroke="rgba(56,189,248,0.6)"/>` + text(3 * T + 16, 0.5 * T + 27, '>_', { size: 9, weight: 700, fill: col });
+    s += text(3 * T + 42, 0.5 * T + 22, 'Tests', { sans: true, size: 12, weight: 600 }) + text(3 * T + 42, 0.5 * T + 34, model === 'default' ? `script · ${scDefault}` : `script · ${rows.length} repositories`, { sans: true, size: 9, fill: C.ink3 });
+    /* the screen: one line per repository of the ticket, with what is run and how it went */
+    s += `<rect x="${3 * T + 12}" y="${0.5 * T + 44}" width="${6 * T - 24}" height="${4 * T - 78}" rx="6" fill="#0b0b0d" stroke="#27272a"/>`;
+    wts.forEach((w, i) => {
+      const c = cmdFor(w), r = result?.lines[w], y = 0.5 * T + 60 + i * 24, mark = !r ? '·' : r === 'ok' ? '✓' : r === 'ko' ? '✗' : r === 'skip' ? '–' : '?', fill = !r ? C.ink3 : r === 'ok' ? C.ok : r === 'ko' ? C.danger : C.warn;
+      s += text(3 * T + 20, y, mark, { size: 11, weight: 700, fill }) + text(3 * T + 34, y, `${w} $ ${c.cmd || '(no command)'}`.slice(0, 40), { size: 9, weight: 700, fill: c.cmd ? C.ink : C.warn }) + text(3 * T + 34, y + 10.5, c.from, { size: 7.5, fill: C.ink3 });
+    });
+    s += text(3 * T + 14, 4.5 * T - 12, `no command: ${missing === 'ignore' ? 'ignored' : missing === 'ko' ? 'failure' : 'own way out'}`, { size: 8, fill: C.ink3 });
+    /* the ways out: ok, ko, and its own when a repository has no command */
+    const outs = [['ok', C.ok, 1.2], ['ko', C.danger, 2.5]].concat(missing === 'own' ? [['unconfigured', C.warn, 3.5]] : []);
+    for (const [name, c, row] of outs) { const on = result?.outcome === name; s += quay(9, row, 0, c) + arm(9, row, 0, c, 0, on ? 'fix' : null, 0.76, 1) + belt(10, row, 2) + plateTag(10 * T + 6, row * T - 12, name, c) + (on ? `<rect x="${9 * T + 1}" y="${row * T + 1}" width="${3 * T - 2}" height="${T - 2}" rx="8" fill="none" stroke="${c}" stroke-width="2"/>` : ''); }
+    if (!result) s += token(1 * T, 2.5 * T, 'fix');
+    $('sc-scene').innerHTML = svg(scW, scH, 'Le poste script et ses sorties', s);
+  }
+  function runScript() {
+    const wts = scTickets[$('sc-ticket').value] || [], missing = $('sc-missing').value, stop = $('sc-fail').value === 'stop', lines = {};
+    let ko = false, none = false;
+    for (const w of wts) {
+      if (ko && stop) { lines[w] = 'skip'; continue; }
+      const c = cmdFor(w);
+      if (!c.cmd) { lines[w] = missing === 'ignore' ? 'skip' : 'none'; none = true; continue; }
+      if (scFails.has(w)) { lines[w] = 'ko'; ko = true; } else lines[w] = 'ok';
+    }
+    result = { lines, outcome: ko ? 'ko' : none && missing === 'ko' ? 'ko' : none && missing === 'own' ? 'unconfigured' : 'ok' };
+    drawScript();
+  }
+  $('sc-ticket').innerHTML = Object.keys(scTickets).map((t) => `<option>${t}</option>`).join('');
+  const again = () => { result = null; showScript(); };
+  document.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-model]'), f = e.target.closest('[data-fail]'), d = e.target.closest('#sc-rows [data-del]');
+    if (m) { model = m.dataset.model; again(); }
+    else if (f) { const w = f.dataset.fail; if (scFails.has(w)) scFails.delete(w); else scFails.add(w); again(); }
+    else if (d) { rows.splice(Number(d.dataset.del), 1); again(); }
+  });
+  $('sc-add').addEventListener('click', () => { const r = $('sc-addrepo').value; if (r) { rows.push({ repo: r, kind: 'named', value: 'test' }); again(); } });
+  $('sc-rows').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i == null) return; rows[i][e.target.dataset.k] = e.target.value; if (e.target.dataset.k === 'kind') rows[i].value = e.target.value === 'named' ? 'test' : ''; again(); });
+  $('sc-default').addEventListener('change', (e) => { if (e.target.id === 'sc-def') { scDefault = e.target.value; again(); } });
+  $('sc-named').addEventListener('change', (e) => { const d = e.target.dataset; if (d.repo) { named[d.repo][d.cmd] = e.target.value.trim(); result = null; drawScript(); } });
+  for (const id of ['sc-ticket', 'sc-missing', 'sc-fail']) $(id).addEventListener('change', () => { if (id === 'sc-ticket') scFails = new Set(); again(); });
+  $('sc-run').addEventListener('click', runScript);
+
+  // ---------- the page ----------
+  const KEY = 'factory-proto-picks';
+  let picks = { set: '', mech: '', reset: '', model: '' };
+  try { picks = { ...picks, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { /* no storage here: the picks live for the visit */ }
+  const families = [
+    { key: 'set', host: 'sets', list: sets, label: 'Poste Set', scene: true },
+    { key: 'mech', host: 'mechs', list: mechs, label: 'Compteur' },
+    { key: 'reset', host: 'resets', list: resets, label: 'Remise à zéro' },
+    { key: 'model', host: 'models', list: models, label: 'Poste script' },
+  ];
+  for (const f of families) {
+    $(f.host).innerHTML = f.list.map((it) => `
+      <article class="card" data-family="${f.key}" data-id="${it.id}">
+        <div class="card-head"><span class="letter">${it.id}</span><h3>${esc(it.name)}</h3>${it.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+        ${f.scene ? `<div class="scene" data-scene="${it.id}">${svg(SW, SH, it.name, it.draw(1.2))}</div>` : ''}
+        <dl><dt>Idée</dt><dd>${esc(it.idea)}</dd><dt>Atout</dt><dd>${esc(it.reads)}</dd><dt>Limite</dt><dd>${esc(it.limit)}</dd></dl>
+        <button type="button" aria-pressed="false">Choisir ${it.id}</button>
+      </article>`).join('');
+  }
+  const nameOf = (f) => f.list.find((x) => x.id === picks[f.key])?.name;
+  const summary = () => families.map((f) => `${f.label} : ${picks[f.key] ? `${picks[f.key]} (${nameOf(f) ?? '?'})` : 'pas encore choisi'}`).join(' · ');
+  function paint() {
+    for (const card of document.querySelectorAll('.card[data-family]')) {
+      const b = card.querySelector(':scope > button'), on = picks[card.dataset.family] === card.dataset.id;
+      card.classList.toggle('picked', on);
+      b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    $('picks').innerHTML = families.map((f) => `${f.label} <b>${picks[f.key] || '–'}</b>`).join(' &nbsp;·&nbsp; ');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.card[data-family] > button'); if (!b) return;
+    const card = b.closest('.card'), k = card.dataset.family;
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    $('said').textContent = '';
+    paint();
+  });
+  $('copy').addEventListener('click', () => {
+    const said = $('said'), line = summary();
+    const done = () => { said.textContent = 'Copié : colle-le dans la conversation.'; };
+    const shown = () => { said.textContent = line; };
+    try { navigator.clipboard.writeText(line).then(done, shown); } catch { shown(); }
+  });
+  paint(); fresh(); showScript();
+
+  // what moves: the four Set stations, and the ticket of the loop
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var playing = !still;
+  let last = performance.now();
+  const anim = $('anim');
+  anim.setAttribute('aria-pressed', String(playing));
+  anim.addEventListener('click', () => { playing = !playing; anim.setAttribute('aria-pressed', String(playing)); if (playing) { last = performance.now(); requestAnimationFrame(tick); } else if (route.length) finish(); });
+  const setHosts = sets.map((it) => [it, document.querySelector(`[data-scene="${it.id}"]`)]);
+  function tick(t) {
+    if (!playing) return;
+    const dt = Math.min(0.1, (t - last) / 1000); last = t; now += dt;
+    for (const [it, el] of setHosts) el.innerHTML = svg(SW, SH, it.name, it.draw(now));
+    if (route.length) { stepLoop(dt); drawLoop(); }
+    requestAnimationFrame(tick);
+  }
+  if (playing) requestAnimationFrame(tick);
+})();
+</script>

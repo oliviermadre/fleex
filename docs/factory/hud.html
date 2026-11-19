@@ -1,0 +1,602 @@
+<title>Factory, le HUD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable scene (the app's page with its new HUD), what to try and what is proposed beyond the ask, then the command card menu by menu, the avatars, and what is left to settle. A bar at the bottom keeps the pick. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  .lede b, .rules li b { color: var(--ink); font-weight: 600; }
+  .tools .lbl { font-size: 0.8rem; color: var(--muted); }
+  .seg { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .seg button { padding: 3px 10px; font-size: 0.78rem; }
+  kbd { font-family: var(--mono); font-size: 0.8em; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  /* the prototype is the app's own page, at 1280 by 720, scaled to the width it is given */
+  .stage-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--line); background: #0f0f11; }
+  .stage { position: relative; width: 1280px; height: 720px; transform-origin: 0 0; background: #0f0f11; color: #fafafa; font-family: var(--body); overflow: hidden; user-select: none; outline: none; color-scheme: dark; line-height: 1.3; }
+  .fx button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 0; }
+  .fx kbd { border: 0; padding: 0; }
+  .hd { position: absolute; left: 0; right: 0; top: 0; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: #0f0f11; border-bottom: 1px solid #3f3f46; font-size: 14px; z-index: 3; }
+  .hd .exp { border: 1px solid #52525b; border-radius: 4px; padding: 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #71717a; }
+  .hd .stop { background: #ef4444; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; }
+  #floor { position: absolute; left: 0; top: 40px; touch-action: none; }
+  #edge { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }
+  .plate { position: absolute; left: 17px; top: 57px; z-index: 4; display: none; align-items: center; gap: 8px; background: #eab308; color: #18181b; border-radius: 4px; padding: 4px 8px; font-size: 11px; }
+  .plate b { font-family: var(--mono); letter-spacing: 1px; }
+  .building .plate { display: flex; }
+  .hud { position: absolute; bottom: 0; background: #131316; z-index: 2; padding: 8px; box-sizing: border-box; }
+  .hud-l { left: 0; width: 330px; height: 262px; }
+  .hud-r { left: 960px; width: 320px; height: 262px; }
+  .hud-c { left: 330px; width: 630px; height: 190px; display: flex; gap: 8px; }
+  .cut .hud-l { clip-path: polygon(0 0, calc(100% - 30px) 0, 100% 30px, 100% 100%, 0 100%); }
+  .cut .hud-r { clip-path: polygon(30px 0, 100% 0, 100% 100%, 0 100%, 0 30px); }
+  .cut .hud-r .trail { padding-left: 26px; }
+  .nohud .hud, .nohud .chips { display: none; }
+  .chips { position: absolute; left: 338px; width: 536px; bottom: 190px; height: 28px; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; z-index: 5; pointer-events: none; }
+  .fx .chip { pointer-events: auto; height: 28px; display: flex; align-items: center; gap: 3px; padding: 0 5px; background: #131316; border: 1px solid #3f3f46; border-bottom: 0; border-radius: 6px 6px 0 0; overflow: hidden; }
+  .fx .chip.none { visibility: hidden; }
+  .fx .chip.on { border-color: #fafafa; }
+  .fx .chip kbd { font-family: var(--mono); font-size: 9.5px; font-weight: 700; color: #71717a; }
+  .fx .chip b { font-family: var(--mono); font-size: 10.5px; font-weight: 700; color: #e4e4e7; }
+  .fx .handle { position: absolute; z-index: 5; left: 884px; bottom: 190px; width: 68px; height: 22px; background: #131316; border: 1px solid #3f3f46; border-bottom: 0; border-radius: 6px 6px 0 0; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.8px; color: #a1a1aa; }
+  .fx .handle kbd { font-family: var(--mono); color: #71717a; }
+  .nohud .handle { left: 600px; width: 80px; bottom: 0; }
+  .tip { position: absolute; z-index: 9; display: none; max-width: 300px; background: #09090b; border: 1px solid #52525b; border-radius: 8px; padding: 7px 9px; font-size: 12px; flex-direction: column; gap: 2px; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+  .tip.on { display: flex; }
+  .tip::after { content: ''; position: absolute; left: var(--caret, 50%); bottom: -6px; width: 10px; height: 10px; margin-left: -5px; background: #09090b; border-right: 1px solid #52525b; border-bottom: 1px solid #52525b; transform: rotate(45deg); }
+  .tip b { font-weight: 600; } .tip span { color: #a1a1aa; } .tip em { color: #71717a; font-style: normal; font-size: 10.5px; margin-top: 3px; }
+  .clock { height: 22px; display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+  .clock .dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+  .clock .sub { margin-left: auto; color: #71717a; font-size: 9.5px; font-weight: 500; letter-spacing: 0; }
+  .cut .clock .sub { margin-right: 24px; }
+  .lrow { display: flex; gap: 6px; height: calc(100% - 28px); margin-top: 6px; }
+  .lcol { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .tog { display: flex; gap: 4px; } .tog span { width: 30px; height: 24px; display: grid; place-items: center; border: 1px solid #3f3f46; border-radius: 6px; font-size: 11px; color: #71717a; } .tog .on { background: #eab308; color: #18181b; border-color: transparent; }
+  .mini { flex: 1; background: #09090b; border-radius: 6px; display: grid; place-items: center; } .mini svg { width: 100%; }
+  .layers { width: 100px; display: flex; flex-direction: column; gap: 1px; border: 1px solid #3f3f46; border-radius: 6px; padding: 3px; font-size: 11px; color: #71717a; box-sizing: border-box; }
+  .layers span { padding: 3px 6px; border-radius: 4px; } .layers .on { background: #27272a; color: #fafafa; } .layers .zoom { margin-top: auto; text-align: center; border-top: 1px solid #3f3f46; color: #a1a1aa; border-radius: 0; }
+  .cbody { flex: 1; min-width: 0; background: #09090b; border: 1px solid #3f3f46; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .ctitle { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ctitle .num { color: #71717a; font-family: var(--mono); font-size: 13px; }
+  .cline { font-size: 12.5px; color: #a1a1aa; } .cstats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #71717a; font-family: var(--mono); } .cstats b { color: #fafafa; }
+  .wire { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fx .unit { position: relative; width: 44px; height: 44px; display: grid; place-items: center; background: #18181b; border: 1px solid #3f3f46; border-radius: 7px; }
+  .fx .unit:hover { border-color: #fafafa; } .unit small { position: absolute; right: 3px; bottom: 1px; font-family: var(--mono); font-size: 8.5px; color: #a1a1aa; }
+  .chint { font-size: 11px; color: #71717a; }
+  .note { position: absolute; left: 12px; right: 12px; bottom: 8px; font-size: 11.5px; color: #facc15; min-height: 1.2em; }
+  .avatar { width: 150px; flex: none; border: 1px solid #3f3f46; border-radius: 8px; overflow: hidden; background: #09090b; } .avatar svg { display: block; width: 100%; height: 100%; }
+  .trail { height: 20px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; color: #71717a; display: flex; gap: 5px; align-items: center; } .trail b { color: #fafafa; } .trail i { font-style: normal; }
+  .cmds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 5px; height: calc(100% - 22px); }
+  .fx .cmd { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 0 2px 8px; background: #18181b; border: 1px solid color-mix(in srgb, var(--c) 55%, #18181b); border-radius: 8px; color: var(--i); font-size: 11px; font-weight: 600; line-height: 1.1; text-align: center; }
+  .fx .cmd kbd { position: absolute; left: 5px; top: 4px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; color: var(--i); opacity: 0.8; }
+  .fx .cmd i { position: absolute; right: 5px; top: 3px; font-style: normal; opacity: 0.7; }
+  .fx span.cmd.none { border: 1px dashed #27272a; background: none; }
+  .fx .cmd:disabled { opacity: 0.35; cursor: default; }
+  .fx .cmd.on { box-shadow: 0 0 0 2px var(--c); }
+  .mini-card { background: #131316; border-radius: 8px; padding: 8px; color: #fafafa; color-scheme: dark; }
+  .mini-card .cmds { height: 156px; } .mini-card .cmd { cursor: default; }
+  .fx .cmd kbd { white-space: nowrap; }
+  .mini-card .cmd { font-size: 10px; padding-bottom: 6px; } .mini-card .cmd kbd { font-size: 8.5px; left: 4px; }
+  .avs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  .avs figure { margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); } .av { display: block; width: 100%; height: auto; }
+  /* what moves in an avatar: little, and slowly */
+  .tilt { transform-origin: 75px 72px; animation: tilt 5s ease-in-out infinite; }
+  @keyframes tilt { 0%, 100% { transform: rotate(-5deg); } 25% { transform: rotate(3deg) translateY(-3px); } 50% { transform: rotate(6deg); } 75% { transform: rotate(-2deg) translateY(2px); } }
+  .bob { animation: bob 4s ease-in-out infinite; } @keyframes bob { 50% { transform: translateY(-3px); } }
+  .blink { animation: blink 4s infinite; } @keyframes blink { 0%, 93%, 100% { opacity: 1; } 96% { opacity: 0.1; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; } @keyframes pulse { 50% { opacity: 0.35; } }
+  .swing { animation: swing 3.5s ease-in-out infinite; } @keyframes swing { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+  .march { animation: march 1.6s linear infinite; } @keyframes march { to { stroke-dashoffset: -21; } }
+  .slide { animation: slide 1s linear infinite; } @keyframes slide { to { transform: translateX(30px); } }
+  .slide2 { animation: slide2 1.6s ease-in-out infinite; } @keyframes slide2 { 50% { transform: translateX(6px); } }
+  .sweep { animation: sweep 3.2s ease-in-out infinite; } @keyframes sweep { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-62deg); } }
+  .smoke { animation: smoke 3s ease-out infinite; } .smoke.s2 { animation-delay: 1.5s; } @keyframes smoke { to { transform: translate(9px, -28px); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .av * { animation: none !important; } }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Le HUD, version jeu de stratégie</h1>
+    <p class="lede">Une seule scène, jouable : sélection additive avec Maj, groupes à place fixe, une icône par item sélectionné, un avatar, l'heure, une carte de commandes de 5 sur 3 dont les touches suivent le clavier, et un contour qui n'est plus une ligne droite. Rien n'est dans le code.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">La scène</h2>
+    <div class="tools">
+      <span class="lbl">Clavier</span>
+      <span class="seg" id="kb"><button type="button" data-kb="auto">Auto</button><button type="button" data-kb="azerty">AZERTY</button><button type="button" data-kb="qwerty">QWERTY</button></span>
+      <span class="lbl" id="kb-said"></span>
+      <span class="lbl" style="margin-left:14px">Contour</span>
+      <span class="seg" id="cut"><button type="button" data-cut="step">C1 Marches droites</button><button type="button" data-cut="cut">C2 Pans coupés</button></span>
+    </div>
+    <div class="stage-wrap" id="wrap"><div class="stage fx" id="stage" tabindex="0" aria-label="The Factory page, as a prototype">
+      <div class="hd"><span>Factory</span><span class="exp">experimental</span><span style="flex:1"></span><span class="stop">Emergency stop</span></div>
+      <svg id="floor" width="1280" height="680" role="img" aria-label="The floor"></svg>
+      <svg id="edge" width="1280" height="720" aria-hidden="true"></svg>
+      <div class="plate" id="plate"><b>BUILD MODE</b><span>the floor keeps running</span></div>
+      <div class="hud hud-l" id="hud-l"></div>
+      <div class="hud hud-c" id="hud-c"></div>
+      <div class="hud hud-r" id="hud-r"></div>
+      <div class="chips" id="chips"></div>
+      <button type="button" class="handle" id="handle"></button>
+      <div class="tip" id="tip" role="tooltip"></div>
+    </div></div>
+    <div class="rules">
+      <div class="card"><h3>À essayer</h3><ul>
+        <li><b>Sélection</b> : clique un ticket ou une machine ; <kbd>Maj</kbd>+clic en ajoute un (ou le retire s'il y est déjà) ; un glisser dessine un cadre, <kbd>Maj</kbd>+glisser ajoute au lieu de remplacer. Sur le plancher on sélectionne des tickets, en mode Build des machines.</li>
+        <li><b>Groupes</b> : <kbd>Maj</kbd>+<kbd>1</kbd>…<kbd>0</kbd> range la sélection, <kbd>1</kbd>…<kbd>0</kbd> la rappelle. Chaque groupe a sa place, ne se montre que s'il est rempli, et garde la même taille. Survole-le.</li>
+        <li><b>Plusieurs items</b> : une icône chacun au centre. Survol : le détail. Clic : ne garder que lui. <kbd>Maj</kbd>+clic : le retirer.</li>
+        <li><b>Carte de commandes</b> : 5 sur 3, les touches sont celles du clavier dans le même ordre. <kbd>B</kbd> entre en mode Build et en sort, toujours en bas à droite.</li>
+        <li><b>Mode Build</b> : le ruban suit le contour du HUD. <kbd>U</kbd> cache le HUD, le ruban redevient un cadre droit.</li>
+      </ul></div>
+      <div class="card"><h3>Ce que je propose, au-delà de ta demande</h3><ul>
+        <li><b>Maj est additif partout</b>, pas seulement en mode Build : sur le plancher aussi, pour les tickets.</li>
+        <li><b>Les touches sont liées à la position</b>, pas à la lettre : la touche en haut à gauche lance la commande en haut à gauche, quel que soit le clavier. Seule l'étiquette change. Le navigateur sait donner la disposition (Chrome, Edge, l'app Electron) ; sinon elle se déduit de la première touche tapée, et un réglage permet de la forcer.</li>
+        <li><b>La dernière ligne ne bouge jamais</b> : Undo, Redo, Next, et en bas à droite Build / Done / Previous. <b>Fit</b> garde la touche F, qui tombe au même endroit sur les deux claviers.</li>
+        <li><b>N, Tab, Suppr et Échap continuent de marcher</b> en plus de la touche de grille.</li>
+        <li><b>Le portique Set passe dans le menu Move</b>, à côté du péage : les deux se posent sur un convoyeur.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-menus">
+    <h2 id="h-menus">La carte de commandes, menu par menu</h2>
+    <p class="brief">Les mêmes commandes aux mêmes places d'un menu à l'autre. Les étiquettes de touches suivent le réglage « Clavier » ci-dessus.</p>
+    <div class="grid small" id="menus"></div>
+  </section>
+
+  <section aria-labelledby="h-av">
+    <h2 id="h-av">Les avatars</h2>
+    <p class="brief">Un pour chaque chose qu'on peut sélectionner. Un ticket montre son objet en grand, qui penche doucement devant un halo de sa couleur ; une machine montre ce qu'elle fait.</p>
+    <div class="avs" id="avs"></div>
+  </section>
+
+  <section aria-labelledby="h-open">
+    <h2 id="h-open">Ce qui reste à trancher</h2>
+    <div class="rules"><div class="card"><ul>
+      <li>Le contour : <b>C1</b> marches droites ou <b>C2</b> pans coupés (bascule au-dessus de la scène).</li>
+      <li>Un groupe d'un seul ticket montre son icône et son numéro ; d'une seule machine, son icône seule. Faut-il un mot sous l'icône d'une machine ?</li>
+      <li>Au-delà de 24 items sélectionnés, je propose des pages comme dans le jeu (24 par page) plutôt qu'un défilement.</li>
+      <li>L'avatar générique : l'usine sur le plancher, le casque de chantier en mode Build. D'autres idées bienvenues.</li>
+      <li>Les objets des tickets sont ici redessinés à la main ; dans l'app ce seront les vrais objets 3D déjà utilisés sur le plancher.</li>
+    </ul></div></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.14)', grid: 'rgba(255,255,255,0.08)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#26262b', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', steel: '#52525b' };
+  const TYPE = { build: { col: '#4ade80', name: 'Build' }, fix: { col: '#f87171', name: 'Fix' }, review: { col: '#facc15', name: 'Review' }, think: { col: '#60a5fa', name: 'Think' } };
+  const HUE = { agent: '#a78bfa', skill: '#38bdf8', gate: C.warn, zone: '#60a5fa', belt: '#a1a1aa', arm: '#a1a1aa', exit: C.ok };
+  /* signs, as strokes in a 24 by 24 box */
+  const G = {
+    build: ['M13.5 3.5l7 7-2.8 2.8-2.1-2.1-8.5 8.5a2 2 0 0 1-2.8-2.8l8.5-8.5-2.1-2.1z'],
+    fix: ['M12 7a4 5 0 0 1 4 5v3a4 4 0 0 1-8 0v-3a4 5 0 0 1 4-5z', 'M8 11H4.5M8 15H4.5M16 11h3.5M16 15h3.5M9.5 6.5L8 4.5M14.5 6.5L16 4.5'],
+    review: ['M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z', 'M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z'],
+    think: ['M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.300 1 2.100h5c0-.8.4-1.600 1-2.100A6 6 0 0 0 12 3z', 'M9.5 18.500h5M10.500 21h3'],
+    agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5v-6A2.5 2.5 0 0 1 7.5 8z', 'M12 8V4.6', 'M9.5 16.2h5'],
+    skill: ['M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.3-.7-.7-2.3z'],
+    gate: ['M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.500-7-4.500-7-8.800V6z', 'M8.8 12l2.3 2.3 4.2-4.4'],
+    zone: ['M4 4h16v16H4z'],
+    belt: ['M4 7l5 5-5 5M10.500 7l5 5-5 5M17 7l4 5-4 5'],
+    arm: ['M6 18a2.500 2.500 0 1 0 0.010 0', 'M7.800 16.200L17 7', 'M17 4.500a2.500 2.500 0 1 0 0.010 0'],
+    exit: ['M4 12h11M11 7l5 5-5 5', 'M20 4v16'],
+    factory: ['M3 20V11l5 3v-3l5 3V6h5v14z', 'M2 20h20'],
+    hat: ['M5 15.500a7 7 0 0 1 14 0z', 'M2.500 15.500h19v2.500h-19z', 'M10.200 8.800V5.500h3.600v3.300', 'M7.300 10.500l1.700 5M16.700 10.500l-1.700 5'],
+    stack: ['M12 4l8 4-8 4-8-4z', 'M4 12l8 4 8-4', 'M4 16l8 4 8-4'],
+  };
+  const glyph = (k, x, y, size, col, w = 2, fill = 'none') => `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="${fill}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${(G[k] || []).map((d) => `<path d="${d}"/>`).join('')}</g>`;
+
+  // ---------- the floor of the prototype ----------
+  const T = 30, OX = 220, OY = 70;
+  const M = [
+    { id: 'todo', kind: 'zone', x: 1, y: 0, w: 3, h: 3, name: 'Todo' },
+    { id: 'b1', kind: 'belt', x: 4, y: 1, dir: 'e' }, { id: 'b2', kind: 'belt', x: 5, y: 1, dir: 'e' }, { id: 'b3', kind: 'belt', x: 6, y: 1, dir: 'e' },
+    { id: 'a1', kind: 'arm', x: 7, y: 1, dir: 'e' },
+    { id: 'dev', kind: 'station', exec: 'agent', x: 8, y: 0, w: 5, h: 4, name: 'Build', ref: 'builder' },
+    { id: 'a2', kind: 'arm', x: 13, y: 1, dir: 'e' },
+    { id: 'rev', kind: 'station', exec: 'skill', x: 14, y: 0, w: 5, h: 4, name: 'Review', ref: 'pr-review' },
+    { id: 'a3', kind: 'arm', x: 19, y: 1, dir: 'e' },
+    { id: 'chk', kind: 'station', exec: 'gate', x: 20, y: 0, w: 4, h: 4, name: 'Check spec' },
+    { id: 'a4', kind: 'arm', x: 24, y: 1, dir: 'e' },
+    { id: 'out', kind: 'exit', x: 25, y: 0, w: 3, h: 3, name: 'Exit' },
+    { id: 'a5', kind: 'arm', x: 21, y: 4, dir: 's' },
+    ...[21, 20, 19, 18, 17, 16, 15, 14].map((x, i) => ({ id: `r${i}`, kind: 'belt', x, y: 5, dir: 'w' })),
+    { id: 'rew', kind: 'zone', x: 11, y: 4, w: 3, h: 3, name: 'Rework' },
+  ].map((m) => ({ w: 1, h: 1, ...m }));
+  const TK = [
+    { id: 't5', n: 5, type: 'build', title: 'Activation date: rule for the first quote', at: 'todo', x: 2, y: 1.200 },
+    { id: 't12', n: 12, type: 'fix', title: 'Fix the tariff rounding', at: 'todo', x: 3, y: 2.100 },
+    { id: 't18', n: 18, type: 'build', title: 'Export the stats page', at: 'b2', x: 5.500, y: 1.500 },
+    { id: 't21', n: 21, type: 'review', title: 'Review the cache pull request', at: 'dev', x: 9.600, y: 2.300 },
+    { id: 't27', n: 27, type: 'think', title: 'How should archives be purged?', at: 'rev', x: 15.600, y: 2.300 },
+    { id: 't33', n: 33, type: 'fix', title: 'Login loop on expired sessions', at: 'chk', x: 21.500, y: 2.300 },
+    { id: 't40', n: 40, type: 'build', title: 'A Desk to create tickets from the floor', at: 'rew', x: 12.500, y: 5.500 },
+  ];
+  const byId = (id) => M.find((m) => m.id === id) || TK.find((t) => t.id === id);
+  const kindOf = (m) => (m.kind === 'station' ? m.exec : m.kind);
+  const kindName = (m) => ({ agent: 'Agent station', skill: 'Skill station', gate: 'Gate', zone: 'Zone', belt: 'Belt', arm: 'Arm', exit: 'Exit' }[kindOf(m)]);
+  const where = (t) => { const m = byId(t.at); return m.kind === 'belt' ? 'on a belt' : `in ${m.name}`; };
+
+  const st = { build: false, path: 'root', sel: { kind: '', ids: [] }, groups: Array(10).fill(null), hidden: false, cut: 'step', kb: 'auto', layout: 'azerty', how: 'default', marquee: null, tool: '', note: '' };
+  st.groups[0] = { kind: 'machines', ids: ['dev'] }; st.groups[1] = { kind: 'tickets', ids: ['t5'] }; st.groups[3] = { kind: 'tickets', ids: ['t12', 't33', 't18'] };
+
+  const px = (v) => OX + v * T, py = (v) => OY + v * T;
+  function token(t, cx, cy, s = 20, sel = false) {
+    const col = TYPE[t.type].col, h = s / 2;
+    return `${sel ? `<circle cx="${cx}" cy="${cy}" r="${h + 6}" fill="none" stroke="#fff" stroke-width="2.500"/>` : ''}<rect x="${cx - h + 1}" y="${cy - h + 2.500}" width="${s}" height="${s}" rx="${s * 0.28}" fill="rgba(0,0,0,0.5)"/><rect x="${cx - h}" y="${cy - h}" width="${s}" height="${s}" rx="${s * 0.28}" fill="${col}"/>${glyph(t.type, cx - s * 0.36, cy - s * 0.36, s * 0.72, '#18181b', 2.400)}`;
+  }
+  function drawFloor() {
+    const b = st.build, sel = new Set(st.sel.ids);
+    let s = `<rect width="1280" height="680" fill="${C.floor}"/>`;
+    if (b) { let g = ''; for (let x = OX % T; x < 1280; x += T) g += `M${x} 0 v680 `; for (let y = OY % T; y < 680; y += T) g += `M0 ${y} h1280 `; s += `<path d="${g}" stroke="${C.grid}"/>`; }
+    else { s += '<radialGradient id="lit" cx="50%" cy="34%" r="60%"><stop offset="0" stop-color="#fff" stop-opacity="0.05"/><stop offset="1" stop-color="#000" stop-opacity="0.22"/></radialGradient><rect width="1280" height="680" fill="url(#lit)"/>'; for (let x = OX % T; x < 1280; x += T) for (let y = OY % T; y < 680; y += T) s += `<circle cx="${x}" cy="${y}" r="1" fill="${C.dot}"/>`; }
+    for (const m of M) {
+      const X = px(m.x), Y = py(m.y), W = m.w * T, H = m.h * T, k = kindOf(m), hue = HUE[k];
+      if (m.kind === 'belt') {
+        s += `<rect x="${X}" y="${Y}" width="${T}" height="${T}" fill="${C.belt}"/><path d="M${X} ${Y + 1.500} h${T} M${X} ${Y + T - 1.500} h${T}" stroke="${C.edge}" stroke-width="3"/>`;
+        for (const o of [8, 21]) s += `<path transform="rotate(${m.dir === 'w' ? 180 : 0} ${X + o} ${Y + T / 2})" d="M${X + o - 3} ${Y + T / 2 - 6} l5 6 -5 6" fill="none" stroke="${C.chev}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+      } else if (m.kind === 'arm') {
+        const [dx, dy] = m.dir === 's' ? [0, 1] : [1, 0], bx = X + T / 2, by = Y + T / 2;
+        s += `<path d="M${bx - dx * 10} ${by - dy * 10} L${bx + dx * 13} ${by + dy * 13}" stroke="${C.steel}" stroke-width="8" stroke-linecap="round"/><circle cx="${bx + dx * 14}" cy="${by + dy * 14}" r="5.500" fill="rgba(24,24,27,0.4)" stroke="${C.ink}" stroke-width="1.800"/><circle cx="${bx - dx * 9}" cy="${by - dy * 9}" r="7" fill="${C.body}" stroke="${C.ink2}" stroke-width="2"/>`;
+      } else if (m.kind === 'zone') {
+        s += `<rect x="${X + 3}" y="${Y + 3}" width="${W - 6}" height="${H - 6}" rx="4" fill="rgba(96,165,250,0.06)" stroke="${hue}" stroke-opacity="0.7" stroke-width="1.600" stroke-dasharray="8 6"/><text x="${X + 10}" y="${Y + 18}" font-family="'JetBrains Mono', monospace" font-size="8.500" font-weight="700" fill="${hue}" letter-spacing="1.500">${m.name.toUpperCase()}</text>`;
+      } else if (m.kind === 'exit') {
+        s += `<rect x="${X + 3}" y="${Y + 3}" width="${W - 6}" height="${H - 6}" rx="8" fill="rgba(34,197,94,0.07)" stroke="${hue}" stroke-opacity="0.25" stroke-width="7"/><rect x="${X + 3}" y="${Y + 3}" width="${W - 6}" height="${H - 6}" rx="8" fill="none" stroke="${hue}" stroke-width="1.600"/><text x="${X + W / 2}" y="${Y + 20}" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="8" font-weight="700" fill="${hue}" letter-spacing="1.500">EXIT</text>`;
+      } else {
+        const gate = k === 'gate';
+        if (k === 'agent') s += `<path d="M${X + 24} ${Y + 3} v-7" stroke="${hue}" stroke-width="2" stroke-linecap="round"/><circle cx="${X + 24}" cy="${Y - 6}" r="2.800" fill="${hue}"/>`;
+        s += `<rect x="${X + 2}" y="${Y + 2}" width="${W - 4}" height="${H - 4}" rx="${k === 'agent' ? 15 : 9}" fill="${C.body}" stroke="${hue}" stroke-width="${gate ? 3 : 1.600}" ${gate ? 'stroke-dasharray="10 7"' : ''}/><rect x="${X + 9}" y="${Y + 9}" width="20" height="20" rx="5.500" fill="${hue}"/>${glyph(k, X + 12, Y + 12, 14, '#09090b', 2.400)}<text x="${X + 35}" y="${Y + 17}" font-family="'JetBrains Mono', monospace" font-size="6" font-weight="700" fill="${hue}" letter-spacing="1">${k.toUpperCase()}</text><text x="${X + 35}" y="${Y + 27.500}" font-family="Inter, sans-serif" font-size="10" font-weight="650" fill="${C.ink}">${esc(m.name)}</text><rect x="${X + 9}" y="${Y + 36}" width="${W - 18}" height="${H - 46}" rx="5" fill="rgba(0,0,0,0.38)"/>`;
+      }
+      if (b && sel.has(m.id)) s += `<rect x="${X - 1.500}" y="${Y - 1.500}" width="${W + 3}" height="${H + 3}" rx="${m.w > 1 ? 10 : 6}" fill="none" stroke="#fff" stroke-width="2.500"/>`;
+      if (!b && st.sel.kind === 'machines' && sel.has(m.id)) s += `<rect x="${X - 1.500}" y="${Y - 1.500}" width="${W + 3}" height="${H + 3}" rx="${m.w > 1 ? 10 : 6}" fill="none" stroke="#fff" stroke-width="2.500"/>`;
+    }
+    for (const t of TK) s += `<g opacity="${b ? 0.45 : 1}">${token(t, px(t.x), py(t.y), 20, !b && sel.has(t.id))}</g>`;
+    if (st.marquee) { const q = st.marquee, x = Math.min(q.x0, q.x1), y = Math.min(q.y0, q.y1); s += `<rect x="${x}" y="${y}" width="${Math.abs(q.x1 - q.x0)}" height="${Math.abs(q.y1 - q.y0)}" fill="rgba(96,165,250,0.12)" stroke="#60a5fa" stroke-width="1.500" stroke-dasharray="6 4"/>`; }
+    $('floor').innerHTML = s;
+  }
+
+  // ---------- the HUD's contour, and the tape that follows it ----------
+  const HL = 330, HR = 960, TOP_SIDE = 458, TOP_MID = 530, CUT = 30;
+  function contour() {
+    if (st.hidden) return [[0, 720], [1280, 720]];
+    return st.cut === 'cut'
+      ? [[0, TOP_SIDE], [HL - CUT, TOP_SIDE], [HL, TOP_SIDE + CUT], [HL, TOP_MID], [HR, TOP_MID], [HR, TOP_SIDE + CUT], [HR + CUT, TOP_SIDE], [1280, TOP_SIDE]]
+      : [[0, TOP_SIDE], [HL, TOP_SIDE], [HL, TOP_MID], [HR, TOP_MID], [HR, TOP_SIDE], [1280, TOP_SIDE]];
+  }
+  function drawEdge() {
+    const c = contour(), line = c.map((p) => p.join(' ')).join(' L'), poly = [[0, 40], [1280, 40], ...c.slice().reverse()].map((p) => p.join(',')).join(' ');
+    let s = '<defs><pattern id="hz" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="20" height="20" fill="#18181b"/><rect width="10" height="20" fill="#eab308"/></pattern><clipPath id="in"><polygon points="' + poly + '"/></clipPath></defs>';
+    /* the tape is drawn twice as wide and cut to the floor: it lies inside the contour, on the floor's side */
+    if (st.build) s += `<polygon points="${poly}" fill="none" stroke="url(#hz)" stroke-width="18" clip-path="url(#in)"/>`;
+    if (!st.hidden) s += `<path d="M${line}" fill="none" stroke="${st.build ? '#18181b' : C.edge}" stroke-width="1.500"/>`;
+    $('edge').innerHTML = s;
+  }
+
+  // ---------- keys: bound to where a key is, labelled by what it prints ----------
+  const CODES = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB'];
+  const LABELS = { azerty: 'AZERTQSDFGWXCVB'.split(''), qwerty: 'QWERTASDFGZXCVB'.split('') };
+  const keyOf = (i) => LABELS[st.layout][i];
+  function setLayout(l, how) { st.layout = l; st.how = how; paintAll(); }
+  if (navigator.keyboard && navigator.keyboard.getLayoutMap) navigator.keyboard.getLayoutMap().then((m) => { const q = m.get('KeyQ'); if (q && st.kb === 'auto') setLayout(q === 'a' ? 'azerty' : 'qwerty', 'read from the browser'); }).catch(() => {});
+
+  // ---------- menus: 5 by 3; the last row and Fit never move ----------
+  const FIT = 8, UNDO = 10, REDO = 11, NEXT = 13, LAST = 14;
+  function menuOf(c) {
+    const S = Array(15).fill(null), put = (i, label, tone, run, o = {}) => { S[i] = { label, tone, run, ...o }; };
+    const say = (m) => () => note(m), tool = (name) => () => { st.tool = st.tool === name ? '' : name; note(st.tool ? `${name}: click the floor to place one` : ''); };
+    put(FIT, 'Fit', 'plain', say('Fit: the whole floor in view'));
+    if (!c.build) {
+      put(NEXT, 'Next', 'warn', say('Next: goes to the next ticket that waits for you (N works too)'));
+      if (c.tickets.length === 1) {
+        const t = c.tickets[0], m = byId(t.at);
+        if (m.kind === 'zone') put(0, 'Release', 'go', say('Release: the zone lets it go'));
+        else if (kindOf(m) === 'gate') { put(0, 'Approve', 'go', say('Approve')); put(1, 'Reject', 'danger', say('Reject')); }
+        else if (m.kind === 'station') put(0, 'Run again', 'go', say('Run again'), { disabled: true });
+        put(5, 'Open', 'ticket', say('Open: the ticket over the floor (Enter works too)')); put(6, 'Star', 'plan', say('Star')); put(7, 'Set aside', 'plan', say('Set aside')); put(9, 'Give back', 'plain', say('Give back: out of the Factory'));
+        put(LAST, 'Previous', 'plain', () => select('', []), { esc: true });
+        return { title: 'Ticket', slots: S };
+      }
+      if (c.tickets.length > 1) {
+        put(0, `Release ${c.tickets.filter((t) => byId(t.at).kind === 'zone').length}`, 'go', say('Release: those of them that wait in a zone')); put(6, 'Star', 'plan', say('Star them all')); put(7, 'Set aside', 'plan', say('Set aside those that can be')); put(9, 'Give back', 'plain', say('Give them back'));
+        put(LAST, 'Previous', 'plain', () => select('', []), { esc: true });
+        return { title: `${c.tickets.length} tickets`, slots: S };
+      }
+      if (c.machines.length === 1) {
+        const m = c.machines[0], k = kindOf(m);
+        if (m.kind === 'zone') put(0, 'Release 1', 'go', say('Release 1: the ticket that waited longest'));
+        else if (k === 'agent' || k === 'skill') put(0, 'Stop', 'danger', say('Stop: takes tickets in, starts nothing'));
+        if (m.kind !== 'belt') put(5, 'Edit', 'station', say('Edit: its popup (Enter works too)'));
+        put(LAST, 'Previous', 'plain', () => select('', []), { esc: true });
+        return { title: 'Machine', slots: S };
+      }
+      put(0, 'Intake', 'ticket', say('Intake: hand tickets over')); put(1, 'Tickets', 'ticket', say('Tickets: the list (Tab works too)')); put(2, 'Stats', 'plain', say('Stats')); put(3, 'Limits', 'plain', say('Limits'));
+      put(LAST, 'Build', 'go', () => setBuild(true));
+      return { title: 'Factory', slots: S };
+    }
+    S[NEXT] = null;
+    put(UNDO, 'Undo', 'plain', say('Undo'), { disabled: !c.machines.length }); put(REDO, 'Redo', 'plain', say('Redo'), { disabled: true });
+    if (c.machines.length) {
+      const one = c.machines.length === 1 ? c.machines[0] : null, belts = c.machines.every((m) => m.kind === 'belt');
+      if (one && (one.kind === 'belt' || one.kind === 'arm')) put(0, 'Turn', 'move', say('Turn: a quarter turn'));
+      if (belts) put(1, 'Speed up', 'move', say('Speed up: fast belts'));
+      put(4, 'Remove', 'danger', say('Remove (Delete works too)'));
+      if (one && one.kind !== 'belt') put(5, 'Edit', 'station', say('Edit: its popup'));
+      put(LAST, 'Previous', 'plain', () => select('', []), { esc: true });
+      return { title: c.machines.length > 1 ? 'Selection' : 'Machine', trail: ['Factory', 'Build'], slots: S };
+    }
+    const place = (i, name, tone) => put(i, name, tone, tool(name), { active: st.tool === name });
+    if (c.path === 'move') { ['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'].forEach((n, i) => place(i, n, 'move')); place(5, 'Toll', 'move'); place(6, 'Set', 'move'); put(7, 'Face', 'move', say('Face: the way the next machine points')); put(LAST, 'Previous', 'plain', () => go('root'), { esc: true }); return { title: 'Move', trail: ['Factory', 'Build'], slots: S }; }
+    if (c.path === 'station') { ['Agent', 'Skill', 'Panel', 'Script', 'Gate'].forEach((n, i) => place(i, n, 'station')); place(5, 'Status', 'station'); put(LAST, 'Previous', 'plain', () => go('root'), { esc: true }); return { title: 'Station', trail: ['Factory', 'Build'], slots: S }; }
+    if (c.path === 'area') { ['Zone', 'Exit', 'Label'].forEach((n, i) => place(i, n, 'area')); put(LAST, 'Previous', 'plain', () => go('root'), { esc: true }); return { title: 'Area', trail: ['Factory', 'Build'], slots: S }; }
+    put(0, 'Move', 'move', () => go('move'), { sub: true }); put(1, 'Station', 'station', () => go('station'), { sub: true }); put(2, 'Area', 'area', () => go('area'), { sub: true }); put(3, 'Plan', 'plan', say('Plan: lay a workflow down')); place(4, 'Erase', 'danger');
+    put(LAST, 'Done', 'go', () => setBuild(false), { esc: true });
+    return { title: 'Build', trail: ['Factory'], slots: S };
+  }
+  const ctxNow = () => ({ build: st.build, path: st.path, tickets: st.sel.kind === 'tickets' ? st.sel.ids.map(byId) : [], machines: st.sel.kind === 'machines' ? st.sel.ids.map(byId) : [] });
+  const TONE = { go: ['#22c55e', '#052e16', true], danger: ['#f87171', '#f87171'], move: ['#60a5fa', '#bfdbfe'], station: ['#a78bfa', '#ddd6fe'], area: ['#2dd4bf', '#99f6e4'], plan: ['#facc15', '#fde68a'], ticket: ['#818cf8', '#c7d2fe'], warn: ['#facc15', '#fde68a'], plain: ['#52525b', '#e4e4e7'] };
+  function cardHtml(menu, live) {
+    return `<div class="trail">${(menu.trail || []).map((x) => `<span>${esc(x)}</span><i>›</i>`).join('')}<b>${esc(menu.title)}</b></div><div class="cmds">${menu.slots.map((c, i) => {
+      if (!c) return '<span class="cmd none"></span>';
+      const [col, ink, solid] = TONE[c.tone];
+      return `<button type="button" class="cmd${c.active ? ' on' : ''}" ${live ? `data-slot="${i}"` : 'tabindex="-1"'} ${c.disabled ? 'disabled' : ''} style="--c:${col};--i:${solid ? ink : ink};${solid ? `background:${col};` : ''}"><kbd>${c.esc && i === LAST ? `${keyOf(i)} Esc` : keyOf(i)}</kbd><span>${esc(c.label)}</span>${c.sub ? '<i>›</i>' : ''}</button>`;
+    }).join('')}</div>`;
+  }
+
+  // ---------- avatars ----------
+  function portrait(d) {
+    const hue = d.hue, id = `av${Math.random().toString(36).slice(2, 8)}`;
+    let inner = '';
+    if (d.kind === 'ticket') inner = `<g class="tilt"><g transform="translate(4 6)" opacity="0.55">${glyph(d.type, 33, 30, 84, '#000', 5, '#000')}</g>${glyph(d.type, 33, 30, 84, '#0b0b0d', 4.500, hue)}<g opacity="0.5">${glyph(d.type, 33, 30, 84, '#fff', 1.200)}</g></g>`;
+    else if (d.kind === 'agent') inner = `<g class="bob">${glyph('agent', 27, 26, 96, hue, 2)}<circle class="pulse" cx="75" cy="40" r="5" fill="${hue}"/><g class="blink"><circle cx="61" cy="78" r="5" fill="${hue}"/><circle cx="89" cy="78" r="5" fill="${hue}"/></g></g>`;
+    else if (d.kind === 'skill') inner = `<g class="swing" style="transform-origin:75px 78px">${glyph('skill', 31, 34, 88, hue, 2, 'rgba(56,189,248,0.15)')}</g>`;
+    else if (d.kind === 'gate') inner = `<g class="bob">${glyph('gate', 29, 30, 92, hue, 2, 'rgba(250,204,21,0.12)')}</g>`;
+    else if (d.kind === 'zone') inner = `<rect class="march" x="35" y="38" width="80" height="80" rx="6" fill="rgba(96,165,250,0.08)" stroke="${hue}" stroke-width="3" stroke-dasharray="12 9"/><rect x="62" y="74" width="26" height="22" rx="4" fill="${hue}"/><path d="M67 74v-7a8 8 0 0 1 16 0v7" fill="none" stroke="${hue}" stroke-width="4"/>`;
+    else if (d.kind === 'belt') inner = `<rect x="0" y="58" width="150" height="44" fill="#27272a"/><path d="M0 60h150M0 100h150" stroke="#3f3f46" stroke-width="5"/><g class="slide">${[-1, 0, 1, 2, 3, 4].map((i) => `<path d="M${10 + i * 30} 68 l10 12 -10 12" fill="none" stroke="#a1a1aa" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</g>`;
+    else if (d.kind === 'arm') inner = `<g class="sweep" style="transform-origin:50px 104px"><path d="M50 104 L104 56" stroke="#52525b" stroke-width="15" stroke-linecap="round"/><path d="M50 104 L104 56" stroke="${hue}" stroke-width="3.500" stroke-linecap="round"/><circle cx="104" cy="56" r="11" fill="rgba(24,24,27,0.4)" stroke="#fafafa" stroke-width="3"/></g><circle cx="50" cy="104" r="14" fill="#26262b" stroke="${hue}" stroke-width="3.500"/>`;
+    else if (d.kind === 'exit') inner = `<rect class="pulse" x="36" y="40" width="78" height="78" rx="12" fill="rgba(34,197,94,0.1)" stroke="${hue}" stroke-opacity="0.3" stroke-width="12"/><rect x="36" y="40" width="78" height="78" rx="12" fill="none" stroke="${hue}" stroke-width="3"/><g class="slide2">${glyph('exit', 51, 55, 48, hue, 2.400)}</g>`;
+    else if (d.kind === 'stack') inner = `<g class="bob">${glyph('stack', 31, 30, 88, hue, 1.800, 'rgba(255,255,255,0.06)')}</g><circle cx="112" cy="46" r="17" fill="${hue}"/><text x="112" y="52" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="17" font-weight="700" fill="#18181b">${d.count}</text>`;
+    else if (d.kind === 'hat') inner = `<g class="bob">${glyph('hat', 27, 26, 96, hue, 2, 'rgba(234,179,8,0.18)')}</g><rect x="0" y="134" width="150" height="9" fill="url(#${id}h)"/>`;
+    else inner = `<g class="bob">${glyph('factory', 27, 30, 96, hue, 1.800, 'rgba(74,222,128,0.1)')}</g><circle class="smoke" cx="107" cy="48" r="5" fill="${hue}" opacity="0.5"/><circle class="smoke s2" cx="107" cy="48" r="4" fill="${hue}" opacity="0.4"/>`;
+    return `<svg viewBox="0 0 150 170" class="av" role="img" aria-label="${esc(d.label)}"><defs><radialGradient id="${id}" cx="50%" cy="46%" r="62%"><stop offset="0" stop-color="${hue}" stop-opacity="0.42"/><stop offset="0.55" stop-color="${hue}" stop-opacity="0.12"/><stop offset="1" stop-color="${hue}" stop-opacity="0"/></radialGradient><pattern id="${id}h" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#18181b"/><rect width="7" height="14" fill="#eab308"/></pattern></defs><rect width="150" height="170" fill="#09090b"/><rect width="150" height="170" fill="url(#${id})"/>${inner}<text x="75" y="160" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="700" fill="${hue}" letter-spacing="1.200">${esc(d.label.toUpperCase())}</text></svg>`;
+  }
+  const portraitOf = (x) => ('type' in x ? { kind: 'ticket', type: x.type, hue: TYPE[x.type].col, label: `#${x.n} ${TYPE[x.type].name}` } : { kind: kindOf(x), hue: HUE[kindOf(x)], label: kindName(x) });
+  function portraitNow() {
+    const items = st.sel.ids.map(byId);
+    if (items.length > 1) return portrait({ kind: 'stack', hue: st.sel.kind === 'tickets' ? '#818cf8' : '#a1a1aa', count: items.length, label: st.sel.kind === 'tickets' ? 'Tickets' : 'Machines' });
+    if (items.length === 1) return portrait(portraitOf(items[0]));
+    return st.build ? portrait({ kind: 'hat', hue: '#eab308', label: 'Build' }) : portrait({ kind: 'factory', hue: '#4ade80', label: 'Factory' });
+  }
+
+  // ---------- the three blocks ----------
+  const icon = (x, size = 22) => ('type' in x ? `<svg width="${size}" height="${size}" viewBox="-2 -2 28 28"><rect x="0" y="0" width="24" height="24" rx="6.500" fill="${TYPE[x.type].col}"/>${glyph(x.type, 3.500, 3.500, 17, '#18181b', 2.400)}</svg>` : `<svg width="${size}" height="${size}" viewBox="-2 -2 28 28"><rect x="0" y="0" width="24" height="24" rx="6.500" fill="#18181b" stroke="${HUE[kindOf(x)]}" stroke-width="1.800"/>${glyph(kindOf(x), 4, 4, 16, HUE[kindOf(x)], 2.200)}</svg>`);
+  const tipOf = (x) => ('type' in x ? `<b>#${x.n} ${esc(x.title)}</b><span>${TYPE[x.type].name} · ${esc(where(x))}</span>` : `<b>${esc(x.name || kindName(x))}</b><span>${kindName(x)}${x.ref ? ` · ${esc(x.ref)}` : ''}</span>`);
+  function drawLeft() {
+    $('hud-l').innerHTML = `<div class="clock"><span class="dot"></span><time id="clock"></time><span class="sub">local time</span></div><div class="lrow"><div class="lcol"><div class="tog">${['Aa', '↔', '#', '▦'].map((x, i) => `<span class="${i % 2 ? 'on' : ''}">${x}</span>`).join('')}</div><div class="mini"><svg viewBox="0 0 200 110">${M.map((m) => `<rect x="${20 + m.x * 5.600}" y="${30 + m.y * 5.600}" width="${m.w * 5.600}" height="${m.h * 5.600}" fill="${m.kind === 'belt' || m.kind === 'arm' ? '#3f3f46' : HUE[kindOf(m)]}" opacity="0.8"/>`).join('')}<rect x="14" y="18" width="172" height="70" fill="none" stroke="#fafafa" stroke-width="1.200"/></svg></div></div><div class="layers">${['Floor', 'Standing now', 'Cost', 'Run time', 'Human wait'].map((x, i) => `<span class="${i ? '' : 'on'}">${x}</span>`).join('')}<span class="zoom">−　⤢　+</span></div></div>`;
+    tick();
+  }
+  function drawCentre() {
+    const items = st.sel.ids.map(byId), n = items.length;
+    let body;
+    if (n > 1) body = `<div class="ctitle">${n} ${st.sel.kind === 'tickets' ? 'tickets' : 'machines'} selected</div><div class="wire">${items.map((x) => `<button type="button" class="unit" data-unit="${x.id}">${icon(x, 34)}${'type' in x ? `<small>${x.n}</small>` : ''}</button>`).join('')}</div><div class="chint">Click one to keep only it. Shift+click takes it out.</div>`;
+    else if (n === 1 && 'type' in items[0]) { const t = items[0]; body = `<div class="ctitle"><span class="num">#${t.n}</span> ${esc(t.title)}</div><div class="cline">${esc(byId(t.at).name || 'A belt')} · ${esc(where(t))}</div><div class="cstats"><span>${TYPE[t.type].name}</span><span>No priority</span><span>Not estimated</span></div>`; }
+    else if (n === 1) { const m = items[0]; body = `<div class="ctitle">${esc(m.name || kindName(m))}</div><div class="cline">${kindName(m)}${m.ref ? ` · ${esc(m.ref)}` : ''}</div><div class="cstats"><span>${TK.filter((t) => t.at === m.id).length} tickets here</span></div>`; }
+    else body = `<div class="ctitle">${st.build ? 'Build' : 'Factory floor'}</div><div class="cline">${st.build ? 'Pick a machine to place, or select some: Shift adds to the selection.' : 'Click to select, drag a frame to select several tickets: Shift adds to the selection.'}</div><div class="cstats"><span>tickets <b>7</b></span><span>running <b>1/3</b></span><span>runs this hour <b>4/20</b></span><span>waiting for you <b>1</b></span></div>`;
+    $('hud-c').innerHTML = `<div class="cbody">${body}<div class="note" id="note">${esc(st.note)}</div></div><div class="avatar">${portraitNow()}</div>`;
+  }
+  function drawRight() { $('hud-r').innerHTML = cardHtml(menuOf(ctxNow()), true); }
+  /* ten places, always the same; a group shows only when it holds something, and never changes size */
+  function drawChips() {
+    $('chips').innerHTML = st.groups.map((g, i) => {
+      if (!g) return '<span class="chip none"></span>';
+      const items = g.ids.map(byId), one = items.length === 1 ? items[0] : null, same = st.sel.kind === g.kind && st.sel.ids.length === g.ids.length && g.ids.every((id) => st.sel.ids.includes(id));
+      return `<button type="button" class="chip${same ? ' on' : ''}" data-group="${i}"><kbd>${(i + 1) % 10}</kbd>${icon(one || items[0], 20)}<b>${one ? ('type' in one ? `#${one.n}` : '') : `×${items.length}`}</b></button>`;
+    }).join('');
+  }
+  function paintAll() {
+    const s = $('stage');
+    s.classList.toggle('building', st.build); s.classList.toggle('nohud', st.hidden); s.classList.toggle('cut', st.cut === 'cut');
+    drawFloor(); drawEdge(); drawLeft(); drawCentre(); drawRight(); drawChips();
+    $('handle').innerHTML = `${st.hidden ? '▴ Console' : '▾ Hide'} <kbd>U</kbd>`;
+    for (const b of document.querySelectorAll('[data-kb]')) b.setAttribute('aria-pressed', String(b.dataset.kb === st.kb));
+    for (const b of document.querySelectorAll('[data-cut]')) b.setAttribute('aria-pressed', String(b.dataset.cut === st.cut));
+    $('kb-said').textContent = st.kb === 'auto' ? `${st.layout.toUpperCase()} (${st.how})` : '';
+    gallery(); picksOut();
+  }
+  const tick = () => { const c = $('clock'); if (c) c.textContent = new Date().toLocaleTimeString('fr-FR', { hour12: false }); };
+  setInterval(tick, 1000);
+
+  // ---------- what the page does ----------
+  let noteT = 0;
+  function note(m) { st.note = m; const n = $('note'); if (n) n.textContent = m; clearTimeout(noteT); if (m) noteT = setTimeout(() => { st.note = ''; const q = $('note'); if (q) q.textContent = ''; }, 2600); }
+  function select(kind, ids) { st.sel = { kind: ids.length ? kind : '', ids }; st.tool = ''; drawFloor(); drawCentre(); drawRight(); drawChips(); }
+  function setBuild(on) { st.build = on; st.path = 'root'; st.sel = { kind: '', ids: [] }; st.tool = ''; paintAll(); }
+  function go(path) { st.path = path; st.tool = ''; drawRight(); }
+  /** Shift adds what is not there and takes out what is: only among things of the kind already selected. */
+  function pick(kind, ids, shift) {
+    if (!shift || st.sel.kind !== kind) return select(kind, ids);
+    const cur = st.sel.ids.slice();
+    if (ids.length === 1 && cur.includes(ids[0])) return select(kind, cur.filter((x) => x !== ids[0]));
+    for (const id of ids) if (!cur.includes(id)) cur.push(id);
+    select(kind, cur);
+  }
+  const at = (e) => { const r = $('stage').getBoundingClientRect(), k = r.width / 1280; return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k - 40 }; };
+  const ticketAt = (p) => TK.find((t) => Math.hypot(px(t.x) - p.x, py(t.y) - p.y) < 14);
+  const machineAt = (p) => M.slice().reverse().find((m) => p.x >= px(m.x) && p.x <= px(m.x + m.w) && p.y >= py(m.y) && p.y <= py(m.y + m.h));
+  let press = null;
+  $('floor').addEventListener('pointerdown', (e) => { const p = at(e); press = { ...p, moved: false, shift: e.shiftKey }; $('floor').setPointerCapture(e.pointerId); });
+  $('floor').addEventListener('pointermove', (e) => {
+    if (!press) return;
+    const p = at(e);
+    if (!press.moved && Math.hypot(p.x - press.x, p.y - press.y) < 5) return;
+    press.moved = true; st.marquee = { x0: press.x, y0: press.y, x1: p.x, y1: p.y }; drawFloor();
+  });
+  $('floor').addEventListener('pointerup', (e) => {
+    if (!press) return;
+    const p = at(e), sh = press.shift || e.shiftKey;
+    if (press.moved) {
+      const q = st.marquee, x0 = Math.min(q.x0, q.x1), x1 = Math.max(q.x0, q.x1), y0 = Math.min(q.y0, q.y1), y1 = Math.max(q.y0, q.y1); st.marquee = null;
+      if (st.build) pick('machines', M.filter((m) => px(m.x + m.w / 2) >= x0 && px(m.x + m.w / 2) <= x1 && py(m.y + m.h / 2) >= y0 && py(m.y + m.h / 2) <= y1).map((m) => m.id), sh);
+      else pick('tickets', TK.filter((t) => px(t.x) >= x0 && px(t.x) <= x1 && py(t.y) >= y0 && py(t.y) <= y1).map((t) => t.id), sh);
+      if (!st.sel.ids.length) drawFloor();
+    } else {
+      const t = st.build ? null : ticketAt(p), m = t ? null : machineAt(p);
+      if (t) pick('tickets', [t.id], sh); else if (m) pick('machines', [m.id], sh && st.build); else if (!sh) select('', []);
+    }
+    press = null;
+  });
+  const save = (i) => { if (st.sel.ids.length) { st.groups[i] = { kind: st.sel.kind, ids: st.sel.ids.slice() }; drawChips(); note(`Group ${(i + 1) % 10} saved`); } else note('Select something first'); };
+  const recall = (i) => { const g = st.groups[i]; if (!g) return; if ((g.kind === 'machines' && g.ids.length > 1 && !st.build)) st.build = true; if (g.kind === 'tickets' && st.build) st.build = false; st.path = 'root'; st.sel = { kind: g.kind, ids: g.ids.slice() }; paintAll(); };
+  $('stage').addEventListener('click', (e) => {
+    const slot = e.target.closest('[data-slot]'), unit = e.target.closest('[data-unit]'), grp = e.target.closest('[data-group]');
+    if (slot) { const c = menuOf(ctxNow()).slots[Number(slot.dataset.slot)]; if (c && !c.disabled) c.run(); if (c && c.run && !['Build', 'Done', 'Previous'].includes(c.label)) drawRight(); }
+    else if (unit) { hideTip(); if (e.shiftKey) select(st.sel.kind, st.sel.ids.filter((x) => x !== unit.dataset.unit)); else select(st.sel.kind, [unit.dataset.unit]); }
+    else if (grp) { hideTip(); if (e.shiftKey) save(Number(grp.dataset.group)); else recall(Number(grp.dataset.group)); }
+  });
+  $('handle').addEventListener('click', () => { st.hidden = !st.hidden; paintAll(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    /* the layout shows in the first letter typed on a key that differs between the two */
+    if (st.kb === 'auto' && e.key.length === 1) { const k = e.key.toLowerCase(), l = { KeyQ: { a: 'azerty', q: 'qwerty' }, KeyA: { q: 'azerty', a: 'qwerty' }, KeyW: { z: 'azerty', w: 'qwerty' }, KeyZ: { w: 'azerty', z: 'qwerty' } }[e.code]; if (l && l[k] && (l[k] !== st.layout || st.how === 'default')) setLayout(l[k], 'seen from a key'); }
+    const digit = /^Digit([0-9])$/.exec(e.code);
+    if (digit) { e.preventDefault(); const i = (Number(digit[1]) + 9) % 10; if (e.shiftKey) save(i); else recall(i); return; }
+    if (e.code === 'KeyU') { e.preventDefault(); st.hidden = !st.hidden; paintAll(); return; }
+    const menu = menuOf(ctxNow());
+    if (e.key === 'Escape') { const c = menu.slots[LAST]; if (c && c.esc) { e.preventDefault(); c.run(); } return; }
+    const i = CODES.indexOf(e.code), c = i >= 0 ? menu.slots[i] : null;
+    if (c && !c.disabled) { e.preventDefault(); c.run(); if (!['Build', 'Done', 'Previous'].includes(c.label)) drawRight(); }
+  });
+  /* a tooltip with its caret, over whatever is pointed at in the HUD */
+  function hideTip() { $('tip').classList.remove('on'); }
+  $('stage').addEventListener('pointerover', (e) => {
+    const unit = e.target.closest('[data-unit]'), grp = e.target.closest('[data-group]'), el = unit || grp;
+    if (!el) return hideTip();
+    let html;
+    if (unit) html = tipOf(byId(unit.dataset.unit));
+    else { const g = st.groups[Number(grp.dataset.group)], items = g.ids.map(byId); html = items.length === 1 ? tipOf(items[0]) : `<b>${items.length} ${g.kind}</b>${items.slice(0, 4).map((x) => `<span>${'type' in x ? `#${x.n} ${esc(x.title)}` : esc(x.name || kindName(x))}</span>`).join('')}${items.length > 4 ? `<span>and ${items.length - 4} more</span>` : ''}`; html += `<em>${(Number(grp.dataset.group) + 1) % 10} recalls · Shift+${(Number(grp.dataset.group) + 1) % 10} replaces</em>`; }
+    const tip = $('tip'), S = $('stage').getBoundingClientRect(), k = S.width / 1280, r = el.getBoundingClientRect();
+    tip.innerHTML = html; tip.classList.add('on');
+    const cx = (r.left + r.width / 2 - S.left) / k, top = (r.top - S.top) / k, w = tip.offsetWidth, x = Math.max(8, Math.min(1280 - w - 8, cx - w / 2));
+    tip.style.left = `${x}px`; tip.style.top = `${top - tip.offsetHeight - 9}px`; tip.style.setProperty('--caret', `${cx - x}px`);
+  });
+  $('stage').addEventListener('pointerleave', hideTip);
+
+  // ---------- the galleries under the scene ----------
+  function gallery() {
+    const t5 = byId('t5'), ctx = (o) => ({ build: false, path: 'root', tickets: [], machines: [], ...o });
+    const list = [['Plancher, rien de sélectionné', ctx({})], ['Un ticket à une porte', ctx({ tickets: [byId('t33')] })], ['Un ticket dans une zone', ctx({ tickets: [t5] })], ['Plusieurs tickets', ctx({ tickets: [t5, byId('t12'), byId('t18')] })], ['Une station', ctx({ machines: [byId('dev')] })], ['Build', ctx({ build: true })], ['Build › Move', ctx({ build: true, path: 'move' })], ['Build › Station', ctx({ build: true, path: 'station' })], ['Build › Area', ctx({ build: true, path: 'area' })], ['Build, des convoyeurs sélectionnés', ctx({ build: true, machines: [byId('b1'), byId('b2')] })]];
+    $('menus').innerHTML = list.map(([name, c]) => `<article class="card"><div class="card-head"><h3>${esc(name)}</h3></div><div class="mini-card fx">${cardHtml(menuOf(c), false)}</div></article>`).join('');
+  }
+  $('avs').innerHTML = [{ kind: 'factory', hue: '#4ade80', label: 'Factory' }, { kind: 'hat', hue: '#eab308', label: 'Build' }, ...['build', 'fix', 'review', 'think'].map((type, i) => ({ kind: 'ticket', type, hue: TYPE[type].col, label: `#${[5, 12, 21, 27][i]} ${TYPE[type].name}` })), { kind: 'stack', hue: '#818cf8', count: 3, label: 'Tickets' }, ...['dev', 'rev', 'chk', 'todo', 'b1', 'a1', 'out'].map((id) => portraitOf(byId(id)))].map((d) => `<figure>${portrait(d)}</figure>`).join('');
+
+  // ---------- the page's own controls ----------
+  $('kb').addEventListener('click', (e) => { const b = e.target.closest('[data-kb]'); if (!b) return; st.kb = b.dataset.kb; if (st.kb !== 'auto') { st.layout = st.kb; st.how = 'forced'; } paintAll(); });
+  $('cut').addEventListener('click', (e) => { const b = e.target.closest('[data-cut]'); if (!b) return; st.cut = b.dataset.cut; try { localStorage.setItem('factory-hud-cut', st.cut); } catch { /* not kept */ } paintAll(); });
+  try { st.cut = localStorage.getItem('factory-hud-cut') === 'cut' ? 'cut' : 'step'; } catch { /* the default */ }
+  const summary = () => `HUD — Contour : ${st.cut === 'cut' ? 'C2 (Pans coupés)' : 'C1 (Marches droites)'} · Clavier vu : ${st.layout.toUpperCase()}`;
+  function picksOut() { $('picks').innerHTML = `Contour <b>${st.cut === 'cut' ? 'C2' : 'C1'}</b>`; }
+  $('copy').addEventListener('click', () => { const said = $('said'), line = summary(); try { navigator.clipboard.writeText(line).then(() => { said.textContent = 'Copié : colle-le dans la conversation.'; }, () => { said.textContent = line; }); } catch { said.textContent = line; } });
+  function fit() { const w = $('wrap'), k = w.clientWidth / 1280; $('stage').style.transform = `scale(${k})`; w.style.height = `${720 * k}px`; }
+  window.addEventListener('resize', fit);
+  paintAll(); fit();
+})();
+</script>

@@ -19,6 +19,8 @@ export interface StepExecutionInput {
   workflowRunId: string;
   stepRunId: string;
   step: WorkflowStep;
+  /** Agent steps: run on this model instead of the persona's. Unset by workflows; the Factory sets it per station. */
+  modelOverride?: string | null;
   workflowContext: {
     workflowName: string;
     stepName: string;

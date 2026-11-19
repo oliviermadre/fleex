@@ -40,6 +40,7 @@ import {
   type TimelineNames,
 } from './buildTimeline';
 import { todoMarks, type TodoMark } from './todoMarks';
+import { useFactoryStationRuns } from '../../../factory/useFactoryStationRuns';
 
 /** Enough for any real ticket's history (the server clamps to 1000). */
 const ACTIVITY_LIMIT = 1000;
@@ -142,6 +143,8 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
 
   // ── Executions (store, live via the agent-events channel) ──
   const executions = useAgentEventStore((s) => s.executionsByTicket[ticketId] ?? EMPTY_EXECUTIONS);
+  /* experimental Factory: which of these a station started, so the timeline names the station (empty when it is off) */
+  const stationRuns = useFactoryStationRuns(ticketId, `${executions.length}:${executions.filter((e) => e.status === 'running').length}`);
   useEffect(() => {
     const s = useAgentEventStore.getState();
     void s.loadExecutionsForTicket(ticketId);
@@ -268,10 +271,11 @@ export function useTicketTimeline(task: WorkTask, deliverables: readonly TicketD
         prDates,
         sessions,
         names,
+        stationRuns,
       },
       now,
     );
-  }, [ticket, ticketId, activities, comments, deliverables, seen, executions, mentions, runsWithSteps, task.prs, prDates, sessions, names, now]);
+  }, [ticket, ticketId, activities, comments, deliverables, seen, executions, mentions, runsWithSteps, task.prs, prDates, sessions, names, stationRuns, now]);
 
   const marks = useMemo(() => todoMarks(todoEvents), [todoEvents]);
 

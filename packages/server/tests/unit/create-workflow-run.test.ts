@@ -31,6 +31,18 @@ describe('CreateWorkflowRunUseCase', () => {
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_created' }));
   });
 
+  it('refuses a ticket something else is routing, before reading anything about it', async () => {
+    const runStore = { getActiveByTicket: vi.fn(), save: vi.fn() };
+    const uc = new CreateWorkflowRunUseCase(
+      { getById: vi.fn() } as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never, { execute: vi.fn() } as never,
+      (ticketId) => (ticketId === 't-floor' ? 'On the factory floor' : null),
+    );
+    await expect(uc.execute({ ticketId: 't-floor', templateId: 'tmpl-1', triggeredBy: '@john', triggeredFrom: 'api' }))
+      .rejects.toMatchObject({ code: 'WORKFLOW_REFUSED', message: 'On the factory floor' });
+    expect(runStore.getActiveByTicket).not.toHaveBeenCalled();
+    expect(runStore.save).not.toHaveBeenCalled();
+  });
+
   it('throws WorkflowRunAlreadyActiveError if a run is active', async () => {
     const templateStore = { getById: vi.fn().mockResolvedValue(template) };
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue({ id: 'existing' }), save: vi.fn() };

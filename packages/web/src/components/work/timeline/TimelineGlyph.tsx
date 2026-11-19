@@ -14,6 +14,7 @@ import { ClaudeIcon, TerminalIcon } from '../../sidebar/icons';
 import { CommentIcon, DeliverableIcon } from '../../ui/icons/ActivityIcons';
 import { useDeliverableTypesStore } from '../../../stores/deliverableTypesStore';
 import type { TimelineGlyph as Glyph } from './buildTimeline';
+import { FactoryIcon } from '../../../factory/FactoryIcon';
 
 const PR_HUE = { open: 'green', draft: 'gray', merged: 'purple', closed: 'red' } as const;
 
@@ -27,6 +28,7 @@ export function glyphHue(g: Glyph): TintHue {
     case 'human': return 'yellow';
     case 'primitive': return PRIMITIVE_META[g.kind].hue;
     case 'executor': return executorEntry(g.executor).hue;
+    case 'factory': return 'green';
     case 'cli': return 'green';
     case 'deliverable': return 'gray';
     case 'comment': return g.human ? 'yellow' : 'purple';
@@ -77,6 +79,8 @@ export function GlyphIcon({ glyph, size = 16 }: { glyph: Glyph; size?: number })
       const Icon = executorEntry(glyph.executor).Icon;
       return <Icon className="shrink-0" />;
     }
+    case 'factory':
+      return <FactoryIcon size={size} className="shrink-0" />;
     case 'cli':
       return glyph.session === 'claude' ? <ClaudeIcon size={size - 2} /> : <TerminalIcon size={size - 2} />;
     case 'deliverable':

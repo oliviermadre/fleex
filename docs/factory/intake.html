@@ -1,0 +1,544 @@
+<title>Factory, les intakes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Tout ce qui t'arrive passe par l'usine</h1>
+    <p class="lede">Slack, Gmail, GitHub et les tickets que tu crées entrent par des intakes. Ce qui entre est un <b>item</b>, une feuille de papier : une conversation, pas un message, et pas un ticket. Le plancher le trie ; il ne devient un ticket que si une machine le décide. Rien n'est dans le code : c'est l'amorce de la prochaine PR.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">Le plancher qui trie</h2>
+    <p class="brief">Fais arriver quelque chose et suis-le. Les compteurs des intakes et des sorties bougent ; le panneau de droite est ce qu'on verrait en ouvrant l'item.</p>
+    <div class="app">
+      <div class="row" id="plays"><h4>Arrives</h4></div>
+      <div class="scene wide" id="scene"></div>
+      <div class="two">
+        <div><p class="now" id="now"><b>NOW</b><span id="say">Nothing moves. Pick something that arrives.</span></p></div>
+        <div class="app inner" id="panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-item">
+    <h2 id="h-item">À quoi ressemble un item</h2>
+    <p class="brief">Sur un convoyeur, il faut distinguer d'un coup d'œil un item d'un ticket, et savoir d'où il vient.</p>
+    <div class="grid" id="g-item"></div>
+  </section>
+
+  <section aria-labelledby="h-intake">
+    <h2 id="h-intake">À quoi ressemble un intake</h2>
+    <div class="grid" id="g-intake"></div>
+    <div class="app">
+      <div class="row"><h4>Intake settings</h4><span id="tabs" class="row"></span></div>
+      <div id="settings"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-new">
+    <h2 id="h-new">Créer un ticket depuis la Factory</h2>
+    <p class="brief">Dans les trois cas c'est le formulaire de création de la vue Work, tel quel, ouvert dans une popup de verre. La question est d'où on l'ouvre et où le ticket naît.</p>
+    <div class="grid" id="g-new"></div>
+  </section>
+
+  <section aria-labelledby="h-rules">
+    <h2 id="h-rules">Ce que j'ai compris, et ce qui reste ouvert</h2>
+    <div class="rules">
+      <div class="card"><h3>Les règles</h3><ol>
+        <li><b>Un item est une conversation</b> : un fil Slack, un fil de mails, une PR. Un nouveau message sur un fil déjà là met l'item à jour, il n'en crée pas un autre.</li>
+        <li><b>L'intake écarte sans modèle</b> ce que ses règles reconnaissent (newsletter, bot). Ce qui est écarté n'entre jamais sur le plancher : l'intake le compte.</li>
+        <li><b>Le délai de calme</b> : un item attend dans son intake tant que sa conversation bouge. « Salut » puis la vraie demande trois messages plus tard font un seul item.</li>
+        <li><b>Triage</b> lit la conversation en un appel, sans outils, et nomme une sortie. Ce n'est pas un run d'agent : il ne compte pas dans les runs par heure.</li>
+        <li><b>Un agent travaille sur un item sans ticket</b> : la conversation est son brief. Ce qu'il produit (un brouillon) reste attaché à l'item.</li>
+        <li><b>Devenir un ticket est une machine</b>, « Make a ticket ». Le papier devient un objet ; il a alors un board, et peut avoir un repo et un worktree.</li>
+        <li><b>Envoyer passe par une porte</b> : rien ne part en ton nom sans que tu l'aies approuvé.</li>
+        <li><b>La sortie archive</b> (suppression douce). Un nouveau message sur un item archivé le fait revenir.</li>
+      </ol></div>
+      <div class="card"><h3>À trancher dans la prochaine PR</h3><ul>
+        <li>Combien de temps garde-t-on une archive avant de la purger pour de bon ?</li>
+        <li>Un message arrive pendant qu'un brouillon attend à la porte : je propose que l'item reparte au triage et que le brouillon soit jeté.</li>
+        <li>Le triage a-t-il son propre plafond par heure, et quel modèle ?</li>
+        <li>Slack sait lire un fil aujourd'hui ; écouter les nouveaux messages et répondre demandent d'autres droits. Gmail et les notifications GitHub : tout est à brancher.</li>
+        <li>Un seul plancher, ou un plancher de tri relié au plancher de dev par téléporteur ? La maquette montre un seul plancher.</li>
+        <li>« For me » : une zone où attend ce que tu dois faire toi-même. Comment dit-on que c'est fait ?</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-hand">
+    <h2 id="h-hand">Pour repartir d'une session neuve</h2>
+    <div class="rules">
+      <div class="card"><h3>Ce qui est dans le dépôt</h3><ul>
+        <li><code>docs/factory/intake-handover.md</code> : ce qui est décidé, ce qui est proposé, ce que le code permet déjà (avec les fichiers et les lignes), les questions ouvertes et un ordre de travail en neuf lots.</li>
+        <li><code>docs/factory/intake.html</code> : cette maquette.</li>
+        <li><code>packages/server/src/factory/README.md</code> : ce qu'est la Factory aujourd'hui, lot 38 compris.</li>
+      </ul></div>
+      <div class="card"><h3>Le message à coller</h3>
+        <p id="prompt" class="mono" style="font-size:0.8rem">Read docs/factory/intake-handover.md, then docs/factory/intake.html and packages/server/src/factory/README.md. We are starting the PR that makes the Factory item-driven and adds intakes (Slack, Gmail, GitHub, and a Desk to create tickets from the floor). My picks on the mock-up are: <span id="prompt-picks"></span>. Start with step 1 of "Proposed order of work" and tell me first what you would change in that plan.</p>
+        <button type="button" id="copy-prompt">Copier le message</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = 40;
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.13)', belt: '#27272a', edge: '#3f3f46', chev: '#71717a', body: '#26262b', pit: 'rgba(0,0,0,0.4)', panel: '#131316', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', ok: '#22c55e', warn: '#facc15', danger: '#ef4444', steel: '#52525b', port: '#22d3ee', paper: '#f4f4f5' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"", SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const r1 = (n) => Math.round(n * 10) / 10, clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (a, b, k) => a + (b - a) * k, ease = (k) => { k = clamp(k); return k * k * (3 - 2 * k); };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const text = (x, y, str, o = {}) => `<text x="${r1(x)}" y="${r1(y)}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''} ${o.spacing ? `letter-spacing="${o.spacing}"` : ''} ${o.opacity ? `opacity="${o.opacity}"` : ''}>${esc(str)}</text>`;
+  /* icons, as strokes in a 24 by 24 box: generic signs, not anybody's logo */
+  const G = {
+    chat: ['M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7l-4 3.5V17H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z'],
+    mail: ['M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z', 'M3.5 7.5l8.5 6 8.5-6'],
+    git: ['M5 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0', 'M5 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0', 'M15 18a2 2 0 1 0 4 0a2 2 0 1 0-4 0', 'M7 8v8', 'M17 16v-5a3 3 0 0 0-3-3h-2', 'M13.5 5.5L11.5 8l2 2.5'],
+    desk: ['M12 5v14', 'M5 12h14'],
+    triage: ['M4 5h16l-6 7.5V19l-4-2v-4.5z'],
+    make: ['M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z', 'M10 9.5v5'],
+    send: ['M20.500 3.500L10 14', 'M20.500 3.500l-6.500 17-4-6.500-6.500-4z'],
+    agent: ['M7.5 8h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5v-6A2.5 2.5 0 0 1 7.5 8z', 'M12 8V4.6', 'M8.4 13a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0', 'M13.8 13a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0', 'M9.5 16.2h5'],
+    gate: ['M12 3l7 3v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.500-7-4.500-7-8.800V6z', 'M8.8 12l2.3 2.3 4.2-4.4'],
+    box: ['M4 5h16v4H4z', 'M5.5 9v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9', 'M10 13h4'],
+  };
+  const glyph = (k, x, y, size, col, w = 2) => `<g transform="translate(${r1(x)} ${r1(y)}) scale(${r1(size / 24 * 100) / 100})" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${G[k].map((d) => `<path d="${d}"/>`).join('')}</g>`;
+  const SRC = { chat: { col: '#e879f9', name: 'Slack' }, mail: { col: '#fda4af', name: 'Gmail' }, git: { col: '#d4d4d8', name: 'GitHub' }, desk: { col: '#4ade80', name: 'Desk' } };
+  const TYPE = { build: '#4ade80', fix: '#f87171' };
+
+  // ---------- the floor ----------
+  const floor = (w, h) => { let s = `<rect width="${w}" height="${h}" fill="${C.floor}"/>`; for (let x = 0; x <= w; x += T) for (let y = 0; y <= h; y += T) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`; return s; };
+  const chevron = (cx, cy, rot) => `<path transform="rotate(${rot} ${cx} ${cy})" d="M${cx - 3.500} ${cy - 7} L${cx + 3.500} ${cy} L${cx - 3.500} ${cy + 7}" fill="none" stroke="${C.chev}" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"/>`;
+  /** A belt of `n` tiles from tile (x, y), going east, west or south. */
+  function belt(x, y, n, dir = 'e') {
+    const v = dir === 's', w = v ? T : n * T, h = v ? n * T : T, rot = dir === 'e' ? 0 : dir === 'w' ? 180 : 90;
+    let s = `<rect x="${x * T}" y="${y * T}" width="${w}" height="${h}" fill="${C.belt}"/>`;
+    s += v ? `<path d="M${x * T + 2} ${y * T} v${h} M${(x + 1) * T - 2} ${y * T} v${h}" stroke="${C.edge}" stroke-width="4"/>` : `<path d="M${x * T} ${y * T + 2} h${w} M${x * T} ${(y + 1) * T - 2} h${w}" stroke="${C.edge}" stroke-width="4"/>`;
+    for (let i = 0; i < n; i++) for (const o of [11, 30]) s += v ? chevron(x * T + T / 2, (y + i) * T + o, rot) : chevron((x + i) * T + o, y * T + T / 2, rot);
+    return s;
+  }
+  /** An item: a sheet of paper with a stripe and a sign in its source's colour. A ticket is an object, as today. */
+  function paper(cx, cy, src, k = 1, op = 1) {
+    const w = 22 * k, h = 17 * k, col = SRC[src].col;
+    return `<g opacity="${r1(op)}"><rect x="${r1(cx - w / 2 + 1.500)}" y="${r1(cy - h / 2 + 2.500)}" width="${r1(w)}" height="${r1(h)}" rx="3" fill="rgba(0,0,0,0.45)"/><rect x="${r1(cx - w / 2)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${r1(h)}" rx="3" fill="${C.paper}"/><rect x="${r1(cx - w / 2)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${r1(4 * k)}" rx="2" fill="${col}"/>${glyph(src, cx - 5.500 * k, cy - 3.500 * k, 11 * k, '#27272a', 2.400)}</g>`;
+  }
+  function ticket(cx, cy, type, s = 17, op = 1) {
+    const h = s / 2, col = TYPE[type], shape = (dy, fill) => type === 'fix'
+      ? `<path d="M${r1(cx - h)} ${r1(cy - h * 0.5 + dy)} L${r1(cx - h * 0.45)} ${r1(cy - h + dy)} H${r1(cx + h * 0.45)} L${r1(cx + h)} ${r1(cy - h * 0.5 + dy)} V${r1(cy + h * 0.5 + dy)} L${r1(cx + h * 0.45)} ${r1(cy + h + dy)} H${r1(cx - h * 0.45)} L${r1(cx - h)} ${r1(cy + h * 0.5 + dy)} Z" fill="${fill}"/>`
+      : `<rect x="${r1(cx - h)}" y="${r1(cy - h + dy)}" width="${s}" height="${s}" rx="${r1(s * 0.26)}" fill="${fill}"/>`;
+    return `<g opacity="${r1(op)}">${shape(2.500, 'rgba(0,0,0,0.45)')}${shape(0, col)}<circle cx="${r1(cx - h * 0.3)}" cy="${r1(cy - h * 0.3)}" r="${r1(s * 0.11)}" fill="rgba(255,255,255,0.55)"/></g>`;
+  }
+  const token = (cx, cy, it, op = 1) => (it.kind === 'ticket' ? ticket(cx, cy, it.type, 17, op) : paper(cx, cy, it.src, 1, op));
+  /** A machine: an edge in its hue, a full badge, its word over its name. `o.shape` is 'agent' (round shoulders, antenna), 'gate' (dashed) or nothing. */
+  function machine(x, y, w, h, o) {
+    const X = x * T, Y = y * T, W = w * T, H = h * T, hue = o.hue;
+    let s = '';
+    if (o.shape === 'agent') s += `<path d="M${X + 32} ${Y + 4} v-9" stroke="${hue}" stroke-width="2.500" stroke-linecap="round"/><circle cx="${X + 32}" cy="${Y - 7}" r="3.500" fill="${hue}"/>`;
+    s += `<rect x="${X + 3}" y="${Y + 3}" width="${W - 6}" height="${H - 6}" rx="${o.shape === 'agent' ? 20 : 12}" fill="${C.body}" stroke="${hue}" stroke-width="${o.shape === 'gate' ? 4 : 2}" ${o.shape === 'gate' ? 'stroke-dasharray="12 8"' : ''}/>`;
+    s += `<rect x="${X + 11}" y="${Y + 10}" width="26" height="26" rx="7" fill="${hue}"/>` + glyph(o.g, X + 14.500, Y + 13.500, 19, '#09090b', 2.300);
+    s += text(X + 44, Y + 18, o.word, { mono: true, size: 7.500, weight: 700, fill: hue, spacing: 1.200 }) + text(X + 44, Y + 32, o.name, { size: 12.500, weight: 650 });
+    const py = Y + 44, ph = H - 54;
+    if (ph > 14) {
+      s += `<rect x="${X + 11}" y="${py}" width="${W - 22}" height="${ph}" rx="7" fill="${C.pit}"/>`;
+      if (o.busy) { const a = (o.t * 300) % 360; s += text(X + 17, py + 12, 'RUNNING', { size: 6.500, weight: 700, fill: C.ok }) + `<circle cx="${X + W / 2}" cy="${py + ph / 2 + 3}" r="15" fill="none" stroke="${C.ok}" stroke-width="2.500" stroke-dasharray="26 68" transform="rotate(${r1(a)} ${X + W / 2} ${py + ph / 2 + 3})"/>`; }
+      else if (o.note) s += text(X + 17, py + 12, o.note, { size: 6.500, weight: 700, fill: o.noteFill ?? C.ink3 });
+    }
+    return s;
+  }
+  /** An intake, as a loading dock: where it comes from, what it holds while a conversation is still moving, what its rules dropped. The mouth is where items come out. */
+  function dock(x, y, src, o) {
+    const X = x * T, Y = y * T, W = 3 * T, H = 2 * T, col = SRC[src].col;
+    let s = `<rect x="${X + 3}" y="${Y + 3}" width="${W - 6}" height="${H - 6}" rx="9" fill="${C.body}" stroke="${col}" stroke-width="2"/>`;
+    s += `<rect x="${X + 10}" y="${Y + 10}" width="24" height="24" rx="6" fill="${col}"/>` + glyph(src, X + 13, Y + 13, 18, '#09090b', 2.300);
+    s += text(X + 40, Y + 18, src === 'desk' ? 'NEW TICKET' : 'INTAKE', { mono: true, size: 7, weight: 700, fill: col, spacing: 1.200 }) + text(X + 40, Y + 31, SRC[src].name, { size: 12.500, weight: 650 });
+    if (src === 'desk') s += text(X + 11, Y + 52, 'double-click: the form', { size: 7.500, fill: C.ink3 });
+    else s += text(X + 11, Y + 50, `HELD ${o.held}`, { mono: true, size: 7.500, weight: 700, fill: o.held ? C.warn : C.ink3 }) + text(X + 11, Y + 62, `DROPPED ${o.dropped}`, { mono: true, size: 7.500, weight: 700, fill: o.flash ? C.danger : C.ink3 });
+    /* the mouth: under the dock, or on its right for the desk */
+    if (src === 'desk') s += `<rect x="${X + W - 5}" y="${Y + H / 2 - 9}" width="9" height="18" rx="2" fill="#09090b" stroke="${col}"/>`;
+    else s += `<rect x="${X + W / 2 - 13}" y="${Y + H - 5}" width="26" height="9" rx="2" fill="#09090b" stroke="${col}"/><path d="M${X + W / 2 - 13} ${Y + H + 4} L${X + W / 2 - 16} ${Y + H + 20} M${X + W / 2 + 13} ${Y + H + 4} L${X + W / 2 + 16} ${Y + H + 20}" stroke="${C.edge}" stroke-width="2"/>`;
+    return s;
+  }
+  function zone(x, y, w, h, name, count) {
+    const X = x * T, Y = y * T;
+    return `<rect x="${X + 4}" y="${Y + 4}" width="${w * T - 8}" height="${h * T - 8}" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.4)" stroke-width="2" stroke-dasharray="10 7"/>` + text(X + 14, Y + 22, name, { mono: true, size: 10, weight: 700, fill: 'rgba(255,255,255,0.6)', spacing: 2 }) + text(X + w * T - 14, Y + h * T - 14, String(count), { mono: true, size: 34, weight: 700, fill: 'rgba(255,255,255,0.16)', anchor: 'end' });
+  }
+  function exit(x, y, name, count, col, g) {
+    const X = x * T, Y = y * T, S = 3 * T;
+    let s = `<rect x="${X + 3}" y="${Y + 3}" width="${S - 6}" height="${S - 6}" rx="10" fill="${col}" fill-opacity="0.07" stroke="${col}" stroke-opacity="0.25" stroke-width="9"/><rect x="${X + 3}" y="${Y + 3}" width="${S - 6}" height="${S - 6}" rx="10" fill="none" stroke="${col}" stroke-width="2"/>`;
+    s += text(X + S / 2, Y + 24, name, { mono: true, size: 9, weight: 700, fill: col, anchor: 'middle', spacing: 1.500 }) + (g ? glyph(g, X + S / 2 - 12, Y + S / 2 - 10, 24, col, 1.800).replace('<g ', '<g opacity="0.55" ') : '') + text(X + S / 2, Y + S - 16, String(count), { mono: true, size: 15, weight: 700, fill: col, anchor: 'middle' });
+    return s;
+  }
+  function pad(x, y, role, label) {
+    const X = x * T, Y = y * T, cx = X + T / 2, cy = Y + T / 2, col = C.port;
+    let s = `<rect x="${X + 3}" y="${Y + 3}" width="${T - 6}" height="${T - 6}" rx="9" fill="${C.panel}" stroke="${col}" stroke-width="2.400" ${role === 'arr' ? 'stroke-dasharray="14 9"' : ''}/><circle cx="${cx}" cy="${cy}" r="10" fill="${col}" fill-opacity="0.12" stroke="${col}" stroke-width="2"/>`;
+    const w = label.length * 5.400 + 12;
+    return s + `<rect x="${r1(cx - w / 2)}" y="${Y + T + 3}" width="${r1(w)}" height="15" rx="4" fill="rgba(9,9,11,0.9)" stroke="${col}" stroke-opacity="0.5"/>` + text(cx, Y + T + 14, label, { mono: true, size: 8.500, weight: 700, fill: col, anchor: 'middle' });
+  }
+  const DIRS = { e: [1, 0], s: [0, 1], w: [-1, 0], n: [0, -1] };
+  /** An arm on tile (tx, ty) working towards `dir`, `e` of its half turn done; `tag` is what it asks for. */
+  function arm(tx, ty, dir, col, e, tag) {
+    const [dx, dy] = DIRS[dir], bx = (tx + 0.5) * T, by = (ty + 0.5) * T, a = Math.atan2(dy, dx) + Math.PI * (1 - ease(e)), r = 0.8 * T, hx = bx + Math.cos(a) * r, hy = by + Math.sin(a) * r;
+    const way = [[-18, -7], [5, -10], [5, -16], [19, 0], [5, 16], [5, 10], [-18, 7]].map(([u, v]) => `${r1(bx + u * dx - v * dy)} ${r1(by + u * dy + v * dx)}`).join(' L');
+    let s = `<path d="M${way} Z" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-opacity="0.55" stroke-width="1.300" stroke-linejoin="round"/>`;
+    s += `<path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${C.steel}" stroke-width="11" stroke-linecap="round"/><path d="M${bx} ${by} L${r1(hx)} ${r1(hy)}" stroke="${col}" stroke-width="3" stroke-linecap="round"/><circle cx="${r1(hx)}" cy="${r1(hy)}" r="7.500" fill="rgba(24,24,27,0.3)" stroke="${C.ink}" stroke-width="2.200"/><circle cx="${bx}" cy="${by}" r="9.500" fill="${C.body}" stroke="${col}" stroke-width="2.600"/>`;
+    if (tag) { const w = tag.length * 5.300 + 10, lx = dir === 's' ? bx + 14 : bx - w / 2, ly = dir === 's' ? by - 8 : by - 27; s += `<rect x="${r1(lx)}" y="${r1(ly)}" width="${r1(w)}" height="14" rx="4" fill="rgba(9,9,11,0.9)" stroke="${col}" stroke-opacity="0.6"/>` + text(lx + w / 2, ly + 10.200, tag, { mono: true, size: 8, weight: 700, fill: col, anchor: 'middle' }); }
+    return s;
+  }
+
+  // ---------- the scene ----------
+  const W = 36 * T, H = 13.3 * T, HUE = { agent: '#a78bfa', triage: '#2dd4bf', util: '#a1a1aa', gate: C.warn };
+  const st = { drop: { chat: 41, mail: 87, git: 12 }, held: { chat: 0, mail: 0, git: 0 }, flash: '', archive: 128, sent: 9, shipped: 3, forMe: 2, busy: {}, arms: {}, item: null, pos: null, op: 1, tele: 0 };
+  function draw(t) {
+    let s = floor(W, H);
+    /* belts first, machines over their ends */
+    s += belt(1, 3, 16) + belt(23, 1, 6) + belt(20, 6, 2, 's') + belt(14, 6, 4, 'w') + belt(3, 7, 3, 's') + belt(3, 10, 3);
+    s += zone(23, 3, 5, 3, 'FOR ME', st.forMe);
+    s += dock(1, 0.5, 'chat', { held: st.held.chat, dropped: st.drop.chat, flash: st.flash === 'chat' }) + dock(5, 0.5, 'mail', { held: st.held.mail, dropped: st.drop.mail, flash: st.flash === 'mail' }) + dock(9, 0.5, 'git', { held: st.held.git, dropped: st.drop.git, flash: st.flash === 'git' }) + dock(0, 6, 'desk', {});
+    s += machine(17, 1, 5, 4, { hue: HUE.triage, g: 'triage', word: 'TRIAGE', name: 'Sort what comes in', busy: st.busy.triage, t, note: 'ONE CALL · NO TOOLS' });
+    s += machine(10, 5, 4, 3, { hue: HUE.util, g: 'make', word: 'MAKE A TICKET', name: 'To the dev board', busy: st.busy.make, t });
+    s += machine(18, 8, 5, 4, { hue: HUE.agent, g: 'agent', word: 'AGENT', name: 'Draft a reply', shape: 'agent', busy: st.busy.draft, t, note: 'FREE' });
+    s += machine(24, 8, 4, 4, { hue: HUE.gate, g: 'gate', word: 'GATE', name: 'Send it?', shape: 'gate', note: st.busy.gate ? 'TO DECIDE · 1' : 'TO DECIDE · 0', noteFill: st.busy.gate ? C.warn : C.ink3 });
+    s += machine(29, 8.5, 3, 3, { hue: HUE.util, g: 'send', word: 'SEND', name: 'Reply', busy: st.busy.send, t });
+    s += machine(6, 8.5, 5, 4, { hue: HUE.agent, g: 'agent', word: 'AGENT', name: 'Build', shape: 'agent', busy: st.busy.build, t, note: 'FREE' });
+    s += exit(29, 0, 'ARCHIVE', st.archive, C.ink2, 'box') + exit(33, 8.5, 'SENT', st.sent, C.ok) + exit(12, 9, 'SHIPPED', st.shipped, C.ok);
+    s += pad(8, 6, 'dep', 'to dev line') + pad(1, 10, 'arr', 'dev line');
+    if (st.tele > 0 && st.tele < 1) { const k = st.tele, x1 = 8.5 * T, y1 = 6.5 * T, x2 = 1.5 * T, y2 = 10.5 * T, qx = 3 * T, qy = 6 * T, u = k; s += `<path d="M${x1} ${y1} Q${qx} ${qy} ${x2} ${y2}" fill="none" stroke="${C.port}" stroke-width="2.400" stroke-dasharray="3 7" stroke-linecap="round"/><circle cx="${r1((1 - u) ** 2 * x1 + 2 * (1 - u) * u * qx + u * u * x2)}" cy="${r1((1 - u) ** 2 * y1 + 2 * (1 - u) * u * qy + u * u * y2)}" r="5" fill="${C.port}"/>`; }
+    const A = st.arms, a = (id) => A[id] ?? 0;
+    s += arm(22, 1, 'e', C.danger, a('J'), 'junk') + arm(22, 4, 'e', C.warn, a('F'), 'for me') + arm(20, 5, 's', '#38bdf8', a('A'), 'answer') + arm(17, 5, 's', '#4ade80', a('T'), 'ticket');
+    s += arm(23, 9, 'e', C.ink2, a('D1')) + arm(28, 9, 'e', C.ok, a('D2'), 'approve') + arm(32, 9, 'e', C.ink2, a('D3')) + arm(9, 6, 'w', C.ink2, a('M')) + arm(2, 10, 'e', C.ink2, a('P')) + arm(11, 10, 'e', C.ink2, a('B'));
+    /* what waits in "for me", then the item that moves */
+    for (let i = 0; i < Math.min(st.forMe, 4); i++) s += paper((24.300 + i * 0.9) * T, 4.700 * T, i === 0 ? 'mail' : 'git', 0.9);
+    if (st.item && st.pos && st.op > 0.02) {
+      const [px, py] = st.pos;
+      s += token(px * T, py * T, st.item, st.op);
+      if (st.item.count > 1) s += `<circle cx="${r1(px * T + 12)}" cy="${r1(py * T - 10)}" r="7.500" fill="${C.warn}" stroke="#09090b" stroke-width="1.500"/>` + text(px * T + 12, py * T - 6.800, String(st.item.count), { mono: true, size: 9, weight: 700, fill: '#09090b', anchor: 'middle' });
+    }
+    $('scene').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The floor: three intakes and a desk, a triage station, and the ways out">${s}</svg>`;
+  }
+
+  // ---------- what plays ----------
+  let run = null, resume = null;
+  const say = (m) => { $('say').textContent = m; };
+  const state = (m) => { if (st.item) st.item.state = m; panel(); };
+  function start(steps, item) { st.item = item; st.op = 1; st.pos = null; run = { steps, i: -1, t0: 0, from: null }; buttons(); advance(performance.now()); }
+  function advance(now) {
+    run.i++;
+    if (run.i >= run.steps.length) { run = null; st.item = null; st.pos = null; buttons(); panel(); return; }
+    const s = run.steps[run.i];
+    if (s.from) st.pos = s.from.slice();
+    run.t0 = now; run.from = st.pos ? st.pos.slice() : null;
+    if (s.to && !s.ms) s.ms = Math.max(220, Math.hypot(s.to[0] - run.from[0], s.to[1] - run.from[1]) * 210);
+    if (s.wait) resume = (choice) => { resume = null; s.then(choice); advance(performance.now()); };
+    if (s.on) s.on();
+    if (s.say) say(s.say);
+  }
+  function frame(now) {
+    const t = now / 1000;
+    if (run) {
+      const s = run.steps[run.i];
+      if (!s.wait) {
+        const k = clamp((now - run.t0) / s.ms), kk = s.arm ? ease(k) : k;
+        if (s.to) st.pos = [lerp(run.from[0], s.to[0], kk), lerp(run.from[1], s.to[1], kk)];
+        if (s.arm) st.arms[s.arm] = k;
+        if (s.fade) st.op = 1 - k;
+        if (s.tele) st.tele = k;
+        if (k >= 1) { if (s.done) s.done(); advance(now); }
+      }
+    }
+    /* an arm that is not carrying goes back to rest */
+    const busy = run && run.steps[run.i] && run.steps[run.i].arm;
+    for (const id of Object.keys(st.arms)) if (id !== busy && st.arms[id] > 0) st.arms[id] = Math.max(0, st.arms[id] - 0.04);
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+  const mv = (to, o = {}) => ({ to, ...o }), hold = (ms, o = {}) => ({ ms, ...o });
+  const work = (key, ms, o = {}) => hold(ms, { ...o, on: () => { st.busy[key] = true; if (o.on) o.on(); }, done: () => { st.busy[key] = false; if (o.done) o.done(); } });
+  const fromDock = (x, src, held) => [{ from: [x + 0.900, 2.050], ms: held ?? 500, on: () => { st.held[src]++; }, done: () => { st.held[src]--; } }, mv([x, 3.500], { on: () => state('On the belt') }), mv([16.800, 3.500]), mv([19.500, 3.300], { ms: 300 })];
+  const triage = (verdict, why, sayIt) => work('triage', 1500, { on: () => state('Triage'), say: sayIt ?? 'Triage reads the whole conversation in one call, without tools, and names a way out: junk, for me, answer or ticket.', done: () => { st.item.verdict = [verdict, why]; panel(); } });
+  const toArchive = (sayIt) => [mv([21.300, 1.800], { ms: 280 }), mv([23.500, 1.500], { arm: 'J', ms: 620, say: sayIt }), mv([29.200, 1.500]), mv([30.500, 1.500], { ms: 280 }), hold(600, { fade: true, on: () => state('Archived'), done: () => { st.archive++; } })];
+  const devLine = () => [mv([6.200, 10.500]), mv([8.500, 10.700], { ms: 300 }), work('build', 2000, { on: () => state('Build'), say: 'From here it is a ticket like any other: a board, a repository, a worktree, an agent.' }), mv([10.800, 10.500], { ms: 280 }), mv([13.500, 10.500], { arm: 'B', ms: 620 }), hold(600, { fade: true, done: () => { st.shipped++; } })];
+
+  const PLAYS = {
+    newsletter: { label: 'A newsletter', src: 'mail', run: () => start([
+      { from: [7.400, 2.050], ms: 900, on: () => { st.flash = 'mail'; state('Dropped by a rule'); }, say: 'A newsletter. The Gmail intake has a rule for it (it carries an unsubscribe header): it is dropped there, with no model asked, and never reaches the floor. The intake counts it.', fade: true, done: () => { st.drop.mail++; } },
+      hold(900, { done: () => { st.flash = ''; } }),
+    ], { kind: 'item', src: 'mail', title: 'This week in product analytics', from: 'newsletter@example.com', msgs: [['newsletter@example.com', 'Five dashboards you should build this quarter, and more.']], rule: 'has an unsubscribe header' }) },
+    mail: { label: 'A mail that expects an answer', src: 'mail', run: () => start([
+      ...fromDock(6.500, 'mail'),
+      triage('answer', 'Camille asks for the Q3 figures before Thursday.'),
+      mv([20.500, 4.600], { ms: 260 }), mv([20.500, 6.500], { arm: 'A', ms: 620, say: 'The arm that asks for "answer" takes it. It is still a sheet of paper: no ticket, nothing in your boards.' }),
+      mv([20.500, 8]), mv([20.500, 10.300], { ms: 300 }),
+      work('draft', 2400, { on: () => state('Draft a reply'), say: 'An agent station drafts the reply. It runs on the item, with the conversation as its brief: an agent does not need a ticket.', done: () => { st.item.draft = 'Hi Camille, the Q3 figures are attached. Revenue and churn are final; the cohort table still moves until Wednesday night, I will resend it then.'; panel(); } }),
+      mv([22.600, 9.600], { ms: 280 }), mv([26, 10.400], { arm: 'D1', ms: 620 }),
+      { wait: true, on: () => { st.busy.gate = true; state('At the gate: waits for you'); }, say: 'The gate holds it. Nothing leaves in your name before you approve: decide in the panel.', then: (c) => { st.busy.gate = false; if (c === 'junk') run.steps.splice(run.i + 1, run.steps.length, mv([30.500, 1.500], { ms: 1100, say: 'You dropped it yourself: it goes to the archive, like anything you drag there.', on: () => state('Archived') }), hold(600, { fade: true, done: () => { st.archive++; } })); } },
+      mv([27.600, 9.600], { ms: 280 }), mv([30.500, 10.200], { arm: 'D2', ms: 620 }),
+      work('send', 1100, { on: () => state('Send'), say: 'Send posts the reply where the conversation lives. It can fail (a token, a network): it has two ways out, like a script station.' }),
+      mv([31.800, 9.700], { ms: 260 }), mv([34.500, 10], { arm: 'D3', ms: 620 }),
+      hold(700, { fade: true, on: () => state('Sent, archived'), say: 'Answered. The item is archived at the exit. No ticket was ever created.', done: () => { st.sent++; } }),
+    ], { kind: 'item', src: 'mail', title: 'Q3 figures for the board', from: 'Camille R.', msgs: [['Camille R.', 'Hi, could you send me the Q3 figures before Thursday? The board pack closes on Friday.']] }) },
+    salut: { label: 'Slack: "hi", then the real ask', src: 'chat', run: () => {
+      const item = { kind: 'item', src: 'chat', title: 'DM with Noa', from: 'Noa L.', count: 1, msgs: [['Noa L.', 'hi!']] };
+      start([
+        { from: [3.400, 2.050], ms: 1300, on: () => { st.held.chat++; state('Held: the conversation is still moving'); }, say: 'A first message: "hi!". The intake holds the item for its quiet delay (2 min here) instead of sending a greeting to be sorted.' },
+        hold(1300, { on: () => { item.count = 2; item.msgs.push(['Noa L.', 'do you have a minute?']); panel(); }, say: 'A second message on the same conversation: the item is updated and the delay starts again. Still one item.' }),
+        hold(1700, { on: () => { item.count = 3; item.msgs.push(['Noa L.', 'the staging deploy has failed since this morning, the migration step times out. Can you look?']); panel(); }, say: 'The real ask comes third. The conversation then stays quiet: the intake lets the item go, whole.', done: () => { st.held.chat--; } }),
+        mv([2.500, 3.500], { on: () => state('On the belt') }), mv([16.800, 3.500]), mv([19.500, 3.300], { ms: 300 }),
+        triage('ticket', 'A failing deploy to investigate: this is development work.'),
+        mv([17.500, 4.600], { ms: 260 }), mv([17.500, 6.500], { arm: 'T', ms: 620 }), mv([14.200, 6.500]), mv([12, 6.700], { ms: 300 }),
+        work('make', 1300, { on: () => state('Make a ticket'), say: 'Only now does it become a ticket: the paper turns into an object. The conversation is its description, the source stays as a link.', done: () => { item.kind = 'ticket'; item.type = 'fix'; item.count = 0; item.ticket = '#812 Staging deploy fails at the migration step'; panel(); } }),
+        mv([10.200, 6.500], { ms: 260 }), mv([8.500, 6.500], { arm: 'M', ms: 620 }),
+        { ms: 900, tele: true, fade: true, on: () => state('Teleported to the dev line'), done: () => { st.tele = 0; st.pos = [1.500, 10.500]; st.op = 1; } },
+        mv([3.500, 10.500], { arm: 'P', ms: 620 }),
+        ...devLine(),
+      ], item);
+    } },
+    chatter: { label: 'Slack: chatter', src: 'chat', run: () => start([
+      ...fromDock(2.500, 'chat', 900),
+      triage('junk', 'A thread about lunch. Nothing is asked of you.', 'No rule knew this one, so it came in. Triage reads it: nothing is asked of you.'),
+      ...toArchive('The red arm asks for "junk". The item goes to the archive exit: a soft delete, counted, and never a ticket.'),
+    ], { kind: 'item', src: 'chat', title: '#team-product', from: '4 people', count: 6, msgs: [['Sam', 'who is in for lunch?'], ['Lou', 'me'], ['Sam', '12:30 at the usual place']] }) },
+    review: { label: 'GitHub: a review is asked', src: 'git', run: () => start([
+      ...fromDock(10.500, 'git'),
+      triage('for me', 'A review is requested from you on a pull request.'),
+      mv([21.300, 4.300], { ms: 280 }), mv([23.600, 4.700], { arm: 'F', ms: 620, say: 'Something only you can do, with no agent involved. It waits in "For me", on the floor, with the rest of what waits for you.' }),
+      hold(500, { on: () => state('For me'), done: () => { st.forMe++; } }),
+    ], { kind: 'item', src: 'git', title: 'Review requested: "Cache the tariff lookup"', from: 'pull request 4127', msgs: [['GitHub', 'Lou requested your review on "Cache the tariff lookup" (+212 −40, 6 files).']] }) },
+    desk: { label: 'I create a ticket', src: 'desk', run: () => { st.form = true; st.item = null; say('The Desk opens the creation form of the Work view, as it is, over the floor. Fill it on the right.'); panel(); } },
+  };
+  function created() {
+    const title = ($('f-title') && $('f-title').value.trim()) || 'Add an export to the stats page';
+    st.form = false;
+    start([
+      { from: [2.300, 7.450], ms: 500, say: 'The ticket is born on the floor, at the Desk, already a ticket: an object, not a sheet of paper. No trip through the Work view.' },
+      mv([3.500, 7.400], { ms: 400 }), mv([3.500, 10.500]),
+      ...devLine(),
+    ], { kind: 'ticket', type: 'build', src: 'desk', title, from: 'you', msgs: [], ticket: `#813 ${title}`, state: 'Created at the Desk' });
+  }
+  function buttons() { for (const b of $('plays').querySelectorAll('button')) b.disabled = !!run; }
+  function panel() {
+    const p = $('panel'), it = st.item;
+    if (st.form) {
+      p.innerHTML = `<h4>New ticket · the form of the Work view</h4>
+        <div class="row"><input id="f-title" aria-label="Title" placeholder="Title" value="Add an export to the stats page" style="flex:1 1 220px"></div>
+        <div class="row"><select aria-label="Type"><option>build</option><option>fix</option><option>think</option></select><select aria-label="Board"><option>Product</option><option>Platform</option></select><select aria-label="Priority"><option>medium</option><option>high</option><option>urgent</option></select></div>
+        <div class="row"><input aria-label="Description" placeholder="Description" style="flex:1 1 220px"></div>
+        <div class="row"><button type="button" class="go" id="f-create">Create ticket</button><button type="button" id="f-cancel">Cancel</button></div>`;
+      $('f-create').onclick = created; $('f-cancel').onclick = () => { st.form = false; say('Nothing moves. Pick something that arrives.'); panel(); };
+      return;
+    }
+    if (!it) { p.innerHTML = '<h4>The item</h4><p class="hint">Opening an item shows its conversation, what Triage said of it, and what the stations produced. It is not the Work view: an item has no board, no repository, no worktree.</p>'; return; }
+    const src = SRC[it.src], isTicket = it.kind === 'ticket';
+    let h = `<div class="row"><h4>${isTicket ? 'Ticket' : 'Item'} · ${esc(src.name)}</h4><span class="tag" style="border-color:${src.col};color:${src.col}">${esc(it.state || '')}</span></div><div><b>${esc(it.ticket || it.title)}</b><div class="hint">${esc(it.from)}${it.count > 1 ? ` · ${it.count} messages` : ''}</div></div>`;
+    if (it.rule) h += `<div class="hint">Rule: <span class="mono">${esc(it.rule)}</span></div>`;
+    if (it.msgs.length) h += `<ul class="log">${it.msgs.map(([who, m]) => `<li><b>${esc(who)}</b> ${esc(m)}</li>`).join('')}</ul>`;
+    if (it.verdict) h += `<div><h4>Triage</h4><span class="tag kv"><b>${esc(it.verdict[0])}</b></span> <span class="hint">${esc(it.verdict[1])}</span></div>`;
+    if (it.draft) h += `<div><h4>Draft reply</h4><div class="draft">${esc(it.draft)}</div></div>`;
+    if (resume) h += '<div class="row"><button type="button" class="go" data-act="approve">Approve and send</button><button type="button" data-act="junk">Junk</button></div>';
+    p.innerHTML = h;
+    for (const b of p.querySelectorAll('[data-act]')) b.onclick = () => resume && resume(b.dataset.act);
+  }
+  $('plays').insertAdjacentHTML('beforeend', Object.entries(PLAYS).map(([k, v]) => `<button type="button" data-play="${k}">${esc(v.label)}</button>`).join(''));
+  $('plays').addEventListener('click', (e) => { const b = e.target.closest('[data-play]'); if (b && !run) PLAYS[b.dataset.play].run(); });
+
+  // ---------- the picks ----------
+  const small = (w, h, inner, label) => `<svg viewBox="0 0 ${w * T} ${h * T}" role="img" aria-label="${esc(label)}">${floor(w * T, h * T)}${inner}</svg>`;
+  const disc = (cx, cy, src) => `<circle cx="${cx + 1.500}" cy="${cy + 2.500}" r="10.500" fill="rgba(0,0,0,0.45)"/><circle cx="${cx}" cy="${cy}" r="10.500" fill="${SRC[src].col}"/>${glyph(src, cx - 6.500, cy - 6.500, 13, '#18181b', 2.300)}`;
+  const badged = (cx, cy, src) => `<rect x="${cx - 8}" y="${cy - 5.500}" width="17" height="17" rx="4.500" fill="rgba(0,0,0,0.45)"/><rect x="${cx - 8.500}" y="${cy - 8.500}" width="17" height="17" rx="4.500" fill="#a1a1aa"/><circle cx="${cx + 8}" cy="${cy - 8}" r="6.500" fill="${SRC[src].col}" stroke="#09090b" stroke-width="1.300"/>${glyph(src, cx + 4, cy - 12, 8, '#18181b', 2.600)}`;
+  const line = (draw) => belt(0.5, 1, 9) + draw(1.5 * T, 1.5 * T, 'chat') + draw(3.5 * T, 1.5 * T, 'mail') + ticket(5.5 * T, 1.5 * T, 'fix') + draw(7.5 * T, 1.5 * T, 'git') + ticket(8.900 * T, 1.5 * T, 'build') + text(5.5 * T, 2.700 * T, 'ticket', { mono: true, size: 8, fill: C.ink3, anchor: 'middle' }) + text(8.900 * T, 2.700 * T, 'ticket', { mono: true, size: 8, fill: C.ink3, anchor: 'middle' });
+  const zoneIntake = (x, y, src, n, dropped) => { const X = x * T, Y = y * T, col = SRC[src].col; return `<rect x="${X + 4}" y="${Y + 4}" width="${4 * T - 8}" height="${3 * T - 8}" rx="6" fill="rgba(255,255,255,0.03)" stroke="${col}" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="10 7"/>` + glyph(src, X + 12, Y + 11, 15, col, 2) + text(X + 32, Y + 23, SRC[src].name.toUpperCase(), { mono: true, size: 10, weight: 700, fill: col, spacing: 2 }) + text(X + 4 * T - 14, Y + 3 * T - 14, String(n), { mono: true, size: 34, weight: 700, fill: 'rgba(255,255,255,0.16)', anchor: 'end' }) + text(X + 12, Y + 3 * T - 14, `DROPPED ${dropped}`, { mono: true, size: 7.500, weight: 700, fill: C.ink3 }) + paper(X + 34, Y + 56, src, 0.9) + paper(X + 62, Y + 62, src, 0.9); };
+  const card12 = (x, y, hot) => { let s = `<rect x="${x}" y="${y}" width="150" height="112" rx="8" fill="#0d0d10" stroke="${C.edge}"/>`; for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { const on = hot && r === 0 && c === 1; s += `<rect x="${x + 6 + c * 36}" y="${y + 6 + r * 34}" width="32" height="30" rx="5" fill="${on ? 'rgba(74,222,128,0.18)' : '#18181b'}" stroke="${on ? '#4ade80' : '#2f2f35'}"/>`; if (on) s += glyph('desk', x + 6 + c * 36 + 9, y + 6 + r * 34 + 4, 14, '#4ade80', 2.400) + text(x + 6 + c * 36 + 16, y + 6 + r * 34 + 26, 'New', { size: 6.500, weight: 600, fill: '#4ade80', anchor: 'middle' }); } return s; };
+  const GROUPS = {
+    item: { title: 'Item', el: 'g-item', opts: [
+      { id: 'J1', name: 'Un jeton à la couleur de la source', scene: small(10, 3, line(disc), 'Discs in the colour of their source, next to tickets'), idea: 'Un disque plein, de la couleur de sa source, avec son signe.', reads: 'La source saute aux yeux, même de loin.', limit: 'Encore des couleurs pleines sur un plancher qui en a beaucoup : un disque rose à côté d\'un ticket rouge se confondent vite.' },
+      { id: 'J2', name: 'Le même objet qu\'un ticket, avec une pastille', scene: small(10, 3, line(badged), 'Grey objects with a source badge, next to tickets'), idea: 'Un objet gris, de la forme d\'un ticket, avec la source en pastille dans le coin.', reads: 'Un seul vocabulaire d\'objets.', limit: 'On ne voit plus qu\'un item n\'est pas un ticket ; la pastille disparaît de loin.' },
+      { id: 'J3', mine: true, name: 'Une feuille de papier', scene: small(10, 3, line((x, y, s) => paper(x, y, s)), 'Sheets of paper with a stripe in the colour of their source, next to tickets'), idea: 'Une feuille claire, avec un liseré et un signe de la couleur de sa source. Un ticket reste un objet coloré.', reads: 'Deux natures, deux matières : de l\'information (papier) et du travail (objet). « Make a ticket » se voit : le papier devient un objet.', limit: 'La source se lit moins bien de très loin que sur un disque plein.' },
+    ] },
+    intake: { title: 'Intake', el: 'g-intake', opts: [
+      { id: 'I1', mine: true, name: 'Un quai de chargement', scene: small(10, 4.300, dock(0.5, 0.4, 'chat', { held: 1, dropped: 41 }) + dock(4, 0.4, 'mail', { held: 0, dropped: 87 }) + belt(0.5, 2.900, 9) + paper(2 * T, 3.400 * T, 'chat') + paper(7.300 * T, 3.400 * T, 'mail'), 'Two docks over a belt'), idea: 'Une machine par source, 3 cases sur 2 : son signe, ce qu\'elle retient pendant le délai de calme, ce que ses règles ont écarté, et une bouche par où sortent les items.', reads: 'Compact, reconnaissable de loin comme les postes depuis le lot 38, et les deux compteurs sont sous les yeux.', limit: 'On ne voit pas les items retenus eux-mêmes, seulement leur nombre.' },
+      { id: 'I2', name: 'Une zone peinte, comme Inbound', scene: small(10, 4.300, zoneIntake(0.5, 0.2, 'chat', 2, 41) + zoneIntake(5, 0.2, 'mail', 2, 87) + belt(0.5, 3.300, 9), 'Two painted zones over a belt'), idea: 'Une zone au sol par source, avec son stock en grand chiffre. Les items retenus s\'y voient et un bras les sort.', reads: 'Réutilise presque tout d\'une zone : le stock, le relâchement, les bras.', limit: 'Prend 4 cases sur 3 par source, plus un bras ; quatre sources mangent un pan de plancher.' },
+    ] },
+    newTicket: { title: 'Nouveau ticket', el: 'g-new', opts: [
+      { id: 'N1', name: 'Un bouton sur la carte de commandes', scene: small(10, 3.600, card12(14, 14, true) + zone(5, 0.300, 4.500, 3, 'INBOUND', 4) + ticket(6.300 * T, 1.900 * T, 'build')), idea: 'Un bouton « New ticket » (et une touche) ouvre le formulaire ; le ticket atterrit dans Inbound, comme un ticket remis à la Factory.', reads: 'Rien de nouveau sur le plancher.', limit: 'Tout naît au même endroit, sans réglage par défaut : il faut ensuite le déplacer à la main.' },
+      { id: 'N2', name: 'Un poste Desk sur le plancher', scene: small(10, 3.600, dock(0.5, 0.5, 'desk', {}) + belt(3.500, 1, 6) + ticket(5 * T, 1.5 * T, 'build')), idea: 'Un intake comme les autres. Un double-clic ouvre le formulaire ; le ticket naît à ce Desk et part sur sa ligne. Plusieurs Desks possibles, chacun avec ses valeurs par défaut (board, type).', reads: 'Un « Bug desk » branché droit sur la ligne de correction : créer, c\'est déjà router.', limit: 'Il faut viser le Desk à la souris.' },
+      { id: 'N3', mine: true, name: 'Les deux', scene: small(10, 3.600, card12(14, 14, true) + dock(4.600, 0.5, 'desk', {}) + belt(7.600, 1, 2.400) + ticket(8.600 * T, 1.5 * T, 'build')), idea: 'Le Desk est la machine ; le bouton de la carte et sa touche ouvrent le formulaire du Desk par défaut, ou de celui qui est sélectionné.', reads: 'Rapide au clavier, et routé dès la naissance.', limit: 'Un peu plus à construire que N1 ou N2 seul.' },
+    ] },
+  };
+  for (const g of Object.values(GROUPS)) $(g.el).innerHTML = g.opts.map((p) => `
+    <article class="card" data-id="${p.id}">
+      <div class="card-head"><span class="letter">${p.id}</span><h3>${esc(p.name)}</h3>${p.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+      <div class="scene">${p.scene}</div>
+      <dl><dt>Idée</dt><dd>${esc(p.idea)}</dd><dt>Atout</dt><dd>${esc(p.reads)}</dd><dt>Limite</dt><dd>${esc(p.limit)}</dd></dl>
+      <button type="button" aria-pressed="false">Choisir ${p.id}</button>
+    </article>`).join('');
+
+  // ---------- an intake's settings ----------
+  const SETTINGS = {
+    chat: { watch: [['Direct messages', true], ['Mentions of me', true], ['Channels', true]], extra: '<span class="tag">#team-product</span><span class="tag">#incidents</span>', quiet: '2 min', rules: ['sender is a bot', 'channel is #random', 'I am the last to speak'] },
+    mail: { watch: [['Inbox', true], ['Other labels', false]], extra: '', quiet: 'none', rules: ['has an unsubscribe header', 'category is Promotions or Social', 'sender is noreply@…'] },
+    git: { watch: [['Review requested', true], ['Mentions of me', true], ['Assigned to me', true], ['CI of my pull requests', false]], extra: '', quiet: '5 min', rules: ['author is a bot', 'the pull request is merged or closed'] },
+  };
+  let tab = 'chat';
+  function settings() {
+    $('tabs').innerHTML = Object.keys(SETTINGS).map((k) => `<button type="button" data-tab="${k}" aria-pressed="${k === tab}">${SRC[k].name}</button>`).join('');
+    const S = SETTINGS[tab];
+    $('settings').innerHTML = `<dl class="fld">
+      <dt>Source</dt><dd>${SRC[tab].name} · connected as you</dd>
+      <dt>Watch</dt><dd>${S.watch.map(([n, on]) => `<label class="tag"><input type="checkbox" ${on ? 'checked' : ''}> ${esc(n)}</label>`).join('')}${S.extra}</dd>
+      <dt>Quiet delay</dt><dd><span class="tag kv"><b>${S.quiet}</b></span><span class="hint">an item leaves once its conversation has been quiet that long</span></dd>
+      <dt>Drop when</dt><dd>${S.rules.map((r) => `<span class="tag">${esc(r)}</span>`).join('')}<button type="button">Add a rule</button></dd>
+      <dt>Set on each</dt><dd><span class="tag kv"><b>source</b>:${tab === 'chat' ? 'slack' : tab === 'mail' ? 'gmail' : 'github'}</span></dd>
+    </dl><p class="hint">A rule drops without asking a model: what it drops never reaches the floor and is only counted. Anything else comes in and is sorted by the floor.</p>`;
+  }
+  $('tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; settings(); } });
+
+  // ---------- the picks, kept ----------
+  const KEY = 'factory-intake-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const summary = () => Object.entries(GROUPS).map(([k, g]) => { const p = g.opts.find((o) => o.id === picks[k]); return `${g.title} : ${p ? `${p.id} (${p.name})` : 'pas encore choisi'}`; }).join(' · ');
+  function paint() {
+    for (const [k, g] of Object.entries(GROUPS)) for (const card of $(g.el).querySelectorAll('.card[data-id]')) {
+      const on = picks[k] === card.dataset.id, b = card.querySelector(':scope > button');
+      card.classList.toggle('picked', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${card.dataset.id} choisi` : `Choisir ${card.dataset.id}`;
+    }
+    $('prompt-picks').textContent = Object.entries(GROUPS).map(([k, g]) => `${g.title === 'Nouveau ticket' ? 'New ticket' : g.title} ${picks[k] || '(not picked)'}`).join(', ');
+    $('picks').innerHTML = Object.entries(GROUPS).map(([k, g]) => `${g.title} <b>${picks[k] || '–'}</b>`).join(' · ');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.grid .card[data-id] > button'); if (!b) return;
+    const card = b.closest('.card'), k = Object.keys(GROUPS).find((key) => GROUPS[key].el === card.parentElement.id);
+    picks[k] = picks[k] === card.dataset.id ? '' : card.dataset.id;
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    $('said').textContent = ''; paint();
+  });
+  $('copy').addEventListener('click', () => {
+    const said = $('said'), lineOut = summary();
+    try { navigator.clipboard.writeText(lineOut).then(() => { said.textContent = 'Copié : colle-le dans la conversation.'; }, () => { said.textContent = lineOut; }); } catch { said.textContent = lineOut; }
+  });
+
+  $('copy-prompt').addEventListener('click', () => {
+    const b = $('copy-prompt'), line = $('prompt').textContent.trim();
+    try { navigator.clipboard.writeText(line).then(() => { b.textContent = 'Copié'; }, () => { b.textContent = 'Sélectionne le texte au-dessus'; }); } catch { b.textContent = 'Sélectionne le texte au-dessus'; }
+  });
+  panel(); settings(); paint(); buttons();
+  requestAnimationFrame(frame);
+})();
+</script>

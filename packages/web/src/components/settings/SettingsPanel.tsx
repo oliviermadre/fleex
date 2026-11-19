@@ -1,3 +1,5 @@
+import { FactorySettingToggle } from '../../factory/FactorySettingToggle';
+import { NamedActionsSettings } from '../../factory/NamedActions';
 import { useState, useEffect } from 'react';
 import { useSettingsStore, type AppSettings } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
@@ -300,6 +302,9 @@ function GeneralTab({
           </span>
         </label>
       </div>
+
+      <FactorySettingToggle />
+      <NamedActionsSettings />
     </div>
   );
 }

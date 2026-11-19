@@ -3,6 +3,7 @@ import type { TicketStorePort } from '../../application/ports/ticket-store.port.
 import type { AgentTokenStorePort } from '../../application/ports/agent-token-store.port.js';
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
 import type { AnnotationStorePort } from '../../application/ports/annotation-store.port.js';
+import type { FactoryStorePort } from '../../factory/factory-store.port.js';
 import type { TodoStorePort } from '../../application/ports/todo-store.port.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
@@ -34,6 +35,8 @@ export interface StorageStores {
   agentTokenStore: AgentTokenStorePort;
   commentStore: CommentStorePort;
   annotationStore: AnnotationStorePort;
+  /** Experimental Factory (see `src/factory`). Null on drivers it does not support. */
+  factoryStore: FactoryStorePort | null;
   todoStore: TodoStorePort;
   mentionStore: MentionStorePort;
   deliverableStore: DeliverableStorePort;
@@ -116,6 +119,7 @@ async function createSqliteStores(deps: {
   const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
   const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
   const { SqliteAnnotationStoreAdapter } = await import('./sqlite/sqlite-annotation-store.adapter.js');
+  const { SqliteFactoryStore } = await import('../../factory/sqlite-factory-store.js');
   const { SqliteTodoStoreAdapter } = await import('./sqlite/sqlite-todo-store.adapter.js');
   const { SqliteMentionStoreAdapter } = await import('./sqlite/sqlite-mention-store.adapter.js');
   const { SqliteDeliverableStoreAdapter } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
@@ -157,6 +161,7 @@ async function createSqliteStores(deps: {
     agentTokenStore: new SqliteAgentTokenStoreAdapter(connection),
     commentStore: new SqliteCommentStoreAdapter(connection),
     annotationStore: new SqliteAnnotationStoreAdapter(connection),
+    factoryStore: new SqliteFactoryStore(connection),
     todoStore: new SqliteTodoStoreAdapter(connection),
     mentionStore: new SqliteMentionStoreAdapter(connection),
     deliverableStore: new SqliteDeliverableStoreAdapter(connection),
@@ -233,6 +238,7 @@ async function createPgsqlStores(deps: {
     agentTokenStore: new PgAgentTokenStore(connection),
     commentStore: new PgCommentStore(connection),
     annotationStore: new PgAnnotationStore(connection),
+    factoryStore: null,
     todoStore: new PgTodoStore(connection),
     mentionStore: new PgMentionStore(connection),
     deliverableStore: new PgDeliverableStore(connection),
@@ -275,6 +281,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseAgentTokenStore } = await import('./supabase/supabase-agent-token-store.adapter.js');
   const { SupabaseCommentStore } = await import('./supabase/supabase-comment-store.adapter.js');
   const { SupabaseAnnotationStore } = await import('./supabase/supabase-annotation-store.adapter.js');
+  const { SupabaseFactoryStore } = await import('../../factory/supabase-factory-store.js');
   const { SupabaseTodoStore } = await import('./supabase/supabase-todo-store.adapter.js');
   const { SupabaseMentionStore } = await import('./supabase/supabase-mention-store.adapter.js');
   const { SupabaseDeliverableStore } = await import('./supabase/supabase-deliverable-store.adapter.js');
@@ -320,6 +327,7 @@ async function createSupabaseStores(deps: {
     agentTokenStore: new SupabaseAgentTokenStore(connection),
     commentStore: new SupabaseCommentStore(connection),
     annotationStore: new SupabaseAnnotationStore(connection),
+    factoryStore: new SupabaseFactoryStore(connection),
     todoStore: new SupabaseTodoStore(connection),
     mentionStore: new SupabaseMentionStore(connection),
     deliverableStore: new SupabaseDeliverableStore(connection),
