@@ -8,6 +8,7 @@ import { applyTheme, BUILT_IN_THEMES } from '../../lib/themes';
 import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin, type NeonOptions } from '../skins/neon';
+import { PIXEL_FONTS, PixelSkin } from '../skins/pixel';
 import type { Skin } from '../skins/skin';
 import { floorState, later, lens } from './fixture';
 
@@ -44,13 +45,19 @@ const SHOTS: Shot[] = [
 ];
 
 /** The skins side by side on the two kinds of theme, for a mock-up: each skin and theme, the same floor. */
-const SKINS: { name: string; skin: () => Skin }[] = [
+const SKINS: { name: string; skin: () => Skin; z?: number }[] = [
   { name: 'fleex', skin: () => new FleexSkin() },
   ...(['soft', 'strong'] as const).flatMap((glow) => (['accent', 'cyan'] as const).map((chevrons) => ({ name: `neon-${glow}-${chevrons}`, skin: () => new NeonSkin({ glow, chevrons } satisfies NeonOptions) }))),
 ];
-const looks = (): Shot[] => SKINS.flatMap(({ name, skin }) => ['verdant', 'light'].map((theme) => ({ name: `${name}-${theme}`, theme, cam: { x: 13, y: 9.6, z: 44 }, st: {}, skin })));
+/* the pixel skin rests on whole steps of its art (see `PIXEL_STEPS`) */
+SKINS.push(
+  { name: 'pixel-32', skin: () => new PixelSkin(), z: 32 }, { name: 'pixel-48', skin: () => new PixelSkin(), z: 48 },
+  { name: 'pixel-cream-32', skin: () => new PixelSkin({ dark: 'cream' }), z: 32 }, { name: 'pixel-appwords-32', skin: () => new PixelSkin({ words: 'app' }), z: 32 },
+);
+const looks = (): Shot[] => SKINS.flatMap(({ name, skin, z }) => ['verdant', 'light'].map((theme) => ({ name: `${name}-${theme}`, theme, cam: { x: 13, y: 9.6, z: z ?? 44 }, st: {}, skin })));
 
 async function shoot(which: 'checks' | 'looks' = 'checks', type = 'image/png'): Promise<Record<string, string>> {
+  await Promise.all(PIXEL_FONTS.map((f) => document.fonts.load(f).catch(() => undefined)));
   await document.fonts.ready;
   const out: Record<string, string> = {};
   for (const s of which === 'looks' ? looks() : SHOTS) {

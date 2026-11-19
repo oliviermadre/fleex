@@ -64,7 +64,7 @@ const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 export class FleexSkin implements Skin {
   readonly id: string = 'fleex';
   /** The floor's clock, as the scene last said. */
-  private clock = 0;
+  protected clock = 0;
   private labels: Label[] = [];
   private boards: Board[] = [];
   protected pal: Palette | null = null;
@@ -75,15 +75,17 @@ export class FleexSkin implements Skin {
   private glowCache = new Map<string, HTMLCanvasElement>();
   private shadowCache = new Map<string, HTMLCanvasElement>();
   /** What it paints on, at this frame. */
-  private on!: Surface;
+  protected on!: Surface;
+  /** The fonts words are written in: the app's own. */
+  protected fonts = { sans: SANS, mono: MONO };
   protected get ctx(): CanvasRenderingContext2D { return this.on.ctx; }
   protected get cv(): HTMLCanvasElement { return this.on.cv; }
-  private get dpr(): number { return this.on.dpr; }
-  private get w(): number { return this.on.w; }
-  private get h(): number { return this.on.h; }
-  private get cam(): Surface['cam'] { return this.on.cam; }
-  private toWorld(sx: number, sy: number): { x: number; y: number } { return this.on.toWorld(sx, sy); }
-  private floorOf(layout: FactoryLayout): { x: number; y: number; w: number; h: number } { return this.on.floorOf(layout); }
+  protected get dpr(): number { return this.on.dpr; }
+  protected get w(): number { return this.on.w; }
+  protected get h(): number { return this.on.h; }
+  protected get cam(): Surface['cam'] { return this.on.cam; }
+  protected toWorld(sx: number, sy: number): { x: number; y: number } { return this.on.toWorld(sx, sy); }
+  protected floorOf(layout: FactoryLayout): { x: number; y: number; w: number; h: number } { return this.on.floorOf(layout); }
   private machine(id: string | null): MachineSpec | null { return this.on.machine(id); }
 
   ground(on: Surface, S: Scene, st: ViewState): void {
@@ -161,7 +163,7 @@ export class FleexSkin implements Skin {
     for (const l of this.labels) this.write(l);
     /* plates of several lines: one box as wide as its longest line, standing off the side of its machine it was given */
     const z = this.cam.z, px = clamp(0.22 * z, 9, 11), lh = px * 1.3, pad = px * 0.55;
-    ctx.font = `700 ${px.toFixed(1)}px ${MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${px.toFixed(1)}px ${this.fonts.mono}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     for (const b of this.boards) {
       const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - this.cam.y) * z + this.h / 2;
       const x0 = b.side === 'right' ? sx + 6 : b.side === 'left' ? sx - 6 - w : sx - w / 2, y0 = b.side === 'above' ? sy - 6 - h : b.side === 'below' ? sy + 6 : sy - h / 2;
@@ -187,7 +189,7 @@ export class FleexSkin implements Skin {
     if (o.max) px = Math.min(px, o.max);
     const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2 + (o.dy ?? 0);
     if (sx < -300 || sx > this.w + 300 || sy < -40 || sy > this.h + 40) return;
-    ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? MONO : SANS}`;
+    ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? this.fonts.mono : this.fonts.sans}`;
     ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
     let text = raw;
     if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
@@ -204,6 +206,15 @@ export class FleexSkin implements Skin {
     if (o.spacing) ctx.letterSpacing = '0px';
   }
 
+  /** A ticket as a thing, in the shape of its type, `T` tiles wide round (px, py). False when there is none to draw: a plain square is drawn instead. */
+  protected token(look: TokenLook, type: string, tint: string, px: number, py: number, T: number, alpha: number): boolean {
+    const ctx = this.ctx, z = this.cam.z, sprite = tokenSprite(type, tint, T * z * this.dpr, look);
+    if (!sprite) return false;
+    const w = sprite.width / (z * this.dpr);
+    ctx.globalAlpha = alpha; ctx.drawImage(sprite, px - w / 2, py - w / 2, w, w); ctx.globalAlpha = 1;
+    return true;
+  }
+
   private ticket(P: Placed, st: ViewState): void {
     const ctx = this.ctx, pal = this.palette(), { t, x: px, y: py, s, mark, dragging, picked, selected, dim, call } = P;
     const z = this.cam.z, info = t.info, type = info?.type ?? '', color = TYPE_COLORS[type] ?? NO_TYPE;
@@ -212,13 +223,7 @@ export class FleexSkin implements Skin {
      * since a shape has holes. Too small to be told apart, it is the plain square again.
      */
     const T = s * 1.16, shaped = T * z >= 10;
-    const stamp = (look: TokenLook, tint: string, alpha: number): boolean => {
-      const sprite = shaped ? tokenSprite(type, tint, T * z * this.dpr, look) : null;
-      if (!sprite) return false;
-      const w = sprite.width / (z * this.dpr);
-      ctx.globalAlpha = alpha; ctx.drawImage(sprite, px - w / 2, py - w / 2, w, w); ctx.globalAlpha = 1;
-      return true;
-    };
+    const stamp = (look: TokenLook, tint: string, alpha: number): boolean => shaped && this.token(look, type, tint, px, py, T, alpha);
     if (dim) {
       /* left out by the filter: still there, but faded and without any of its marks */
       if (!stamp('ghost', GHOST, 0.32)) { ctx.globalAlpha = 0.28; rr(ctx, px - s / 2, py - s / 2, s, s, s * 0.22); ctx.fillStyle = pal.text3; ctx.fill(); ctx.globalAlpha = 1; }
@@ -308,7 +313,7 @@ export class FleexSkin implements Skin {
     if (!items.length) return;
     const ctx = this.ctx, LH = 15, PAD = 5;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.font = `500 11px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `500 11px ${this.fonts.sans}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
@@ -327,10 +332,10 @@ export class FleexSkin implements Skin {
         const t = byId.get(l.id), y = b.y + PAD + i * LH + LH / 2, sel = st.selTicket === l.id;
         rr(ctx, b.x + PAD, y - 4, 8, 8, 2); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
         if (t?.info?.favorite) { ctx.fillStyle = STAR; ctx.beginPath(); ctx.arc(b.x + PAD + 8, y - 4, 2.2, 0, 6.3); ctx.fill(); }
-        ctx.font = `${sel ? 700 : 500} 11px ${SANS}`; ctx.fillStyle = lit ? (sel || st.found?.has(l.id) ? '#09090b' : 'rgba(24,24,27,0.86)') : sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
+        ctx.font = `${sel ? 700 : 500} 11px ${this.fonts.sans}`; ctx.fillStyle = lit ? (sel || st.found?.has(l.id) ? '#09090b' : 'rgba(24,24,27,0.86)') : sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
         ctx.fillText(l.text, b.x + PAD + 13, y + 0.5);
       });
-      if (b.more > 0) { ctx.font = `500 11px ${SANS}`; ctx.fillStyle = lit ? 'rgba(24,24,27,0.6)' : 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
+      if (b.more > 0) { ctx.font = `500 11px ${this.fonts.sans}`; ctx.fillStyle = lit ? 'rgba(24,24,27,0.6)' : 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
     }
     ctx.restore();
   }
@@ -363,13 +368,7 @@ export class FleexSkin implements Skin {
     ctx.fillStyle = pal.floor; ctx.fillRect(0, 0, this.w, this.h);
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - this.cam.x * z) * d, (this.h / 2 - this.cam.y * z) * d);
     /* the light over the middle and the dusk at the edges are in the floor's own paint: one opaque coat */
-    let paint: string | CanvasGradient = pal.floor;
-    if (!st.edit) {
-      const cx = F.x + F.w / 2, cy = F.y + F.h / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(F.w, F.h) * 0.62);
-      g.addColorStop(0, mix(pal.floor, '#ffffff', look.light)); g.addColorStop(0.6, pal.floor); g.addColorStop(1, mix(pal.floor, '#000000', look.dusk));
-      paint = g;
-    }
-    rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = paint; ctx.fill();
+    rr(ctx, F.x - 0.5, F.y - 0.5, F.w + 1, F.h + 1, 0.7); ctx.fillStyle = this.floorPaint(ctx, F, st, pal); ctx.fill();
     ctx.strokeStyle = st.edit ? pal.accent : pal.grid; ctx.lineWidth = st.edit ? 0.08 : 0.05; ctx.stroke();
 
     if (st.edit) {
@@ -380,6 +379,32 @@ export class FleexSkin implements Skin {
         ctx.stroke(); ctx.globalAlpha = 1;
       }
     } else {
+      this.dress(ctx, F, st, pal);
+      /* amber around a machine that needs someone, a dimmer red around one that is off; one that simply works throws no light */
+      for (const [m, s] of lit) this.glow(ctx, m, s, pal);
+      ctx.globalAlpha = 1;
+    }
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0);
+  }
+
+  /** The light a station's lamp throws on the floor round it: amber when it needs someone, a dimmer red when it is off. */
+  protected glow(ctx: CanvasRenderingContext2D, m: StationSpec, s: Lamp, pal: Palette): void {
+    const R = Math.max(m.w, m.h) * 1.25;
+    ctx.globalAlpha = floorLook(pal.floor).glow * (s === 'off' ? 0.7 : 1); ctx.drawImage(this.glowSprite(s === 'off' ? pal.danger : pal.warn), m.x + m.w / 2 - R, m.y + m.h / 2 - R, R * 2, R * 2);
+  }
+
+  /** The paint of the floor: out of build mode, a light over the middle and dusk at the edges, in one opaque coat. */
+  protected floorPaint(ctx: CanvasRenderingContext2D, F: { x: number; y: number; w: number; h: number }, st: ViewState, pal: Palette): string | CanvasGradient {
+    if (st.edit) return pal.floor;
+    const look = floorLook(pal.floor), cx = F.x + F.w / 2, cy = F.y + F.h / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(F.w, F.h) * 0.62);
+    g.addColorStop(0, mix(pal.floor, '#ffffff', look.light)); g.addColorStop(0.6, pal.floor); g.addColorStop(1, mix(pal.floor, '#000000', look.dusk));
+    return g;
+  }
+
+  /** What the floor is dressed with out of build mode, over its paint: a dot where tiles meet, only the ones in view. */
+  protected dress(ctx: CanvasRenderingContext2D, F: { x: number; y: number; w: number; h: number }, st: ViewState, pal: Palette): void {
+    const z = this.cam.z, look = floorLook(pal.floor);
+    {
       /* dots, only the ones in view: one path for the plain ones, one for the stronger ones */
       const seen = st.grid === false ? 0 : fadeIn(z, 8, 12);
       if (seen > 0) {
@@ -396,15 +421,11 @@ export class FleexSkin implements Skin {
         }
         ctx.globalAlpha = 1;
       }
-      /* amber around a machine that needs someone, a dimmer red around one that is off; one that simply works throws no light */
-      for (const [m, s] of lit) { const R = Math.max(m.w, m.h) * 1.25; ctx.globalAlpha = look.glow * (s === 'off' ? 0.7 : 1); ctx.drawImage(this.glowSprite(s === 'off' ? pal.danger : pal.warn), m.x + m.w / 2 - R, m.y + m.h / 2 - R, R * 2, R * 2); }
-      ctx.globalAlpha = 1;
     }
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.drawImage(cv, 0, 0);
   }
 
   /** A machine that stands on the floor casts a shadow on it (not in build mode, which is a plain drawing). A picture made once per size, and stamped. */
-  private shadows(st: ViewState, pal: Palette): void {
+  protected shadows(st: ViewState, pal: Palette): void {
     if (st.edit) return;
     const look = floorLook(pal.floor), a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h);
     for (const m of st.layout.machines) {
@@ -695,10 +716,10 @@ export class FleexSkin implements Skin {
     /* the body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
     if (kind) this.behind(m, kind, tint, pal);
     this.trace(m);
-    if (kind === 'script') ctx.fillStyle = mix(pal.body, '#000000', pal.light ? 0.1 : 0.55);
-    else { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body); ctx.fillStyle = g; }
+    ctx.fillStyle = this.bodyFill(kind, y, h, pal);
     ctx.fill();
-    ctx.lineWidth = gate ? 0.12 : pal.light ? 0.07 : 0.055; ctx.strokeStyle = tint;
+    const edge = this.bodyEdge(gate, tint, pal);
+    ctx.lineWidth = edge.width; ctx.strokeStyle = edge.color;
     if (gate) ctx.setLineDash([0.3, 0.2]);
     ctx.stroke(); ctx.setLineDash([]);
     if (kind === 'script') {
@@ -771,6 +792,17 @@ export class FleexSkin implements Skin {
       this.boards.push({ lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
     }
     if (L === 'off') { ctx.globalAlpha = 0.28; this.trace(m); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
+  }
+
+  /** What a station's body is filled with: a plate lit from above; a terminal's dark glass for a script. */
+  protected bodyFill(kind: RunKind | null, y: number, h: number, pal: Palette): string | CanvasGradient {
+    if (kind === 'script') return mix(pal.body, '#000000', pal.light ? 0.1 : 0.55);
+    const g = this.ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body);
+    return g;
+  }
+  /** A station's edge: in its kind's hue, thicker and dashed for a gate. */
+  protected bodyEdge(gate: boolean, tint: string, pal: Palette): { color: string; width: number } {
+    return { color: tint, width: gate ? 0.12 : pal.light ? 0.07 : 0.055 };
   }
 
   /** The outline of a machine's body, as a path: each kind that runs something has its own (see `machineArt.ts`). */

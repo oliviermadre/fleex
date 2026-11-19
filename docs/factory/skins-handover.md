@@ -32,6 +32,10 @@ be overturned.
    setting next to the theme, not a setting of the floor. A skin should follow the theme where it can (a pixel skin
    with a dark floor on a dark theme, the theme's accent where the skin has one): then the console taking the skin's
    colours stays in keeping with the rest of the app.
+9. **Pixel zoom** (open question 3, answered): the zoom moves continuously but only ever stops on a step, where
+   pixels are whole; never at rest between two steps.
+10. **Sprites** (open question 4, answered): drawn by code. What they do is procedural and the page's own: where a
+   worker stands is not kept by the server, and after a reload it may well be somewhere else.
 6. **Working method, unchanged**: an interactive HTML mock-up drawn like the floor comes first for anything
    functional or visual, the owner picks, then "go build". One commit per lot. Replies to the owner in French,
    product text in English, never "..." in a wording.

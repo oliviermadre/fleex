@@ -5,6 +5,7 @@
  *   node scripts/factory-shots/run.mjs shoot <dir>             paint the made-up floor (src/factory/shots) into <dir>/*.png
  *   node scripts/factory-shots/run.mjs compare <a> <b> [diff]  compare two such folders pixel by pixel; differences in red in [diff]
  *   node scripts/factory-shots/run.mjs looks <dir>             each skin on a dark and a light theme, as WebP, for a mock-up
+ *   node scripts/factory-shots/run.mjs playground <file.js>    the made-up floor, live (src/factory/shots/playground.ts), as one script a mock-up embeds
  *
  * Run from packages/web. The usual check: shoot on main into one folder, shoot on the branch into another, compare.
  * Needs Playwright's Chromium (pre-installed in cloud sessions; else `npx playwright install chromium`).
@@ -71,7 +72,20 @@ async function compare(a, b, diffDir) {
   process.exitCode = bad ? 1 : 0;
 }
 
-if (cmd === 'shoot' && args[0]) await shoot(path.resolve(args[0]));
+async function playground(file) {
+  const { build } = await import(require.resolve('vite'));
+  const outDir = path.dirname(file);
+  await build({
+    configFile: false, root: web, logLevel: 'warn', publicDir: false,
+    resolve: { alias: { '@fleex/shared': path.resolve(web, '../shared/src/index.ts') } },
+    define: { 'process.env.NODE_ENV': '"production"' },
+    build: { outDir, emptyOutDir: false, minify: true, lib: { entry: path.join(web, 'src/factory/shots/playground.ts'), formats: ['iife'], name: 'FactoryPlayground', fileName: () => path.basename(file) } },
+  });
+  console.log(`playground in ${file}`);
+}
+
+if (cmd === 'playground' && args[0]) await playground(path.resolve(args[0]));
+else if (cmd === 'shoot' && args[0]) await shoot(path.resolve(args[0]));
 else if (cmd === 'looks' && args[0]) await shoot(path.resolve(args[0]), 'looks');
 else if (cmd === 'compare' && args[0] && args[1]) await compare(path.resolve(args[0]), path.resolve(args[1]), args[2] && path.resolve(args[2]));
-else { console.error('usage: run.mjs shoot <dir> | compare <a> <b> [diff] | looks <dir>'); process.exitCode = 2; }
+else { console.error('usage: run.mjs shoot <dir> | compare <a> <b> [diff] | looks <dir> | playground <file.js>'); process.exitCode = 2; }
