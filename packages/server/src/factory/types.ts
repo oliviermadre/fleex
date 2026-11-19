@@ -108,7 +108,24 @@ export interface DeskSpec extends MachineBase {
   kind: 'desk';
   defaults?: { boardId?: string; type?: string; priority?: string };
 }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec;
+/** Where items come from. `manual` is an item made by hand (a test, or a source not connected yet). */
+export type ItemSource = 'slack' | 'gmail' | 'github' | 'manual';
+export const ITEM_SOURCES: readonly ItemSource[] = ['slack', 'gmail', 'github', 'manual'];
+/** A rule of an intake: an item whose field contains this text (any case) is dropped, and never reaches the floor. */
+export interface DropRule { field: 'author' | 'title' | 'text'; contains: string }
+/**
+ * Where items of one source come in (picked on `docs/factory/intake.html`, I1): a dock of 3 by 2. An item waits in it
+ * while its conversation moves, and is let out once it has been quiet for `quietSec`; an arm then takes it. What the
+ * rules recognise (a newsletter, a bot) is dropped there, counted, and never reaches the floor. Nothing on the floor
+ * can put anything into it.
+ */
+export interface IntakeSpec extends MachineBase {
+  kind: 'intake'; source: ItemSource;
+  /** Seconds a conversation must have been quiet before its item leaves. 0: at once. */
+  quietSec?: number;
+  drop?: DropRule[];
+}
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec | IntakeSpec;
 
 /**
  * `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. `version` says what
@@ -176,6 +193,33 @@ export interface FactoryRunRow {
   id: string; ticketId: string; floorId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: FactoryRunStatus; outcome: string | null; executionId: string | null; error: string | null;
   startedAt: string; finishedAt: string | null;
+}
+
+/**
+ * An item: a conversation that came in from a source, and is not a ticket. It travels the floor as a ticket does, with
+ * its own row (`factory_items`): `machineId` and `state` are where it stands, as `factory_tickets` has it for a ticket.
+ */
+export interface FactoryItemRow {
+  id: string; floorId: string; source: ItemSource;
+  /** Its key in its source: workspace + channel + thread, a mail thread id, repository + pull request number. */
+  sourceKey: string;
+  title: string; author: string; excerpt: string; url: string | null; tags: string[];
+  /** How many messages the conversation has had, and when the last one came. */
+  messages: number; lastActivityAt: string;
+  /** The intake it came in by. */
+  intakeId: string | null;
+  machineId: string | null; state: FactoryTicketState | null;
+  archivedAt: string | null; archivedReason: 'junk' | 'exit' | 'dropped' | null;
+  createdAt: string; updatedAt: string;
+}
+/** What the page is told of an item, beside the ticket-like fields every token has. */
+export interface FactoryItemInfo { source: ItemSource; author: string; excerpt: string; url: string | null; messages: number; lastActivityAt: string }
+/** What a source says about a conversation that moved: a new one, or a new message on one already known. */
+export interface ItemInput {
+  source: ItemSource; key: string; title: string;
+  author?: string; excerpt?: string; url?: string | null; tags?: string[];
+  /** How many messages it has now; without it, one more than known. */
+  messages?: number;
 }
 
 /** What the engine needs to know about a ticket to route it and to show it. */

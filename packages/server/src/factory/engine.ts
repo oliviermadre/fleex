@@ -7,9 +7,9 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
-  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, RUNS, SET_ASIDE,
-  type ArmSpec, type BeltSpec, type FactoryFloorRow, type FactoryGroup, type FactoryLayout, type FactoryRunRow, type FactorySettings,
-  type FactoryTicketInfo, type FactoryTicketState, type MachineSpec, type StationSpec, type ZoneSpec,
+  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
+  type ArmSpec, type BeltSpec, type DropRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
+  type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
 /** Tiles per second on a belt. */
@@ -28,6 +28,10 @@ const REFRESH_INFO_EVERY_MS = 30_000;
 /* how many tickets are re-read at once: on a remote database each read is a round trip */
 const REFRESH_CONCURRENCY = 8;
 const HOUR_MS = 3_600_000;
+/** What an intake's DROPPED counter covers. */
+const DROPPED_WINDOW_MS = 24 * HOUR_MS;
+/** How long an intake keeps a conversation that moves, unless it says otherwise. */
+const DEFAULT_QUIET_SEC = 120;
 
 interface Machine {
   spec: MachineSpec;
@@ -51,11 +55,36 @@ interface Ticket {
   s: FactoryTicketState;
   createdAt: string;
   info: FactoryTicketInfo | null;
+  /** Set when this is an item and not a ticket: its row, which is where it is saved. */
+  item?: FactoryItemRow;
+}
+
+/**
+ * What arms and tolls see of an item: no type, no priority, no board, and its tags with `source:<its source>` added,
+ * so that "tag value source is slack" routes it.
+ */
+export function itemInfo(row: FactoryItemRow): FactoryTicketInfo {
+  return {
+    id: row.id, displayId: 0, title: row.title, type: '', priority: 'none', status: 'todo', tags: [...row.tags.filter((t) => !t.startsWith('source:')), `source:${row.source}`],
+    boardId: '', complexity: null, favorite: false, blocked: false,
+  };
+}
+const itemOf = (row: FactoryItemRow): FactoryItemInfo => ({ source: row.source, author: row.author, excerpt: row.excerpt, url: row.url, messages: row.messages, lastActivityAt: row.lastActivityAt });
+/** Whether one of an intake's rules drops this conversation. */
+export function dropsIt(rules: readonly DropRule[] | undefined, i: { title: string; author: string; excerpt: string }): DropRule | null {
+  for (const r of rules ?? []) {
+    const needle = r.contains.trim().toLowerCase(); if (!needle) continue;
+    const hay = r.field === 'author' ? i.author : r.field === 'title' ? i.title : `${i.title}\n${i.excerpt}`;
+    if (hay.toLowerCase().includes(needle)) return r;
+  }
+  return null;
 }
 
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
-  tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null; /** When it was handed over to the Factory (ISO). */ handedAt: string })[];
+  tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null; /** When it was handed over to the Factory (ISO). */ handedAt: string; /** Set on an item, which is not a ticket. */ item?: FactoryItemInfo })[];
+  /** What each intake dropped over the last 24 hours, by its id. */
+  intakes?: Record<string, { dropped: number }>;
   /** `p` is how far each arm has swung (0 at its source, 1 at its destination) and `state` which way it is going, so the page can carry the motion on between two snapshots. */
   arms: { id: string; p: number; state: 'rest' | 'carry' | 'back'; carrying: string | null }[];
   /** Seconds an arm takes to swing one way. */
@@ -120,7 +149,7 @@ export function cleanGroups(input: unknown): FactoryGroup[] {
     return null;
   });
 }
-function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit' || m.spec.kind === 'desk'); }
+function isBox(m: Machine | null): boolean { return !!m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'exit' || m.spec.kind === 'desk' || m.spec.kind === 'intake'); }
 /** A desk's defaults as the page sent them: short strings, and nothing else. */
 function cleanDefaults(input: unknown): { boardId?: string; type?: string; priority?: string } | undefined {
   const d = input && typeof input === 'object' ? input as Record<string, unknown> : {}, out: Record<string, string> = {};
@@ -190,6 +219,16 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
       const defaults = cleanDefaults(m.defaults); if (defaults) m.defaults = defaults; else delete m.defaults;
     }
+    else if (m.kind === 'intake') {
+      /* a dock of three by two, as a desk */
+      m.w = 3; m.h = 2;
+      if (!ITEM_SOURCES.includes(m.source)) throw new FactoryError(`unknown item source "${String(m.source)}"`);
+      m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
+      m.quietSec = Math.max(0, Math.min(7 * 86_400, Math.floor(Number(m.quietSec ?? DEFAULT_QUIET_SEC) || 0)));
+      m.drop = (Array.isArray(m.drop) ? m.drop : [])
+        .filter((r) => r && ['author', 'title', 'text'].includes(r.field) && typeof r.contains === 'string' && r.contains.trim())
+        .slice(0, 100).map((r) => ({ field: r.field, contains: r.contains.trim().slice(0, 200) }));
+    }
     else throw new FactoryError(`unknown machine kind "${String((m as { kind?: string }).kind)}"`);
     if ((m.kind === 'belt' || m.kind === 'arm') && ![0, 1, 2, 3].includes(m.dir)) throw new FactoryError('belts and arms need a direction 0..3');
     if (m.kind !== 'label') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
@@ -231,6 +270,10 @@ export class FactoryEngine {
   private flushing: Promise<void> | null = null;
   /** Something the page should tell once: the floor was started over because its layout could not be carried to this version. */
   private notice: string | null = null;
+  /** The item on the floor for each conversation, by `source\u0000key`. */
+  private itemKeys = new Map<string, string>();
+  /** What each intake dropped since the window began, by its id. */
+  private dropped = new Map<string, number>();
   private readonly now: () => number;
   private readonly armSwing: number;
   private readonly restMs: number;
@@ -273,6 +316,13 @@ export class FactoryEngine {
       if (startedOver) { const inbound = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound); if (inbound) { this.accept(inbound, t); t.s.outcome = ''; continue; } }
       this.attach(t);
     }
+    for (const row of await this.deps.store.listItems(this.floor.id)) {
+      const t: Ticket = { ticketId: row.id, machineId: row.machineId, s: row.state ?? this.looseState(), createdAt: row.createdAt, info: itemInfo(row), item: row };
+      this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${row.sourceKey}`, row.id);
+      if (startedOver) { const inbound = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound); if (inbound) { this.accept(inbound, t); t.s.outcome = ''; continue; } }
+      this.attach(t);
+    }
+    this.dropped = new Map(Object.entries(await this.deps.store.countDropped(this.floor.id, new Date(this.now() - DROPPED_WINDOW_MS).toISOString())));
     const sinceIso = new Date(this.now() - HOUR_MS).toISOString();
     const n = await this.deps.store.countRunsSince(this.floor.id, sinceIso);
     for (let i = 0; i < n; i++) this.runStarts.push(this.now());
@@ -337,7 +387,7 @@ export class FactoryEngine {
     for (const t of this.tickets.values()) {
       const m = t.machineId ? this.byId.get(t.machineId) : null;
       if (m && t.s.phase === 'running' && m.spec.kind !== 'station') { t.s.phase = 'loose'; t.machineId = null; this.dirty.add(t.ticketId); continue; }
-      if (m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'desk')) { t.s.x = m.spec.x; t.s.y = m.spec.y; continue; }
+      if (m && (m.spec.kind === 'station' || m.spec.kind === 'zone' || m.spec.kind === 'desk' || m.spec.kind === 'intake')) { t.s.x = m.spec.x; t.s.y = m.spec.y; continue; }
       if (!m && t.machineId) this.dirty.add(t.ticketId);
       this.attach(t);
     }
@@ -370,6 +420,8 @@ export class FactoryEngine {
     if (m.spec.kind === 'teleporter') return m.spec.role === 'departure' && !m.item;
     /* a ticket is born at a desk (see `transfer`): nothing on the floor goes into one */
     if (m.spec.kind === 'desk') return false;
+    /* nor into an intake: it only receives from its source */
+    if (m.spec.kind === 'intake') return false;
     if (m.spec.kind === 'bridge') return dir !== undefined && !(dir % 2 === 0 ? m.item : m.item2);   // 0 and 2 cross east-west
     if (m.spec.kind === 'station') {
       /* its places are for what it works on; what is done waits apart, and intake stops when that piles up as high */
@@ -405,6 +457,12 @@ export class FactoryEngine {
     } else if (spec.kind === 'zone') { t.s.phase = 'zone'; if (spec.status) this.applyStatus(t, spec.status); }
     /* a desk holds what was just created there, already free to go: the first arm that wants it takes it */
     else if (spec.kind === 'desk') { t.s.phase = 'zone'; t.s.released = true; }
+    /* an intake holds an item until its conversation has been quiet long enough (`updateIntake`) */
+    else if (spec.kind === 'intake') { t.s.phase = 'zone'; }
+    else if (spec.kind === 'exit' && t.item) {
+      /* an item is not shipped: it is archived, at the very least */
+      this.archive(t, 'exit');
+    }
     else if (spec.kind === 'exit') {
       this.applyStatus(t, 'done');
       /* a row for the shipment: from hand-over to exit, which is the lead time the stats report */
@@ -418,6 +476,8 @@ export class FactoryEngine {
   }
 
   private applyStatus(t: Ticket, status: TicketStatus): void {
+    /* an item has no status to set */
+    if (t.item) return;
     if (t.info && t.info.status === status) return;
     if (t.info) t.info = { ...t.info, status };
     void this.deps.setStatus(t.ticketId, status).catch((err) => this.deps.logger.warn('Factory: could not set a ticket status', { ticketId: t.ticketId, status, error: String(err) }));
@@ -434,6 +494,8 @@ export class FactoryEngine {
   }
 
   private saveRun(run: FactoryRunRow): void {
+    /* a run row belongs to a ticket; an item's visits are not recorded */
+    if (this.tickets.get(run.ticketId)?.item) return;
     void this.deps.store.saveRun(run).catch((err) => this.deps.logger.warn('Factory: could not save a run', { runId: run.id, error: String(err) }));
   }
 
@@ -467,7 +529,7 @@ export class FactoryEngine {
     }
     if (s.spec.kind === 'belt') return s.item && this.wants(arm, s.item) ? s.item : null;
     if (s.spec.kind === 'station') return this.inside(s).find((t) => ((t.s.phase === 'out' && this.rested(t)) || (t.s.phase === 'question' && takesQuestions(spec))) && this.wants(arm, t)) ?? null;
-    if (s.spec.kind === 'zone' || s.spec.kind === 'desk') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
+    if (s.spec.kind === 'zone' || s.spec.kind === 'desk' || s.spec.kind === 'intake') return this.inside(s).find((t) => t.s.released && this.wants(arm, t)) ?? null;
     /* out of an arrival only: what is in a departure is on its way somewhere else */
     if (s.spec.kind === 'teleporter') return s.spec.role === 'arrival' && s.item && this.ported(s.item) && this.wants(arm, s.item) ? s.item : null;
     return null;
@@ -553,7 +615,8 @@ export class FactoryEngine {
     if (b.gate === 'failed' && this.now() < b.gateRetryAt) return false;
     const done = () => { b.gate = 'idle'; t.s.released = true; if (t.s.note) t.s.note = ''; this.dirty.add(t.ticketId); };
     const spec = b.spec as BeltSpec, ops = spec.set ?? [];
-    if (!t.info || !ops.length) { done(); return true; }
+    /* what a gantry sets are a ticket's fields: an item goes under it untouched */
+    if (!t.info || !ops.length || t.item) { done(); return true; }
     const before = t.info, { info, change } = applyOps(before, ops);
     if (!change) { done(); return true; }
     if (!this.deps.applyChange) { t.info = info; done(); return true; }
@@ -627,6 +690,7 @@ export class FactoryEngine {
     let running = inside.filter((t) => t.s.phase === 'running').length;
     for (const t of inside) {
       if (t.s.phase !== 'wait') continue;
+      if (t.item) { t.s.phase = 'failed'; t.s.note = 'Stations do not work on items yet: move it, or archive it'; this.dirty.add(t.ticketId); continue; }
       const s = this.floor.settings;
       const note = spec.off ? `${spec.name || 'The station'} is switched off`
         : running >= spec.cap ? `${spec.name || 'The station'} works on ${spec.cap} at once`
@@ -693,6 +757,15 @@ export class FactoryEngine {
     next.s.released = true; this.dirty.add(next.ticketId);
   }
 
+  /** An intake lets out the items whose conversation has been quiet for its delay. */
+  private updateIntake(m: Machine): void {
+    const quiet = ((m.spec as IntakeSpec).quietSec ?? DEFAULT_QUIET_SEC) * 1000, now = this.now();
+    for (const t of this.inside(m)) {
+      if (t.s.released || !t.item) continue;
+      if (now - Date.parse(t.item.lastActivityAt) >= quiet) { t.s.released = true; this.dirty.add(t.ticketId); }
+    }
+  }
+
   // ---------- teleporters ----------
 
   /** A ticket in a teleporter stays in view a moment before it is sent on, or taken out. */
@@ -725,6 +798,7 @@ export class FactoryEngine {
       else if (k === 'arm') this.updateArm(m, dt);
       else if (k === 'station') this.updateStation(m);
       else if (k === 'zone') this.updateZone(m);
+      else if (k === 'intake') this.updateIntake(m);
     }
     this.updateTeleporters();
   }
@@ -742,6 +816,12 @@ export class FactoryEngine {
     for (const id of ids) {
       const t = this.tickets.get(id);
       if (!t) continue;
+      if (t.item) {
+        t.item = { ...t.item, machineId: t.machineId, state: t.s, updatedAt: nowIso };
+        try { await this.deps.store.saveItem(t.item); }
+        catch (err) { this.dirty.add(id); this.deps.logger.warn('Factory: could not save an item', { itemId: id, error: String(err) }); }
+        continue;
+      }
       try { await this.deps.store.saveTicket({ ticketId: t.ticketId, floorId: this.floor.id, machineId: t.machineId, state: t.s, createdAt: t.createdAt, updatedAt: nowIso }); }
       catch (err) { this.dirty.add(id); this.deps.logger.warn('Factory: could not save a ticket position', { ticketId: id, error: String(err) }); }
     }
@@ -755,7 +835,7 @@ export class FactoryEngine {
   }
 
   private async sweep(): Promise<void> {
-    const all = [...this.tickets.values()];
+    const all = [...this.tickets.values()].filter((t) => !t.item);
     for (let i = 0; i < all.length; i += REFRESH_CONCURRENCY) await Promise.all(all.slice(i, i + REFRESH_CONCURRENCY).map((t) => this.reread(t)));
   }
 
@@ -775,7 +855,9 @@ export class FactoryEngine {
 
   /** Re-read one ticket now, after it was changed from the Factory page (a favourite toggled), without waiting for the next sweep. */
   async refreshInfo(ticketId: string): Promise<void> {
-    const t = this.get(ticketId), info = await this.deps.loadTicket(ticketId);
+    const t = this.get(ticketId);
+    if (t.item) return;
+    const info = await this.deps.loadTicket(ticketId);
     if (info) t.info = info;
   }
 
@@ -787,7 +869,8 @@ export class FactoryEngine {
     return t;
   }
 
-  managedIds(): Set<string> { return new Set(this.tickets.keys()); }
+  /** The tickets on the floor; items are not tickets, and are left out. */
+  managedIds(): Set<string> { return new Set([...this.tickets.values()].filter((t) => !t.item).map((t) => t.ticketId)); }
   isManaged(ticketId: string): boolean { return this.tickets.has(ticketId); }
 
   /** The Inbound zone, created on the first free spot when the floor has none (it was removed, or the floor predates it). */
@@ -841,8 +924,84 @@ export class FactoryEngine {
   /** Take a ticket back out of the Factory: plain Fleex owns it again, in the status it has now. */
   async giveBack(ticketId: string): Promise<void> {
     const t = this.get(ticketId);
+    /* an item has nowhere to go back to: giving it back is archiving it */
+    if (t.item) { await this.archiveItem(ticketId); return; }
     this.detach(t); this.tickets.delete(ticketId); this.dirty.delete(ticketId);
     await this.deps.store.removeTicket(ticketId);
+  }
+
+  private looseState(): FactoryTicketState {
+    const nowIso = new Date(this.now()).toISOString();
+    return { x: 0, y: 0, phase: 'loose', p: 0, fx: 1, fy: 0, outcome: '', released: false, since: nowIso, runId: null, note: '' };
+  }
+
+  /** Take an item off the floor and archive it (soft delete): by hand as junk, or at an exit. */
+  private archive(t: Ticket, reason: 'junk' | 'exit'): void {
+    const row = t.item!, nowIso = new Date(this.now()).toISOString();
+    this.detach(t); this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId); this.itemKeys.delete(`${row.source}\u0000${row.sourceKey}`);
+    const archived: FactoryItemRow = { ...row, machineId: null, state: null, archivedAt: nowIso, archivedReason: reason, updatedAt: nowIso };
+    void this.deps.store.saveItem(archived).catch((err) => this.deps.logger.warn('Factory: could not archive an item', { itemId: row.id, error: String(err) }));
+  }
+
+  /** Archive an item by hand: it is junk, or done with. A new message in its conversation brings it back. */
+  async archiveItem(itemId: string): Promise<void> {
+    const t = this.get(itemId);
+    if (!t.item) throw new FactoryError('Only an item can be archived from the floor: a ticket is given back');
+    this.archive(t, 'junk');
+    await this.flush();
+  }
+
+  /**
+   * A source says a conversation moved: a new one, or a new message on one already known. A new one is dropped when a
+   * rule of its intake recognises it (it never reaches the floor, the intake counts it), and comes in otherwise. A new
+   * message updates the item where it is; in its intake, the item waits for the conversation to be quiet again. An
+   * archived item comes back to its intake.
+   */
+  async ingest(input: ItemInput): Promise<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped' }> {
+    if (!input || !ITEM_SOURCES.includes(input.source)) throw new FactoryError(`unknown item source "${String(input?.source)}"`);
+    const key = String(input.key ?? '').trim().slice(0, 500);
+    if (!key) throw new FactoryError('an item needs its key in its source');
+    const intake = this.machines.find((m) => m.spec.kind === 'intake' && m.spec.source === input.source);
+    if (!intake) throw new FactoryError(`No ${input.source} intake on the floor: put one there first (Build › Area › Intake)`);
+    const nowIso = new Date(this.now()).toISOString();
+    const url = typeof input.url === 'string' && /^https?:\/\//.test(input.url) ? input.url.slice(0, 2000) : null;
+    const fields = {
+      title: String(input.title ?? '').trim().slice(0, 300) || '(no subject)',
+      author: String(input.author ?? '').trim().slice(0, 200),
+      excerpt: String(input.excerpt ?? '').trim().slice(0, 2000),
+      tags: (Array.isArray(input.tags) ? input.tags : []).map(String).map((t) => t.trim()).filter(Boolean).slice(0, 20),
+    };
+    const count = (was: number) => Math.max(1, Math.floor(Number(input.messages) || was + 1));
+
+    const onFloor = this.itemKeys.get(`${input.source}\u0000${key}`), known = onFloor ? this.tickets.get(onFloor) : undefined;
+    if (known?.item) {
+      known.item = { ...known.item, ...fields, url: url ?? known.item.url, messages: count(known.item.messages), lastActivityAt: nowIso };
+      known.info = itemInfo(known.item);
+      /* still in its intake: the conversation moves, so it waits for it to be quiet again */
+      if (known.machineId && this.byId.get(known.machineId)?.spec.kind === 'intake') known.s.released = false;
+      this.dirty.add(known.ticketId);
+      await this.flush();
+      return { itemId: known.ticketId, status: 'updated' };
+    }
+
+    const stored = await this.deps.store.getItemByKey(input.source, key);
+    const row: FactoryItemRow = {
+      id: stored?.id ?? randomUUID(), floorId: this.floor.id, source: input.source, sourceKey: key, ...fields, url: url ?? stored?.url ?? null,
+      messages: stored ? count(stored.messages) : Math.max(1, Math.floor(Number(input.messages) || 1)), lastActivityAt: nowIso,
+      intakeId: intake.spec.id, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: stored?.createdAt ?? nowIso, updatedAt: nowIso,
+    };
+    /* what was archived by hand or at an exit comes back; what was dropped, and anything new, goes through the rules */
+    const back = !!stored && stored.archivedReason !== 'dropped';
+    if (!back && dropsIt((intake.spec as IntakeSpec).drop, row)) {
+      await this.deps.store.saveItem({ ...row, archivedAt: nowIso, archivedReason: 'dropped' });
+      this.dropped.set(intake.spec.id, (this.dropped.get(intake.spec.id) ?? 0) + 1);
+      return { itemId: null, status: 'dropped' };
+    }
+    const t: Ticket = { ticketId: row.id, machineId: null, s: this.looseState(), createdAt: row.createdAt, info: itemInfo(row), item: row };
+    this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${key}`, row.id);
+    this.accept(intake, t);
+    await this.flush();
+    return { itemId: row.id, status: back ? 'back' : 'new' };
   }
 
   async release(ticketId: string): Promise<void> {
@@ -863,7 +1022,7 @@ export class FactoryEngine {
       status: 'completed', outcome, executionId: null, error: null, startedAt: t.s.since, finishedAt: nowIso,
     });
     t.s.phase = 'out'; t.s.outcome = outcome; t.s.since = nowIso; this.dirty.add(ticketId);
-    if (this.deps.recordDecision) void this.deps.recordDecision(ticketId, m.spec.name || 'Gate', outcome, reason.trim().slice(0, 4000))
+    if (this.deps.recordDecision && !t.item) void this.deps.recordDecision(ticketId, m.spec.name || 'Gate', outcome, reason.trim().slice(0, 4000))
       .catch((err) => this.deps.logger.warn('Factory: could not write a decision in the thread', { ticketId, error: String(err) }));
     await this.flush();
   }
@@ -981,7 +1140,8 @@ export class FactoryEngine {
     return {
       notice: this.notice,
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
-      tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s })),
+      tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s, ...(t.item ? { item: itemOf(t.item) } : {}) })),
+      intakes: Object.fromEntries(this.machines.filter((m) => m.spec.kind === 'intake').map((m) => [m.spec.id, { dropped: this.dropped.get(m.spec.id) ?? 0 }])),
       /* arms, and the arms of tolls, which go by their belt's id */
       arms: this.machines.filter((m) => m.spec.kind === 'arm' || (m.spec.kind === 'belt' && !!m.spec.toll)).map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: (m.spec.kind === 'arm' ? m.item : m.item2)?.ticketId ?? null })),
       armSwing: this.armSwing, beltSpeed: BELT_SPEED, fastBelt: FAST_BELT,
