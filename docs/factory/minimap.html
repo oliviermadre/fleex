@@ -1,0 +1,406 @@
+<title>Factory, la minimap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the block of the minimap as it is today, then three proposals, each the block at its real size, scaled up and playable; what holds for all three; a bar at the bottom keeps the pick. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  .lede b, .rules li b { color: var(--ink); font-weight: 600; }
+  .tools .lbl { font-size: 0.8rem; color: var(--muted); }
+  .seg { display: inline-flex; gap: 4px; } .seg button { padding: 3px 10px; font-size: 0.78rem; }
+  .card > button.pick { align-self: flex-start; }
+  /* the scene is the app's own page, at its real size, scaled up to the width it is given */
+  .stage-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 8px; line-height: 1.3; }
+  .stage { position: relative; transform-origin: 0 0; font-family: var(--body); overflow: hidden; user-select: none; }
+  .stage .abs, .abs { position: absolute; }
+  /* the page's scenes stretch their pictures to their width: not inside the app's own block */
+  .scene .stage svg { width: auto; height: auto; display: block; }
+  .scene .stage button svg { display: inline-block; }
+  .stage button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; border-radius: 0; cursor: pointer; }
+  .blk-shadow { background: #000; opacity: 0.55; filter: blur(10px); transform: translateY(-6px); }
+  .blk-edge { background: var(--edge); }
+  .blk { background: var(--surface); color: var(--text); }
+  .b-head { position: absolute; left: 14px; right: 40px; top: 10px; height: 20px; display: flex; align-items: center; gap: 7px; }
+  .b-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  .b-head time { font-family: var(--mono); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+  .b-head .lt { margin-left: auto; font-size: 11px; color: var(--faint); }
+  .b-head .row-t { margin-left: auto; display: flex; gap: 4px; }
+  /* one control, everywhere in the block: same radius, same lit state */
+  .stage .ib { display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); background: var(--surface); }
+  .stage .ib:hover { color: var(--text); border-color: var(--edge); }
+  .stage .ib.on { background: var(--hazard); color: var(--hazard-ink); border-color: transparent; }
+  .screen { background: var(--screen); border: 1px solid var(--edge); border-radius: 6px; box-shadow: inset 0 2px 6px var(--shadow); overflow: hidden; }
+  .lens-plate { position: absolute; left: 6px; top: 6px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; pointer-events: none; }
+  .lens-plate i { font-style: normal; font-weight: 500; color: var(--faint); margin-left: 4px; }
+  .tabs { display: flex; align-items: flex-end; gap: 3px; height: 27px; }
+  .stage .tab { width: 32px; height: 25px; display: grid; place-items: center; border: 1px solid var(--edge); border-bottom: 0; border-radius: 6px 6px 0 0; color: var(--muted); background: var(--surface); margin-bottom: -1px; position: relative; z-index: 1; }
+  .stage .tab.on { background: var(--hazard); color: var(--hazard-ink); }
+  .tabs-lbl, .strip-lbl { font-family: var(--mono); font-size: 8.5px; font-weight: 700; letter-spacing: 1.5px; color: var(--faint); align-self: center; margin-left: 6px; }
+  .strip { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--edge); border-left: 0; border-radius: 0 6px 6px 0; overflow: hidden; background: var(--surface); }
+  .strip .ib { border: 0; border-radius: 0; border-bottom: 1px solid var(--border); }
+  .strip .ib:last-child { border-bottom: 0; }
+  .zoom-pill { position: absolute; right: 6px; bottom: 6px; display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .stage .zoom-pill button { width: 24px; height: 22px; display: grid; place-items: center; color: var(--muted); }
+  .stage .zoom-pill button + button { border-left: 1px solid var(--border); }
+  .stage .zoom-pill button:hover { color: var(--text); }
+  .toolbar { display: flex; align-items: center; gap: 2px; height: 30px; }
+  .toolbar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+  .col { display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--edge); border-radius: 6px; padding: 3px; background: var(--surface); }
+  .col .list { display: flex; flex-direction: column; gap: 1px; }
+  .stage .col .list button { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 4px; font-size: 11px; color: var(--muted); text-align: left; }
+  .stage .col .list button.on { background: var(--hazard); color: var(--hazard-ink); font-weight: 600; }
+  .zoom-row { display: flex; border-top: 1px solid var(--border); padding-top: 3px; }
+  .stage .zoom-row button { flex: 1; height: 22px; display: grid; place-items: center; color: var(--muted); border-radius: 4px; }
+  /* what is there now, as it is */
+  .stage .old-t { width: 30px; height: 26px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
+  .stage .old-t.on { background: var(--hazard); color: var(--hazard-ink); border-color: transparent; }
+  .old-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
+  .stage .old-list button { text-align: left; padding: 3px 8px; font-size: 11px; color: var(--faint); border-radius: 4px; }
+  .stage .old-list button.on { background: var(--overlay); color: var(--text); }
+  .old-zoom { display: flex; border: 1px solid var(--border); border-radius: 6px; }
+  .stage .old-zoom button { flex: 1; padding: 2px 0; color: var(--muted); }
+  .tip { position: absolute; z-index: 9; display: none; background: var(--surface); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 4px 7px; font-size: 10.5px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px var(--shadow); }
+  .tip.on { display: block; }
+  .tip::after { content: ''; position: absolute; left: var(--caret, 50%); bottom: -5px; width: 8px; height: 8px; margin-left: -4px; background: var(--surface); border-right: 1px solid var(--edge); border-bottom: 1px solid var(--edge); transform: rotate(45deg); }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Le bloc de la minimap</h1>
+    <p class="lede">Aujourd'hui l'heure, quatre bascules, la carte, la liste des calques et le zoom sont posés côte à côte sans grille commune : la carte flotte dans un grand vide noir, la liste et les bascules n'ont pas le même style, le zoom traîne en bas. Trois pistes pour en faire un seul instrument, dessinées à la taille réelle du bloc. Tout se manipule : bascules, calques, zoom, clic sur la carte.</p>
+    <div class="tools"><span class="lbl">Thème</span><span class="seg" id="theme"><button type="button" data-theme="dark" aria-pressed="true">Sombre</button><button type="button" data-theme="light" aria-pressed="false">Clair</button></span></div>
+  </header>
+
+  <section aria-labelledby="h-now">
+    <h2 id="h-now">Aujourd'hui</h2>
+    <div class="grid"><article class="card" data-id="M0">
+      <div class="card-head"><span class="letter">M0</span><h3>Ce qui est en place</h3></div>
+      <div class="scene" data-scene></div>
+      <dl><dt>Constat</dt><dd>Cinq éléments, cinq styles : du texte libre en haut, des boutons jaunes, un écran sans cadre où la carte n'occupe qu'un tiers, une liste encadrée, un zoom encadré à part. Rien n'est aligné sur rien, et le pan coupé ne dialogue avec aucun élément.</dd></dl>
+    </article></div>
+  </section>
+
+  <section aria-labelledby="h-props">
+    <h2 id="h-props">Les propositions</h2>
+    <div class="grid" id="props"></div>
+  </section>
+
+  <section aria-labelledby="h-common">
+    <h2 id="h-common">Ce qui vaut pour les trois</h2>
+    <div class="rules"><div class="card"><ul>
+      <li><b>La carte remplit son écran.</b> Le plancher est cadré au plus juste ; ce qui reste autour est du terrain quadrillé, pas un vide noir.</li>
+      <li><b>Un seul style de commande</b> dans le bloc : même hauteur, même rayon, même état allumé, pour les bascules, les calques et le zoom.</li>
+      <li><b>L'écran a un cadre</b> : un bord, un creux, et le rectangle de la vue en blanc. Il se lit comme un instrument, comme la carte de commandes en face.</li>
+      <li><b>Le calque actif se lit sur la carte elle-même</b> : les postes prennent leur chaleur, le reste s'éteint, et son nom s'inscrit dans un coin de l'écran.</li>
+      <li><b>Chaque icône a sa bulle</b> au survol (la même que pour les groupes), puisque les calques perdent leur nom écrit dans deux des pistes.</li>
+    </ul></div></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  /* the two themes, as the app's tokens */
+  const THEMES = {
+    dark: { page: '#0f0f11', floor: '#18181b', dot: 'rgba(255,255,255,0.12)', surface: '#1c1c1f', base: '#09090b', edge: '#5a5a63', border: '#3f3f46', text: '#fafafa', muted: '#a1a1aa', faint: '#71717a', screen: '#0b0b0d', terrain: 'rgba(255,255,255,0.05)', land: '#1f1f23', belt: '#52525b', view: '#fafafa', overlay: '#27272a', hazard: '#eab308', hazardInk: '#18181b', ok: '#22c55e', shadow: 'rgba(0,0,0,0.6)' },
+    light: { page: '#f4f4f5', floor: '#ffffff', dot: 'rgba(0,0,0,0.14)', surface: '#ffffff', base: '#f4f4f5', edge: '#8a8a93', border: '#d4d4d8', text: '#18181b', muted: '#52525b', faint: '#828289', screen: '#e9e9ec', terrain: 'rgba(0,0,0,0.06)', land: '#f8f8f9', belt: '#a1a1aa', view: '#18181b', overlay: '#e4e4e7', hazard: '#eab308', hazardInk: '#18181b', ok: '#15803d', shadow: 'rgba(0,0,0,0.18)' },
+  };
+  let theme = 'dark';
+  const C = () => THEMES[theme];
+
+  /* signs, as strokes in a 24 by 24 box */
+  const G = {
+    names: ['M4 18l4.5-12 4.5 12', 'M5.700 14h5.600', 'M15.500 12.500a2.500 2.500 0 1 1 0 5h-.5a2 2 0 0 1 0-4h3V18'],
+    rules: ['M6 18a2.500 2.500 0 1 0 0.010 0', 'M7.800 16.200L16 8', 'M14 4.500h5.500V10', 'M13 9.500l1.500 1.500'],
+    numbers: ['M9 4L7 20', 'M17 4l-2 16', 'M4.500 9h16', 'M3.500 15h16'],
+    grid: ['M4 4h16v16H4z', 'M4 9.300h16M4 14.700h16M9.300 4v16M14.700 4v16'],
+    floor: ['M3 6.500l6-2.500 6 2.500 6-2.500v13l-6 2.500-6-2.500-6 2.500z', 'M9 4v13M15 6.500v13'],
+    standing: ['M12 4l8 4-8 4-8-4z', 'M4 12l8 4 8-4', 'M4 16l8 4 8-4'],
+    cost: ['M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16z', 'M14.600 9.300c-.5-.8-1.400-1.300-2.600-1.300-1.600 0-2.700.8-2.700 2s1 1.700 2.700 2 2.800.8 2.800 2.100-1.200 2-2.800 2c-1.300 0-2.300-.5-2.800-1.400M12 6.300V8M12 16.100v1.600'],
+    time: ['M12 6a7 7 0 1 0 0.010 0', 'M12 9v4l2.500 1.500', 'M10 3h4'],
+    human: ['M12 4.500a3.500 3.500 0 1 0 0.010 0', 'M5 20c.8-3.800 3.600-6 7-6s6.200 2.200 7 6'],
+    minus: ['M6 12h12'], plus: ['M6 12h12M12 6v12'], fit: ['M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'],
+  };
+  const icon = (k, size = 16, w = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${G[k].map((d) => `<path d="${d}"/>`).join('')}</svg>`;
+  const TOGGLES = [['names', 'Ticket names'], ['rules', 'Arm rules'], ['numbers', 'Ticket numbers'], ['grid', 'Grid']];
+  const LAYERS = [['floor', 'Floor', 'The floor as it is'], ['standing', 'Standing now', 'Where tickets stand, and for how long'], ['cost', 'Cost', 'What each station spent'], ['time', 'Run time', 'How long a run takes'], ['human', 'Human wait', 'Where tickets wait for a human']];
+
+  /* a floor shaped like the one in the screenshot: three lines of stations joined by belts */
+  const FW = 64, FH = 22;
+  const ST = [], BELT = [];
+  const line = (y, xs, kinds) => xs.forEach((x, i) => ST.push({ x, y, w: 2.4, h: 1.6, kind: kinds[i % kinds.length], heat: [0.2, 0.9, 0.4, 0.1, 0.6, 0.3, 0.75, 0.15][(x + y) % 8] }));
+  line(2, [8, 11, 14], ['agent', 'agent', 'gate']); ST.push({ x: 2, y: 2, w: 1.6, h: 1.6, kind: 'zone', heat: 0 }); ST.push({ x: 19, y: 2.2, w: 1.2, h: 1.2, kind: 'exit', heat: 0 });
+  line(6, [9, 14], ['skill', 'agent']); ST.push({ x: 18, y: 6.2, w: 1.2, h: 1.2, kind: 'exit', heat: 0 });
+  line(6, [27, 32, 37, 46, 51], ['agent', 'agent', 'gate', 'skill', 'agent']); ST.push({ x: 56, y: 6.2, w: 1.2, h: 1.2, kind: 'belt', heat: 0 }); ST.push({ x: 60, y: 6.2, w: 1.2, h: 1.2, kind: 'exit', heat: 0 });
+  line(10, [33], ['gate']); ST.push({ x: 37, y: 10.2, w: 1.2, h: 1.2, kind: 'exit', heat: 0 });
+  line(14, [11, 15, 19, 24, 32], ['agent', 'agent', 'gate', 'agent', 'skill']); ST.push({ x: 4, y: 14.2, w: 1.2, h: 1.2, kind: 'belt', heat: 0 });
+  ST.push({ x: 40, y: 16.2, w: 1.2, h: 1.2, kind: 'belt', heat: 0 }); ST.push({ x: 45, y: 16.2, w: 1.2, h: 1.2, kind: 'exit', heat: 0 });
+  BELT.push([[4, 2.8], [8, 2.8]], [[10.4, 2.8], [11, 2.8]], [[16.4, 2.8], [19, 2.8]], [[5, 3.6], [5, 6.8], [9, 6.8]], [[11.4, 6.8], [14, 6.8]], [[16.4, 6.8], [18, 6.8]],
+    [[9, 3.6], [9, 5], [24, 5], [24, 6.8], [27, 6.8]], [[29.4, 6.8], [32, 6.8]], [[34.4, 6.8], [37, 6.8]], [[39.4, 6.8], [46, 6.8]], [[48.4, 6.8], [51, 6.8]], [[53.4, 6.8], [60, 6.8]],
+    [[38, 7.6], [38, 9], [34, 9], [34, 10]], [[35.4, 10.8], [37, 10.8]], [[4.6, 14.8], [11, 14.8]], [[13.4, 14.8], [15, 14.8]], [[17.4, 14.8], [19, 14.8]], [[21.4, 14.8], [24, 14.8]], [[26.4, 14.8], [32, 14.8]],
+    [[34.4, 14.8], [38, 14.8], [38, 16.8], [45, 16.8]], [[22, 8.6], [22, 12], [30, 12], [30, 18], [21, 18], [21, 16.4]], [[5, 15.6], [5, 19], [16, 19], [16, 16.4]]);
+  const HUE = { agent: '#8b7cf6', skill: '#38bdf8', gate: '#eab308', zone: '#f97355', exit: '#22c55e', belt: '#71717a' };
+
+  /** The map, fitted into a screen of w by h; `vw` is the view's rectangle in tiles. */
+  function map(w, h, st, pad = 8) {
+    const c = C(), s = Math.min((w - pad * 2) / FW, (h - pad * 2) / FH), ox = (w - FW * s) / 2, oy = (h - FH * s) / 2, X = (v) => ox + v * s, Y = (v) => oy + v * s;
+    const lens = st.layer !== 'floor';
+    let g = '';
+    /* the terrain round the floor: a faint grid, never a black void */
+    for (let x = ((ox % (4 * s)) + 4 * s) % (4 * s); x < w; x += 4 * s) g += `<path d="M${x.toFixed(1)} 0V${h}" stroke="${c.terrain}"/>`;
+    for (let y = ((oy % (4 * s)) + 4 * s) % (4 * s); y < h; y += 4 * s) g += `<path d="M0 ${y.toFixed(1)}H${w}" stroke="${c.terrain}"/>`;
+    g += `<rect x="${X(0)}" y="${Y(0)}" width="${FW * s}" height="${FH * s}" rx="2" fill="${c.land}" stroke="${c.border}"/>`;
+    for (const b of BELT) g += `<path d="M${b.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join(' L')}" fill="none" stroke="${c.belt}" stroke-width="${Math.max(1.2, s * 0.35)}" opacity="${lens ? 0.45 : 1}"/>`;
+    for (const m of ST) {
+      const heat = `hsl(${Math.round(52 - 52 * m.heat)} 95% 52%)`;
+      const fill = lens ? (m.kind === 'agent' || m.kind === 'skill' || m.kind === 'gate' ? (m.heat > 0.05 ? heat : c.belt) : c.belt) : HUE[m.kind];
+      g += `<rect x="${X(m.x).toFixed(1)}" y="${Y(m.y).toFixed(1)}" width="${(m.w * s).toFixed(1)}" height="${(m.h * s).toFixed(1)}" rx="1" fill="${fill}" opacity="${lens && fill === c.belt ? 0.5 : 1}"/>`;
+    }
+    const v = st.view, vw = 26 / st.zoom, vh = 13 / st.zoom;
+    g += `<rect x="${X(v.x - vw / 2).toFixed(1)}" y="${Y(v.y - vh / 2).toFixed(1)}" width="${(vw * s).toFixed(1)}" height="${(vh * s).toFixed(1)}" fill="none" stroke="${c.view}" stroke-width="1.4"/>`;
+    return { svg: `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" data-map data-ox="${ox}" data-oy="${oy}" data-s="${s}" style="display:block;cursor:crosshair">${g}</svg>`, s, ox, oy };
+  }
+  const clock = () => { const d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':'); };
+
+  /* the block: 358 by 262, its top right corner cut, as in the app */
+  const BW = 358, BH = 262, CUT = 30;
+  const clip = `polygon(0 0, ${BW - CUT}px 0, ${BW}px ${CUT}px, ${BW}px ${BH}px, 0 ${BH}px)`;
+  const btn = (k, label, on, attrs, size = 28) => `<button type="button" class="ib${on ? ' on' : ''}" ${attrs} aria-label="${esc(label)}" data-tip="${esc(label)}" style="width:${size}px;height:${size}px">${icon(k, Math.round(size * 0.58))}</button>`;
+  const lensName = (st) => LAYERS.find((l) => l[0] === st.layer);
+  const plate = (st) => st.layer === 'floor' ? '' : `<span class="lens-plate">${esc(lensName(st)[1].toUpperCase())}<i>· last 7 days</i></span>`;
+  const head = (right = true) => `<div class="b-head"><span class="dot"></span><time>${clock()}</time>${right ? '<span class="lt">local time</span>' : ''}</div>`;
+
+  const DESIGNS = {
+    /* what is there now */
+    M0: (st) => {
+      const m = map(192, 150, st, 4);
+      return `${head()}
+        <div class="abs" style="left:14px;top:40px;display:flex;gap:6px">${TOGGLES.map(([k, l]) => `<button type="button" class="old-t${st.show[k] ? ' on' : ''}" data-toggle="${k}" aria-label="${l}">${icon(k, 16)}</button>`).join('')}</div>
+        <div class="abs" style="left:14px;top:78px;width:192px;height:150px;background:${C().base}" data-screen>${m.svg.replace(/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" rx="2"[^>]*>/, '')}</div>
+        <div class="abs old-list" style="left:232px;top:40px;width:110px">${LAYERS.map(([k, l]) => `<button type="button" class="${st.layer === k ? 'on' : ''}" data-layer="${k}">${l}</button>`).join('')}</div>
+        <div class="abs old-zoom" style="left:232px;top:220px;width:110px"><button type="button" data-zoom="out">−</button><button type="button" data-zoom="fit">⤢</button><button type="button" data-zoom="in">+</button></div>`;
+    },
+    /* M1: a screen with its buttons on its edges */
+    M1: (st) => {
+      const m = map(282, 182, st);
+      return `${head()}
+        <div class="abs tabs" style="left:14px;top:38px">${TOGGLES.map(([k, l]) => `<button type="button" class="tab${st.show[k] ? ' on' : ''}" data-toggle="${k}" aria-label="${l}" data-tip="${l}">${icon(k, 15)}</button>`).join('')}<span class="tabs-lbl">SHOW</span></div>
+        <div class="abs screen" style="left:14px;top:64px;width:282px;height:182px" data-screen>${m.svg}${plate(st)}
+          <div class="zoom-pill">${['minus', 'fit', 'plus'].map((k, i) => `<button type="button" data-zoom="${['out', 'fit', 'in'][i]}" aria-label="${['Zoom out', 'Fit the floor', 'Zoom in'][i]}" data-tip="${['Zoom out', 'Fit the floor (F)', 'Zoom in'][i]}">${icon(k, 14, 2.2)}</button>`).join('')}</div></div>
+        <div class="abs strip" style="left:303px;top:64px">${LAYERS.map(([k, l, t]) => btn(k, `${l}: ${t}`, st.layer === k, `data-layer="${k}"`, 36)).join('')}</div>
+        <span class="abs strip-lbl" style="left:303px;top:44px">LAYER</span>`;
+    },
+    /* M2: one toolbar under a wide screen */
+    M2: (st) => {
+      const m = map(330, 170, st);
+      const sep = '<span class="sep"></span>';
+      return `${head()}
+        <div class="abs screen" style="left:14px;top:38px;width:330px;height:170px" data-screen>${m.svg}${plate(st)}</div>
+        <div class="abs toolbar" style="left:14px;top:216px;width:330px">${TOGGLES.map(([k, l]) => btn(k, l, st.show[k], `data-toggle="${k}"`, 26)).join('')}${sep}${LAYERS.map(([k, l, t]) => btn(k, `${l}: ${t}`, st.layer === k, `data-layer="${k}"`, 26)).join('')}${sep}${['minus', 'fit', 'plus'].map((k, i) => btn(k, ['Zoom out', 'Fit the floor (F)', 'Zoom in'][i], false, `data-zoom="${['out', 'fit', 'in'][i]}"`, 26)).join('')}</div>`;
+    },
+    /* M3: the same parts, on one grid */
+    M3: (st) => {
+      const m = map(226, 204, st);
+      return `<div class="b-head"><span class="dot"></span><time>${clock()}</time><span class="row-t">${TOGGLES.map(([k, l]) => btn(k, l, st.show[k], `data-toggle="${k}"`, 24)).join('')}</span></div>
+        <div class="abs screen" style="left:14px;top:42px;width:226px;height:204px" data-screen>${m.svg}${plate(st)}</div>
+        <div class="abs col" style="left:248px;top:42px;width:96px;height:204px">
+          <div class="list">${LAYERS.map(([k, l, t]) => `<button type="button" class="${st.layer === k ? 'on' : ''}" data-layer="${k}" data-tip="${esc(t)}">${icon(k, 13)}<span>${l}</span></button>`).join('')}</div>
+          <div class="zoom-row">${['minus', 'fit', 'plus'].map((k, i) => `<button type="button" data-zoom="${['out', 'fit', 'in'][i]}" aria-label="${['Zoom out', 'Fit the floor', 'Zoom in'][i]}">${icon(k, 13, 2.2)}</button>`).join('')}</div>
+        </div>`;
+    },
+  };
+  const PROPS = [
+    { id: 'M1', mine: true, name: 'Un écran avec ses boutons sur ses bords', idea: 'La carte devient un écran encadré, qui prend presque tout le bloc. Les quatre bascules sont des onglets posés sur son bord haut, les calques une colonne de boutons carrés sur son bord droit, le zoom une pastille dans son coin bas. Le nom du calque actif s\'inscrit dans l\'écran.', reads: 'Un seul objet au lieu de cinq : tout s\'accroche à l\'écran. C\'est la logique de la minimap d\'un jeu de stratégie, et la carte gagne en taille.', limit: 'Les calques n\'ont plus leur nom écrit : il faut la bulle au survol, ou le nom qui s\'affiche dans l\'écran une fois choisi.' },
+    { id: 'M2', name: 'Un grand écran, une barre d\'outils dessous', idea: 'L\'écran prend toute la largeur. En dessous, une seule barre de douze boutons de même taille, en trois groupes séparés : ce qui s\'affiche, le calque, le zoom.', reads: 'La carte la plus grande des trois, et une rangée unique facile à balayer.', limit: 'Douze petites icônes alignées se distinguent mal ; bascules et calques se ressemblent alors qu\'ils ne font pas la même chose.' },
+    { id: 'M3', name: 'Les mêmes pièces, sur une seule grille', idea: 'Le moins de changement : la carte et la liste des calques gardent leur place, mais à la même hauteur, avec le même cadre, et la carte remplit son écran. Les bascules remontent à côté de l\'heure, le zoom se range sous la liste.', reads: 'Les calques gardent leur nom écrit, avec une icône en plus.', limit: 'Ça reste deux colonnes côte à côte : plus propre, mais moins « instrument ».' },
+  ];
+
+  /* each card has its own state: what it shows, which layer, where the view is */
+  const ALL = ['M0', ...PROPS.map((p) => p.id)];
+  const STATE = Object.fromEntries(ALL.map((id) => [id, { show: { names: false, rules: true, numbers: false, grid: true }, layer: 'floor', zoom: 1, view: { x: 22, y: 15 } }]));
+  const SW = BW + 40, SH = BH + 46;
+  function scene(id) {
+    const c = C(), st = STATE[id];
+    const dots = []; for (let x = 10; x < SW; x += 22) for (let y = 10; y < SH; y += 22) dots.push(`<circle cx="${x}" cy="${y}" r="1" fill="${c.dot}"/>`);
+    return `<div class="stage-wrap"><div class="stage" data-stage="${id}" style="width:${SW}px;height:${SH}px;background:${c.floor};--surface:${c.surface};--base:${c.base};--edge:${c.edge};--border:${c.border};--text:${c.text};--muted:${c.muted};--faint:${c.faint};--screen:${c.screen};--overlay:${c.overlay};--hazard:${c.hazard};--hazard-ink:${c.hazardInk};--ok:${c.ok};--shadow:${c.shadow}">
+      <svg class="abs" width="${SW}" height="${SH}" style="left:0;top:0">${dots.join('')}</svg>
+      <div class="abs blk-shadow" style="left:0;bottom:0;width:${BW}px;height:${BH}px;clip-path:${clip}"></div>
+      <div class="abs blk-edge" style="left:0;bottom:0;width:${BW}px;height:${BH}px;clip-path:${clip}">
+        <div class="abs blk" style="left:0;top:1px;right:1px;bottom:0;clip-path:${clip}">${DESIGNS[id](st)}</div>
+      </div>
+      <div class="tip" role="tooltip"></div>
+    </div></div>`;
+  }
+  function paint(id) {
+    const card = document.querySelector(`.card[data-id="${id}"]`);
+    card.querySelector('[data-scene]').innerHTML = scene(id);
+    fit(card);
+  }
+  function fit(card) {
+    const wrap = card.querySelector('.stage-wrap'), stage = card.querySelector('.stage'), k = Math.min(2, wrap.clientWidth / SW);
+    stage.style.transform = `scale(${k})`; wrap.style.height = `${SH * k}px`;
+  }
+  const cardHtml = (p) => `<article class="card" data-id="${p.id}">
+      <div class="card-head"><span class="letter">${p.id}</span><h3>${esc(p.name)}</h3>${p.mine ? '<span class="mine">Ma préférence</span>' : ''}</div>
+      <div class="scene" data-scene></div>
+      <dl><dt>Idée</dt><dd>${esc(p.idea)}</dd><dt>Atout</dt><dd>${esc(p.reads)}</dd><dt>Limite</dt><dd>${esc(p.limit)}</dd></dl>
+      <button type="button" class="pick" aria-pressed="false">Choisir ${p.id}</button>
+    </article>`;
+  $('props').innerHTML = PROPS.map(cardHtml).join('');
+  const paintAll = () => ALL.forEach(paint);
+
+  /* what a click does in a scene */
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.card[data-id]'); if (!card) return;
+    const id = card.dataset.id, st = STATE[id], t = e.target.closest('[data-toggle],[data-layer],[data-zoom]');
+    if (t) {
+      if (t.dataset.toggle) st.show[t.dataset.toggle] = !st.show[t.dataset.toggle];
+      if (t.dataset.layer) st.layer = t.dataset.layer;
+      if (t.dataset.zoom) { st.zoom = t.dataset.zoom === 'in' ? Math.min(3, st.zoom * 1.4) : t.dataset.zoom === 'out' ? Math.max(0.5, st.zoom / 1.4) : 0.42; if (t.dataset.zoom === 'fit') st.view = { x: FW / 2, y: FH / 2 }; }
+      paint(id); return;
+    }
+    const svg = e.target.closest('svg[data-map]');
+    if (svg) {
+      const r = svg.getBoundingClientRect(), k = r.width / Number(svg.getAttribute('width'));
+      const s = Number(svg.dataset.s), ox = Number(svg.dataset.ox), oy = Number(svg.dataset.oy);
+      st.view = { x: Math.max(0, Math.min(FW, ((e.clientX - r.left) / k - ox) / s)), y: Math.max(0, Math.min(FH, ((e.clientY - r.top) / k - oy) / s)) };
+      paint(id);
+    }
+  });
+  /* the bubble, with its caret, over what is pointed at */
+  document.addEventListener('pointerover', (e) => {
+    const el = e.target.closest('[data-tip]'), stage = e.target.closest('.stage');
+    document.querySelectorAll('.tip.on').forEach((t) => { if (!stage || t.parentElement !== stage) t.classList.remove('on'); });
+    if (!stage) return;
+    const tip = stage.querySelector('.tip');
+    if (!el) { tip.classList.remove('on'); return; }
+    const S = stage.getBoundingClientRect(), k = S.width / SW, r = el.getBoundingClientRect();
+    tip.textContent = el.dataset.tip; tip.classList.add('on');
+    const cx = (r.left + r.width / 2 - S.left) / k, w = tip.offsetWidth, x = Math.max(4, Math.min(SW - w - 4, cx - w / 2));
+    tip.style.left = `${x}px`; tip.style.top = `${(r.top - S.top) / k - tip.offsetHeight - 8}px`; tip.style.setProperty('--caret', `${cx - x}px`);
+  });
+
+  $('theme').addEventListener('click', (e) => { const b = e.target.closest('[data-theme]'); if (!b) return; theme = b.dataset.theme; for (const x of document.querySelectorAll('[data-theme]')) x.setAttribute('aria-pressed', String(x.dataset.theme === theme)); paintAll(); });
+  window.addEventListener('resize', () => document.querySelectorAll('.card[data-id]').forEach(fit));
+  setInterval(() => document.querySelectorAll('.b-head time').forEach((t) => { t.textContent = clock(); }), 1000);
+
+  /* the pick */
+  const KEY = 'factory-minimap-pick';
+  let pick = '';
+  try { pick = localStorage.getItem(KEY) || ''; } catch { /* lives for the visit */ }
+  const summary = () => { const p = PROPS.find((x) => x.id === pick); return `Minimap : ${p ? `${p.id} (${p.name})` : 'pas encore choisi'}`; };
+  function paintPick() {
+    for (const c of document.querySelectorAll('#props .card')) { const on = pick === c.dataset.id, b = c.querySelector('.pick'); c.classList.toggle('picked', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? `${c.dataset.id} choisi` : `Choisir ${c.dataset.id}`; }
+    $('picks').innerHTML = `Minimap <b>${pick || '–'}</b>`;
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.pick'); if (!b) return;
+    const id = b.closest('.card').dataset.id; pick = pick === id ? '' : id;
+    try { localStorage.setItem(KEY, pick); } catch { /* not kept */ }
+    $('said').textContent = ''; paintPick();
+  });
+  $('copy').addEventListener('click', () => { const said = $('said'), l = summary(); try { navigator.clipboard.writeText(l).then(() => { said.textContent = 'Copié : colle-le dans la conversation.'; }, () => { said.textContent = l; }); } catch { said.textContent = l; } });
+  paintAll(); paintPick();
+})();
+</script>
