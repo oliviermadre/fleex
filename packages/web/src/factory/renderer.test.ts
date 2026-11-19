@@ -73,6 +73,31 @@ describe('the floor is the map', () => {
   });
 });
 
+describe('the smallest floor', () => {
+  const inbound: MachineSpec = { id: 'in', kind: 'zone', x: 148, y: 72, w: 4, h: 6, name: 'Inbound', status: '', release: 'manual', inbound: true };
+
+  it('is 300 tiles wide and 150 high, its Inbound in the middle, so a new factory has room to grow on every side', () => {
+    expect(floorRect(layout(inbound))).toEqual({ x: 0, y: 0, w: 300, h: 150 });
+    expect(floorRect(layout())).toMatchObject({ w: 300, h: 150 });
+    /* what is built past it makes it grow, as before */
+    const wide = floorRect(layout(station('a', 0, 0), station('b', 400, 0)));
+    expect(wide.w).toBe(405 + 2 * 8);
+    expect(wide.h).toBe(150);
+  });
+
+  it('is not what a new factory is first seen as: the view frames its Inbound close enough to be read', () => {
+    const v = view(1300, 600), l = layout(inbound);
+    v.fit(l, false);
+    const s = seen(v);
+    expect(s.x0).toBeLessThanOrEqual(148); expect(s.x1).toBeGreaterThanOrEqual(152);
+    expect(s.y0).toBeLessThanOrEqual(72); expect(s.y1).toBeGreaterThanOrEqual(78);
+    expect(s.x1 - s.x0).toBeLessThan(60);                                            // not the 300 tiles of the floor
+    /* the whole floor is still there to be built on */
+    v.fit(l, true);
+    expect(seen(v).x1 - seen(v).x0).toBeGreaterThanOrEqual(299);
+  });
+});
+
 describe('what the minimap frames', () => {
   it('is what is built, with a tile of room round it, and not the floor\'s margins', () => {
     const l = layout(station('a', 10, 4), station('b', 30, 12));

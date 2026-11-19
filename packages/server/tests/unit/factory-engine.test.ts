@@ -126,6 +126,9 @@ describe('FactoryEngine', () => {
     });
     await engine.init();
     expect(engine.snapshot().floor.layout.machines).toMatchObject([{ kind: 'zone', name: 'Inbound', inbound: true }]);
+    /* in the middle of the smallest floor the page shows, 300 tiles by 150 from 0,0: a new factory has room on every side */
+    const inbound = engine.snapshot().floor.layout.machines[0]!;
+    expect([inbound.x + inbound.w / 2, inbound.y + inbound.h / 2]).toEqual([150, 75]);
     const two = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), inbound: true } as MachineSpec, { ...zone('z2', 6, 1), inbound: true } as MachineSpec] });
     expect(two.machines.map((m) => (m.kind === 'zone' ? m.inbound : null))).toEqual([true, false]);
   });
