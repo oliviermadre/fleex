@@ -638,6 +638,14 @@ describe('normaliseLayout', () => {
     expect(out[3]!.to).toBeUndefined();                                                        // a departure cannot lead to another departure
   });
 
+  it('keeps the model chosen on an agent or skill station, which runs it, and drops it elsewhere', () => {
+    const out = normaliseLayout({ w: 30, h: 10, machines: [
+      station('a', 0, 0, { exec: 'agent', model: ' claude-haiku-5-5 ' }), station('s', 6, 0, { exec: 'skill', ref: 'review', model: 'claude-haiku-5-5' }),
+      station('p', 12, 0, { exec: 'panel', model: 'claude-haiku-5-5' }), station('e', 18, 0, { exec: 'skill', model: '  ' }),
+    ] }).machines as StationSpec[];
+    expect(out.map((m) => m.model)).toEqual(['claude-haiku-5-5', 'claude-haiku-5-5', undefined, undefined]);
+  });
+
   it('refuses overlaps and duplicate ids, and records how far the floor extends', () => {
     expect(() => normaliseLayout({ w: 10, h: 10, machines: [belt('a', 1, 1), belt('b', 1, 1)] })).toThrow(/overlap/);
     expect(normaliseLayout({ w: 0, h: 0, machines: [station('s', -8, 8), belt('a', 30, 2)] })).toMatchObject({ w: 39, h: 9 });

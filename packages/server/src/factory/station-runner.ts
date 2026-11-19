@@ -56,7 +56,7 @@ export class StationRunner implements StationRunnerPort {
     };
     const input: StepExecutionInput = {
       ticketId, workflowRunId: runId, stepRunId: runId, step,
-      modelOverride: station.exec === 'agent' ? station.model || null : null,
+      modelOverride: station.exec === 'agent' || station.exec === 'skill' ? station.model || null : null,
       workflowContext: {
         workflowName: 'Factory', stepName: name,
         outgoingEdges: branching

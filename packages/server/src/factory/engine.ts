@@ -170,7 +170,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       if (!['agent', 'skill', 'panel', 'script', 'human_gate', 'native'].includes(m.exec)) throw new FactoryError(`unknown station executor "${String(m.exec)}"`);
       /* a script station concludes by itself: its ways out are its own, and follow what it is told about a repository it has nothing to run for */
       if (m.exec === 'script') { m.script = normaliseScript(m.script); m.outcomes = scriptOutcomes(m.script); } else delete m.script;
-      m.model = m.exec === 'agent' && typeof m.model === 'string' && m.model.trim() ? m.model.trim().slice(0, 120) : undefined;
+      m.model = (m.exec === 'agent' || m.exec === 'skill') && typeof m.model === 'string' && m.model.trim() ? m.model.trim().slice(0, 120) : undefined;
       if (m.off === true && RUNS.includes(m.exec)) m.off = true; else delete m.off;
       if (typeof m.prompt === 'string' && m.prompt.length > 60_000) throw new FactoryError(`the instructions of ${m.name || 'a station'} are too long`);
     } else if (m.kind === 'zone') {

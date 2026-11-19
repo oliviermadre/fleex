@@ -52,4 +52,23 @@ describe('SkillStepExecutor', () => {
     expect(r.output.questions).toEqual([{ prompt: 'Repo ?', options: ['fleex', 'odys'] }]);
     expect(r.output.schemaFields).not.toHaveProperty('questions');
   });
+
+  it('runs the skill on the station\'s model when one is given, on a ticket and in a routine alike', async () => {
+    const skillStore = { getByCommandName: vi.fn().mockResolvedValue({ id: 'sk-1', commandName: 'review', personaId: 'p-1', displayName: 'Review', markdownContent: 'Review it.' }) };
+    const executeAgent = {
+      executeForSkill: vi.fn().mockResolvedValue({ structuredOutput: { deliverable: null, comment: 'ok' }, rawText: '', executionId: 'e-1' }),
+      executeForWorkflowStep: vi.fn().mockResolvedValue({ structuredOutput: { deliverable: null, comment: 'ok' }, rawText: '', executionId: 'e-2' }),
+    };
+    const personaStore = { getById: vi.fn().mockResolvedValue({ id: 'p-1', name: 'builder', model: 'claude-opus-5-5' }) };
+    const exec = new SkillStepExecutor(executeAgent as never, skillStore as never, personaStore as never, { get: () => ({}) } as never);
+    const base = {
+      workflowRunId: 'r-1', stepRunId: 'sr-1', modelOverride: 'claude-haiku-5-5',
+      step: { id: 's1', name: 'Review', executorType: 'skill' as const, executorRef: 'review', position: { x: 0, y: 0 } },
+      workflowContext: { workflowName: 'Factory', stepName: 'Review', outgoingEdges: [], previousOutputs: {} },
+    };
+    await exec.execute({ ...base, ticketId: 't-1' });
+    await exec.execute({ ...base, ticketId: null as never });
+    expect(executeAgent.executeForSkill).toHaveBeenCalledWith('sk-1', 't-1', expect.objectContaining({ model: 'claude-haiku-5-5' }));
+    expect(executeAgent.executeForWorkflowStep).toHaveBeenCalledWith(expect.objectContaining({ personaName: 'builder', model: 'claude-haiku-5-5' }));
+  });
 });

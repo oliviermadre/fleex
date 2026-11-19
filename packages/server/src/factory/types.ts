@@ -56,7 +56,7 @@ export interface StationSpec extends MachineBase {
   /** Persona name, skill command name or panel name. Unused by gates and native stations. */
   ref?: string;
   mode?: 'talk' | 'plan' | 'edit';
-  /** Agent stations: the model to run on instead of the persona's own. Empty: the persona's. */
+  /** Agent and skill stations: the model to run on instead of the persona's own (a skill's persona). Empty: the persona's. */
   model?: string;
   prompt?: string;
   /** The first one is the way forward. Each one leaves through the arm whose `outcome` filter holds it. */

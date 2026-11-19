@@ -38,7 +38,7 @@ export interface ArmSpec extends MachineBase {
 }
 export interface StationSpec extends MachineBase {
   kind: 'station'; exec: StationExec; ref?: string; mode?: 'talk' | 'plan' | 'edit'; prompt?: string;
-  /** Agent stations: the model to run on instead of the persona's own. */
+  /** Agent and skill stations: the model to run on instead of the persona's own (a skill's persona). */
   model?: string;
   outcomes: string[]; cap: number; sets?: TicketStatus;
   /** Agent, skill and panel stations: switched off, it takes tickets in but starts nothing on them. */

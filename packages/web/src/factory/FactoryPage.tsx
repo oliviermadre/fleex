@@ -223,7 +223,7 @@ function Floor() {
   }, []);
 
   const boardName = useCallback((id: string) => useTicketStore.getState().boards.find((b) => b.id === id)?.name ?? 'a board', []);
-  const modelOf = useCallback((m: StationSpec) => stationModel(m, { personas: useAgentPersonaStore.getState().personas, panels: usePanelStore.getState().panels }), []);
+  const modelOf = useCallback((m: StationSpec) => stationModel(m, { personas: useAgentPersonaStore.getState().personas, skills: useSkillStore.getState().skills, panels: usePanelStore.getState().panels }), []);
   const viewState = useCallback((): ViewState | null => {
     const s = useFactoryStore.getState(), l = live.current;
     if (!s.snapshot || !s.layout) return null;

@@ -6,7 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { modelTag, stationModel, type ModelSources } from './stationModel';
 
 const src: ModelSources = {
-  personas: [{ name: 'builder', model: 'claude-sonnet-4-6' }, { name: 'bare' }],
+  personas: [{ id: 'p-builder', name: 'builder', model: 'claude-sonnet-4-6' }, { id: 'p-bare', name: 'bare' }],
+  skills: [{ commandName: 'review', personaId: 'p-builder' }, { commandName: 'loose', personaId: 'p-bare' }],
   panels: [{ name: 'review', orchestratorModel: 'claude-opus-4-8' }],
 };
 
@@ -19,6 +20,12 @@ describe('the model of a station', () => {
     expect(stationModel({ exec: 'agent', ref: 'builder', model: 'claude-haiku-4-5' }, src)).toBe('claude-haiku-4-5');
     expect(stationModel({ exec: 'agent', ref: 'nobody', model: 'claude-haiku-4-5' }, src)).toBe('claude-haiku-4-5');
   });
+  it('a skill station runs on the model of the persona the skill belongs to, unless it chooses its own', () => {
+    expect(stationModel({ exec: 'skill', ref: 'review' }, src)).toBe('claude-sonnet-4-6');
+    expect(stationModel({ exec: 'skill', ref: 'review', model: 'claude-haiku-4-5' }, src)).toBe('claude-haiku-4-5');
+    expect(stationModel({ exec: 'skill', ref: 'loose' }, src)).toBeNull();
+    expect(stationModel({ exec: 'skill', ref: 'gone' }, src)).toBeNull();
+  });
   it('a panel runs on its orchestrator', () => {
     expect(stationModel({ exec: 'panel', ref: 'review' }, src)).toBe('claude-opus-4-8');
   });
@@ -27,8 +34,8 @@ describe('the model of a station', () => {
     expect(stationModel({ exec: 'agent', ref: 'bare' }, src)).toBeNull();
     expect(stationModel({ exec: 'panel', ref: 'gone' }, src)).toBeNull();
   });
-  it('what calls no model of its own gets no model', () => {
-    for (const exec of ['skill', 'script', 'human_gate', 'native'] as const) expect(stationModel({ exec, ref: 'builder', model: 'claude-haiku-4-5' }, src)).toBeNull();
+  it('what calls no model gets no model', () => {
+    for (const exec of ['script', 'human_gate', 'native'] as const) expect(stationModel({ exec, ref: 'builder', model: 'claude-haiku-4-5' }, src)).toBeNull();
   });
   it('reads without the claude- prefix', () => {
     expect(modelTag('claude-opus-4-8')).toBe('opus-4-8');
