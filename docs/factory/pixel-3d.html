@@ -127,6 +127,7 @@
       <button type="button" id="play" aria-pressed="true">Pause</button>
       <button type="button" id="spawn">Faire entrer un ticket</button>
       <button type="button" id="hits" aria-pressed="false">Montrer les zones de clic</button>
+      <button type="button" id="layers" aria-pressed="false">Montrer les couches</button>
       <button type="button" id="grid" aria-pressed="false">Afficher la matrice</button>
       <button type="button" id="decor" aria-pressed="true">Décor</button>
     </div>
@@ -157,10 +158,18 @@
         <li><b>Ce qui est posé sur quelque chose prend sa hauteur</b> : un ticket sur un convoyeur est levé de 8, dans une station de 16, porté par un bras de la hauteur du bras.</li>
         <li><b>Les clics</b> visent ce qu'on voit : le dessus et la face avant, du plus proche au plus lointain. Les dépôts (un ticket lâché, une machine posée) restent sur les cases.</li>
       </ul></div>
+      <div class="card"><h3>L'ordre de rendu : quatre couches</h3><ul>
+        <li><b>1. Le sol</b> : carrelage, marquage des lignes, zones, tapis de la sortie. Rien n'y passe devant rien.</li>
+        <li><b>2. Ce qui est debout, par profondeur</b> : chaque chose a pour clé le bas de son emplacement ; ce qui est plus bas sur l'écran passe devant. Une chose à cheval est coupée en morceaux à leur propre profondeur : le pied d'un bras, le poteau arrière et le poteau avant d'un portique, les poteaux d'une sortie.</li>
+        <li><b>Ce qui est porté suit son porteur</b> : un ticket n'a pas sa propre profondeur, il prend celle de ce qui le porte, juste après lui (après les convoyeurs de sa rangée, après sa station). C'est ce qui manquait : un ticket glissait sous le convoyeur voisin.</li>
+        <li><b>3. Ce qui est en l'air, après tout ce qui est debout</b> : la flèche et la ventouse des bras avec leur ticket, la barre des portiques, le linteau de la sortie. Un bras passe donc au-dessus d'une station au lieu de s'y enfoncer, et une barre de portique est fine pour qu'on voie le ticket dessous.</li>
+        <li><b>4. Les mots</b>, à la fin, par-dessus tout. Le bouton « Montrer les couches » colore en magenta ce qui est en l'air et en cyan ce qui suit son porteur.</li>
+      </ul></div>
       <div class="card"><h3>Ce que ça touche dans le code</h3><ul>
         <li><b>Après la refonte en skins</b> (les lots 1 et 2 de l'étude des skins), c'est une option du skin : une hauteur par sorte d'élément, la face avant et les pieds dans chaque peintre, un tri par profondeur dans la boucle de dessin, et <code>pick()</code> qui teste les boîtes vues. Un lot moyen.</li>
         <li><b>Sans la refonte</b>, il faudrait toucher chacune des quarante méthodes de <code>renderer.ts</code> pour leur ajouter une face avant et un décalage, et réordonner tout le dessin : faisable, mais c'est le même travail que la refonte, sans en garder le bénéfice.</li>
         <li><b>Ce qui ne change pas</b> : le moteur, la géométrie des pièces, les quais, les règles des bras, le mode Build (ses fantômes restent sur les cases), la minimap.</li>
+        <li><b>Chaque peintre déclare ses morceaux</b> et leur couche (debout ou en l'air), et ce qu'il porte : la boucle de dessin les trie. C'est la seule vraie règle à poser dans le contrat d'un skin pour le trois-quarts ; un skin à plat n'a qu'une couche debout et ne change rien.</li>
         <li><b>Le risque</b> : la hauteur masque un peu la rangée du dessus. On le garde sous la moitié d'une case, et un ticket masqué reste visible par sa plaque de nom.</li>
       </ul></div>
     </div>
@@ -276,7 +285,7 @@
 
   // ---------- painting, at half resolution, enlarged without smoothing ----------
   const cv = $('cv'), ctx = cv.getContext('2d'), low = document.createElement('canvas'), c = low.getContext('2d');
-  let tq = true, lanes = new Set(['paint', 'rail']), showHits = false, showGrid = false, showDecor = true, selected = null;
+  let tq = true, lanes = new Set(['paint', 'rail']), showHits = false, showLayers = false, showGrid = false, showDecor = true, selected = null;
   const LIFT = { station: 16, belt: 8, arm: 12, exit: 0, zone: 0, port: 4 };
   const lift = (m) => (tq ? LIFT[m.kind] ?? 0 : 0);
   const words = [];
@@ -358,25 +367,41 @@
     if (tq) { c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X + 2, Y0 + T - 3, T, 5); c.fillStyle = '#3a3742'; c.fillRect(X, Y0 + T - L, T, L); c.fillStyle = '#56525f'; for (let x = X + 3; x < X + T; x += 8) c.fillRect(x, Y0 + T - L + 2, 4, 3); if ((m.x + m.y) % 2 === 0) { c.fillStyle = OUT; c.fillRect(X + 4, Y0 + T - 4, 4, 4); c.fillRect(X + T - 8, Y0 + T - 4, 4, 4); } }
     c.fillStyle = '#56525f'; c.fillRect(X, Y, T, T); c.fillStyle = OUT; if (v) { c.fillRect(X, Y, 3, T); c.fillRect(X + T - 3, Y, 3, T); } else { c.fillRect(X, Y, T, 3); c.fillRect(X, Y + T - 3, T, 3); }
     const [dx, dy] = DIRV[m.dir], off = (t * 22) % 16; c.save(); c.beginPath(); c.rect(X, Y, T, T); c.clip(); c.strokeStyle = '#c9c3d1'; c.lineWidth = 2; for (let i = -1; i < 3; i++) { const o = i * 16 + off, cx = X + T / 2 + dx * (o - 8), cy = Y + T / 2 + dy * (o - 8); c.beginPath(); c.moveTo(cx - dx * 4 - dy * 6, cy - dy * 4 - dx * 6); c.lineTo(cx + dx * 3, cy + dy * 3); c.lineTo(cx - dx * 4 + dy * 6, cy - dy * 4 + dx * 6); c.stroke(); } c.restore();
-    if (m.set) {
-      /* a gantry: two posts at the belt's sides and a bar over it */
-      const col = m.toll ? '#d9433f' : '#d6407e', hh = tq ? 26 : 0, bar = hot ? col : '#ece4d4';
-      if (v) { box(X - 6, Y + 10, 6, 14, col); box(X + T, Y + 10, 6, 14, col); }
-      else if (tq) { box(X + 12, Y0 + T - hh - 4, 8, hh, sh(col, -0.2)); box(X + 6, Y - hh + 12, 20, T - 6, bar, OUT, 2); }
-      else box(X + T / 2 - 5, Y - 4, 10, T + 8, bar, col, 2);
-    }
+  }
+  /*
+   * A gantry is three things at three depths: the post behind the belt (drawn before what rides on it), the post in
+   * front (drawn after), and the bar over it (overhead, drawn after everything that stands).
+   */
+  const GANTRY_H = 30;
+  function gantryPost(m, front) {
+    const X = m.x * T, Y0 = m.y * T, v = m.dir === 'n' || m.dir === 's', col = m.toll ? '#d9433f' : '#d6407e';
+    if (!tq) return;
+    if (v) { const px = front ? X + T : X - 6; box(px, Y0 + T / 2 - GANTRY_H + 4, 6, GANTRY_H, sh(col, -0.2)); return; }
+    const fy = front ? Y0 + T : Y0 + 2; c.fillStyle = 'rgba(40,30,20,0.2)'; c.fillRect(X + 12, fy - 1, 10, 3); box(X + 13, fy - GANTRY_H, 6, GANTRY_H, sh(col, front ? -0.1 : -0.3));
+  }
+  function gantryBar(m, hot) {
+    const X = m.x * T, Y0 = m.y * T, v = m.dir === 'n' || m.dir === 's', col = m.toll ? '#d9433f' : '#d6407e', bar = hot ? col : '#ece4d4';
+    if (!tq) { /* flat: a bar across the belt, hollow so what rides under it shows */ c.strokeStyle = col; c.lineWidth = 3; c.strokeRect(X + T / 2 - 5, Y0 - 3, 10, T + 6); if (hot) { c.fillStyle = col; c.fillRect(X + T / 2 - 5, Y0 - 3, 10, 5); c.fillRect(X + T / 2 - 5, Y0 + T - 2, 10, 5); } return; }
+    if (v) box(X - 6, Y0 + T / 2 - GANTRY_H, T + 12, 7, bar, OUT, 2);
+    else box(X + 12, Y0 + 2 - GANTRY_H, 8, T + 2, bar, OUT, 2);
+  }
+  /* an arm: its pillar stands on the floor; its boom, its cup and what it carries swing overhead */
+  function armBase(m) {
+    const L = lift(m), bx = (m.x + 0.5) * T, by0 = (m.y + 0.5) * T, col = m.col ?? '#f2b01e';
+    if (tq) { c.fillStyle = 'rgba(40,30,20,0.22)'; c.fillRect(bx - 8, by0 + 4, 18, 5); box(bx - 6, by0 - L, 12, L + 6, sh(col, -0.25)); }
   }
   function armDraw(m, tk) {
     const L = lift(m), bx = (m.x + 0.5) * T, by0 = (m.y + 0.5) * T, by = by0 - L, [dx, dy] = DIRV[m.dir], k = tk ? tk.armK : 0, th = Math.atan2(dy, dx) + Math.PI * (1 - ease(k)), hx = bx + Math.cos(th) * 0.9 * T, hy = by + Math.sin(th) * 0.9 * T, col = m.col ?? '#f2b01e';
-    if (tq) { c.fillStyle = 'rgba(40,30,20,0.22)'; c.fillRect(bx - 8, by0 + 4, 18, 5); box(bx - 6, by, 12, L + 6, sh(col, -0.25)); }
+    if (tk) ticket(tk, hx, hy);
     c.strokeStyle = OUT; c.lineWidth = 9; c.lineCap = 'square'; c.beginPath(); c.moveTo(bx, by); c.lineTo(hx, hy); c.stroke(); c.strokeStyle = col; c.lineWidth = 5; c.stroke();
-    box(hx - 6, hy - 6, 12, 12, '#fafafa'); box(bx - 8, by - 8, 16, 16, col);
+    c.globalAlpha = 0.85; box(hx - 6, hy - 6, 12, 12, '#fafafa'); c.globalAlpha = 1; box(bx - 8, by - 8, 16, 16, col);
   }
   function zone(m) { const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T, col = m.id === 'in' ? '#2f9e44' : '#3d6fd1'; c.fillStyle = col + '1c'; c.fillRect(X + 2, Y + 2, w - 4, h - 4); c.strokeStyle = col; c.lineWidth = 2; c.setLineDash([8, 6]); c.strokeRect(X + 3, Y + 3, w - 6, h - 6); c.setLineDash([]); say(m.name.toUpperCase(), X + 9, Y + 12, { size: 8, ink: sh(col, -0.25) }); }
+  function exitMat(m) { const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T; c.fillStyle = '#dff0d8'; c.fillRect(X + 4, Y + 4, w - 8, h - 8); c.fillStyle = '#2f9e44'; for (let x = X + 8; x < X + w - 8; x += 10) c.fillRect(x, Y + h - 12, 6, 4); if (tq) say(String(shipped), X + w / 2, Y + h / 2 + 4, { size: 16, ink: '#2f9e44', align: 'center' }); }
+  function exitLintel(m) { if (!tq) return; const X = m.x * T, Y = m.y * T, w = m.w * T; box(X, Y - 26, w, 14, '#2f9e44'); say('EXIT', X + w / 2, Y - 19, { size: 8, ink: '#fafafa', align: 'center' }); }
   function exitDraw(m) {
     const X = m.x * T, Y = m.y * T, w = m.w * T, h = m.h * T;
-    c.fillStyle = '#dff0d8'; c.fillRect(X + 4, Y + 4, w - 8, h - 8); c.fillStyle = '#2f9e44'; for (let x = X + 8; x < X + w - 8; x += 10) c.fillRect(x, Y + h - 12, 6, 4);
-    if (tq) { /* a doorway: two posts and a lintel with its sign */ box(X + 2, Y - 20, 8, h - 2, '#4a7f4f'); box(X + w - 10, Y - 20, 8, h - 2, '#4a7f4f'); box(X, Y - 26, w, 14, '#2f9e44'); say('EXIT', X + w / 2, Y - 19, { size: 8, ink: '#fafafa', align: 'center' }); }
+    if (tq) { /* a doorway: two posts standing at its front corners; its mat and its lintel are drawn apart */ box(X + 2, Y - 20, 8, h - 2, '#4a7f4f'); box(X + w - 10, Y - 20, 8, h - 2, '#4a7f4f'); return; }
     else { c.strokeStyle = '#2f9e44'; c.lineWidth = 3; c.strokeRect(X + 4, Y + 4, w - 8, h - 8); say('EXIT', X + w / 2, Y + 14, { size: 8, ink: '#2f9e44', align: 'center' }); }
     say(String(shipped), X + w / 2, Y + h / 2 + 4, { size: 16, ink: '#2f9e44', align: 'center' });
   }
@@ -388,8 +413,8 @@
     if (beam && tq) { c.fillStyle = m.col; c.globalAlpha = 0.35 * (1 - Math.abs(beam - 0.5) * 2); c.fillRect(cx - 10, cy - 70, 20, 70); c.globalAlpha = 1; }
     say(m.name, cx, cy0 + 24, { size: 8, ink: '#fafafa', align: 'center', plate: '#2b2833' });
   }
-  function ticket(tk) {
-    const L = tk.arm ? lift(byId[tk.arm]) + 4 : under(tk.x, tk.y), x = Math.round(tk.x * T), y = Math.round(tk.y * T) - L, col = TYPE[tk.type];
+  function ticket(tk, cx, cy) {
+    const L = cx != null ? 0 : under(tk.x, tk.y), x = Math.round(cx ?? tk.x * T), y = Math.round((cy != null ? cy + 4 : tk.y * T)) - L, col = TYPE[tk.type];
     c.globalAlpha = tk.op; if (tq && L) { c.fillStyle = 'rgba(40,30,20,0.25)'; c.fillRect(x - 8, y + L - 2, 18, 4); }
     c.fillStyle = '#c8955a'; c.fillRect(x - 10, y - 8, 20, 15); c.fillStyle = '#9c6b3a'; c.fillRect(x - 10, y - 2, 20, 2); c.fillStyle = col; c.fillRect(x - 10, y - 8, 20, 4); c.strokeStyle = OUT; c.lineWidth = 2; c.strokeRect(x - 9, y - 7, 18, 13); c.globalAlpha = 1;
   }
@@ -422,18 +447,41 @@
     /* everything that stands, by depth: what is lower on the screen passes in front */
     const armOf = {}, busy = {}, gantry = {}, beam = {};
     for (const tk of tickets) { if (tk.arm) armOf[tk.arm] = tk; if (tk.where) busy[tk.where] = tk.state; if (tk.gantry) gantry[tk.gantry] = true; if (tk.beam) beam[tk.beam] = tk.beamK; }
-    const items = [];
+    /*
+     * 1. the floor: tiles, lines, zones, the exit's mat (done above, and here).
+     * 2. what stands, by depth (the foot of each thing: lower on the screen passes in front); what rides on a thing is
+     *    drawn just after that thing, never on its own depth: a ticket on a belt after the belts of its row, in a
+     *    station after the station.
+     * 3. what is overhead: arms' booms and what they carry, gantries' bars, an exit's lintel, by depth among themselves.
+     * 4. the words, last, over everything (after the picture is enlarged).
+     */
+    for (const m of M) if (m.kind === 'exit') exitMat(m);
+    const items = [], over = [], carried = [];
+    const keyOf = (m) => (m.kind === 'belt' ? m.y + 1 - 0.01 : m.kind === 'arm' ? m.y + 1 + 0.02 : m.y + m.h);
     for (const m of M) {
-      const bottom = m.y + m.h;
-      if (m.kind === 'station') items.push({ y: bottom, draw: () => station(m, busy[m.id], t) });
-      else if (m.kind === 'belt') items.push({ y: bottom - 0.01, draw: () => beltTile(m, t, gantry[m.id]) });
-      else if (m.kind === 'arm') items.push({ y: bottom + 0.02, draw: () => { const tk = armOf[m.id]; armDraw(m, tk); if (tk) ticket(tk); } });
-      else if (m.kind === 'exit') items.push({ y: bottom, draw: () => exitDraw(m) });
-      else if (m.kind === 'port') items.push({ y: bottom, draw: () => port(m, t, beam[m.id]) });
+      const k = keyOf(m);
+      if (m.kind === 'station') items.push({ y: k, draw: () => station(m, busy[m.id], t) });
+      else if (m.kind === 'belt') { items.push({ y: k, draw: () => beltTile(m, t, gantry[m.id]) }); if (m.set) { items.push({ y: m.y + 0.02, draw: () => gantryPost(m, false) }); items.push({ y: k + 0.005, draw: () => gantryPost(m, true) }); over.push({ y: k, box: [m.x, m.y - 1, 1, 2], draw: () => gantryBar(m, gantry[m.id]) }); } }
+      else if (m.kind === 'arm') { items.push({ y: k, draw: () => armBase(m) }); over.push({ y: k, box: [m.x - 1, m.y - 1, 3, 3], draw: () => armDraw(m, armOf[m.id]) }); }
+      else if (m.kind === 'exit') { items.push({ y: k, draw: () => exitDraw(m) }); over.push({ y: k, box: [m.x, m.y - 1, m.w, 1], draw: () => exitLintel(m) }); }
+      else if (m.kind === 'port') items.push({ y: k, draw: () => port(m, t, beam[m.id]) });
     }
-    for (const tk of tickets) if (!tk.arm) { const host = M.find((q) => q.kind === 'station' && tk.x >= q.x && tk.x < q.x + q.w && tk.y >= q.y && tk.y < q.y + q.h); items.push({ y: host ? host.y + host.h + 0.001 : tk.y + 0.45, draw: () => ticket(tk) }); }
+    /* a ticket rides on what is under it, and is drawn just after it */
+    for (const tk of tickets) if (!tk.arm) {
+      const host = M.find((q) => q.kind !== 'zone' && q.kind !== 'arm' && tk.x >= q.x && tk.x < q.x + q.w && tk.y + 0.3 >= q.y && tk.y + 0.3 < q.y + q.h);
+      const y = host ? keyOf(host) + 0.004 : tk.y + 0.45;
+      items.push({ y, draw: () => ticket(tk) }); carried.push([tk, host]);
+    }
     if (showDecor) items.push(...rails(), ...decorProps(t));
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+    over.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+    if (showLayers) {
+      /* what is overhead, in magenta; what rides on something, in cyan */
+      c.lineWidth = 2; c.setLineDash([4, 3]);
+      c.strokeStyle = '#d6407e'; for (const o of over) if (o.box) c.strokeRect(o.box[0] * T, o.box[1] * T - (tq ? 8 : 0), o.box[2] * T, o.box[3] * T);
+      c.strokeStyle = '#1fb5d6'; for (const [tk, host] of carried) if (host) { const L = under(tk.x, tk.y); c.strokeRect(tk.x * T - 12, tk.y * T - L - 10, 24, 20); }
+      c.setLineDash([]);
+    }
     if (selected) { const m = byId[selected], L = lift(m); c.strokeStyle = '#d6407e'; c.lineWidth = 3; c.setLineDash([6, 4]); c.strokeRect(m.x * T - 3, m.y * T - L - 3, m.w * T + 6, m.h * T + L + 6); c.setLineDash([]); }
     if (showHits) for (const m of M) { const L = lift(m); c.fillStyle = 'rgba(214,64,126,0.18)'; c.fillRect(m.x * T, m.y * T - L, m.w * T, m.h * T + L); c.strokeStyle = 'rgba(29,27,38,0.7)'; c.lineWidth = 1; c.strokeRect(m.x * T + 0.5, m.y * T + 0.5, m.w * T - 1, m.h * T - 1); }
     if (showGrid) { c.strokeStyle = 'rgba(214,64,126,0.6)'; c.lineWidth = 2; for (let x = 0; x <= W; x++) { c.beginPath(); c.moveTo(x * T, 0); c.lineTo(x * T, CH); c.stroke(); } for (let y = 0; y <= H; y++) { c.beginPath(); c.moveTo(0, y * T); c.lineTo(CW, y * T); c.stroke(); } }
@@ -460,7 +508,7 @@
   $('lanes').addEventListener('click', (e) => { const b = e.target.closest('[data-lane]'); if (!b) return; const k = b.dataset.lane; if (lanes.has(k)) lanes.delete(k); else lanes.add(k); b.setAttribute('aria-pressed', String(lanes.has(k))); });
   $('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Lecture'; $('play').setAttribute('aria-pressed', String(playing)); });
   $('spawn').addEventListener('click', spawn);
-  for (const [id, set] of [['hits', (v) => { showHits = v; }], ['grid', (v) => { showGrid = v; }], ['decor', (v) => { showDecor = v; }]]) $(id).addEventListener('click', () => { const v = $(id).getAttribute('aria-pressed') !== 'true'; set(v); $(id).setAttribute('aria-pressed', String(v)); });
+  for (const [id, set] of [['layers', (v) => { showLayers = v; }], ['hits', (v) => { showHits = v; }], ['grid', (v) => { showGrid = v; }], ['decor', (v) => { showDecor = v; }]]) $(id).addEventListener('click', () => { const v = $(id).getAttribute('aria-pressed') !== 'true'; set(v); $(id).setAttribute('aria-pressed', String(v)); });
   /* a click hits what is seen: the top and the front face, nearest first */
   cv.addEventListener('click', (e) => {
     const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * CW, y = ((e.clientY - r.top) / r.height) * CH;
