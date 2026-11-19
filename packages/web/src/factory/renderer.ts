@@ -112,6 +112,8 @@ function around(layout: FactoryLayout, minW: number, minH: number, aspect = 0): 
 }
 /** The closest and the farthest the floor is ever seen from, in pixels per tile. The farthest is also bounded by the floor: see `FactoryView.constrain`. */
 const Z_MAX = 80, Z_MIN = 3;
+/** The wheel's travel that makes a notch, for a skin whose zoom goes by steps; and how fast the zoom glides to a step. */
+const NOTCH = 40, GLIDE = 14;
 
 export class FactoryView {
   cam = { x: 24, y: 15, z: 18 };
@@ -124,7 +126,7 @@ export class FactoryView {
   /** Each view has its own skin: a skin keeps pictures it painted once, for this canvas. */
   constructor(readonly cv: HTMLCanvasElement, private skin: Skin = new FleexSkin()) { this.ctx = cv.getContext('2d')!; }
   /** Paint with another skin from the next frame on. What the floor shows, and where, is kept. */
-  setSkin(skin: Skin): void { this.skin = skin; }
+  setSkin(skin: Skin): void { this.skin = skin; this.glideTo = null; this.notch = 0; }
 
   resize(): void {
     const d = Math.min(window.devicePixelRatio || 1, 2), w = this.cv.clientWidth, h = this.cv.clientHeight;
@@ -153,12 +155,58 @@ export class FactoryView {
     this.cam.x = hw * 2 >= F.w ? F.x + F.w / 2 : clamp(this.cam.x, F.x + hw, F.x + F.w - hw);
     this.cam.y = hh * 2 >= F.h ? F.y + F.h / 2 : clamp(this.cam.y, F.y + hh, F.y + F.h - hh);
   }
+  /** Zoom by that factor round that point of the view; for a skin with steps, to the next step that way. */
   zoomAt(sx: number, sy: number, factor: number): void {
+    if (this.skin.steps) { if (factor !== 1) this.step(factor > 1 ? 1 : -1, sx, sy); return; }
+    this.zoomTo(sx, sy, this.cam.z * factor);
+  }
+  /** The wheel, round that point: free for most skins; for one with steps, a notch (or a trackpad's worth) is a step. */
+  wheel(sx: number, sy: number, deltaY: number, fine = false, lines = false): void {
+    if (!this.skin.steps) { this.zoomTo(sx, sy, this.cam.z * Math.exp(-Math.max(-120, Math.min(120, deltaY)) * (fine ? 0.012 : 0.0022))); return; }
+    this.notch += lines ? deltaY * 30 : deltaY;
+    if (Math.abs(this.notch) >= NOTCH) { this.step(this.notch < 0 ? 1 : -1, sx, sy); this.notch = 0; }
+  }
+  private zoomTo(sx: number, sy: number, z: number): void {
     const before = this.toWorld(sx, sy);
-    this.cam.z = clamp(this.cam.z * factor, this.zMin, Z_MAX);
+    this.cam.z = clamp(z, this.zMin, Z_MAX);
     const after = this.toWorld(sx, sy);
     this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
   }
+
+  /*
+   * A skin with steps (the pixel skin: its pixels are whole only there) rests on them only. The zoom glides from one to
+   * the next and never stops between two; whatever puts it elsewhere (a jump to a ticket, a paste) is glided to the
+   * nearest step at the next frames.
+   */
+  /** Where the zoom is gliding to, round which point, and the wheel's travel towards the next notch. */
+  private glideTo: number | null = null;
+  private glideAt = { x: 0, y: 0 };
+  private notch = 0;
+  /** The steps the zoom can rest on here: those the floor allows. */
+  private stepsHere(): number[] {
+    const all = (this.skin.steps ?? []).filter((s) => s >= this.zMin - 1e-6 && s <= Z_MAX);
+    return all.length ? all : [clamp(this.skin.steps?.[this.skin.steps.length - 1] ?? Z_MAX, this.zMin, Z_MAX)];
+  }
+  private step(dir: 1 | -1, sx = this.w / 2, sy = this.h / 2): void {
+    const from = this.glideTo ?? this.cam.z, all = this.stepsHere();
+    const next = dir > 0 ? all.find((s) => s > from + 1e-3) : [...all].reverse().find((s) => s < from - 1e-3);
+    if (next != null) { this.glideTo = next; this.glideAt = { x: sx, y: sy }; }
+  }
+  private nearestStep(z: number): number { return this.stepsHere().reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a)); }
+  /** One frame of the glide: fast at first, slower as it comes, landing exactly on the step. The draw loop calls it. */
+  glide(dt: number): void {
+    if (!this.skin.steps) { this.glideTo = null; return; }
+    const z = this.cam.z;
+    if (this.glideTo == null && !this.stepsHere().some((s) => Math.abs(s - z) < 1e-6)) { this.glideTo = this.nearestStep(z); this.glideAt = { x: this.w / 2, y: this.h / 2 }; }
+    if (this.glideTo == null) return;
+    /* a step the floor no longer allows (the view grew): the nearest it does */
+    if (!this.stepsHere().includes(this.glideTo)) this.glideTo = this.nearestStep(this.glideTo);
+    const to = this.glideTo, next = Math.abs(to - z) < 0.05 ? to : z + (to - z) * (1 - Math.exp(-dt * GLIDE));
+    this.zoomTo(this.glideAt.x, this.glideAt.y, next);
+    if (next === to) { this.cam.z = to; this.glideTo = null; }
+  }
+  /** Is the zoom resting where its skin lets it (always, for a skin without steps)? */
+  get resting(): boolean { return !this.skin.steps || (this.glideTo == null && this.stepsHere().some((s) => Math.abs(s - this.cam.z) < 1e-6)); }
   /** Frame what is built (at least a starting area round it: a lone Inbound fills it), or the whole floor when it is being edited. */
   fit(layout: FactoryLayout, whole: boolean): void {
     this.resize();
@@ -168,6 +216,8 @@ export class FactoryView {
     this.cam.z = clamp(Math.min(this.w / bw, this.h / bh), Z_MIN, 60);
     this.cam.x = (x0 + x1) / 2; this.cam.y = (y0 + y1) / 2;
     this.constrain(layout);
+    /* with steps: the closest step that still frames it all (at once: framing is not zooming) */
+    if (this.skin.steps) { const all = this.stepsHere(), z = this.cam.z; this.cam.z = [...all].reverse().find((s) => s <= z + 1e-6) ?? all[0]!; this.glideTo = null; this.constrain(layout); }
   }
 
   /**
@@ -198,6 +248,7 @@ export class FactoryView {
   draw(st: ViewState, dtReal: number): void {
     this.resize();
     const S = this.scene.build(st, dtReal);
+    this.glide(dtReal);
     this.constrain(st.layout);
     this.skin.ground(this, S, st);
     const pieces: Piece[] = [];

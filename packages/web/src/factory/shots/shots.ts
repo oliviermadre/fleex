@@ -38,6 +38,8 @@ const SHOTS: Shot[] = [
   { name: 'moving-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { hoverMachine: null }, then: { tickets: later }, after: 30 },
   { name: 'neon-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {}, skin: () => new NeonSkin() },
   { name: 'neon-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { edit: true, selMachine: 'a4' }, skin: () => new NeonSkin() },
+  { name: 'pixel-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 32 }, st: {}, skin: () => new PixelSkin() },
+  { name: 'pixel-light', theme: 'light', cam: { x: 11, y: 6, z: 48 }, st: { selMachine: 'st_agent' }, skin: () => new PixelSkin() },
   {
     name: 'halted-drag', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
     st: { halted: true, selTickets: new Set(['t28', 't29']), pickTickets: new Set(['t0']), drag: { ticketId: 't1', x: 12.4, y: 5.6, ok: true, text: 'Drop on Build' } },
@@ -52,7 +54,6 @@ const SKINS: { name: string; skin: () => Skin; z?: number }[] = [
 /* the pixel skin rests on whole steps of its art (see `PIXEL_STEPS`) */
 SKINS.push(
   { name: 'pixel-32', skin: () => new PixelSkin(), z: 32 }, { name: 'pixel-48', skin: () => new PixelSkin(), z: 48 },
-  { name: 'pixel-cream-32', skin: () => new PixelSkin({ dark: 'cream' }), z: 32 }, { name: 'pixel-appwords-32', skin: () => new PixelSkin({ words: 'app' }), z: 32 },
 );
 const looks = (): Shot[] => SKINS.flatMap(({ name, skin, z }) => ['verdant', 'light'].map((theme) => ({ name: `${name}-${theme}`, theme, cam: { x: 13, y: 9.6, z: z ?? 44 }, st: {}, skin })));
 

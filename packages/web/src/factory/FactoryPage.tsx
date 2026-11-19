@@ -451,7 +451,7 @@ function Floor() {
     }
   };
 
-  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => { const v = viewRef.current; if (!v) return; const p = local(e); v.zoomAt(p.x, p.y, Math.exp(-Math.max(-120, Math.min(120, e.deltaY)) * (e.ctrlKey ? 0.012 : 0.0022))); };
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => { const v = viewRef.current; if (!v) return; const p = local(e); v.wheel(p.x, p.y, e.deltaY, e.ctrlKey, e.deltaMode === 1); };
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);

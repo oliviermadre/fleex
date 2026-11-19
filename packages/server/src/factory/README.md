@@ -529,6 +529,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
 | `application/ports/config.port.ts`, web: `settingsStore.ts` | `factorySkin`: how the floor is painted, read by the page only |
 | web: `components/settings/AppearanceTab.tsx` | one line to mount the choice of skin under the theme |
+| web: `public/fonts/` | the pixel skin's fonts and their licences (Silkscreen, Pixelify Sans, SIL OFL); only the Factory under the pixel skin loads them |
 | web: `lib/themes.ts` | `themeVars(theme)`: the CSS variables of a theme, which `applyTheme` sets on the root; the Factory sets those of a night theme on its own page under the neon skin. Pure, it can stay |
 | `application/ports/config.port.ts` | `namedActions`, and `actions` in a repository's config: the named actions script stations run |
 | `infrastructure/container.ts` | gives the module the host's shell and where a ticket's workspace and worktrees are (`host`), for script stations |
@@ -562,7 +563,7 @@ a layer, and what is carried just after what carries it). See `docs/factory/skin
 
 The skin is chosen in Settings › Appearance, under the theme (`factorySkin` in the settings, `FactorySkinPicker.tsx`,
 shown only while the Factory is on): one card a skin, each with a made-up floor painted live by the real renderer in
-that skin and the theme in use. There are two (`skins/index.ts`):
+that skin and the theme in use. There are three (`skins/index.ts`):
 
 - **Fleex** (`skins/fleex.ts`), the default: the floor as it has always been drawn, following the theme. A flat skin:
   everything on one layer, its depth the order the floor has always been painted in.
@@ -574,6 +575,22 @@ that skin and the theme in use. There are two (`skins/index.ts`):
   made from the theme in use (`nightTheme`, set on the page's own element through `themeVars`), and a monospace
   font. Popups, which open over the whole app, keep the theme. `neon.test.ts` holds every ink of the floor and of
   the page to 4.5 on every ground it is written on, for every built-in theme.
+- **Pixel** (`skins/pixel.ts`), chosen on `docs/factory/pixel-flat.html`: a workshop in pixel art, by day on a light
+  theme and at night on a dark one, the theme's accent made to read on it. The same painters as Fleex, painted at
+  16 art pixels a tile and enlarged without smoothing; the words are written crisp after, in pixel fonts (Silkscreen,
+  Pixelify Sans) that Fleex serves itself (`packages/web/public/fonts`, under the SIL Open Font License, declared in
+  `skins/pixelFonts.css`). Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue,
+  hard shadows, a dithered lamp light, tickets as crates in the colour of their type, and a worker at the foot of
+  each station that runs something, busy while a ticket runs there. Workers are procedural: drawn from the scene at
+  each frame, kept by no one. The page around the floor is painted in the same workshop (`workshopTheme`), in
+  Pixelify Sans; `pixel.test.ts` holds its inks as the neon's are held.
+
+A skin may give the steps its zoom rests on (`steps` on `Skin`): the pixel skin's pixels are whole only at 16, 32,
+48, 64 and 80 pixels a tile (and it does not pixelate at 4 and 8, from far). The view then zooms by steps
+(`FactoryView.wheel`, `zoomAt`, `glide`): a notch of the wheel, or a click on the zoom buttons, sends it to the next
+step, it glides there and lands exactly on it; whatever puts it elsewhere (a jump to a ticket, a paste) glides to
+the nearest step; framing picks the closest step that still shows everything. It never rests between two. Other
+skins zoom freely.
 
 How the floor is painted is checked by eye, in a browser against a made-up server: what is tested is the scene and the
 geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).

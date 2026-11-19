@@ -12,7 +12,7 @@
  * `nightTheme`. Chosen on `docs/factory/skin-choice.html`: a soft glow, the belts' chevrons in the theme's accent.
  */
 import type { Theme } from '../../lib/themes';
-import { contrast, isLight, mix } from '../floorLook';
+import { contrast, isLight, mix, toHex } from '../floorLook';
 import { FleexSkin, type Palette } from './fleex';
 
 /** The night floor, and what does not follow the theme. */
@@ -29,9 +29,6 @@ export interface NeonOptions {
   /** What the belts' chevrons are lit in: the theme's accent, or the cyan of the tubes. */
   chevrons?: 'accent' | 'cyan';
 }
-
-/** `rgb(r,g,b)` (what `mix` gives) as `#rrggbb`; a colour already written so is given back. */
-const toHex = (c: string): string => { const m = /^rgb\((\d+),(\d+),(\d+)\)$/.exec(c.replace(/\s/g, '')); return m ? `#${m.slice(1).map((v) => Number(v).toString(16).padStart(2, '0')).join('')}` : c; };
 
 /** A colour made to shine on the night floor: lifted towards white until it stands out from it. As `#rrggbb`. */
 export function shine(color: string, floor: string = NIGHT.floor): string {

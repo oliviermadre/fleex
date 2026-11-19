@@ -25,6 +25,14 @@ export function mix(color: string, towards: string, amount: number): string {
   const a = channels(color), b = channels(towards), k = Math.max(0, Math.min(1, amount));
   return a && b ? `rgb(${a.map((v, i) => Math.round(v + (b[i]! - v) * k)).join(',')})` : color;
 }
+/** A colour as `#rrggbb`: what `mix` gives (`rgb(r,g,b)`) is written so; one already written so is given back. */
+export const toHex = (c: string): string => { const m = /^rgb\((\d+),(\d+),(\d+)\)$/.exec(c.replace(/\s/g, '')); return m ? `#${m.slice(1).map((v) => Number(v).toString(16).padStart(2, '0')).join('')}` : c; };
+/** That colour, mixed towards white (or black) a tenth at a time until it reads at `ratio` on every one of `grounds`. As `#rrggbb`. */
+export function readable(color: string, grounds: readonly string[], ratio: number, towards: '#ffffff' | '#000000'): string {
+  let c = color;
+  for (let k = 0; k < 10 && grounds.some((g) => contrast(c, g) < ratio); k++) c = mix(color, towards, (k + 1) * 0.1);
+  return toHex(c);
+}
 /** True for the floor of a light theme (a floor that cannot be read counts as dark, as most themes are). */
 export function isLight(color: string): boolean {
   const c = channels(color);

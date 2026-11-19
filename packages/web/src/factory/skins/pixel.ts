@@ -1,19 +1,23 @@
 /**
- * The pixel skin, "workshop": the floor in pixel art. DRAFT for the mock-up of lot 5 (`docs/factory/pixel-flat.html`).
+ * The pixel skin, "workshop": the floor in pixel art, chosen on `docs/factory/pixel-flat.html`.
  *
  * Pixel art from the same painters: the picture is painted at a low resolution, `ART` pixels to a tile, then enlarged
- * without smoothing. The words are not: they wait, and are written crisp over the enlarged picture. Pixels are whole
- * only when a tile is a whole number of screen pixels per art pixel, so the zoom rests on `PIXEL_STEPS` only (it
- * glides between them, it never stops between them). Seen from far (under `ART` pixels a tile), the picture is not
- * pixelated: a pixel of art would be smaller than a pixel of the screen.
+ * without smoothing. The words are not: they wait, and are written crisp over the enlarged picture, in pixel fonts
+ * (`pixelFonts.css`). Pixels are whole only when a tile is a whole number of screen pixels per art pixel, so the zoom
+ * rests on `PIXEL_STEPS` only: the view glides between them and never stops between them (`steps`, read by the view).
+ * Seen from far (under `ART` pixels a tile), the picture is not pixelated: a pixel of art would be smaller than a pixel
+ * of the screen.
  *
- * Its own drawing: a floor of tiles, flat bodies with a dark outline, hard shadows, tickets as crates in the colour of
- * their type, and a worker at the foot of each station that runs something, busy while it does. Workers are
- * procedural: drawn from the scene at each frame, kept by no one.
+ * Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue, hard shadows, a dithered
+ * lamp light, tickets as crates in the colour of their type, and a worker at the foot of each station that runs
+ * something, busy while it does. Workers are procedural: drawn from the scene at each frame, kept by no one.
  *
- * It follows the theme: a cream workshop on a light theme, a workshop at night on a dark one (or cream always).
+ * It follows the theme: a cream workshop on a light theme, a workshop at night on a dark one, with the theme's accent
+ * made to read on it. The page around the floor is painted in the same workshop (`workshopTheme`).
  */
-import { isLight, legible, luminance, mix } from '../floorLook';
+import './pixelFonts.css';
+import type { Theme } from '../../lib/themes';
+import { isLight, mix, readable, toHex } from '../floorLook';
 import type { Lamp, RunKind } from '../machineArt';
 import type { StationSpec } from '../types';
 import type { Scene, StationView } from '../scene';
@@ -24,31 +28,61 @@ import type { Piece, Surface } from './skin';
 
 /** The pixel fonts, as a canvas asks for them. */
 export const PIXEL_FONTS = ['400 16px "Silkscreen"', '700 16px "Silkscreen"', '500 16px "Pixelify Sans"', '700 16px "Pixelify Sans"'];
+/** The font of the page around a pixel floor. */
+export const WORKSHOP_FONT = '"Pixelify Sans", ui-sans-serif, system-ui, sans-serif';
 /** Art pixels to a tile. */
 export const ART = 16;
 /** The zooms the view rests on, in screen pixels per tile: whole multiples of the art, and two far ones. */
 export const PIXEL_STEPS: readonly number[] = [4, 8, 16, 32, 48, 64, 80];
 
-export interface PixelOptions {
-  /** On a dark theme: a workshop at night (it follows the theme), or the cream workshop always. */
-  dark?: 'night' | 'cream';
-  /** The words: in pixel fonts, or in the app's own (crisper when small). */
-  words?: 'pixel' | 'app';
-}
-
-const CREAM = {
+/** The workshop by day (on a light theme) and at night (on a dark one): its floor, and what is written on it. */
+export const CREAM = {
   bg: '#e8dfcc', floor: '#efe7d6', grid: '#d9cfbb', belt: '#56525f', edge: '#2b2833', chev: '#d8d2e0', fast: '#2f7fd6', body: '#f4ecdc',
-  text: '#1d1b26', text2: '#4b4655', text3: '#6b6574', ok: '#2f9e44', warn: '#a86d00', danger: '#c8322e', amber: '#c27c0e', light: true,
-};
-const NIGHT = {
+  text: '#1d1b26', text2: '#4b4655', text3: '#6b6574', ok: '#256b30', warn: '#7a4f00', danger: '#a3221b', amber: '#c27c0e', light: true,
+} as const;
+export const NIGHT = {
   bg: '#17151d', floor: '#25222c', grid: '#2f2b38', belt: '#4a4555', edge: '#0f0e14', chev: '#b3acc4', fast: '#5aa9ff', body: '#3a3644',
-  text: '#f4ecdc', text2: '#d2ccdb', text3: '#9a93ab', ok: '#4fbf5f', warn: '#f2b01e', danger: '#ff6b62', amber: '#f2b01e', light: false,
-};
+  text: '#f4ecdc', text2: '#d2ccdb', text3: '#9a93ab', ok: '#4fbf5f', warn: '#f2b01e', danger: '#ff7a72', amber: '#f2b01e', light: false,
+} as const;
 /** A crate's wood, its plank line and its outline. */
 const WOOD = '#c8955a', PLANK = '#9c6b3a', INK = '#2b2833';
 
+/** The workshop that goes with a theme: by day on a light one, at night on a dark one. */
+export const workshopOf = (light: boolean) => (light ? CREAM : NIGHT);
+/** The theme's accent, made to read on the workshop's floor and bodies: darkened by day, lifted at night. */
+export function workshopAccent(accent: string, light: boolean): string {
+  const w = workshopOf(light);
+  /* its floor and bodies, and the grounds of the page around it (see `workshopTheme`) */
+  return readable(accent, [w.floor, w.body, w.bg, light ? '#e9dfca' : '#2f2b38'], 4.5, light ? '#000000' : '#ffffff');
+}
+
+/**
+ * The theme the page around a pixel floor is painted in: the workshop's surfaces and inks, by day or at night as the
+ * theme is, the theme's accent made to read on them, the rest of the theme as it is. Every ink holds 4.5 on its
+ * surfaces (`pixel.test.ts`).
+ */
+export function workshopTheme(theme: Theme): Theme {
+  const light = isLight(theme.colors.bgSurface), accent = workshopAccent(theme.colors.accent, light), [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+  const day = {
+    bgBase: '#e8dfcc', bgSurface: '#f4ecdc', bgOverlay: '#e9dfca', bgHover: 'rgba(217, 207, 187, 0.5)', bgOverlayHover: '#d9cfbb',
+    border: '#cfc3aa', borderSubtle: 'rgba(207, 195, 170, 0.5)', borderInput: '#a89c84',
+    textPrimary: '#1d1b26', textSecondary: '#4b4655', textMuted: '#5c5665', textFaint: '#7d7686', success: CREAM.ok, warning: CREAM.warn, danger: CREAM.danger,
+  };
+  const night = {
+    bgBase: '#17151d', bgSurface: '#25222c', bgOverlay: '#2f2b38', bgHover: 'rgba(58, 54, 68, 0.5)', bgOverlayHover: '#3a3644',
+    border: '#3a3644', borderSubtle: 'rgba(58, 54, 68, 0.5)', borderInput: '#4f4a5c',
+    textPrimary: '#f4ecdc', textSecondary: '#d2ccdb', textMuted: '#a9a2ba', textFaint: '#857e98', success: NIGHT.ok, warning: NIGHT.warn, danger: NIGHT.danger,
+  };
+  return {
+    ...theme, id: `${theme.id}@workshop`, name: `${theme.name}, in the workshop`, builtIn: false,
+    colors: { ...(light ? day : night), accent, accentHover: toHex(mix(accent, light ? '#000000' : '#ffffff', 0.12)), accentActive: toHex(mix(accent, light ? '#000000' : '#ffffff', 0.24)), accentMuted: `rgba(${r}, ${g}, ${b}, 0.15)` },
+  };
+}
+
 export class PixelSkin extends FleexSkin {
   override readonly id: string = 'pixel';
+  /** The zoom rests on these only. */
+  readonly steps = PIXEL_STEPS;
   /** The picture at low resolution, and how many of its pixels there are to a pixel of the view (CSS). */
   private low: HTMLCanvasElement | null = null;
   private lowCtx: CanvasRenderingContext2D | null = null;
@@ -56,13 +90,11 @@ export class PixelSkin extends FleexSkin {
   /** Painting into the low picture (from the floor to the pieces), or onto the view (the words). */
   private toLow = false;
 
-  constructor(private readonly opts: PixelOptions = {}) {
+  constructor() {
     super();
-    if (opts.words !== 'app') {
-      this.fonts = { sans: '"Pixelify Sans", ui-sans-serif, system-ui, sans-serif', mono: '"Silkscreen", ui-monospace, monospace' };
-      /* a canvas does not ask for a font it is told to use: ask now, and the words take it at the frame after it came */
-      if (typeof document !== 'undefined' && document.fonts) for (const f of PIXEL_FONTS) void document.fonts.load(f).catch(() => undefined);
-    }
+    this.fonts = { sans: WORKSHOP_FONT, mono: '"Silkscreen", ui-monospace, monospace' };
+    /* a canvas does not ask for a font it is told to use: ask now, and the words take it at the frame after it came */
+    if (typeof document !== 'undefined' && document.fonts) for (const f of PIXEL_FONTS) void document.fonts.load(f).catch(() => undefined);
   }
 
   protected override get ctx(): CanvasRenderingContext2D { return this.toLow && this.lowCtx ? this.lowCtx : this.on.ctx; }
@@ -103,10 +135,9 @@ export class PixelSkin extends FleexSkin {
     const now = performance.now();
     if (this.pal && now - this.palAt < 2000) return this.pal;
     const cs = getComputedStyle(document.documentElement), surface = cs.getPropertyValue('--theme-bg-surface').trim() || '#18181b', accent = cs.getPropertyValue('--theme-accent').trim() || '#D77655';
-    const p = isLight(surface) || this.opts.dark === 'cream' ? CREAM : NIGHT, ground = luminance(p.floor) ?? 0.5;
+    const light = isLight(surface), p = workshopOf(light);
     this.palAt = now;
-    /* the theme's accent, made to read on the workshop's floor */
-    this.pal = { ...p, accent: p.light ? legible(accent, ground) : mix(accent, '#ffffff', luminance(accent)! < 0.2 ? 0.35 : 0) };
+    this.pal = { ...p, accent: workshopAccent(accent, light) };
     return this.pal;
   }
 

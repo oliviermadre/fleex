@@ -22,8 +22,9 @@ function Preview({ skin, theme }: { skin: SkinInfo; theme: string }) {
       if (!cv?.getContext('2d') || !cv.clientWidth) return;
       /* no name tags: at this size they would cover the floor */
       const plain = tickets.map((t) => (t.info?.favorite ? { ...t, info: { ...t.info, favorite: false } } : t));
-      const v = new FactoryView(cv, skin.make()), st = floorState({ tickets: plain, selTicket: null, hoverMachine: null, dim: null, found: null, named: null, armTags: false });
-      v.resize(); v.cam = { x: 13, y: 8.5, z: 11 };
+      const painter = skin.make(), v = new FactoryView(cv, painter), st = floorState({ tickets: plain, selTicket: null, hoverMachine: null, dim: null, found: null, named: null, armTags: false });
+      /* a skin whose zoom goes by steps is shown on one of them */
+      v.resize(); v.cam = { x: 13, y: 8.5, z: painter.steps ? 16 : 11 };
       for (let i = 0; i < 24; i++) v.draw(st, 1 / 60);
     });
     return () => cancelAnimationFrame(raf);
@@ -57,10 +58,6 @@ export function FactorySkinPicker() {
             </button>
           );
         })}
-        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-[var(--theme-border)] p-2 opacity-60" aria-disabled="true">
-          <div className="flex h-28 items-center justify-center rounded bg-[var(--theme-bg-overlay)] font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--theme-text-muted)]">Pixel · coming</div>
-          <div className="px-1 text-xs text-[var(--theme-text-muted)]">Pixel</div>
-        </div>
       </div>
     </div>
   );

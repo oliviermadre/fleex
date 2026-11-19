@@ -77,6 +77,8 @@ export interface SceneLookup { readonly shown: ReadonlyMap<string, { x: number; 
 
 export interface Skin {
   readonly id: string;
+  /** The zooms the view may rest on, in pixels per tile; it glides between them. None: the zoom is free. */
+  readonly steps?: readonly number[];
   /** What lies under everything: the floor, its light, what stands casts on it. Leaves the canvas in the floor's units. */
   ground(on: Surface, S: Scene, st: ViewState): void;
   /** The pieces of the scene. */

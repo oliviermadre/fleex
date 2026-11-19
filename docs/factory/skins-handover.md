@@ -220,8 +220,17 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   a palette and one glow over the whole picture. The page around the floor takes the skin's colours through the CSS
   variables of a night theme (`nightTheme` + `themeVars`, set on the page's element), the minimap too; popups keep the
   theme. `neon.test.ts`: every ink on every ground, for every built-in theme. Fleex's pictures still identical.
-- **Next, lot 5**: the pixel skin, flat. Open questions 3 (zoom by whole steps or not) and 4 (sprites: who draws them)
-  first, on a mock-up on a real floor that zooms.
+- **Lot 5, done**: picked on `docs/factory/pixel-flat.html` (a live mock-up embedding the real renderer: a workshop at
+  night on a dark theme, pixel fonts). `skins/pixel.ts`: painted at 16 art pixels a tile and enlarged without
+  smoothing, the words crisp after; tiles, flat outlined bodies, hard shadows, dithered lamp light, crates, and a
+  procedural worker at each station that runs something. The zoom by steps is the view's (`steps` on `Skin`,
+  `FactoryView.wheel` / `glide`): it glides and only rests on a step. Fonts served by Fleex (`public/fonts`, OFL).
+  The page in the workshop's colours (`workshopTheme`); `pixel.test.ts`; two pixel pictures among the checks.
+  Not done: an exit's light is still a soft glow under the pixel skin.
+- **Next, lot 6**: the three-quarter view (a lift per kind, front faces and feet, `pick()` on the boxes seen). Then
+  lot 7, the decor (wall and props generated from the floor), lot 8, lines, lot 9, people. A mock-up first for lot 6,
+  live like the pixel one: it answers open questions 5 (do platforms raise what stands on them), 7 (hidden tickets)
+  and 9 (build mode in three quarters).
 
 ## Proposed order of work
 
