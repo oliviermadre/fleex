@@ -418,7 +418,8 @@ async function main() {
   await app.listen({ port, host: '0.0.0.0' });
   container.logger.info(`Fleex server started on port ${port}`);
 
-  // The Factory engine ticks only while its flag is on; it loads its floor on the first enabled tick.
+  // The Factory engine ticks only while its flag is on; it loads its floor on the first tick with the flag on,
+  // so a workspace that never turns it on never reads its tables.
   container.factory?.start();
 
   // Verify gateway connectivity

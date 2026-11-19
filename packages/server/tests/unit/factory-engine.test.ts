@@ -498,6 +498,24 @@ describe('FactoryEngine', () => {
     await engine.refreshInfos();
     expect(where('a')).toBe('gone');
   });
+
+  it('never runs two sweeps at once, and reads a few tickets at a time', async () => {
+    await boot([zone('z', 1, 1, { cap: 50 })]);
+    for (let i = 0; i < 20; i++) { infos.set(`t${i}`, info(`t${i}`)); await engine.transfer(`t${i}`, { machineId: 'z' }); }
+    let inFlight = 0, most = 0, reads = 0;
+    const gate: (() => void)[] = [];
+    (engine as unknown as { deps: { loadTicket: (id: string) => Promise<FactoryTicketInfo | null> } }).deps.loadTicket = async (id) => {
+      reads++; inFlight++; most = Math.max(most, inFlight);
+      await new Promise<void>((r) => gate.push(r));
+      inFlight--; return infos.get(id) ?? null;
+    };
+    const first = engine.refreshInfos(), second = engine.refreshInfos();
+    expect(second).toBe(first);
+    while (reads < 20 || gate.length) { await settle(); gate.splice(0).forEach((r) => r()); await settle(); }
+    await first;
+    expect(reads).toBe(20);
+    expect(most).toBe(8);
+  });
 });
 
 describe('teleporters', () => {

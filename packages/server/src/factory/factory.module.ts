@@ -30,6 +30,10 @@ const LAUNCHES = ['agent', 'skill', 'panel'];
 
 const DAY_MS = 86_400_000;
 const STATS_TTL_MS = 20_000;
+/* a floor that could not be loaded is tried again after this, not at every tick */
+const INIT_RETRY_MS = 30_000;
+/* what changes a ticket as the floor sees it: its type, priority, status, tags, flags, or its removal */
+const TICKET_EVENTS = ['ticket.updated', 'ticket.moved', 'ticket.blocked', 'ticket.unblocked', 'ticket.favorited', 'ticket.unfavorited', 'ticket.deleted'] as const;
 
 export interface FactoryModuleDeps {
   /** Null on a storage driver the Factory does not support: the module is then absent. */
@@ -59,6 +63,7 @@ export class FactoryModule {
   readonly engine: FactoryEngine;
   readonly store: FactoryStorePort;
   private initPromise: Promise<void> | null = null;
+  private retryAt = 0;
 
   /**
    * A script station on a ticket: where the ticket's workspace and worktrees are, what each of its repositories
@@ -145,6 +150,12 @@ export class FactoryModule {
       if (event.createdMentions.some((m) => LAUNCHES.includes(m.targetType))) await this.engine.launchedByHand(event.ticketId);
       else await this.engine.answered(event.ticketId);
     });
+    for (const type of TICKET_EVENTS) {
+      this.deps.eventBus.on(type, async (e) => {
+        const ticketId = (e as { ticketId?: string }).ticketId;
+        if (ticketId && this.managedTicketIds()?.has(ticketId)) await this.engine.ticketChanged(ticketId);
+      });
+    }
   }
 
   /** A skill or a panel was launched on a ticket without a comment (its own button): same as launching it from the thread. */
@@ -199,7 +210,9 @@ export class FactoryModule {
   start(): void {
     this.engine.start(() => {
       if (!this.enabled()) return false;
-      if (!this.initPromise) void this.ensureReady().catch((err) => this.deps.logger.warn('Factory: could not load the floor', { error: String(err) }));
+      if (!this.initPromise && Date.now() >= this.retryAt) {
+        void this.ensureReady().catch((err) => { this.retryAt = Date.now() + INIT_RETRY_MS; this.deps.logger.warn('Factory: could not load the floor', { error: String(err) }); });
+      }
       return true;
     });
   }

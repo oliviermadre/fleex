@@ -94,3 +94,54 @@ describe('FactoryModule: what it hears from the ticket thread', () => {
     expect(factory.refusesWorkflow('a')).toBeNull();
   });
 });
+
+describe('FactoryModule: what it reads, and when', () => {
+  it('re-reads a ticket of the floor when it is changed elsewhere in Fleex, and no other', async () => {
+    const changed = vi.spyOn(factory.engine, 'ticketChanged');
+    bus.emit({ type: 'ticket.updated', ticketId: 'a', changes: {}, occurredAt: new Date() } as never);
+    bus.emit({ type: 'ticket.moved', ticketId: 'a', occurredAt: new Date() } as never);
+    bus.emit({ type: 'ticket.updated', ticketId: 'elsewhere', changes: {}, occurredAt: new Date() } as never);
+    await settle();
+    expect(changed.mock.calls).toEqual([['a'], ['a']]);
+  });
+
+  it('loads the floor on its own once the flag is on, without waiting for the Factory page, and reads nothing while it is off', async () => {
+    vi.useFakeTimers();
+    try {
+      enabled = false;
+      const reads = vi.fn(async () => null);
+      const store = { ...memoryStore(), getFloor: reads };
+      const off = createFactoryModule({
+        store, eventBus: new EventBus(), config: { get: () => ({ factoryEnabled: enabled }) } as never,
+        ticketStore: {} as never, skillStore: {} as never, personaStore: {} as never, agentEventStore: {} as never, executeAgent: {} as never, runPanel: {} as never,
+        applyTicketMutation: {} as never, submitDeliverable: {} as never, postComment: {} as never, logger: { warn: () => {}, info: () => {} },
+      })!;
+      off.start();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(reads).not.toHaveBeenCalled();
+      enabled = true;
+      await vi.advanceTimersByTimeAsync(500);
+      expect(reads).toHaveBeenCalledTimes(1);
+      expect(off.managedTicketIds()).not.toBeNull();
+      await off.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('tries a floor that could not be loaded again after a while, not at every tick', async () => {
+    vi.useFakeTimers();
+    try {
+      const reads = vi.fn(async () => { throw new Error('down'); });
+      const broken = createFactoryModule({
+        store: { ...memoryStore(), getFloor: reads }, eventBus: new EventBus(), config: { get: () => ({ factoryEnabled: true }) } as never,
+        ticketStore: {} as never, skillStore: {} as never, personaStore: {} as never, agentEventStore: {} as never, executeAgent: {} as never, runPanel: {} as never,
+        applyTicketMutation: {} as never, submitDeliverable: {} as never, postComment: {} as never, logger: { warn: () => {}, info: () => {} },
+      })!;
+      broken.start();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(reads).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(reads).toHaveBeenCalledTimes(2);
+      await broken.stop();
+    } finally { vi.useRealTimers(); }
+  });
+});

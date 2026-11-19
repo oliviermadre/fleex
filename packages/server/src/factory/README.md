@@ -495,6 +495,22 @@ limiter and the execution log. The Factory adds two limits of its own, editable 
 
 Supported storage: SQLite and Supabase. On pgsql the store is `null` and the module is absent, like workflows.
 
+### What it reads, and how often
+
+The floor moves in memory: the 250 ms tick, `GET /api/factory/state` (the page polls it every 600 ms),
+`/api/factory/managed` and the checks the rest of Fleex makes (`refusesWorkflow`, `launchedByHand`) never query the
+database. With the flag off nothing is read at all, not even the floor. What does reach the database:
+
+- at the first tick with the flag on: the floor, its tickets, the runs left running, the runs of the last hour;
+- every 2 s, only when something moved: one upsert per ticket that changed machine or phase (not per tick), never two
+  writes in flight;
+- every 30 s: every ticket of the floor re-read through the ticket store, 8 at a time, a sweep never doubled. A ticket
+  changed in Fleex (`ticket.updated`, `moved`, `blocked`, `favorited`, `deleted` and their opposites) is re-read at once
+  by its event; the sweep is the safety net, mainly for archiving;
+- each station run: its row in `factory_runs`, start and end, beside the usual execution log;
+- the page, while open: the stats every 30 s (cached 20 s on the server: runs of the period, then the executions of
+  the tickets that ran, 8 at a time), a machine popup's runs every 4 s, a ticket's thread every 3 s.
+
 ## Hooks in existing code
 
 | File | What |

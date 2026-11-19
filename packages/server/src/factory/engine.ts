@@ -23,7 +23,10 @@ const STATION_REST_MS = 1000;
 /** How long a ticket stays in a teleporter before it is sent on, or taken out: long enough to be seen there. */
 const TELEPORT_REST_MS = 800;
 const FLUSH_EVERY_MS = 2000;
-const REFRESH_INFO_EVERY_MS = 10_000;
+/* a full re-read of every ticket on the floor, as a safety net: what is changed in Fleex reaches the floor by its events, at once */
+const REFRESH_INFO_EVERY_MS = 30_000;
+/* how many tickets are re-read at once: on a remote database each read is a round trip */
+const REFRESH_CONCURRENCY = 8;
 const HOUR_MS = 3_600_000;
 
 interface Machine {
@@ -193,6 +196,8 @@ export class FactoryEngine {
   private lastFlush = 0;
   private lastRefresh = 0;
   private ready = false;
+  private sweeping: Promise<void> | null = null;
+  private flushing: Promise<void> | null = null;
   /** Something the page should tell once: the floor was started over because its layout could not be carried to this version. */
   private notice: string | null = null;
   private readonly now: () => number;
@@ -251,7 +256,8 @@ export class FactoryEngine {
     this.timer = setInterval(() => {
       const t = this.now(), dt = Math.min(1, (t - this.lastTick) / 1000);
       this.lastTick = t;
-      if (!this.ready || !enabled()) return;
+      /* `enabled` first: it is what loads the floor */
+      if (!enabled() || !this.ready) return;
       try { this.tick(dt); } catch (err) { this.deps.logger.warn('Factory tick failed', { error: err instanceof Error ? err.message : String(err) }); }
       if (t - this.lastFlush > FLUSH_EVERY_MS) { this.lastFlush = t; void this.flush(); }
       if (t - this.lastRefresh > REFRESH_INFO_EVERY_MS) { this.lastRefresh = t; void this.refreshInfos(); }
@@ -687,7 +693,14 @@ export class FactoryEngine {
     this.updateTeleporters();
   }
 
+  /** Write what moved since the last time. One write at a time: a slow database never gets two in flight. */
   async flush(): Promise<void> {
+    while (this.flushing) await this.flushing;
+    this.flushing = this.flushNow().finally(() => { this.flushing = null; });
+    return this.flushing;
+  }
+
+  private async flushNow(): Promise<void> {
     const ids = [...this.dirty]; this.dirty.clear();
     const nowIso = new Date(this.now()).toISOString();
     for (const id of ids) {
@@ -699,14 +712,29 @@ export class FactoryEngine {
   }
 
   /** Re-read type, priority, status and tags; a ticket that was deleted or archived leaves the floor. */
-  async refreshInfos(): Promise<void> {
-    for (const t of [...this.tickets.values()]) {
-      try {
-        const info = await this.deps.loadTicket(t.ticketId);
-        if (info) t.info = info;
-        else if (this.tickets.get(t.ticketId) === t) { this.detach(t); this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId); await this.deps.store.removeTicket(t.ticketId); }
-      } catch (err) { this.deps.logger.warn('Factory: could not refresh a ticket', { ticketId: t.ticketId, error: String(err) }); }
-    }
+  /** A sweep still running is waited for, never doubled: on a slow database sweeps would otherwise pile up. */
+  refreshInfos(): Promise<void> {
+    if (!this.sweeping) this.sweeping = this.sweep().finally(() => { this.sweeping = null; });
+    return this.sweeping;
+  }
+
+  private async sweep(): Promise<void> {
+    const all = [...this.tickets.values()];
+    for (let i = 0; i < all.length; i += REFRESH_CONCURRENCY) await Promise.all(all.slice(i, i + REFRESH_CONCURRENCY).map((t) => this.reread(t)));
+  }
+
+  private async reread(t: Ticket): Promise<void> {
+    try {
+      const info = await this.deps.loadTicket(t.ticketId);
+      if (info) t.info = info;
+      else if (this.tickets.get(t.ticketId) === t) { this.detach(t); this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId); await this.deps.store.removeTicket(t.ticketId); }
+    } catch (err) { this.deps.logger.warn('Factory: could not refresh a ticket', { ticketId: t.ticketId, error: String(err) }); }
+  }
+
+  /** A ticket on the floor was changed elsewhere in Fleex: re-read it now. Nothing happens for a ticket that is not on the floor. */
+  async ticketChanged(ticketId: string): Promise<void> {
+    const t = this.tickets.get(ticketId);
+    if (t) await this.reread(t);
   }
 
   /** Re-read one ticket now, after it was changed from the Factory page (a favourite toggled), without waiting for the next sweep. */

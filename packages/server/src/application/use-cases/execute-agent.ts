@@ -2444,7 +2444,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       await emitEvent('execution_end', {
-        status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode,
+        status: 'completed', ticketId: params.ticketId, model, effectiveMode,
         resultLength: resultText.length,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
@@ -2456,7 +2456,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         maxTurns: wfMaxTurns,
       });
       await this.agentEventStore.completeExecution(executionId, 'completed', {
-        model: persona.model,
+        model,
         effectiveMode,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
