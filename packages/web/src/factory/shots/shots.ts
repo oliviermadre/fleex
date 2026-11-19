@@ -1,0 +1,69 @@
+/**
+ * Paints the made-up floor of `fixture.ts` in a few situations (dark and light themes, build mode, a lens, from far,
+ * stopped), the same frames each time, and hands back each picture as a PNG data URL. Run by
+ * `packages/web/scripts/factory-shots/run.mjs`, which saves them and compares two runs pixel by pixel: a change to
+ * the renderer that should show nothing is checked that way.
+ */
+import { applyTheme, BUILT_IN_THEMES } from '../../lib/themes';
+import { FactoryView, type ViewState } from '../renderer';
+import { arms, later, layout, lens, tickets } from './fixture';
+
+const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
+
+/** `then`: what changes after the first frames, drawn for `after` more frames (what is seen moving between two snapshots). */
+interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number }
+
+const base = (): ViewState => ({
+  layout, tickets, arms, armAge: 0.2, armSwing: 1.1, beltSpeed: 1.2, fastBelt: 2,
+  boardName: () => 'Main', modelOf: (m) => m.model ?? (m.exec === 'skill' || m.exec === 'panel' ? 'claude-opus-4-1' : null),
+  selMachine: null, selMany: [], marquee: null, selTicket: 't9', selTickets: null, pickTickets: null, hoverMachine: 'p_dep',
+  edit: false, ghost: null, drag: null, lens: null, dim: new Set(['t3']), found: new Set(['t16']), named: new Set(['t21']),
+  exits: { ex1: 12 }, exitDays: 7,
+});
+
+const SHOTS: Shot[] = [
+  { name: 'floor-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {} },
+  { name: 'floor-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: {} },
+  { name: 'close-dark', theme: 'verdant', cam: { x: 12.5, y: 3, z: 72 }, st: { hoverLamp: 'st_agent', selMachine: 'g1' } },
+  { name: 'close-light', theme: 'light', cam: { x: 18, y: 9, z: 72 }, st: { selMachine: 'st_script' } },
+  {
+    name: 'build', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
+    st: {
+      edit: true, selMachine: 'a4', selMany: [], selTicket: null, hoverMachine: 'b9', marquee: { x0: 18.2, y0: 14.5, x1: 25.6, y1: 18.4 },
+      ghost: { cells: [{ x: 12, y: 16, w: 1, h: 1, dir: 0, arm: true }, { x: 13, y: 17, w: 5, h: 4 }], ok: true, text: 'Place a station' },
+    },
+  },
+  { name: 'build-many', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { edit: true, selMany: ['b1', 'b2', 'g1'], selTicket: null, grid: true, ghost: { cells: [{ x: 22, y: 16, w: 2, h: 1 }], ok: false, erase: true } } },
+  { name: 'lens', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: { lens } },
+  { name: 'far', theme: 'verdant', cam: { x: 13, y: 10, z: 9 }, st: { allNames: true, armTags: false, numbers: true } },
+  { name: 'moving', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: { hoverMachine: null }, then: { tickets: later }, after: 14 },
+  { name: 'moving-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { hoverMachine: null }, then: { tickets: later }, after: 30 },
+  {
+    name: 'halted-drag', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
+    st: { halted: true, selTickets: new Set(['t28', 't29']), pickTickets: new Set(['t0']), drag: { ticketId: 't1', x: 12.4, y: 5.6, ok: true, text: 'Drop on Build' } },
+  },
+];
+
+async function shoot(): Promise<Record<string, string>> {
+  await document.fonts.ready;
+  const out: Record<string, string> = {};
+  for (const s of SHOTS) {
+    const theme = BUILT_IN_THEMES.find((t) => t.id === s.theme);
+    if (!theme) throw new Error(`no theme ${s.theme}`);
+    applyTheme(theme);
+    const cv = document.createElement('canvas');
+    cv.style.width = `${W}px`; cv.style.height = `${H}px`; cv.style.display = 'block';
+    document.body.replaceChildren(cv);
+    /* a fresh view each time: it keeps where tickets were drawn and the theme it read */
+    const v = new FactoryView(cv), st = { ...base(), ...s.st };
+    v.resize(); v.cam = { ...s.cam };
+    for (let i = 0; i < FRAMES; i++) v.draw(st, DT);
+    if (s.then) { const next = { ...st, ...s.then }; for (let i = 0; i < (s.after ?? 10); i++) v.draw(next, DT); }
+    out[s.name] = cv.toDataURL('image/png');
+  }
+  return out;
+}
+
+declare global { interface Window { shoot: typeof shoot; shotsReady: boolean } }
+window.shoot = shoot;
+window.shotsReady = true;

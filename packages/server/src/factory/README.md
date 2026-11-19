@@ -550,6 +550,13 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 How the floor is painted (`renderer.ts`) is checked by eye, in a browser against a made-up server: what is tested is
 the geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
 
+A change to the renderer that should show nothing is checked picture against picture. `packages/web/src/factory/shots/`
+is a made-up floor with one of everything (each kind of station in each state, zones, belts that bend, run fast and
+cross, gantry, toll, arms, teleporters, an exit, tickets in every phase, one leaving and one jumping), painted the same
+frames each time in eleven situations: dark and light themes, close and far, build mode, a lens, the emergency stop.
+From `packages/web`, `node scripts/factory-shots/run.mjs shoot <dir>` saves them, on `main` and on the branch, and
+`node scripts/factory-shots/run.mjs compare <a> <b> [diff]` says which differ, by how many pixels, and paints where.
+
 The engine, what the module hears from the rest of Fleex, the stats and the SQLite store are tested
 (`factory-engine.test.ts`, `factory-module.test.ts`, `factory-stats.test.ts`, `factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a
 live database and an API key. So the cost figures have only been checked against made-up executions.
