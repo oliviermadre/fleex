@@ -5,6 +5,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { PriorityIndicator } from '../components/tickets/PriorityIndicator';
 import { ComplexityBadge } from '../components/tickets/ComplexityBadge';
+import { Composer } from '../components/work/task/Composer';
 import { useTicketDeliverables } from '../components/work/panel/useTicketDeliverables';
 import { useUIStore } from '../stores/uiStore';
 import * as api from '../services/api';
@@ -15,7 +16,6 @@ import { NEED_LABEL, needKind } from './needs';
 
 const REFRESH_MS = 3000;
 const noop = () => {};
-const FIELD = 'h-7 min-w-0 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 text-xs text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]';
 
 export interface PeekHandle {
   /** Where the ticket's machine (or the ticket itself) is on the floor, in the floor's own pixels: the card sits beside it. */
@@ -60,9 +60,15 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const info = ft.info, need = needKind(ft), gate = ft.phase === 'review' && machine?.kind === 'station' ? machine : null;
   const where = `${machine ? machine.name || machine.kind : 'On the floor'}${need ? ` · ${NEED_LABEL[need]}` : ''}`;
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn(); await load(); } catch { /* toast already shown */ } finally { setBusy(false); } };
-  const say = () => run(async () => { if (draft.trim()) { await api.postTicketComment(ticketId, draft.trim()); setDraft(''); } });
-  /* Escape in a field: with something typed it only leaves the field, empty it closes the card, as it does on the floor */
-  const escape = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key !== 'Escape') return; e.preventDefault(); if (e.currentTarget.value) e.currentTarget.blur(); else onClose(); };
+  /* the composer clears the draft once this resolves, and keeps it when it throws */
+  const say = async (body: string) => { setBusy(true); try { await api.postTicketComment(ticketId, body); await load(); } finally { setBusy(false); } };
+  /* Escape in a field: with something typed it only leaves the field, empty it closes the card, as it does on the floor.
+     It bubbles up from the composer's textarea; the mention menu, when open, has already taken it (defaultPrevented). */
+  const escape = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const field = e.target;
+    if (e.key !== 'Escape' || e.defaultPrevented || !(field instanceof HTMLTextAreaElement)) return;
+    e.preventDefault(); if (field.value) field.blur(); else onClose();
+  };
   const latest = [...deliverables].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
 
   return (
@@ -100,14 +106,18 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
         {gate ? (
           <>
             <span className="basis-full text-[11px] font-semibold text-[var(--theme-warning)]">{gate.name || 'The gate'} waits for your decision</span>
-            <input id="factory-peek-reason" aria-label="Reason" placeholder="Reason (optional), kept in the thread" value={reason} onChange={(e) => setReason(e.target.value)} onKeyDown={escape} className={cn(FIELD, 'basis-full')} />
+            <div className="basis-full" onKeyDown={escape}>
+              <Composer bare ticketId={ticketId} value={reason} onChange={setReason} onSend={noop} submitOn="none" showExecBar={false} showSend={false}
+                placeholder="Reason (optional), kept in the thread: markdown, paste a screenshot" />
+            </div>
             {gate.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} disabled={busy} onClick={() => run(() => store.resolve(ticketId, o, reason))}>{o}</Button>)}
           </>
         ) : (
           <>
-            <input id="factory-peek-reply" aria-label="Reply" placeholder={ft.phase === 'question' && machine?.kind === 'station' ? 'Answer: the station takes the ticket again' : 'Reply'} value={draft} onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { escape(e); if (e.key === 'Enter' && draft.trim() && !busy) { e.preventDefault(); void say(); } }}
-              className={cn(FIELD, 'flex-1')} />
+            <div className="basis-full" onKeyDown={escape}>
+              <Composer bare ticketId={ticketId} value={draft} onChange={setDraft} onSend={say} posting={busy} showExecBar={false}
+                placeholder={ft.phase === 'question' && machine?.kind === 'station' ? 'Answer: the station takes the ticket again' : 'Reply: markdown, @ to mention, paste a screenshot'} />
+            </div>
             {ft.phase === 'failed' && <Button size="sm" disabled={busy} onClick={() => run(() => store.putBack(ticketId))}>Run again</Button>}
           </>
         )}
