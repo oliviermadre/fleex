@@ -126,7 +126,7 @@ export function FactoryAvatar({ of, className }: { of: AvatarOf; className?: str
       {/* a glow of its colour, fading out */}
       <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 44%, color-mix(in srgb, ${hue} 40%, transparent), color-mix(in srgb, ${hue} 11%, transparent) 55%, transparent)` }} />
       <div className="absolute inset-x-0 bottom-5 top-0 grid place-items-center overflow-hidden">{body}</div>
-      {of.kind === 'build' && <div className="absolute inset-x-0 bottom-[22px] h-2" style={{ background: 'repeating-linear-gradient(45deg, var(--theme-warning) 0 7px, #18181b 7px 14px)' }} />}
+      {of.kind === 'build' && <div className="absolute inset-x-0 bottom-[22px] h-2" style={{ background: 'repeating-linear-gradient(45deg, #eab308 0 7px, #18181b 7px 14px)' }} />}
       <div className="absolute inset-x-1 bottom-1.5 truncate text-center font-mono text-[9px] font-bold uppercase tracking-wider" style={{ color: hue }}>{label}</div>
     </div>
   );

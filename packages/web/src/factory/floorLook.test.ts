@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { channels, fadeIn, floorLook, isLight, mix, veil } from './floorLook';
+import { channels, contrast, fadeIn, floorLook, isLight, legible, luminance, mix, veil } from './floorLook';
+import { KIND_LOOK } from './machineArt';
 
 
 describe('theme colours', () => {
@@ -32,6 +33,41 @@ describe('theme colours', () => {
     for (const dark of ['#18181b', '#1e293b', '#0a0a0a', '#292018']) expect(isLight(dark)).toBe(false);
     for (const light of ['#ffffff', '#fffbeb']) expect(isLight(light)).toBe(true);
     expect(isLight('not a colour')).toBe(false);
+  });
+});
+
+describe('writing on a light theme', () => {
+  it('reads a colour written as rgb() or rgba() too, leaving its opacity aside', () => {
+    expect(channels('rgb(10, 20, 30)')).toEqual([10, 20, 30]);
+    expect(channels('rgba(9,9,11,0.84)')).toEqual([9, 9, 11]);
+    expect(mix('rgb(0,0,0)', '#ffffff', 0.5)).toBe('rgb(128,128,128)');
+  });
+
+  it('counts how light a colour is, and the contrast of two', () => {
+    expect(luminance('#000000')).toBe(0);
+    expect(luminance('#ffffff')).toBeCloseTo(1);
+    expect(luminance('nope')).toBeNull();
+    expect(contrast('#000000', '#ffffff')).toBeCloseTo(21);
+    expect(contrast('#777777', '#777777')).toBeCloseTo(1);
+  });
+
+  it('darkens the floor\'s light colours until they read on a light ground, keeping what already does', () => {
+    const body = '#e4e4e7', white = '#ffffff';
+    /* the hues of the station kinds, the paint of zones, amber and the pastel inks: all picked on a dark floor */
+    for (const hue of [...Object.values(KIND_LOOK).map((k) => k.hue), '#60a5fa', '#fb923c', '#c084fc', '#22c55e', '#facc15', '#fde68a', '#f4f4f5', '#fb7185', '#22d3ee', '#a1a1aa']) {
+      expect([hue, contrast(hue, body) < 3.2]).toEqual([hue, true]);               // as it is, it does not read on a light body
+      expect([hue, contrast(legible(hue, 1), body) >= 4.5]).toEqual([hue, true]);  // darkened, it does
+      expect(contrast(legible(hue, 1), white)).toBeGreaterThan(4.5);
+    }
+    expect(legible('#18181b', 1)).toBe('#18181b');
+    expect(legible('#646469', 1)).toBe('#646469');                                  // a light theme's own muted text is left alone
+  });
+
+  it('turns an ink too dark to read on a dark ground near white, and leaves a light one alone', () => {
+    expect(legible('#18181b', 0.02)).toBe('#f4f4f5');
+    expect(legible('#052e16', 0.1)).toBe('#f4f4f5');
+    expect(legible('#fde68a', 0.02)).toBe('#fde68a');
+    expect(legible('not a colour', 1)).toBe('not a colour');
   });
 });
 

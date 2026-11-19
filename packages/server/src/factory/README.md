@@ -169,6 +169,18 @@ stopped" under the emergency stop). It is laid over the floor and takes no point
 console's contour while the console is shown, steps and cut corners included, and is a plain frame when it is put
 away (`tapeShape`): a shape measured from the view's own edges, so nothing has to be measured.
 
+## Light themes
+
+The floor's colours were picked on a dark floor, where they are light: the hues of the station kinds, the paint of
+zones, the pastel inks of plates. On a light theme (`isLight` of the floor's colour) the renderer keeps the hues and
+changes what they are written with (`legible` in `floorLook.ts`): an ink that would not read on a light ground is
+darkened, the lighter the more, until it does; `floorLook.test.ts` holds every hue of the floor to a contrast of 4.5
+on a light body. The near-black plates of labels turn light, with a hairline, and the tags of arms become light
+plates tinted with their colour. The places of a station are a faint shade instead of a deep hollow. What is paint
+and not text keeps one colour on any theme: the hazard yellow of the build tape, of the toggles and of what is set
+aside, and the three lights of a station's lamp. A theme's warning colour is a text colour, brown on a light theme:
+gates are drawn in amber there. Nothing changes on a dark theme.
+
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from

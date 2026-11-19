@@ -1,11 +1,10 @@
-import { cn } from '../lib/cn';
-import { tintClasses } from '../lib/tints';
 import type { HudShape } from './hudShape';
 
-const YELLOW = tintClasses('yellow');
 /** How wide the tape is, and its stripes: yellow and black on the diagonal, as on the bay of what is set aside. */
 export const TAPE = 9;
-const STRIPES = 'repeating-linear-gradient(45deg, var(--theme-warning) 0 10px, #18181b 10px 20px)';
+/** Hazard yellow, as paint: the same on any theme (a theme's warning colour is a text colour, brown on a light one). */
+export const HAZARD = '#eab308', HAZARD_INK = '#18181b';
+const STRIPES = `repeating-linear-gradient(45deg, ${HAZARD} 0 10px, ${HAZARD_INK} 10px 20px)`;
 
 /**
  * The tape as a shape to cut the stripes to: a ring `t` wide just inside the edge of the floor's view. With the
@@ -38,7 +37,7 @@ export function FactoryBuildFrame({ halted, hud = null }: { halted: boolean; hud
   return (
     <div className="pointer-events-none absolute inset-0" role="status" aria-label="Build mode">
       <div className="absolute inset-0" data-tape={hud ? 'contour' : 'frame'} style={{ background: STRIPES, clipPath: tapeShape(hud) }} />
-      <div className={cn('absolute flex items-center gap-2 rounded px-2 py-1 text-[11px] shadow-lg', YELLOW.solid, YELLOW.onSolid)} style={{ left: TAPE + 8, top: TAPE + 8 }}>
+      <div className="absolute flex items-center gap-2 rounded px-2 py-1 text-[11px] shadow-lg" style={{ left: TAPE + 8, top: TAPE + 8, background: HAZARD, color: HAZARD_INK }}>
         <b className="font-mono tracking-wider">BUILD MODE</b>
         <span className="font-medium opacity-80">{halted ? 'the floor is stopped' : 'the floor keeps running'}</span>
       </div>

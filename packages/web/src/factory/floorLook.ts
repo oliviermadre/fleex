@@ -6,8 +6,10 @@
  * Decoration only, kept faint: it never says anything the machines do not
  * already say. Pure helpers; the renderer paints.
  */
-/** The channels of a theme colour (`#rgb` or `#rrggbb`), or null for anything else. */
+/** The channels of a colour (`#rgb`, `#rrggbb`, `rgb(…)` or `rgba(…)`, whose opacity is left aside), or null for anything else. */
 export function channels(color: string): [number, number, number] | null {
+  const f = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(color.trim());
+  if (f) return [Number(f[1]), Number(f[2]), Number(f[3])];
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
   if (!m) return null;
   const h = m[1]!.length === 3 ? [...m[1]!].map((c) => c + c).join('') : m[1]!;
@@ -27,6 +29,30 @@ export function mix(color: string, towards: string, amount: number): string {
 export function isLight(color: string): boolean {
   const c = channels(color);
   return !!c && (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 > 0.55;
+}
+
+/** How light a colour is, from 0 (black) to 1 (white), as contrast is counted; null for one that cannot be read. */
+export function luminance(color: string): number | null {
+  const c = channels(color);
+  if (!c) return null;
+  const [r, g, b] = c.map((v) => { const k = v / 255; return k <= 0.03928 ? k / 12.92 : ((k + 0.055) / 1.055) ** 2.4; }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+/** The contrast of two colours, from 1 (the same) to 21 (black on white). */
+export function contrast(a: string, b: string): number {
+  const la = luminance(a) ?? 0, lb = luminance(b) ?? 0;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+/**
+ * A colour to write with on a ground of that lightness, keeping its hue: the colours of the floor were picked on a
+ * dark floor, where they are light. On a light ground a light ink is darkened, the lighter the more; on a dark
+ * ground an ink too dark to be read becomes near white. What already reads is given back as it is.
+ */
+export function legible(ink: string, ground: number): string {
+  const l = luminance(ink);
+  if (l == null) return ink;
+  if (ground > 0.4) return l > 0.22 ? mix(ink, '#000000', Math.min(0.72, 0.4 + (l - 0.22) * 0.5)) : ink;
+  return l < 0.2 ? '#f4f4f5' : ink;
 }
 
 export interface FloorLook {

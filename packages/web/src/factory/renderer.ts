@@ -8,7 +8,7 @@ import { layoutNames, tie, type NamedTicket } from './nameTags';
 import { armColor, armTag, isConditional, shortCondition } from './armRules';
 import { armDue, armShown, easeSwing } from './armMotion';
 import { bridgeFlow, type LaneFlow } from './bridges';
-import { fadeIn, floorLook, MAJOR, mix, veil } from './floorLook';
+import { fadeIn, floorLook, isLight, legible, luminance, MAJOR, mix, veil } from './floorLook';
 import { follow, type Track, type TrackPos } from './ticketMotion';
 import { BAR, bodyOf, CUT, inRect, KIND_LOOK, kindOf, lampOf, MACHINE_ICONS, machineParts, ROUND, SHOULDER, sortInto, STACK, type Lamp, type Rect, type RunKind } from './machineArt';
 import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatch, type EdgePoint } from './quays';
@@ -84,6 +84,10 @@ const STATUS_COLORS: Record<string, string> = { backlog: '#71717a', todo: '#fb92
 /** The paint of a zone: the colour of the status it sets, lifted where that one is too dark to read on the floor; and the paint of a zone that sets none. */
 const ZONE_PAINT: Record<string, string> = { backlog: '#a1a1aa', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
 const PAINT = '#60a5fa';
+/* the plates things are written on: near black on a dark floor; on a light one they turn light (`write`) */
+const DARK_PLATE = /^rgba\(9,9,11,/, LIGHT_PLATE = 'rgba(255,255,255,0.95)';
+/** Hazard yellow, as paint: the same on any theme. */
+const HAZARD = '#eab308';
 /** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
 const SNAP = 0.0005, SLIDE = 0.03;
 /** The colour of a Set gantry, and of everything that says what it does. */
@@ -101,8 +105,8 @@ interface Leaving { type: string; from: { x: number; y: number }; edge: EdgePoin
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
-interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string }
-type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number }];
+interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
+type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number; /** It is written on something dark whatever the theme (a veil over the floor): its ink is left as it is. */ dark?: boolean }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
@@ -248,7 +252,9 @@ export class FactoryView {
       edge: v('--theme-border-input', '#3f3f46'), chev: v('--theme-text-muted', '#71717a'), fast: v('--tint-blue-solid', '#60a5fa'), body: v('--theme-bg-overlay', '#27272a'),
       text: v('--theme-text-primary', '#fafafa'), text2: v('--theme-text-secondary', '#a1a1aa'), text3: v('--theme-text-muted', '#71717a'),
       ok: v('--theme-success', '#22c55e'), warn: v('--theme-warning', '#eab308'), danger: v('--theme-danger', '#ef4444'), accent: v('--theme-accent', '#D77655'),
+      light: false, amber: '',
     };
+    this.pal.light = isLight(this.pal.floor); this.pal.amber = this.pal.light ? '#d97706' : this.pal.warn;
     return this.pal;
   }
 
@@ -313,8 +319,9 @@ export class FactoryView {
       const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - this.cam.y) * z + this.h / 2;
       const x0 = b.side === 'right' ? sx + 6 : b.side === 'left' ? sx - 6 - w : sx - w / 2, y0 = b.side === 'above' ? sy - 6 - h : b.side === 'below' ? sy + 6 : sy - h / 2;
       if (x0 > this.w || x0 + w < 0 || y0 > this.h || y0 + h < 0) continue;
-      rr(ctx, x0, y0, w, h, 4); ctx.fillStyle = 'rgba(9,9,11,0.92)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = b.col; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
-      b.lines.forEach((l, i) => { ctx.fillStyle = b.inks[i] ?? b.col; ctx.fillText(l, x0 + pad, y0 + pad / 2 + lh * (i + 0.5)); });
+      const lit = !!this.pal?.light, on = lit ? 1 : 0;
+      rr(ctx, x0, y0, w, h, 4); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = lit ? legible(b.col, 1) : b.col; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+      b.lines.forEach((l, i) => { const ink = b.inks[i] ?? b.col; ctx.fillStyle = lit ? legible(ink, on) : ink; ctx.fillText(l, x0 + pad, y0 + pad / 2 + lh * (i + 0.5)); });
     }
     ctx.restore(); this.labels.length = 0; this.boards.length = 0;
   }
@@ -337,13 +344,16 @@ export class FactoryView {
     ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
     let text = raw;
     if (o.fit) { const room = o.fit * z; if (ctx.measureText(text).width > room) { while (text.length > 3 && ctx.measureText(`${text}…`).width > room) text = text.slice(0, -1); text += '…'; } }
-    if (o.plate) {
+    /* on a light theme: the dark plates turn light, with a hairline to stand on a white floor, and every ink is made to read on what it is written on */
+    const lit = !!this.pal?.light && !o.dark, neutral = lit && !!o.plate && DARK_PLATE.test(o.plate), plate = neutral ? LIGHT_PLATE : o.plate;
+    if (plate) {
       const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
       const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
-      ctx.fillStyle = o.plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
+      ctx.fillStyle = plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
+      if (neutral) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke(); }
     }
     if (o.spacing) ctx.letterSpacing = `${(px * o.spacing).toFixed(2)}px`;
-    ctx.fillStyle = color; ctx.fillText(text, sx, sy);
+    ctx.fillStyle = lit ? legible(color, plate ? luminance(plate) ?? 1 : 1) : color; ctx.fillText(text, sx, sy);
     if (o.spacing) ctx.letterSpacing = '0px';
   }
 
@@ -464,7 +474,8 @@ export class FactoryView {
     const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
-    ctx.strokeStyle = 'rgba(244,244,245,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
+    const lit = pal.light;
+    ctx.strokeStyle = lit ? 'rgba(24,24,27,0.4)' : 'rgba(244,244,245,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
     for (const b of boxes) {
       const ends = b.points.length ? b.points.map((p) => tie(b, { x: p.x, y: p.y, w: 0, h: 0 })) : [tie(b, b.anchor)];
       for (const e of ends) { ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); }
@@ -472,16 +483,16 @@ export class FactoryView {
     ctx.stroke();
     for (const b of boxes) {
       const hot = b.lines.some((l) => st.found?.has(l.id));
-      rr(ctx, b.x, b.y, b.w, b.h, 5); ctx.fillStyle = 'rgba(9,9,11,0.92)'; ctx.fill();
-      ctx.strokeStyle = hot ? pal.accent : 'rgba(244,244,245,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+      rr(ctx, b.x, b.y, b.w, b.h, 5); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill();
+      ctx.strokeStyle = hot ? pal.accent : lit ? 'rgba(24,24,27,0.28)' : 'rgba(244,244,245,0.18)'; ctx.lineWidth = 1; ctx.stroke();
       b.lines.forEach((l, i) => {
         const t = byId.get(l.id), y = b.y + PAD + i * LH + LH / 2, sel = st.selTicket === l.id;
         rr(ctx, b.x + PAD, y - 4, 8, 8, 2); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
         if (t?.info?.favorite) { ctx.fillStyle = STAR; ctx.beginPath(); ctx.arc(b.x + PAD + 8, y - 4, 2.2, 0, 6.3); ctx.fill(); }
-        ctx.font = `${sel ? 700 : 500} 11px ${SANS}`; ctx.fillStyle = sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
+        ctx.font = `${sel ? 700 : 500} 11px ${SANS}`; ctx.fillStyle = lit ? (sel || st.found?.has(l.id) ? '#09090b' : 'rgba(24,24,27,0.86)') : sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
         ctx.fillText(l.text, b.x + PAD + 13, y + 0.5);
       });
-      if (b.more > 0) { ctx.font = `500 11px ${SANS}`; ctx.fillStyle = 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
+      if (b.more > 0) { ctx.font = `500 11px ${SANS}`; ctx.fillStyle = lit ? 'rgba(24,24,27,0.6)' : 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
     }
     ctx.restore();
   }
@@ -710,7 +721,7 @@ export class FactoryView {
         ctx.strokeStyle = `hsl(${hue}, 95%, 60%)`; ctx.lineWidth = 0.05 + 0.08 * k; ctx.stroke();
       }
       const text = layer.text.get(m.id);
-      this.label(text ?? '–', m.x + m.w / 2, m.y + m.h / 2 + 0.2, 0.44, text ? '#ffffff' : pal.text3, { align: 'center', weight: 700, mono: true, min: 9, max: 22, fit: m.w - 0.2 });
+      this.label(text ?? '–', m.x + m.w / 2, m.y + m.h / 2 + 0.2, 0.44, text ? '#ffffff' : pal.light ? '#a1a1aa' : pal.text3, { align: 'center', weight: 700, mono: true, min: 9, max: 22, fit: m.w - 0.2, dark: true });
     }
   }
 
@@ -956,7 +967,9 @@ export class FactoryView {
      * tag above the arm read as belonging to the one before.
      */
     /* the tag is in the arm's colour: a dark plate tinted with it, and the colour lightened for the ink */
-    const o = { min: 9, max: 12, mono: true, plate: a.color ? mix('#09090b', col, 0.2) : filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' }, ink = a.color ? mix(col, '#ffffff', 0.45) : filtered ? '#fde68a' : pal.text2;
+    /* on a light floor: a light plate tinted with it, and the colour darkened for the ink (`write` sees to the ink) */
+    const o = { min: 9, max: 12, mono: true, plate: pal.light ? (a.color ? mix('#ffffff', col, 0.2) : filtered ? '#fef3c7' : 'rgba(9,9,11,0.84)') : a.color ? mix('#09090b', col, 0.2) : filtered ? 'rgba(40,32,4,0.92)' : 'rgba(9,9,11,0.84)' };
+    const ink = pal.light ? (a.color ? col : filtered ? '#92400e' : pal.text2) : a.color ? mix(col, '#ffffff', 0.45) : filtered ? '#fde68a' : pal.text2;
     /* a teleporter is a tile a tag must not cover either: it has its ring and its own plate */
     const solid = (m: MachineSpec | null) => isBox(m) || isPort(m);
     if (solid(dst) && solid(src)) {
@@ -1020,15 +1033,16 @@ export class FactoryView {
     const P = machineParts(m, D.stuck.length > 0), S = sortInto(m, tickets), L = lampOf(m, tickets);
     /* a question an arm takes is on its way out: it stands at that arm's quay, not in the bay */
     const aside = S.aside.filter((t) => !D.quay.has(t.ticketId));
-    const kind = kindOf(m), look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.warn, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
-    const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke(); };
+    const kind = kindOf(m), look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.amber, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
+    /* a place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read */
+    const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = pal.light ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.06)'; ctx.stroke(); };
     /* the body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
     if (kind) this.behind(m, kind, tint, pal);
     this.trace(m);
-    if (kind === 'script') ctx.fillStyle = mix(pal.body, '#000000', 0.55);
+    if (kind === 'script') ctx.fillStyle = mix(pal.body, '#000000', pal.light ? 0.1 : 0.55);
     else { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, mix(pal.body, '#ffffff', 0.09)); g.addColorStop(1, pal.body); ctx.fillStyle = g; }
     ctx.fill();
-    ctx.lineWidth = gate ? 0.12 : 0.055; ctx.strokeStyle = tint;
+    ctx.lineWidth = gate ? 0.12 : pal.light ? 0.07 : 0.055; ctx.strokeStyle = tint;
     if (gate) ctx.setLineDash([0.3, 0.2]);
     ctx.stroke(); ctx.setLineDash([]);
     if (kind === 'script') {
@@ -1049,7 +1063,8 @@ export class FactoryView {
     /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
     rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
     P.lights.forEach((l, i) => {
-      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = i === 0 ? pal.danger : i === 1 ? pal.warn : pal.ok;
+      /* a lamp is a light on a dark housing: on a light theme its colours are the bright ones, not the theme's text colours */
+      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = pal.light ? ['#ef4444', HAZARD, '#22c55e'][i]! : i === 0 ? pal.danger : i === 1 ? pal.warn : pal.ok;
       if (on) { ctx.globalAlpha = 0.28 * (i === 1 ? 0.6 + 0.4 * Math.sin(this.clock * 4) ** 2 : 1); ctx.beginPath(); ctx.arc(l.x, l.y, l.r * 2.3, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
       ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 6.3); ctx.fillStyle = on ? col : '#2a2a2f'; ctx.fill();
     });
@@ -1067,7 +1082,7 @@ export class FactoryView {
         pit(c);
         const t = S.places[i], size = Math.min(c.w, c.h - 0.2) * 0.52, cx = c.x + c.w / 2, cy = c.y + c.h / 2 + 0.08;
         tiny(t ? (t.phase === 'running' ? 'RUNNING' : 'HELD') : 'FREE', c, t?.phase === 'running' ? pal.ok : pal.text3);
-        if (!t && kind && c.w * z >= 38) this.idle(kind, cx, cy, size, c, tint);
+        if (!t && kind && c.w * z >= 38) this.idle(kind, cx, cy, size, c, pal.light ? mix(tint, '#000000', 0.3) : tint);
         if (t) this.ticket(t, cx, cy, size, st, t.phase === 'running' ? 'run' : 'wait', dt);
       });
       S.extra.forEach((t) => this.shown.set(t.ticketId, { x: P.work.x + P.work.w - 0.3, y: P.work.y + 0.3 }));
@@ -1087,10 +1102,10 @@ export class FactoryView {
       pit(a);
       ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
-      ctx.strokeStyle = veil(pal.warn, aside.length ? 0.75 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
+      ctx.strokeStyle = veil(pal.light ? HAZARD : pal.warn, aside.length ? (pal.light ? 1 : 0.75) : pal.light ? 0.7 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
       for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
       ctx.stroke(); ctx.restore();
-      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, veil(pal.warn, aside.length ? 0.9 : 0.45), { weight: 700 });
+      this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, pal.light ? (aside.length ? pal.warn : pal.text3) : veil(pal.warn, aside.length ? 0.9 : 0.45), { weight: 700 });
       /* the tickets stand to the right of the bay's name, apart enough for their signs not to cover one another */
       const as = Math.min(0.44, a.h * 0.56), step = as + 0.4, x0 = a.x + band + 1.2, fit = Math.max(1, Math.floor((a.x + a.w - 0.1 - x0) / step));
       aside.forEach((t, i) => { if (i < fit) this.ticket(t, x0 + as / 2 + i * step, a.y + a.h / 2, as, st, t.phase === 'failed' ? 'fail' : 'human', dt); else this.shown.set(t.ticketId, { x: a.x + a.w - 0.3, y: a.y + a.h / 2 }); });
@@ -1156,7 +1171,7 @@ export class FactoryView {
     } else {
       const sx = c.x + 0.12, sy = c.y + 0.34, sw = c.w - 0.24, sh = c.h - 0.46;
       if (sh < 0.3) return;
-      rr(ctx, sx, sy, sw, sh, 0.05); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+      rr(ctx, sx, sy, sw, sh, 0.05); ctx.fillStyle = this.pal?.light ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.45)'; ctx.fill();
       this.label('$', sx + 0.1, sy + 0.2, 0.2, veil(tint, 0.8), { mono: true, weight: 700 });
       ctx.fillStyle = veil(tint, 0.7); ctx.fillRect(sx + 0.3, sy + 0.1, 0.07, 0.2);
       if (sh > 0.5) { ctx.fillStyle = veil(tint, 0.3); ctx.fillRect(sx + 0.1, sy + sh - 0.16, sw * 0.55, 0.05); }
@@ -1201,8 +1216,8 @@ export class FactoryView {
   private zone(m: ZoneSpec, tickets: FactoryTicket[], st: ViewState, pal: Palette, dt: number): void {
     const ctx = this.ctx, { x, y, w, h } = m, auto = m.release === 'auto', c = m.inbound ? pal.accent : ZONE_PAINT[m.status ?? ''] ?? PAINT;
     const takers = this.takersOf(m), D = this.leavers(m, takers, tickets, st), held = tickets.filter((t) => !D.quay.has(t.ticketId)), stock = tickets.filter((t) => !t.released).length;
-    ctx.fillStyle = c; ctx.globalAlpha = 0.055; ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = c; ctx.globalAlpha = 0.45; ctx.lineWidth = 0.045; ctx.setLineDash([0.2, 0.16]); ctx.strokeRect(x + 0.035, y + 0.035, w - 0.07, h - 0.07); ctx.setLineDash([]);
+    ctx.fillStyle = c; ctx.globalAlpha = pal.light ? 0.1 : 0.055; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = c; ctx.globalAlpha = pal.light ? 0.8 : 0.45; ctx.lineWidth = 0.045; ctx.setLineDash([0.2, 0.16]); ctx.strokeRect(x + 0.035, y + 0.035, w - 0.07, h - 0.07); ctx.setLineDash([]);
     /* three corners: the fourth is the padlock's */
     ctx.globalAlpha = 1; ctx.lineWidth = 0.11; ctx.lineCap = 'square'; ctx.beginPath();
     for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]] as const) { ctx.moveTo(cx + sx * 0.4, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.055); ctx.lineTo(cx + sx * 0.055, cy + sy * 0.4); }
@@ -1210,7 +1225,7 @@ export class FactoryView {
     this.label((m.name || 'Zone').toUpperCase(), x + 0.26, y + 0.42, 0.26, c, { mono: true, weight: 700, min: 9, max: 15, fit: w - (auto ? 1.25 : 0.95) });
     this.padlock(x + w - (auto ? 0.86 : 0.52), y + 0.2, auto, auto ? pal.ok : pal.danger);
     /* the stock, on the ground: tickets stand on it */
-    if (w >= 2 && h >= 2) this.stencil(String(stock).padStart(2, '0'), x + 0.2, y + h - 0.56, 0.9, c, stock ? 0.3 : 0.14, { mono: true, weight: 700 });
+    if (w >= 2 && h >= 2) this.stencil(String(stock).padStart(2, '0'), x + 0.2, y + h - 0.56, 0.9, c, pal.light ? (stock ? 0.4 : 0.22) : stock ? 0.3 : 0.14, { mono: true, weight: 700 });
     if (auto && m.status === 'todo') {
       /* it stops releasing while that many tickets are in work on the floor: the line is how close that is */
       const limit = m.limit ?? 12, k = clamp(this.wip / limit, 0, 1), cc = k >= 0.8 ? pal.warn : c, x0 = x + 0.24, x1 = x + w - 0.24, ly = y + h - 0.17;
@@ -1255,7 +1270,7 @@ export class FactoryView {
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
     ctx.globalAlpha = 1;
-    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', 0.3); ctx.fill(); ctx.lineWidth = 0.055; ctx.stroke();
+    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', pal.light ? 0.06 : 0.3); ctx.fill(); ctx.lineWidth = 0.055; ctx.stroke();
     const R = Math.min(w, h) * 0.46;
     ctx.globalAlpha = 0.24; ctx.drawImage(this.glowSprite(ok), x + w / 2 - R, y + h / 2 - R, R * 2, R * 2); ctx.globalAlpha = 1;
     const plate = { mono: true, weight: 700, min: 9, max: 12 } as const;
@@ -1282,7 +1297,7 @@ export class FactoryView {
     /* a ticket on its way out of here, or into here: see `jumped` */
     const out = this.jumps.find((j) => j.from.id === m.id), into = this.jumps.find((j) => j.to.id === m.id), w = (j: Jump) => j.age / JUMP_S;
     const burst = out && w(out) < 0.5 ? w(out) / 0.5 : into && w(into) > 0.5 ? 1 - (w(into) - 0.5) / 0.5 : 0;
-    rr(ctx, x + 0.068, y + 0.068, 0.864, 0.864, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', 0.3); ctx.fill();
+    rr(ctx, x + 0.068, y + 0.068, 0.864, 0.864, 0.2); ctx.fillStyle = mix(pal.floor, '#000000', pal.light ? 0.08 : 0.3); ctx.fill();
     ctx.strokeStyle = col; ctx.lineWidth = 0.057;
     if (dep) ctx.stroke();
     else {

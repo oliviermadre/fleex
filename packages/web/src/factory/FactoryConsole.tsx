@@ -7,6 +7,7 @@ import { tintClasses, type TintHue } from '../lib/tints';
 import { SLOTS, type Command, type Menu, type Tone } from './menu';
 import { useKeyLabels } from './keys';
 import { HUD } from './hudShape';
+import { HAZARD, HAZARD_INK } from './FactoryBuildFrame';
 import { FactoryAvatar, type AvatarOf } from './FactoryAvatar';
 import { Clock, Groups, Units, type Unit } from './FactoryHudBits';
 import { machinesSel, ticketsSel } from './pick';
@@ -40,7 +41,6 @@ const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'in a zone', port: 'in a teleporter',
 };
-const YELLOW = tintClasses('yellow');
 const alsoLabel = (k: string) => (k === 'Escape' ? 'Esc' : k === 'Delete' ? 'Del' : k);
 
 function machineIcon(m: MachineSpec): string {
@@ -210,7 +210,8 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
                 {TOGGLES.map((t) => (
                   <button key={t.key} type="button" aria-pressed={show[t.key]} aria-label={t.label} title={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`} onClick={() => onShow(t.key)}
                     className={cn('grid h-[26px] w-[30px] place-items-center rounded-md border transition-colors',
-                      show[t.key] ? cn(YELLOW.solid, YELLOW.onSolid, 'border-transparent') : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>
+                      show[t.key] ? 'border-transparent' : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+                      style={show[t.key] ? { background: HAZARD, color: HAZARD_INK } : undefined}>
                     <FIcon name={t.icon} size={16} />
                   </button>
                 ))}
