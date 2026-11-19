@@ -98,7 +98,7 @@ silhouette through. The mock-up does not.
 ### 5. The decor on a floor that changes and zooms
 
 The floor is not a fixed picture. It grows as machines are built (`floorRect` in `renderer.ts`: what is built plus a
-margin of `FLOOR_MARGIN = 8` tiles each side, never smaller than 40 by 24), and the view zooms from far to near and
+margin of `FLOOR_MARGIN = 8` tiles each side, never smaller than 300 by 150), and the view zooms from far to near and
 cannot leave it. The decor has to follow without being placed by hand.
 
 - **The decor is generated, not placed.** It is computed from the floor's rectangle and from which tiles are free,

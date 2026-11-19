@@ -94,6 +94,10 @@ export class FactoryError extends Error {}
 function inboundZone(x: number, y: number): ZoneSpec {
   return { id: randomUUID(), kind: 'zone', x, y, w: 4, h: 6, name: 'Inbound', status: '', release: 'manual', inbound: true };
 }
+/** A floor as it starts: only Inbound, in the middle of the smallest floor the page shows (300 tiles by 150, from 0,0). */
+function freshLayout(): FactoryLayout {
+  return { version: LAYOUT_VERSION, w: 4, h: 6, machines: [inboundZone(148, 72)] };
+}
 
 /*
  * `question` is the outcome a run gets when the agent asks instead of answering. Only an arm that asks for it takes
@@ -182,7 +186,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
  * is the only writer of the three `factory_*` tables.
  */
 export class FactoryEngine {
-  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: { version: LAYOUT_VERSION, w: 48, h: 30, machines: [inboundZone(1, 1)] }, settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
+  private floor: FactoryFloorRow = { id: DEFAULT_FLOOR_ID, name: 'Factory', layout: freshLayout(), settings: { ...DEFAULT_SETTINGS }, createdAt: '', updatedAt: '' };
   private machines: Machine[] = [];
   private byId = new Map<string, Machine>();
   private grid = new Map<string, Machine>();
@@ -226,7 +230,7 @@ export class FactoryEngine {
       else if (!layout) {
         /* it cannot be carried over: keep it as it was under another id, and start from an empty floor */
         await this.deps.store.saveFloor({ ...existing, id: `${DEFAULT_FLOOR_ID}@v${from}-${this.now()}`, name: `${existing.name} (layout v${from})`, updatedAt: nowIso });
-        this.floor = { ...this.floor, layout: { version: LAYOUT_VERSION, w: 48, h: 30, machines: [inboundZone(1, 1)] }, updatedAt: nowIso };
+        this.floor = { ...this.floor, layout: freshLayout(), updatedAt: nowIso };
         await this.deps.store.saveFloor(this.floor);
         startedOver = true;
         this.notice = `The floor was started over: machines changed size (layout v${from} to v${LAYOUT_VERSION}) and what was built could not be carried over. The previous layout is kept as an archive, and the tickets are back in Inbound. Import your plans again.`;

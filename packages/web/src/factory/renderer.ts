@@ -119,6 +119,10 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 /** Empty tiles kept around what is built, so there is always room to extend it. */
 export const FLOOR_MARGIN = 8;
+/** The smallest floor, in tiles: a new factory starts on it, its Inbound in the middle. */
+export const FLOOR_MIN_W = 300, FLOOR_MIN_H = 150;
+/** The smallest area the view frames around what is built, so that a lone Inbound is not seen from too close. */
+const FRAME_MIN_W = 40, FRAME_MIN_H = 24;
 /**
  * The floor: what is built plus the margin, never smaller than a starting floor. Given the shape of the view
  * (`aspect`, its width over its height), it is widened or heightened to that shape, so that seen whole it fills the
@@ -132,11 +136,15 @@ export function builtRect(layout: FactoryLayout): { x: number; y: number; w: num
   return { x: x0 - 1, y: y0 - 1, w: x1 - x0 + 2, h: y1 - y0 + 2 };
 }
 export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: number; w: number; h: number } {
+  return around(layout, FLOOR_MIN_W, FLOOR_MIN_H, aspect);
+}
+/** What is built plus the margin, grown evenly to at least `minW` by `minH`, then to the shape `aspect`. */
+function around(layout: FactoryLayout, minW: number, minH: number, aspect = 0): { x: number; y: number; w: number; h: number } {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
   if (!layout.machines.length) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; }
   x0 -= FLOOR_MARGIN; y0 -= FLOOR_MARGIN; x1 += FLOOR_MARGIN; y1 += FLOOR_MARGIN;
-  const growX = Math.max(0, 40 - (x1 - x0)), growY = Math.max(0, 24 - (y1 - y0));
+  const growX = Math.max(0, minW - (x1 - x0)), growY = Math.max(0, minH - (y1 - y0));
   let x = x0 - Math.floor(growX / 2), y = y0 - Math.floor(growY / 2), w = x1 - x0 + growX, h = y1 - y0 + growY;
   if (aspect > 0 && Number.isFinite(aspect)) {
     if (w / h < aspect) { const wide = Math.ceil(h * aspect), by = wide - w; x -= Math.floor(by / 2); w = wide; }
@@ -238,10 +246,10 @@ export class FactoryView {
     const after = this.toWorld(sx, sy);
     this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
   }
-  /** Frame what is built, or the whole floor when it is empty or being edited. */
+  /** Frame what is built (at least a starting area round it: a lone Inbound fills it), or the whole floor when it is being edited. */
   fit(layout: FactoryLayout, whole: boolean): void {
     this.resize();
-    const f = this.floorOf(layout), pad = whole || layout.machines.length === 0 ? 0 : FLOOR_MARGIN - 1.5;
+    const f = whole ? this.floorOf(layout) : around(layout, FRAME_MIN_W, FRAME_MIN_H), pad = whole || layout.machines.length <= 1 ? 0 : FLOOR_MARGIN - 1.5;
     const x0 = f.x + pad, y0 = f.y + pad, x1 = f.x + f.w - pad, y1 = f.y + f.h - pad;
     const bw = x1 - x0, bh = y1 - y0;
     this.cam.z = clamp(Math.min(this.w / bw, this.h / bh), Z_MIN, 60);

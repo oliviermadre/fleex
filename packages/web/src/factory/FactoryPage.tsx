@@ -239,7 +239,7 @@ function Floor() {
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
-        if (!fitted.current) { v.fit(st.layout, st.layout.machines.length <= 1); fitted.current = true; }
+        if (!fitted.current) { v.fit(st.layout, false); fitted.current = true; }
         v.draw(st, dt);
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
         if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
@@ -470,7 +470,7 @@ function Floor() {
   }, []);
   const transferTo = useCallback((ticketId: string) => { void useFactoryStore.getState().transfer(ticketId, {}); }, []);
 
-  const fit = useCallback(() => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, live.current.building || l.machines.length <= 1); }, []);
+  const fit = useCallback(() => { const l = useFactoryStore.getState().layout; if (l && viewRef.current) viewRef.current.fit(l, live.current.building); }, []);
   /** Centre the view on a ticket and select it. */
   const goTo = useCallback((ticketId: string) => {
     const v = viewRef.current, p = v?.ticketPos(ticketId);
