@@ -10,6 +10,7 @@ import { HUD } from './hudShape';
 import { HAZARD, HAZARD_INK } from './FactoryBuildFrame';
 import { FactoryAvatar, type AvatarOf } from './FactoryAvatar';
 import { Clock, Groups, Units, type Unit } from './FactoryHudBits';
+import { Tooltip } from '../components/ui/Tooltip';
 import { machinesSel, ticketsSel } from './pick';
 import { machineKind } from './FactoryMachinePopup';
 import { cn } from '../lib/cn';
@@ -29,13 +30,15 @@ import { money } from './format';
 import { needsHuman, RUNS, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec, type MachineStats, type Selection } from './types';
 
 /** The layers of the floor, in the order they are listed next to the minimap. */
-const LAYERS: [Lens, string, string][] = [
-  ['none', 'Floor', 'The floor as it is'],
-  ['load', LENS_LABEL.load, 'Where tickets stand right now, and for how long'],
-  ['cost', LENS_LABEL.cost, 'What each station spent on agent runs'],
-  ['time', LENS_LABEL.time, 'How long a run takes in each station'],
-  ['human', LENS_LABEL.human, 'Where tickets wait for a human, and for how long'],
+const LAYERS: [Lens, string, string, string][] = [
+  ['none', 'Floor', 'The floor as it is', 'map'],
+  ['load', LENS_LABEL.load, 'Where tickets stand right now, and for how long', 'layers'],
+  ['cost', LENS_LABEL.cost, 'What each station spent on agent runs', 'coin'],
+  ['time', LENS_LABEL.time, 'How long a run takes in each station', 'clock'],
+  ['human', LENS_LABEL.human, 'Where tickets wait for a human, and for how long', 'person'],
 ];
+/** The edge of the minimap's screen, its tabs and its column: one line, a little stronger than a border. */
+const SCREEN_EDGE = 'color-mix(in srgb, var(--theme-text-primary) 22%, var(--theme-border-input))';
 
 const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
@@ -204,43 +207,59 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   return (
     <div className="relative flex-shrink-0" style={{ height: HUD.mid }} aria-label="Factory console">
       <Side side="left">
-        <div className="flex h-full flex-col gap-1.5">
-          <div className="flex flex-none items-center gap-2" style={{ paddingRight: HUD.cut - 6 }}>
+        {/* one instrument: a screen, the four toggles as tabs on its top edge, the layers as a column on its right edge, the zoom in its corner */}
+        <div className="flex h-full flex-col">
+          <div className="flex h-[22px] flex-none items-center gap-2" style={{ paddingRight: HUD.cut - 6 }}>
             <span className="h-1.5 w-1.5 flex-none rounded-full bg-[var(--theme-success)]" aria-hidden="true" /><Clock />
             <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">local time</span>
           </div>
-          <div className="flex min-h-0 flex-1 gap-1.5">
-            <div className="flex h-full min-w-0 flex-1 flex-col gap-1.5">
-              {/* what the floor shows on top of the machines: each one on or off, black or yellow */}
-              <div className="flex flex-none gap-1" role="group" aria-label="Show on the floor">
-                {TOGGLES.map((t) => (
-                  <button key={t.key} type="button" aria-pressed={show[t.key]} aria-label={t.label} title={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`} onClick={() => onShow(t.key)}
-                    className={cn('grid h-[26px] w-[30px] place-items-center rounded-md border transition-colors',
-                      show[t.key] ? 'border-transparent' : 'border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
-                      style={show[t.key] ? { background: HAZARD, color: HAZARD_INK } : undefined}>
-                    <FIcon name={t.icon} size={16} />
+          <div className="mt-1.5 flex h-[26px] flex-none items-end gap-[3px]">
+            <div className="flex items-end gap-[3px]" role="group" aria-label="Show on the floor">
+              {TOGGLES.map((t) => (
+                <Tooltip key={t.key} placement="top" label={`${t.title}: ${show[t.key] ? 'shown' : 'hidden'}`}>
+                  <button type="button" aria-pressed={show[t.key]} aria-label={t.label} onClick={() => onShow(t.key)}
+                    className={cn('relative z-[1] -mb-px grid h-[25px] w-8 place-items-center rounded-t-md border border-b-0', show[t.key] ? 'border-transparent' : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+                    style={show[t.key] ? { background: HAZARD, color: HAZARD_INK, borderColor: SCREEN_EDGE } : { borderColor: SCREEN_EDGE }}>
+                    <FIcon name={t.icon} size={15} />
                   </button>
-                ))}
-              </div>
-              <canvas ref={miniRef} className="min-h-0 w-full flex-1 cursor-crosshair touch-none rounded-md" aria-label="Minimap: click to go there"
-              onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
+                </Tooltip>
+              ))}
             </div>
-            <div className="flex w-[104px] flex-col justify-between gap-1">
-              {/* one layer at a time: a list, not commands */}
-              <div className="flex flex-col rounded-md border border-[var(--theme-border-input)] p-0.5" role="radiogroup" aria-label="Layer">
-                {LAYERS.map(([l, label, what]) => (
-                  <button key={l} type="button" role="radio" aria-checked={lens === l} title={what} onClick={() => onLens(l)}
-                    className={cn('rounded px-2 py-[2.5px] text-left text-[11px] font-medium', lens === l ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>{label}</button>
+            <span className="ml-1.5 self-center font-mono text-[8.5px] font-bold tracking-[0.18em] text-[var(--theme-text-faint)]">SHOW</span>
+            <span className="ml-auto w-9 self-center text-center font-mono text-[8.5px] font-bold tracking-[0.18em] text-[var(--theme-text-faint)]">LAYER</span>
+          </div>
+          <div className="flex min-h-0 flex-1">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-md rounded-tl-none border" style={{ borderColor: SCREEN_EDGE, background: 'var(--theme-bg-base)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.35)' }}>
+              <canvas ref={miniRef} className="absolute inset-0 h-full w-full cursor-crosshair touch-none" aria-label="Minimap: click to go there"
+                onPointerDown={(e) => { down.current = true; e.currentTarget.setPointerCapture(e.pointerId); go(e); }} onPointerMove={(e) => { if (down.current) go(e); }} onPointerUp={() => { down.current = false; }} />
+              {/* the layer in use, written on the screen */}
+              {lens !== 'none' && (
+                <span className="pointer-events-none absolute left-1.5 top-1.5 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-1.5 py-px font-mono text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-primary)]">
+                  {LENS_LABEL[lens]}{lens !== 'load' && <span className="ml-1 font-medium normal-case text-[var(--theme-text-faint)]">· {period}</span>}
+                </span>
+              )}
+              <div className="absolute bottom-1.5 right-1.5 flex overflow-hidden rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" role="group" aria-label="Zoom">
+                {([['Zoom out', 'zoomout', () => zoom(1 / 1.4)], ['Fit the floor (F)', 'fit', onFit], ['Zoom in', 'zoomin', () => zoom(1.4)]] as const).map(([label, k, run], n) => (
+                  <Tooltip key={k} placement="top" label={label}>
+                    <button type="button" aria-label={label} onClick={run} className={cn('grid h-[22px] w-6 place-items-center text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]', n > 0 && 'border-l border-[var(--theme-border)]')}>
+                      {k === 'fit' ? <FIcon name="fit" size={13} /> : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d={k === 'zoomin' ? 'M5 12h14M12 5v14' : 'M5 12h14'} /></svg>}
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
-              <div className="flex rounded-md border border-[var(--theme-border-input)]" role="group" aria-label="Zoom">
-                <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1 / 1.4)}>−</button>
-                <button type="button" className="flex-1 py-0.5 text-xs text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Fit the floor" title="Fit the floor (F)" onClick={onFit}>⤢</button>
-                <button type="button" className="flex-1 py-0.5 text-sm text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1.4)}>+</button>
-              </div>
+            </div>
+            <div className="flex w-9 flex-none flex-col overflow-hidden rounded-r-md border border-l-0 bg-[var(--theme-bg-surface)]" style={{ borderColor: SCREEN_EDGE }} role="radiogroup" aria-label="Layer">
+              {LAYERS.map(([l, label, what, ic], n) => (
+                <Tooltip key={l} placement="left" label={`${label}: ${what}`}>
+                  <button type="button" role="radio" aria-checked={lens === l} aria-label={label} onClick={() => onLens(l)}
+                    className={cn('grid min-h-0 flex-1 place-items-center', n > 0 && 'border-t border-[var(--theme-border)]', lens === l ? '' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}
+                    style={lens === l ? { background: HAZARD, color: HAZARD_INK } : undefined}>
+                    <FIcon name={ic} size={19} />
+                  </button>
+                </Tooltip>
+              ))}
             </div>
           </div>
-
         </div>
       </Side>
 

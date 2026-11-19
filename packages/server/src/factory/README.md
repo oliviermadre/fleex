@@ -149,6 +149,11 @@ contour (`FactoryHudShadow.tsx`: one still shape under the console, blurred once
 a light one, so nothing in the console is filtered), its top edge is a line stronger than a border, and its surface
 is a little lighter at the top on a dark theme.
 
+- **The block of the minimap is one instrument** (picked on `docs/factory/minimap.html`): the map is a framed
+  screen, the four toggles are tabs on its top edge, the five layers a column of buttons on its right edge (each
+  with its name in a tooltip), the zoom a small group in its bottom corner. The map frames what is built and the
+  view's rectangle, not the floor's margins, on a faint quadrille of terrain; under a layer, stations and zones take
+  the colour of their reading and the rest goes grey, and the layer's name is written in a corner of the screen.
 - **Over the minimap**, the time it is, to the second.
 - **In the notch**, the saved selections (`Groups` in `FactoryHudBits.tsx`): ten places that never move, Shift+1 to
   Shift+0 to save. The digit selects what was saved; pressed again while it is the selection, it centres the view

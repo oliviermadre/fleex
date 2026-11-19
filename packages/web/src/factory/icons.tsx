@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 /** Line icons of the Factory console, 24×24, drawn with the current colour. */
 const PATHS: Record<string, ReactNode> = {
   belt: <path d="M4 8l4 4-4 4M10.5 8l4 4-4 4M17 8l3.5 4-3.5 4" />,
+  map: <path d="M3 6.5l6-2.5 6 2.5 6-2.5v13l-6 2.5-6-2.5-6 2.5zM9 4v13M15 6.5v13" />,
+  layers: <path d="M12 4l8 4-8 4-8-4zM4 12l8 4 8-4M4 16l8 4 8-4" />,
   teleporter: <><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" /><circle cx="12" cy="12" r="3.4" /><path d="M12 6.2l-1.6-1.4M12 6.2l1.6-1.4M12 17.8l-1.6 1.4M12 17.8l1.6 1.4" /></>,
   set: <><path d="M3 12h18" /><rect x="9.5" y="4" width="5" height="16" rx="2" /><path d="M6.5 4h11M6.5 20h11" /></>,
   toll: <><path d="M3 9h18" /><rect x="9.5" y="2.5" width="5" height="13" rx="2" /><path d="M12 15.5v5M9 18l3 3 3-3" /></>,

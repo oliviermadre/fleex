@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FactoryView, floorRect } from './renderer';
+import { builtRect, FactoryView, floorRect } from './renderer';
 import type { FactoryLayout, MachineSpec } from './types';
 
 const station = (id: string, x: number, y: number): MachineSpec => ({ id, kind: 'station', x, y, w: 5, h: 4, name: id, exec: 'agent', outcomes: ['ok'], cap: 2 });
@@ -70,5 +70,15 @@ describe('the floor is the map', () => {
     const empty = layout(), w = view(1900, 800);
     w.fit(empty, true);
     expect(seen(w).x1 - seen(w).x0).toBeLessThanOrEqual(w.floorOf(empty).w + 1e-9);
+  });
+});
+
+describe('what the minimap frames', () => {
+  it('is what is built, with a tile of room round it, and not the floor\'s margins', () => {
+    const l = layout(station('a', 10, 4), station('b', 30, 12));
+    expect(builtRect(l)).toEqual({ x: 9, y: 3, w: 27, h: 15 });
+    const f = floorRect(l);
+    expect(f.w).toBeGreaterThan(27);                                                // the floor itself is wider: it has its margins
+    expect(builtRect(layout())).toBeNull();
   });
 });

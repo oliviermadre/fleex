@@ -124,6 +124,13 @@ export const FLOOR_MARGIN = 8;
  * (`aspect`, its width over its height), it is widened or heightened to that shape, so that seen whole it fills the
  * view: the floor is the map, and nothing shows beyond it. Its sides stay on whole tiles.
  */
+/** What is built on the floor, with a tile of room round it: what the minimap frames. Null on an empty floor. */
+export function builtRect(layout: FactoryLayout): { x: number; y: number; w: number; h: number } | null {
+  if (!layout.machines.length) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
+  return { x: x0 - 1, y: y0 - 1, w: x1 - x0 + 2, h: y1 - y0 + 2 };
+}
 export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: number; w: number; h: number } {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
@@ -1554,15 +1561,32 @@ export class FactoryView {
     if (!w || !h) return;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
     const c = cv.getContext('2d'); if (!c) return;
-    const F = this.floorOf(L), s = Math.min(w / F.w, h / F.h), ox = (w - F.w * s) / 2 - F.x * s, oy = (h - F.h * s) / 2 - F.y * s;
+    /* what is built fills the screen (the floor's margins do not); around it is terrain, a faint quadrille */
+    /* and so does the view's own rectangle, kept on the floor: zoomed out, the view is never off the screen */
+    const F = this.floorOf(L), hw0 = this.w / 2 / this.cam.z, hh0 = this.h / 2 / this.cam.z;
+    const V = { x0: Math.max(F.x, this.cam.x - hw0), y0: Math.max(F.y, this.cam.y - hh0), x1: Math.min(F.x + F.w, this.cam.x + hw0), y1: Math.min(F.y + F.h, this.cam.y + hh0) };
+    const b0 = builtRect(L) ?? F, bx0 = Math.min(b0.x, V.x0), by0 = Math.min(b0.y, V.y0), B = { x: bx0, y: by0, w: Math.max(b0.x + b0.w, V.x1) - bx0, h: Math.max(b0.y + b0.h, V.y1) - by0 }, room = 6, s = Math.min((w - room * 2) / B.w, (h - room * 2) / B.h), ox = (w - B.w * s) / 2 - B.x * s, oy = (h - B.h * s) / 2 - B.y * s;
     this.mini = { s, ox, oy };
     c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h);
+    const step = MAJOR * s;
+    if (step >= 6) {
+      c.strokeStyle = pal.light ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'; c.lineWidth = 1; c.beginPath();
+      for (let x = ((ox % step) + step) % step; x < w; x += step) { c.moveTo(Math.round(x) + 0.5, 0); c.lineTo(Math.round(x) + 0.5, h); }
+      for (let y = ((oy % step) + step) % step; y < h; y += step) { c.moveTo(0, Math.round(y) + 0.5); c.lineTo(w, Math.round(y) + 0.5); }
+      c.stroke();
+    }
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
+    c.strokeStyle = pal.edge; c.lineWidth = 1; c.strokeRect(Math.round(ox + F.x * s) + 0.5, Math.round(oy + F.y * s) + 0.5, Math.round(F.w * s) - 1, Math.round(F.h * s) - 1);
+    /* under a layer, a station or a zone takes the colour of its reading, and the rest goes grey */
+    const lens = st.lens, heat = (id: string): string | null => { if (!lens) return null; const v = lens.values.get(id) ?? 0; if (!(lens.max > 0 && v > 0)) return null; return `hsl(${Math.round(52 - 52 * Math.sqrt(v / lens.max))}, 95%, 52%)`; };
     for (const m of L.machines) {
       if (m.kind === 'label') continue;
-      c.fillStyle = m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2;
+      const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
+      c.globalAlpha = lens && !hot ? 0.45 : 1;
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => this.byId.get(id)) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
+    c.globalAlpha = 1;
     for (const t of st.tickets) {
       const q = this.shown.get(t.ticketId); if (!q) continue;
       if (st.dim?.has(t.ticketId)) { c.fillStyle = pal.text3; c.fillRect(ox + q.x * s - 0.5, oy + q.y * s - 0.5, 1.5, 1.5); continue; }
