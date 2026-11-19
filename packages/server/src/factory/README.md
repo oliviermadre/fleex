@@ -551,9 +551,13 @@ Drawing the floor is two things. The scene (`packages/web/src/factory/scene.ts`)
 where, with no paint: every machine with its state, its places and what they hold, its quays, its plates' words, every
 ticket where it is drawn, every arm where its cup is. It keeps what moves from one frame to the next (tickets easing
 towards where the server says they are, riding the belts, carried by cups, sliding to quays, leaving by exits, jumping
-between teleporters), and is tested (`scene.test.ts`). The renderer (`renderer.ts`) paints that scene and keeps nothing
-of the floor: sizes, colours, fonts, and what is left out from far are its own. This split is what lets a skin be paint
-only (see `docs/factory/skins-handover.md`).
+between teleporters), and is tested (`scene.test.ts`). A skin (`skins/`) paints that scene and keeps nothing of the
+floor: sizes, colours, fonts, and what is left out from far are its own. The view (`renderer.ts`) holds the camera, says
+what is under the pointer, and at each frame builds the scene, gives it to the skin, and paints the pieces the skin
+returns in their order (`order` in `skins/skin.ts`: by layer, floor then what stands then what is overhead, by depth on
+a layer, and what is carried just after what carries it). The one skin today is Fleex's own (`skins/fleex.ts`): flat,
+everything on one layer, its depth the order the floor has always been painted in. See
+`docs/factory/skins-handover.md`.
 
 How the floor is painted is checked by eye, in a browser against a made-up server: what is tested is the scene and the
 geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).

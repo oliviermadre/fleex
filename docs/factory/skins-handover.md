@@ -206,6 +206,12 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
 - **Lot 1, done**: `scene.ts` says what is shown and where, and owns everything that lives from one frame to the next
   (easing, belts, cups, quays, exits, jumps). `renderer.ts` only paints the scene. Checked: the eleven pictures are
   identical to the pixel to those of `main`.
+- **Lots 2 and 3, done together**: `skins/skin.ts` is the contract (`Skin`: `ground`, `pieces`, `top`, `minimap`; a
+  `Surface` to paint on; `Piece` with a layer, a depth and what carries it; `order`, tested). `skins/fleex.ts` is
+  today's drawing, colours and light-theme rules included, as a flat skin: one layer, its depth the old paint order.
+  `renderer.ts` is only the view (camera, pick, the frame loop). Same check, identical pictures.
+- **Next, lot 4**: choosing the skin in Settings next to the theme, the console's CSS variables and font per skin, and
+  the neon skin. Each skin gets the contrast test `floorLook.test.ts` holds Fleex's inks to.
 
 ## Proposed order of work
 
