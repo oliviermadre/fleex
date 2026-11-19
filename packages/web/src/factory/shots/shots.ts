@@ -6,12 +6,15 @@
  */
 import { applyTheme, BUILT_IN_THEMES } from '../../lib/themes';
 import { FactoryView, type ViewState } from '../renderer';
+import { FleexSkin } from '../skins/fleex';
+import { NeonSkin, type NeonOptions } from '../skins/neon';
+import type { Skin } from '../skins/skin';
 import { arms, later, layout, lens, tickets } from './fixture';
 
 const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
 
 /** `then`: what changes after the first frames, drawn for `after` more frames (what is seen moving between two snapshots). */
-interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number }
+interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number; skin?: () => Skin }
 
 const base = (): ViewState => ({
   layout, tickets, arms, armAge: 0.2, armSwing: 1.1, beltSpeed: 1.2, fastBelt: 2,
@@ -38,16 +41,25 @@ const SHOTS: Shot[] = [
   { name: 'far', theme: 'verdant', cam: { x: 13, y: 10, z: 9 }, st: { allNames: true, armTags: false, numbers: true } },
   { name: 'moving', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: { hoverMachine: null }, then: { tickets: later }, after: 14 },
   { name: 'moving-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { hoverMachine: null }, then: { tickets: later }, after: 30 },
+  { name: 'neon-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {}, skin: () => new NeonSkin() },
+  { name: 'neon-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { edit: true, selMachine: 'a4' }, skin: () => new NeonSkin() },
   {
     name: 'halted-drag', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
     st: { halted: true, selTickets: new Set(['t28', 't29']), pickTickets: new Set(['t0']), drag: { ticketId: 't1', x: 12.4, y: 5.6, ok: true, text: 'Drop on Build' } },
   },
 ];
 
-async function shoot(): Promise<Record<string, string>> {
+/** The skins side by side on the two kinds of theme, for a mock-up: each skin and theme, the same floor. */
+const SKINS: { name: string; skin: () => Skin }[] = [
+  { name: 'fleex', skin: () => new FleexSkin() },
+  ...(['soft', 'strong'] as const).flatMap((glow) => (['accent', 'cyan'] as const).map((chevrons) => ({ name: `neon-${glow}-${chevrons}`, skin: () => new NeonSkin({ glow, chevrons } satisfies NeonOptions) }))),
+];
+const looks = (): Shot[] => SKINS.flatMap(({ name, skin }) => ['verdant', 'light'].map((theme) => ({ name: `${name}-${theme}`, theme, cam: { x: 13, y: 9.6, z: 44 }, st: {}, skin })));
+
+async function shoot(which: 'checks' | 'looks' = 'checks', type = 'image/png'): Promise<Record<string, string>> {
   await document.fonts.ready;
   const out: Record<string, string> = {};
-  for (const s of SHOTS) {
+  for (const s of which === 'looks' ? looks() : SHOTS) {
     const theme = BUILT_IN_THEMES.find((t) => t.id === s.theme);
     if (!theme) throw new Error(`no theme ${s.theme}`);
     applyTheme(theme);
@@ -55,11 +67,11 @@ async function shoot(): Promise<Record<string, string>> {
     cv.style.width = `${W}px`; cv.style.height = `${H}px`; cv.style.display = 'block';
     document.body.replaceChildren(cv);
     /* a fresh view each time: it keeps where tickets were drawn and the theme it read */
-    const v = new FactoryView(cv), st = { ...base(), ...s.st };
+    const v = new FactoryView(cv, s.skin?.()), st = { ...base(), ...s.st };
     v.resize(); v.cam = { ...s.cam };
     for (let i = 0; i < FRAMES; i++) v.draw(st, DT);
     if (s.then) { const next = { ...st, ...s.then }; for (let i = 0; i < (s.after ?? 10); i++) v.draw(next, DT); }
-    out[s.name] = cv.toDataURL('image/png');
+    out[s.name] = cv.toDataURL(type, 0.86);
   }
   return out;
 }

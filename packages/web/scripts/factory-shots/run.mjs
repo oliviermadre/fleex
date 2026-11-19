@@ -4,6 +4,7 @@
  *
  *   node scripts/factory-shots/run.mjs shoot <dir>             paint the made-up floor (src/factory/shots) into <dir>/*.png
  *   node scripts/factory-shots/run.mjs compare <a> <b> [diff]  compare two such folders pixel by pixel; differences in red in [diff]
+ *   node scripts/factory-shots/run.mjs looks <dir>             each skin on a dark and a light theme, as WebP, for a mock-up
  *
  * Run from packages/web. The usual check: shoot on main into one folder, shoot on the branch into another, compare.
  * Needs Playwright's Chromium (pre-installed in cloud sessions; else `npx playwright install chromium`).
@@ -20,7 +21,7 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = await im
 
 const [cmd, ...args] = process.argv.slice(2);
 
-async function shoot(dir) {
+async function shoot(dir, which = 'checks') {
   const { createServer } = await import(require.resolve('vite'));
   const server = await createServer({ root: web, configFile: path.join(web, 'vite.config.ts'), logLevel: 'error', server: { port: 0, strictPort: false, hmr: false } });
   await server.listen();
@@ -31,9 +32,9 @@ async function shoot(dir) {
     page.on('pageerror', (e) => console.error('page error:', e.message));
     await page.goto(new URL('scripts/factory-shots/index.html', url).href);
     await page.waitForFunction(() => window.shotsReady === true, null, { timeout: 60000 });
-    const shots = await page.evaluate(() => window.shoot());
+    const webp = which === 'looks', shots = await page.evaluate(([w, t]) => window.shoot(w, t), [which, webp ? 'image/webp' : 'image/png']);
     mkdirSync(dir, { recursive: true });
-    for (const [name, data] of Object.entries(shots)) writeFileSync(path.join(dir, `${name}.png`), Buffer.from(data.split(',')[1], 'base64'));
+    for (const [name, data] of Object.entries(shots)) writeFileSync(path.join(dir, `${name}.${webp ? 'webp' : 'png'}`), Buffer.from(data.split(',')[1], 'base64'));
     console.log(`${Object.keys(shots).length} pictures in ${dir}`);
   } finally { await browser.close(); await server.close(); }
 }
@@ -71,5 +72,6 @@ async function compare(a, b, diffDir) {
 }
 
 if (cmd === 'shoot' && args[0]) await shoot(path.resolve(args[0]));
+else if (cmd === 'looks' && args[0]) await shoot(path.resolve(args[0]), 'looks');
 else if (cmd === 'compare' && args[0] && args[1]) await compare(path.resolve(args[0]), path.resolve(args[1]), args[2] && path.resolve(args[2]));
-else { console.error('usage: run.mjs shoot <dir> | compare <a> <b> [diff]'); process.exitCode = 2; }
+else { console.error('usage: run.mjs shoot <dir> | compare <a> <b> [diff] | looks <dir>'); process.exitCode = 2; }

@@ -40,7 +40,7 @@ interface Board { lines: string[]; inks: string[]; wx: number; wy: number; side:
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
-interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
+export interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
 type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number; /** It is written on something dark whatever the theme (a veil over the floor): its ink is left as it is. */ dark?: boolean }];
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -62,13 +62,13 @@ const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.2
 const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 
 export class FleexSkin implements Skin {
-  readonly id = 'fleex';
+  readonly id: string = 'fleex';
   /** The floor's clock, as the scene last said. */
   private clock = 0;
   private labels: Label[] = [];
   private boards: Board[] = [];
-  private pal: Palette | null = null;
-  private palAt = 0;
+  protected pal: Palette | null = null;
+  protected palAt = 0;
   /** The floor as last painted, and what it was painted for. */
   private backdrop: HTMLCanvasElement | null = null;
   private backdropKey: unknown[] = [];
@@ -76,8 +76,8 @@ export class FleexSkin implements Skin {
   private shadowCache = new Map<string, HTMLCanvasElement>();
   /** What it paints on, at this frame. */
   private on!: Surface;
-  private get ctx(): CanvasRenderingContext2D { return this.on.ctx; }
-  private get cv(): HTMLCanvasElement { return this.on.cv; }
+  protected get ctx(): CanvasRenderingContext2D { return this.on.ctx; }
+  protected get cv(): HTMLCanvasElement { return this.on.cv; }
   private get dpr(): number { return this.on.dpr; }
   private get w(): number { return this.on.w; }
   private get h(): number { return this.on.h; }
@@ -130,11 +130,15 @@ export class FleexSkin implements Skin {
     const pal = this.palette();
     if (st.lens) this.lens(st.lens, st.layout, pal);
     this.overlay(st, S, pal);
+    this.lit();
     this.flushLabels();
     this.names(st, S, pal);
   }
 
-  private palette(): Palette {
+  /** What the picture becomes once everything is painted, before the words are written over it. Nothing, here. */
+  protected lit(): void { /* a flat skin has no light of its own */ }
+
+  protected palette(): Palette {
     const now = performance.now();
     if (this.pal && now - this.palAt < 2000) return this.pal;
     const cs = getComputedStyle(document.documentElement), v = (n: string, f: string) => cs.getPropertyValue(n).trim() || f;
