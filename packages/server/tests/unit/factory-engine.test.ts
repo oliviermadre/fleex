@@ -1115,3 +1115,25 @@ describe('layout versions', () => {
     expect(again.snapshot().notice).toBeNull();
   });
 });
+
+describe('FactoryEngine saved selections', () => {
+  it('keeps the floor groups across a restart, so Shift+digit selections outlive a reload', async () => {
+    await boot([belt('b1', 1, 1), belt('b2', 2, 1)]);
+    const groups = [{ machine: 'b1' }, { machines: ['b1', 'b2'] }, null, { tickets: ['a', 'b'] }];
+    await engine.setSettings({ groups });
+    await engine.setSettings({ maxRunsPerHour: 5 });                    // changing a limit must not wipe them
+    expect(store.floor!.settings.groups).toEqual([...groups, null, null, null, null, null, null]);
+
+    /* a new engine on the same storage: what a server restart does */
+    await boot([belt('b1', 1, 1), belt('b2', 2, 1)]);
+    expect(engine.snapshot().floor.settings.groups?.slice(0, 4)).toEqual(groups);
+  });
+
+  it('stores only well-formed groups, ten slots, whatever the client sent', async () => {
+    await boot([belt('b1', 1, 1)]);
+    await engine.setSettings({ groups: [{ machine: '' }, { tickets: [] }, { machines: ['b1', 3] }, 'junk', { ticket: 't1' }, ...Array(12).fill({ machine: 'b1' })] as never });
+    const saved = store.floor!.settings.groups!;
+    expect(saved).toHaveLength(10);
+    expect(saved.slice(0, 5)).toEqual([null, null, null, null, { ticket: 't1' }]);
+  });
+});

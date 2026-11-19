@@ -163,6 +163,14 @@ function Floor() {
   const findRef = useRef<HTMLInputElement>(null);
   const jumpAt = useRef(0);
   const groupsRef = useRef(groups); groupsRef.current = groups;
+  /* the saved selections live with the floor: taken from the first snapshot, written back on each Shift+digit */
+  const groupsLoaded = useRef(false);
+  useEffect(() => {
+    if (groupsLoaded.current || !snapshot) return;
+    groupsLoaded.current = true;
+    const saved = snapshot.floor.settings.groups;
+    if (saved) setGroups(Array.from({ length: GROUPS }, (_, k) => saved[k] ?? null));
+  }, [snapshot]);
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
@@ -608,7 +616,9 @@ function Floor() {
     if (save) {
       const cur = live.current.selection;
       if (!cur) { toast.info('Select a machine or a ticket first'); return; }
-      setGroups((g) => g.map((x, k) => (k === i ? cur : x)));
+      const next = groupsRef.current.map((x, k) => (k === i ? cur : x));
+      setGroups(next);
+      void useFactoryStore.getState().setSettings({ groups: next });
       return;
     }
     const g = groupsRef.current[i], s = useFactoryStore.getState(), v = viewRef.current;
