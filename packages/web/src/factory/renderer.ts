@@ -15,6 +15,7 @@ import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatc
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState } from './teleport';
 import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
+import { modelTag } from './stationModel';
 import { tokenSprite, type TokenLook } from './ticketToken';
 import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
@@ -33,6 +34,8 @@ export interface ViewState {
   fastBelt?: number;
   /** Board id → name, for the tag of an arm that sorts by board. */
   boardName?: (id: string) => string;
+  /** The model a station runs on (see `stationModel.ts`), written under it; null for what calls none. */
+  modelOf?: (m: StationSpec) => string | null;
   selMachine: string | null;
   /** Build mode: several machines selected at once. */
   selMany: string[];
@@ -1127,6 +1130,9 @@ export class FactoryView {
       if (aside.length > fit) this.label(`+${aside.length - fit}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
     }
     this.quays(takers, D, st, pal, dt, false);
+    /* the model it runs on, under it: its own, else its persona's, or a panel's orchestrator */
+    const model = st.modelOf?.(m);
+    if (model) { const b = bodyOf(m); this.label(modelTag(model), b.x + b.w / 2, b.y + b.h + 0.26, 0.24, pal.text2, { align: 'center', mono: true, plate: 'rgba(9,9,11,0.84)', min: 9, max: 12, fit: b.w + 1 }); }
     /* a script station says what it runs when it is pointed at: one line a command */
     if (m.exec === 'script' && (st.selMachine === m.id || st.hoverMachine === m.id)) {
       const lines = plateLines(scriptPlate(m.script), 9), col = tint;

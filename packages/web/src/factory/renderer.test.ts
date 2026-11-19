@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { builtRect, FactoryView, floorRect } from './renderer';
 import type { FactoryLayout, MachineSpec } from './types';
 
@@ -105,5 +105,43 @@ describe('what the minimap frames', () => {
     const f = floorRect(l);
     expect(f.w).toBeGreaterThan(27);                                                // the floor itself is wider: it has its margins
     expect(builtRect(layout())).toBeNull();
+  });
+});
+
+describe('the model under a station', () => {
+  afterEach(() => vi.restoreAllMocks());
+  /** A canvas that does nothing but remember what was written on it. */
+  const drawn = () => {
+    const texts: string[] = [];
+    const noop = () => {};
+    const ctx: Record<string | symbol, unknown> = new Proxy({}, {
+      get: (_t, k) => k === 'fillText' ? (s: string) => texts.push(s) : k === 'measureText' ? (s: string) => ({ width: s.length * 6 })
+        : k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createPattern' ? () => ({ addColorStop: noop })
+        : k === 'getLineDash' ? () => [] : k === 'getTransform' ? () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) : noop,
+      set: () => true,
+    });
+    /* the floor is painted once on a canvas of its own, made by the view */
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never);
+    const v = new FactoryView({ getContext: () => ctx, clientWidth: 1200, clientHeight: 800, width: 0, height: 0 } as unknown as HTMLCanvasElement);
+    return { v, texts };
+  };
+  const st = (l: FactoryLayout, modelOf?: (m: Extract<MachineSpec, { kind: 'station' }>) => string | null) => ({
+    layout: l, tickets: [], arms: new Map(), selMachine: null, selMany: [], marquee: null, selTicket: null, hoverMachine: null, edit: false, ghost: null, drag: null, modelOf,
+  });
+
+  it('is written, without its claude- prefix, under what runs a model, and nowhere else', () => {
+    const l = layout(station('a', 148, 72), { ...station('s', 156, 72), exec: 'skill', ref: 'x' } as MachineSpec);
+    const { v, texts } = drawn();
+    v.fit(l, false);
+    v.draw(st(l, (m) => (m.exec === 'agent' ? 'claude-opus-4-8' : null)), 0);
+    expect(texts.filter((t) => t === 'opus-4-8')).toHaveLength(1);
+  });
+
+  it('is not written when the model is not known yet', () => {
+    const l = layout(station('a', 148, 72));
+    const { v, texts } = drawn();
+    v.fit(l, false);
+    v.draw(st(l, () => null), 0);
+    expect(texts.some((t) => t.includes('opus') || t.includes('inherit'))).toBe(false);
   });
 });
