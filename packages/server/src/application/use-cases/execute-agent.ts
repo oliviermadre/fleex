@@ -1632,6 +1632,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // `runId`/`stepRunId` additionally tag the execution with the workflow node
     // it belongs to, so the Execution Log header names the step being debugged.
     workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
+    /** Runs the skill on another model than its persona's (a Factory station's own choice). Empty or absent: the persona's. */
+    model?: string | null;
   }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
@@ -1677,11 +1679,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // `runId`/`stepRunId` additionally tag the execution with the workflow node
     // it belongs to, so the Execution Log header names the step being debugged.
     workflowContext?: { workflowName: string; stepName: string; runId?: string | null; stepRunId?: string | null };
+    /** Runs the skill on another model than its persona's. Empty or absent: the persona's. */
+    model?: string | null;
   }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     const skillId = skill.id;
 
     const persona = await this.personaStore.getById(skill.personaId);
     if (!persona) throw new AgentPersonaNotFoundError(skill.personaId);
+    const model = opts?.model?.trim() || persona.model;
 
     const humanName = this.resolveHumanMentionName(persona);
     const executionId = randomUUID();
@@ -1743,7 +1748,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       personaId: persona.id,
       ticketId,
       mentionId: startMentionId,
-      model: persona.model,
+      model,
     });
 
     const context = await this.getTicketContext.execute({
@@ -1813,7 +1818,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       personaName: persona.name,
       ticketId,
       mentionId: startMentionId,
-      model: persona.model,
+      model,
       // Skills always run with full edit rights.
       effectiveMode: 'edit',
       worktreePath,
@@ -1838,7 +1843,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       systemPrompt,
       promptBlocks: skillPromptBlocks,
       manifest: skillPromptManifest,
-      model: persona.model,
+      model,
       effectiveMode: 'edit',
       maxTurns: skillMaxTurns,
       memoryEngine: context?.memoryEngine,
@@ -1864,7 +1869,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const previousSessionId = this.sessionHistory.get(sessionKey);
 
       const queryOptions = buildSdkOptions('edit', {
-        model: persona.model,
+        model,
         systemPrompt,
         cwd: worktreePath,
         outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
@@ -1920,8 +1925,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
-        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
+        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model, effectiveMode });
         return;
       }
 
@@ -1944,7 +1949,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       await emitEvent('execution_end', {
         status: 'completed',
         ticketId,
-        model: persona.model,
+        model,
         effectiveMode,
         resultLength: resultText.length,
         structuredOutputParsed: structured !== null,
@@ -1961,7 +1966,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Short-circuit: workflow orchestrator handles persistence via step_runs
       if (opts?.returnStructured) {
         await this.agentEventStore.completeExecution(executionId, 'completed', {
-          model: persona.model,
+          model,
           effectiveMode,
           durationMs: sdkDurationMs,
           costUsd: sdkCostUsd,
@@ -2090,7 +2095,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
-        model: persona.model,
+        model,
         effectiveMode,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
@@ -2147,7 +2152,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model });
       } catch {
         // Don't mask original error
       }

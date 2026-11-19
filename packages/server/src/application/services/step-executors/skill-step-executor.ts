@@ -59,6 +59,7 @@ export class SkillStepExecutor implements StepExecutor {
         mode: 'edit',
         onExecutionStarted: input.onExecutionStarted,
         actorName: `workflow:${input.workflowContext.workflowName} → ${input.workflowContext.stepName}`,
+        model: input.modelOverride,
       });
       return { output: this.toStepOutput(structuredOutput), executionId };
     }
@@ -68,6 +69,7 @@ export class SkillStepExecutor implements StepExecutor {
       outputFormatOverride: outputFormat,
       workflowContextPrompt,
       returnStructured: true,
+      model: input.modelOverride,
       workflowContext: {
         workflowName: input.workflowContext.workflowName,
         stepName: input.workflowContext.stepName,

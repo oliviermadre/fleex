@@ -30,12 +30,14 @@ describe('StationRunner', () => {
     expect(input.workflowContext.outgoingEdges.map((e) => [e.label, e.targetName])).toEqual([['bug', 'Fix line'], ['feature', 'Spec']]);
   });
 
-  it('runs an agent station on its own model when it has one, and on the persona\'s otherwise', async () => {
+  it('runs an agent or skill station on its own model when it has one, and on the persona\'s otherwise', async () => {
     const { r, seen } = runner();
     await r.run(station({ model: 'claude-haiku-5-5' }), 't1', 'run-1', {}, () => {});
     await r.run(station(), 't1', 'run-2', {}, () => {});
-    await r.run(station({ exec: 'skill', model: 'claude-haiku-5-5' }), 't1', 'run-3', {}, () => {});   // only agent stations choose a model
-    expect(seen.map((i) => i.modelOverride)).toEqual(['claude-haiku-5-5', null, null]);
+    await r.run(station({ exec: 'skill', model: 'claude-haiku-5-5' }), 't1', 'run-3', {}, () => {});
+    await r.run(station({ exec: 'skill' }), 't1', 'run-4', {}, () => {});
+    await r.run(station({ exec: 'panel', model: 'claude-haiku-5-5' }), 't1', 'run-5', {}, () => {});   // a panel runs on its orchestrator's
+    expect(seen.map((i) => i.modelOverride)).toEqual(['claude-haiku-5-5', null, 'claude-haiku-5-5', null, null]);
   });
 
   it('falls back to the first outcome when the agent names none of them, and reports a question or a failure as such', async () => {

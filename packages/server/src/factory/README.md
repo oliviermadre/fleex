@@ -18,7 +18,8 @@ second. So what moves is not drawn where it was last said to be, which would sta
 at its own pace (`armMotion.ts`), and a ticket on belts follows what was last said along the belts themselves, at their
 pace, a fraction of a second behind (`ticketMotion.ts`; the snapshot carries `beltSpeed` and `fastBelt` for it).
 
-An agent station can run on another model than its persona's (`model` on the station).
+An agent or skill station can run on another model than its persona's (`model` on the station; a skill's persona is the
+one the skill belongs to).
 
 When a station's agent asks a question instead of answering, the ticket waits in the station, pulsing with a "?".
 It leaves only by an arm filtered on the reserved outcome `question` (an unfiltered arm leaves it alone, so an
@@ -521,7 +522,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
-| `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor}.ts` | an optional model for one workflow-step execution (`model`, `modelOverride`): unset by workflows, set by an agent station |
+| `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor,skill-step-executor}.ts` | an optional model for one workflow-step or skill execution (`model`, `modelOverride`): unset by workflows, set by an agent or skill station |
 | web: `components/ui/Modal.tsx` | a dialog leaves Escape to a popover opened from it (a general fix, found with the ticket list's filters; it can stay) |
 | web: `components/ui/Modal.tsx` | three opt-in props for the Factory's popups: `variant="glass"`, `flush` (no padding), `guardEscape` (Escape stays in a field, and is left to what is opened over the dialog). Unset, a dialog is unchanged; they can stay |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |

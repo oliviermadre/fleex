@@ -251,7 +251,10 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
   const [editing, setEditing] = useState(false);
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
   const takers = view.takersOf(m);
-  const persona = m.kind === 'station' && m.exec === 'agent' ? personas.find((p) => p.name === m.ref) ?? null : null;
+  /* whose model the station runs on unless it chooses one: an agent's persona, or the persona a skill belongs to */
+  const skill = m.kind === 'station' && m.exec === 'skill' ? skills.find((s) => s.commandName === m.ref) ?? null : null;
+  const persona = m.kind === 'station' && m.exec === 'agent' ? personas.find((p) => p.name === m.ref) ?? null
+    : skill ? personas.find((p) => p.id === skill.personaId) ?? null : null;
   /* what the station runs stays listed even when its persona, skill or panel is not (yet) known here: the field never shows "choose" over a station that is set */
   const refs = (exec: StationExec, mine: string) => [...new Set([mine, ...(exec === 'agent' ? personas.map((p) => p.name) : exec === 'skill' ? skills.map((s) => s.commandName) : exec === 'panel' ? panels.map((p) => p.name) : [])])].filter(Boolean);
   const beyond = (a: MachineSpec & { kind: 'arm' }) => view.leadsTo(view.at(a.x + DX[a.dir]!, a.y + DY[a.dir]!));
@@ -312,10 +315,10 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
                   options={[{ value: '', label: 'choose' }, ...refs(m.exec, m.ref ?? '').map((r) => ({ value: r, label: r }))]} />
               </div>
               {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: without it, every run fails.</div>}
-              {m.exec === 'agent' && (
+              {(m.exec === 'agent' || m.exec === 'skill') && (
                 <div className="grid grid-cols-2 gap-2">
-                  <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
-                    options={[{ value: 'edit', label: 'edit (can change code)' }, { value: 'plan', label: 'plan' }, { value: 'talk', label: 'talk (no workspace)' }]} />
+                  {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
+                    options={[{ value: 'edit', label: 'edit (can change code)' }, { value: 'plan', label: 'plan' }, { value: 'talk', label: 'talk (no workspace)' }]} />}
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Model</span>
                     <ModelSelect id="f-model" ariaLabel="Model this station runs on" value={m.model ?? ''} onChange={(v) => onPatch({ model: v || undefined } as Partial<StationSpec>)}
@@ -323,7 +326,7 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
                   </div>
                 </div>
               )}
-              {m.exec === 'agent' && m.model && <Hint>Runs on this model here, whatever {m.ref || 'the persona'} is set to elsewhere.</Hint>}
+              {(m.exec === 'agent' || m.exec === 'skill') && m.model && <Hint>Runs on this model here, whatever {persona?.name || (m.exec === 'agent' && m.ref) || 'the persona'} is set to elsewhere.</Hint>}
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Instructions for this station</span>
                 <button type="button" onClick={() => setEditing(true)} title="Open the editor"
