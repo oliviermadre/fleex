@@ -14,6 +14,7 @@
 import type { Theme } from '../../lib/themes';
 import { contrast, isLight, mix, toHex } from '../floorLook';
 import { FleexSkin, type Palette } from './fleex';
+import type { DecorStyle } from './flatDecor';
 
 /** The night floor, and what does not follow the theme. */
 export const NIGHT = {
@@ -62,6 +63,8 @@ export class NeonSkin extends FleexSkin {
   override readonly id: string = 'neon';
   private bloom: HTMLCanvasElement | null = null;
   constructor(private readonly opts: NeonOptions = {}) { super(); }
+  /** Its decor: the plan in lit tubes. */
+  protected override decorStyle(): DecorStyle { return 'neon'; }
 
   protected override palette(): Palette {
     const now = performance.now();

@@ -164,6 +164,7 @@ export class PixelSkin extends FleexSkin {
   constructor(look: PixelLook = PIXEL_LOOK) {
     super();
     this.look = { ...look, crisp: look.crisp || look.sprites };
+    this.decorOpts = look.decor ?? null;
     this.fonts = this.look.crisp ? { sans: '"Silkscreen", ui-monospace, monospace', mono: '"Silkscreen", ui-monospace, monospace' } : { sans: WORKSHOP_FONT, mono: '"Silkscreen", ui-monospace, monospace' };
     this.spaced = !this.look.crisp;
     /* a canvas does not ask for a font it is told to use: ask now, and the words take it at the frame after it came */
@@ -221,7 +222,6 @@ export class PixelSkin extends FleexSkin {
   /** The procedural sprites: a worker at the foot of each station that runs something. */
   override pieces(S: Scene, st: ViewState, out: Piece[]): void {
     super.pieces(S, st, out);
-    this.decorPieces(st, out, false);
     for (const v of S.boxes) if (v.kind === 'station' && v.run && !v.gate) out.push({ layer: 'standing', depth: 3.5, draw: () => this.worker(v) });
     /* the light of the lamps that need someone, on the floor, under everything */
     const pal = this.palette();
@@ -232,8 +232,8 @@ export class PixelSkin extends FleexSkin {
    * The decor (DRAFT, see `PixelLook.decor`): the yard and the walls under everything, then the props, on the floor
    * for a flat skin, standing at their row for one seen from three quarters (`standing`).
    */
-  protected decorPieces(st: ViewState, out: Piece[], standing: boolean): void {
-    const d = this.look.decor;
+  protected override decorPieces(st: ViewState, out: Piece[], standing: boolean): void {
+    const d = this.decorOpts;
     if (!d) return;
     const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
     const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };

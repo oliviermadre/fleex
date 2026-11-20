@@ -19,6 +19,8 @@ import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, LabelView, PortVi
 import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
+import { builtBox, hallOf, type DecorOptions } from '../decor';
+import { flatProps, flatWalls, flatYard, type DecorStyle, type FlatDecorPaint } from './flatDecor';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). A colour with a meaning: another skin may soften it, not replace it. */
 export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
@@ -103,7 +105,25 @@ export class FleexSkin implements Skin {
    * what lies on the floor, the arms with what they carry, the tolls' arms, what leaves by an exit, and the links
    * between teleporters over all of it.
    */
+  /** The decor (DRAFT, see `decor.ts`): none until it is asked for. */
+  protected decorOpts: DecorOptions | null = null;
+  /** Give the floor a decor, or take it away. */
+  setDecor(d: DecorOptions | null): this { this.decorOpts = d; return this; }
+  /** How this skin draws its decor: an architect's plan. */
+  protected decorStyle(): DecorStyle { return 'fleex'; }
+  /** The decor: the yard and the walls under everything, the props on the floor, faded in build mode. */
+  protected decorPieces(st: ViewState, out: Piece[], _standing: boolean): void {
+    const d = this.decorOpts;
+    if (!d) return;
+    const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
+    const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    const paint = (): FlatDecorPaint => ({ ctx: this.ctx, pal, style: this.decorStyle(), z: this.cam.z, view, clock: this.clock, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') flatYard(p, hall, F); flatWalls(p, hall, built, 'FLEEX FACTORY'); } });
+    if (d.props && !(st.edit && d.build === 'hide')) out.push({ layer: 'floor', depth: -0.5, draw: () => flatProps(paint(), st.layout, hall, d.props, !!st.edit) });
+  }
+
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
+    this.decorPieces(st, out, false);
     const ctx = this.ctx, pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void) => { out.push({ layer: 'standing', depth, draw }); };
     /* the areas: decor on the floor, under everything */
     for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });

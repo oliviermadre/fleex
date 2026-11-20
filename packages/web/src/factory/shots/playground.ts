@@ -46,8 +46,8 @@ const LINES: AreaSpec[] = [
 export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea?: (a: AreaSpec | null) => void) {
   let look: Look = { tool: 'select', overlap: 'nest', move: 'name', ...start };
   let layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...behind, ...(start.platforms === false ? [] : LINES)] };
-  const pixelLook = (): PixelLook => ({ ...PIXEL_LOOK, decor: look.decor ?? null });
-  const make = () => (look.skin === 'fleex' ? new FleexSkin() : look.skin === 'neon' ? new NeonSkin() : look.skin === 'pixel-3d' || look.view === 'tq' ? new PixelTqSkin({ raise: look.raise, hidden: look.hidden, buildFlat: look.buildFlat }, pixelLook()) : new PixelSkin(pixelLook()));
+  const skinOf = () => (look.skin === 'fleex' ? new FleexSkin() : look.skin === 'neon' ? new NeonSkin() : look.skin === 'pixel-3d' || look.view === 'tq' ? new PixelTqSkin({ raise: look.raise, hidden: look.hidden, buildFlat: look.buildFlat }, PIXEL_LOOK) : new PixelSkin(PIXEL_LOOK));
+  const make = () => skinOf().setDecor(look.decor ?? null);
   const theme = () => { const t = BUILT_IN_THEMES.find((x) => x.id === look.theme); if (t) applyTheme(t); };
   theme();
   const view = new FactoryView(cv, make()), st = floorState({ layout, tickets: [...tickets, ...riders], hoverMachine: null, selTicket: null, edit: !!look.build });
