@@ -43,6 +43,9 @@ import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
+/** The draw loop's floor between two frames: 60 a second at most. A little under 1000/60, so that on a 60 Hz screen a
+ *  frame that comes a hair early is still drawn, and on a 120 Hz screen every other one is. */
+const FRAME_MS = 1000 / 60 - 2;
 
 const POLL_MS = 600;
 const STATS_EVERY_MS = 30_000;
@@ -246,6 +249,9 @@ function Floor() {
     const v = new FactoryView(cv); viewRef.current = v; setView(v);
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
+      raf = requestAnimationFrame(frame);
+      /* at most 60 frames a second: a 120 Hz screen would otherwise draw the whole floor twice as often for nothing */
+      if (ts - last < FRAME_MS) return;
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
@@ -254,7 +260,6 @@ function Floor() {
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
         if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
-      raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
