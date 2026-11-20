@@ -6,7 +6,7 @@ import type { FactoryRun, FactoryTicket } from './types';
 export interface TicketRuns {
   /** The runs that started an execution, oldest first: the ones there is a log to show for. */
   list: readonly FactoryRun[];
-  /** The run the ticket is on (`ft.runId`), even before its execution id is known; else the last one with a log. */
+  /** The run the ticket is on (`ft.runId`) when it has a log or is starting one; else the last one with a log. */
   current: FactoryRun | null;
   /** What each execution cost so far, by execution id. */
   cost: Readonly<Record<string, number>>;
@@ -35,7 +35,8 @@ export function useTicketRuns(ft: FactoryTicket | null, serverTime: string | und
       .then(async (rows) => {
         const list = rows.filter((r) => r.executionId).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
         const own = ft?.runId ? rows.find((r) => r.id === ft.runId) ?? null : null;
-        const current = own ?? list[list.length - 1] ?? null;
+        /* a gate opens a run of its own with no execution: the ticket's run then has no log, show the last one that has */
+        const current = (own && (own.executionId || own.status === 'running') ? own : null) ?? list[list.length - 1] ?? null;
         let cost: Record<string, number> = {};
         if (list.length) {
           try { cost = Object.fromEntries((await api.fetchExecutionsForTicket(ticketId)).map((e) => [e.id, e.costUsd ?? 0])); } catch { /* no cost then */ }

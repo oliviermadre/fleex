@@ -140,8 +140,9 @@ describe('<FactoryPeek/> Thread · Run', () => {
   });
 
   it('opens a ticket waiting at a gate on its thread, where the decision is made; its last run is one click away', async () => {
-    runsAre([runRow('r1', 'e1', 'completed')]);
-    seed({ ...ticket('qa', 'review'), runId: 'r1' });
+    /* as the engine leaves it: the agent's run done, then the gate's own run, with no execution, as the ticket's run */
+    runsAre([runRow('r1', 'e1', 'completed'), { ...runRow('g1', null, 'needs_review', 'Check spec', '2026-11-15T09:40:00.000Z'), machineId: 'qa', executor: 'human_gate' }]);
+    seed({ ...ticket('qa', 'review'), runId: 'g1' });
     open();
     await waitFor(() => expect(screen.getByRole('tablist', { hidden: true })).toBeTruthy());
     expect(tab(/Thread/).getAttribute('aria-selected')).toBe('true');
@@ -209,6 +210,25 @@ describe('<FactoryPeek/> Thread · Run', () => {
     fireEvent.click(screen.getByText(/run 2\/2/));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Spec/, hidden: true }));
     await streamShows('e0');
+    /* the ticket did not move: nothing to follow, only an older run being read */
+    expect(screen.queryByText('Follow →')).toBeNull();
+  });
+
+  it('Escape with the run picker open closes the picker, not the card under it', async () => {
+    runsAre([runRow('r0', 'e0', 'completed', 'Spec', '2026-11-15T09:00:00.000Z'), runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    open();
+    await streamShows('e1');
+    /* the floor closes the card from a keydown on window, as FactoryPage does */
+    const floor = vi.fn();
+    window.addEventListener('keydown', floor);
+    try {
+      fireEvent.click(screen.getByText(/run 2\/2/));
+      await screen.findByRole('menuitem', { name: /Spec/, hidden: true });
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: /Spec/, hidden: true })).toBeNull());
+      expect(floor).not.toHaveBeenCalled();
+    } finally { window.removeEventListener('keydown', floor); }
   });
 
   it('stops a live run in two clicks, and pops its log out into the floating panel', async () => {

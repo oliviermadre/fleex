@@ -44,7 +44,8 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const runs = useTicketRuns(ft, store.snapshot?.serverTime);
   const [tab, setTab] = useState<'thread' | 'run'>(() => (ft?.phase === 'running' && logged ? 'run' : 'thread'));
   /* the run on screen: set once one is shown, then changed only by a click (the picker, or following the ticket) */
-  const [pick, setPick] = useState<string | null>(null);
+  const [picked, setPicked] = useState<{ id: string; base: string | null } | null>(null);
+  const pick = picked?.id ?? null;
   const [comments, setComments] = useState<TicketComment[] | null>(null);
   const [draft, setDraft] = useState('');
   const [reason, setReason] = useState('');
@@ -76,8 +77,10 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const view = switchable ? tab : 'thread';
   const candidates = current && !runs.list.includes(current) ? [...runs.list, current] : runs.list;
   const shown = (pick ? candidates.find((r) => r.id === pick) : null) ?? (pick ? null : current);
-  const next = pick && current && current.id !== pick && current.status === 'running' ? current : null;
-  useEffect(() => { if (view === 'run' && !pick && current?.executionId) setPick(current.id); }, [view, pick, current]);
+  /* `base` is the ticket's run when the pick was made: the ticket moved on only if that changed since, not when an older run is picked */
+  const setPick = (id: string) => setPicked({ id, base: current?.id ?? null });
+  const next = pick && current && current.id !== pick && current.id !== picked?.base && current.status === 'running' ? current : null;
+  useEffect(() => { if (view === 'run' && !pick && current?.executionId) setPicked({ id: current.id, base: current.id }); }, [view, pick, current]);
 
   if (!ft) return null;
   const info = ft.info, need = needKind(ft), gate = ft.phase === 'review' && machine?.kind === 'station' ? machine : null;
