@@ -66,6 +66,7 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
     return `Departure · ${to ? `sends its ticket to ${portName(to)}` : 'no destination: it keeps what it is given'}`;
   }
   if (m.kind === 'bridge') { const f = bridgeFlow((px, py) => view.at(px, py), m); return `Bridge · over ${flowLabel(f.over)}, under ${flowLabel(f.under)}`; }
+  if (m.kind === 'area') return `Area · ${m.w} × ${m.h} tiles: drag its sides or corners to resize it, its name to move it`;
   return 'Label';
 }
 const Stat = ({ label, value, tone }: { label: string; value: string | number; tone?: 'danger' | 'warning' | 'success' }) => (

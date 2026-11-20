@@ -1172,7 +1172,8 @@ export class FleexSkin implements Skin {
       ctx.fillStyle = 'rgba(96,165,250,0.12)'; ctx.strokeStyle = PICK; ctx.lineWidth = 0.05; ctx.setLineDash([0.2, 0.14]);
       ctx.fillRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.strokeRect(mx, my, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0)); ctx.setLineDash([]);
     }
-    if (sel) {
+    /* an area selected shows its own frame and handles (build mode, below) */
+    if (sel && sel.kind !== 'area') {
       outline(sel, pal.text, 0.08);
       /* what feeds the selected machine, and what empties it */
       for (const n of S.feeders) outline(n, pal.ok, 0.07);

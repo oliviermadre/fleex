@@ -242,7 +242,13 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   Mock-ups: `pixel-crisp.html` (today / step 1 / steps 1 and 2), `pixel-tickets.html` (every type),
   `pixel-parts.html` (every part, Fleex and pixel side by side). Fleex's and neon's pictures unchanged; the lamp's
   light is brighter on the day workshop; the four pixel check pictures now show both steps.
-- **Next, lot 8 before lot 7**: the owner described the platforms as a feature of build mode (below). A mock-up first.
+- **Lot 8, done**: picked on `docs/factory/areas.html` (D1, moved by its name; O2, nesting only). Kind `area` in the
+  server's layout (decor: no tile, ignored by the engine, two never cross, `normaliseLayout` refuses it), Build › Place
+  › Area (the sub-menu formerly called Area), drawn by a drag, resized by its sides and corners, moved by its name,
+  selected by a click where nothing stands, a popup for its name, colour and where the name goes; remove, undo, copy and
+  paste as for a machine; out of build mode it answers no click. Checked in Chromium on the real page against a stand-in
+  API that runs the server's `normaliseLayout` (the `qa` workspace does not exist on the session's machine).
+- **Next, lot 7**: the decor.
 
 ### Lot 8 as the owner described it (decided)
 

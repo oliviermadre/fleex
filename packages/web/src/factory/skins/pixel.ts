@@ -871,7 +871,7 @@ export class PixelSkin extends FleexSkin {
       const q = st.marquee, i = this.ap(Math.min(q.x0, q.x1)), j = this.ap(Math.min(q.y0, q.y1)), w = this.ap(Math.max(q.x0, q.x1)) - i, h = this.ap(Math.max(q.y0, q.y1)) - j;
       box(ctx, i, j, w, h, 'rgba(96,165,250,0.12)'); frame(ctx, i, j, w, h, 1, PICK, [3, 2]);
     }
-    if (sel) {
+    if (sel && sel.kind !== 'area') {
       outline(sel, pal.text, 2);
       for (const n of S.feeders) outline(n, pal.ok, 2);
       for (const a of S.emptiers) outline(a, '#fb923c', 2);

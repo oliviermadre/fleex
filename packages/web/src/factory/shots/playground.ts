@@ -7,7 +7,7 @@
  * The zoom is the view's own, as in the page: by steps for the pixel skins (see `FactoryView.wheel`), free for Fleex's.
  */
 import { applyTheme, BUILT_IN_THEMES } from '../../lib/themes';
-import { areaAt, areasOf, fits, freshArea, handleAt, moved, resize, spanOf, type Handle, type Overlap, type Rect } from '../areas';
+import { areaAt, areasOf, fits, freshArea, handleAt, moved, nameBox, resize, spanOf, type Handle, type Overlap, type Rect } from '../areas';
 import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin } from '../skins/neon';
@@ -68,12 +68,6 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
   let drag: Drag | null = null;
   const world = (e: PointerEvent) => view.toWorld(e.offsetX, e.offsetY);
   const reach = () => Math.max(0.2, 8 / view.cam.z);
-  /** Where an area's name is written, as a box of the floor: what is grabbed to move it by its name. */
-  const nameBox = (a: AreaSpec): Rect => {
-    const at = a.label ?? 'bl', w = Math.min(a.w, Math.max(2, a.name.length * 0.3 + 0.5)), right = at === 'tr' || at === 'br';
-    const y = at === 'tl' || at === 'tr' ? a.y : at === 'above' ? a.y - 0.7 : at === 'below' ? a.y + a.h : a.y + a.h - 0.75;
-    return { x: right ? a.x + a.w - w : a.x, y, w, h: 0.75 };
-  };
   const inBox = (r: Rect, p: { x: number; y: number }) => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
   /** The area a press in build mode takes hold of, and how: by a handle of the selected one, or to move one. */
   const grab = (p: { x: number; y: number }): Drag | null => {

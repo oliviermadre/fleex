@@ -108,6 +108,21 @@ geometry cannot be: the step returns null, the old layout is kept as an archived
 `factory_floors`), the floor starts over with only Inbound, the tickets go back to Inbound, and the page says so once
 (`notice` in the snapshot, `POST /api/factory/notice/ack`). Version 2 is the first such step: stations grew from 3 by 3.
 
+## Areas
+
+An area (`kind: 'area'`) is a part of the floor named as a place, "Build line", "Rework": a rectangle of whole
+tiles, a name, a colour, and where its name is written (in a corner, or over or under it). It is decor. The engine
+ignores it, it takes no tile (machines stand on it, as on a label), and nothing in the data links it to the machines on
+it. Two areas nest or keep apart, never cross: one lies wholly inside the other or they do not meet (`normaliseLayout`
+refuses a layout where two cross; the page refuses to draw, move, resize or paste one across another).
+
+It is changed in build mode only (Build › Place › Area): a drag draws it, it is resized by its sides and corners,
+moved by its name (a drag elsewhere on the floor stays the frame that selects machines, which never takes an area),
+selected by a click on the floor where nothing stands, edited in its popup and removed like a machine; undo, copy and
+paste work as for machines (`packages/web/src/factory/areas.ts`). Out of build mode it answers no click. The flat
+skins paint it as a tinted slab bordered in its colour with its name on the floor; Pixel 3D raises it as a platform,
+and what stands wholly on it with it.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`
@@ -121,7 +136,7 @@ steps and native actions other than a status change have no equivalent yet.
 ## The command card
 
 The commands of the page are a grid of five columns by three rows (`packages/web/src/factory/menu.ts`), organised as
-menus that open sub-menus: Factory, then Build, then Move, Station or Area. Three levels at most. A command is found
+menus that open sub-menus: Factory, then Build, then Move, Station or Place. Three levels at most. A command is found
 by its place, and its key is its place: the grid lies on the keyboard, the top row of letters for the first row, the
 home row for the second, the bottom row for the third (`keys.ts`). A key is bound to where it is, not to what it
 types, so the command at the top left is under the same finger on any keyboard; the tile prints what that key types
@@ -408,7 +423,7 @@ The floor takes the whole width of the page. Nothing of the Factory opens beside
   and started there (Q), and **Edit** (V, at the place where a ticket has Open; also Enter or a double-click) opens
   its popup.
 - **A machine's popup** (`FactoryMachinePopup.tsx`): a station shows its settings, the tickets it holds with what each
-  needs, and what it did with its latest runs; a zone its settings and its tickets; an arm, an exit or a label, which
+  needs, and what it did with its latest runs; a zone its settings and its tickets; an arm, an exit, a label or an area, which
   have only settings, a small popup. Everything a machine has to be set is set there, in build mode or out of it. A
   belt and a bridge have nothing to set and no popup.
 - **The floor's popup** (`FactoryFloorPopup.tsx`, **Stats** on the card when nothing is selected): what the floor did

@@ -3,10 +3,11 @@
  * functions on rectangles of tiles; the page and the skins do the rest.
  *
  * An Area is decor (`AreaSpec`): a rectangle of the floor with a name and a colour, independent of the machines that
- * stand on it. It is drawn by dragging from one tile to another, resized by its sides and corners, always on whole
- * tiles and never smaller than one. Whether two may overlap is a rule (`Overlap`), to be chosen.
+ * stand on it. It is drawn by dragging from one tile to another, resized by its sides and corners, moved by its name,
+ * always on whole tiles and never smaller than one. Two areas nest or keep apart, never cross (`fits` with `'nest'`,
+ * the rule the owner picked; the server holds to it too).
  */
-import { PALETTE, type AreaSpec, type MachineSpec } from './types';
+import { PALETTE, type AreaSpec, type FactoryLayout, type MachineSpec } from './types';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 /** A side or a corner of an area, by compass. */
@@ -67,4 +68,34 @@ export function freshArea(areas: readonly AreaSpec[], r: Rect, id: string): Area
   while (areas.some((a) => a.name === `Area ${n}`)) n++;
   const used = new Set(areas.map((a) => a.color)), colors = PALETTE.filter((c) => c.name !== 'Grey' && c.name !== 'White').map((c) => c.hex);
   return { id, kind: 'area', ...r, name: `Area ${n}`, color: colors.find((c) => !used.has(c)) ?? colors[areas.length % colors.length]!, label: 'bl' };
+}
+
+/**
+ * Where an area's name is written, as a box of the floor: what is grabbed to move it (in build mode, a drag on the
+ * floor elsewhere is the frame that selects machines).
+ */
+export function nameBox(a: AreaSpec): Rect {
+  const at = a.label ?? 'bl', w = Math.min(a.w, Math.max(2, a.name.length * 0.3 + 0.5)), right = at === 'tr' || at === 'br';
+  const y = at === 'tl' || at === 'tr' ? a.y : at === 'above' ? a.y - 0.7 : at === 'below' ? a.y + a.h : a.y + a.h - 0.75;
+  return { x: right ? a.x + a.w - w : a.x, y, w, h: 0.75 };
+}
+const inBox = (r: Rect, px: number, py: number) => px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
+/** The area whose name is at a point of the floor: the innermost, the last laid among equals. */
+export function nameAt(areas: readonly AreaSpec[], px: number, py: number): AreaSpec | null {
+  let best: AreaSpec | null = null;
+  for (const a of areas) if (inBox(nameBox(a), px, py) && (!best || a.w * a.h <= best.w * best.h)) best = a;
+  return best;
+}
+
+/** A new area laid on the floor, if it fits there: its name and colour are the next free ones. */
+export function laidArea(layout: FactoryLayout, r: Rect, id: string): { layout: FactoryLayout; area: AreaSpec } | null {
+  const areas = areasOf(layout.machines);
+  if (!fits(r, areas, 'nest')) return null;
+  const area = freshArea(areas, r, id);
+  return { layout: { ...layout, machines: [...layout.machines, area] }, area };
+}
+/** An area moved or resized, if it fits there. */
+export function shapedArea(layout: FactoryLayout, id: string, r: Rect): FactoryLayout | null {
+  if (!fits(r, areasOf(layout.machines).filter((a) => a.id !== id), 'nest')) return null;
+  return { ...layout, machines: layout.machines.map((m) => (m.id === id && m.kind === 'area' ? { ...m, x: r.x, y: r.y, w: r.w, h: r.h } : m)) };
 }
