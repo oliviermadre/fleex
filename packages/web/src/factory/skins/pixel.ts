@@ -111,7 +111,7 @@ const TYPE_ICONS: Record<string, readonly string[]> = {
   build: ['.XXXXXXXX..', 'XowooooooX.', 'XooooooooXX', '.XXXXooXXX.', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XXXX...'],
   fix: ['..X.....X..', '...XXXXX...', '..XowoooX..', 'XXXoooooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', '...XXXXX...', '...........'],
   review: ['...........', '...........', '...XXXXX...', '.XXoooooXX.', 'XoooXXXoooX', 'XooXXwXXooX', 'XoooXXXoooX', '.XXoooooXX.', '...XXXXX...', '...........', '...........'],
-  ops: ['....XXX....', '.X.XoooX.X.', 'XoXowoooXoX', '.XooXXXooX.', 'XooX...XooX', 'XooX...XooX', 'XooX...XooX', '.XooXXXooX.', 'XoXoooooXoX', '.X.XoooX.X.', '....XXX....'],
+  ops: ['...XX.XX...', '..XooXooX..', '.XXooXooXX.', 'XowoooooooX', 'XoooXXXoooX', '.XXoX.XoXX.', 'XoooXXXoooX', 'XoooooooooX', '.XXooXooXX.', '..XooXooX..', '...XX.XX...'],
   lead: ['...........', '....XXX....', '...X...X...', 'XXXXXXXXXXX', 'XowoooooooX', 'XoooooooooX', 'XXXXXwXXXXX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
   think: ['...XXXXX...', '..XowoooX..', '.XowoooooX.', '.XoooooooX.', '.XoooooooX.', '..XoooooX..', '...XoooX...', '...XXXXX...', '...XgggX...', '...XXXXX...', '....XXX....'],
 };
