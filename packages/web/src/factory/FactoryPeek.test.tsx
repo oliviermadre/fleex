@@ -111,3 +111,96 @@ describe('<FactoryPeek/> at a gate', () => {
     await waitFor(() => expect(resolve).toHaveBeenCalledWith('t1', 'reject', 'Not yet:\n- fix the header\n![shot.png](/api/files/shot.png)'));
   });
 });
+
+/**
+ * A long reason used to push the decision buttons out of the card: the field grew with its stacked split preview,
+ * and the buttons sat in the same block, under it. The buttons now live in their own bar, a sibling of the reply
+ * area, and the field stops at a few rows; ⤢ gives it more without leaving the floor.
+ */
+describe('<FactoryPeek/> reply area and button bar', () => {
+  const rowsOf = (field: HTMLTextAreaElement) => field.closest('[data-testid="peek-reply"]')!;
+  const enlarge = () => screen.getByLabelText('Enlarge the field');
+
+  it('keeps the decision buttons and Open out of the reply area, in a bar that never shrinks', () => {
+    seed(ticket('qa', 'review'));
+    open();
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    const bar = screen.getByTestId('peek-actions');
+    expect(rowsOf(field).contains(screen.getByText('reject'))).toBe(false);
+    expect(bar.contains(screen.getByText('reject'))).toBe(true);
+    expect(bar.contains(screen.getByText('Open'))).toBe(true);
+    expect(bar.className).toContain('flex-none');
+    /* the reply area is the one that gives way and scrolls */
+    expect(rowsOf(field).className).toMatch(/min-h-0.*overflow-y-auto|overflow-y-auto.*min-h-0/);
+  });
+
+  it('ignores a split chosen in Work: no stacked preview, no split segment, the stored choice untouched', () => {
+    localStorage.setItem('md_mode_comment', 'split');
+    seed(ticket('qa', 'review'));
+    open();
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'one\ntwo' } });
+    expect(screen.queryByLabelText('Split')).toBeNull();
+    expect(screen.getByLabelText('Write').getAttribute('aria-pressed')).toBe('true');
+    expect(localStorage.getItem('md_mode_comment')).toBe('split');
+    localStorage.removeItem('md_mode_comment');
+  });
+
+  it('⤢ enlarges the field, ⤡ folds it back, the text untouched', () => {
+    seed(ticket('qa', 'review'));
+    open();
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'a long reason' } });
+    fireEvent.click(enlarge());
+    const shrink = screen.getByLabelText('Shrink the field');
+    expect(shrink.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(shrink);
+    expect(enlarge().getAttribute('aria-pressed')).toBe('false');
+    expect(field.value).toBe('a long reason');
+  });
+
+  it('a decision taken enlarged sends the whole reason, then empties and folds the field', async () => {
+    const { resolve } = seed(ticket('qa', 'review'));
+    open();
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    const reason = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\n');
+    fireEvent.change(field, { target: { value: reason } });
+    fireEvent.click(enlarge());
+    fireEvent.click(screen.getByText('approve'));
+    await waitFor(() => expect(resolve).toHaveBeenCalledWith('t1', 'approve', reason));
+    await waitFor(() => expect(field.value).toBe(''));
+    expect(enlarge().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps the reason when the decision fails, so nothing typed is lost', async () => {
+    const { resolve } = seed(ticket('qa', 'review'));
+    resolve.mockRejectedValueOnce(new Error('down'));
+    open();
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'because' } });
+    fireEvent.click(screen.getByText('reject'));
+    await waitFor(() => expect(resolve).toHaveBeenCalled());
+    expect(field.value).toBe('because');
+  });
+
+  it('another ticket opens on an empty, folded field', () => {
+    seed(ticket('qa', 'review'));
+    const t2 = { ...ticket('qa', 'review'), ticketId: 't2' };
+    useFactoryStore.setState((s) => ({ snapshot: s.snapshot && { ...s.snapshot, tickets: [...s.snapshot.tickets, t2] } }));
+    const { rerender } = render(<FactoryPeek ticketId="t1" onOpen={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Reason \(optional\)/), { target: { value: 'for t1' } });
+    fireEvent.click(enlarge());
+    rerender(<FactoryPeek ticketId="t2" onOpen={vi.fn()} onClose={vi.fn()} />);
+    expect((screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement).value).toBe('');
+    expect(enlarge().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('a failed ticket has the same shape: Run again and Open in the bar, ⤢ on the field', () => {
+    seed(ticket('dev', 'failed'));
+    open();
+    const bar = screen.getByTestId('peek-actions');
+    expect(bar.contains(screen.getByText('Run again'))).toBe(true);
+    expect(bar.contains(screen.getByText('Open'))).toBe(true);
+    expect(enlarge()).toBeTruthy();
+  });
+});

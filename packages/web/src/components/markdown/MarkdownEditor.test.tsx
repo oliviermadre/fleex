@@ -260,3 +260,42 @@ describe('MarkdownEditor — overlaid toggle anchoring', () => {
     expect(overlay.parentElement!.className).toContain('relative');
   });
 });
+
+/**
+ * A composer in a small card (the Factory peek) can't afford the split: its preview stacks above the field and
+ * pushes what is under the field out of the card. The split someone chose in Work for the same surface kind must
+ * survive it, though: the card never writes the shared preference.
+ */
+describe('MarkdownEditor — noSplit composer', () => {
+  it('opens on write over a stored split, offers no split segment, and leaves the stored split alone', () => {
+    localStorage.setItem('md_mode_unit_nosplit', 'split');
+    const { container } = render(<Harness surfaceKind="unit_nosplit" variant="composer" noSplit initial={'a\nb'} />);
+
+    expect(activeMode()).toBe('Write');
+    expect(screen.queryByLabelText('Split')).toBeNull();
+    // one field, no preview stacked above it
+    expect(container.querySelectorAll('.overflow-y-auto')).toHaveLength(1);
+    fireEvent.click(screen.getByLabelText('Preview'));
+    expect(activeMode()).toBe('Preview');
+    expect(readMarkdownMode('unit_nosplit')).toBe('split');
+  });
+
+  it('⌘⇧P only swaps write and preview, and stores nothing', () => {
+    const { container } = render(<Harness surfaceKind="unit_nosplit_cycle" variant="composer" noSplit initial={'a\nb'} />);
+    const press = () => fireEvent.keyDown(container.querySelector('textarea')!, { key: 'P', metaKey: true, shiftKey: true });
+
+    press();
+    expect(activeMode()).toBe('Preview');
+    press();
+    expect(activeMode()).toBe('Write');
+    expect(readMarkdownMode('unit_nosplit_cycle')).toBeNull();
+  });
+
+  it('caps the preview at the field\'s own row limit instead of the fixed 16rem', () => {
+    const { container } = render(<Harness surfaceKind="unit_nosplit_cap" variant="composer" noSplit maxRows={4} initial={'a\nb'} />);
+    fireEvent.click(screen.getByLabelText('Preview'));
+    const preview = container.querySelector('div.overflow-y-auto') as HTMLElement;
+    expect(preview.className).not.toContain('max-h-64');
+    expect(preview.style.maxHeight).toContain('4 *');
+  });
+});

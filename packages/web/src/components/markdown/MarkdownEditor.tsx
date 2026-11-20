@@ -71,6 +71,13 @@ export interface MarkdownEditorProps {
   trailing?: ReactNode;
   /** Extra controls rendered in the bottom bar, next to the mode toggle. */
   actions?: ReactNode;
+  /**
+   * Write ↔ preview only, for a composer squeezed into a small card (the Factory peek): a split there stacks a
+   * preview above the field and pushes everything below it out of the card. The mode is the editor's own, opens
+   * on write and is never stored, so the split someone chose for the same surface kind elsewhere is kept.
+   * The preview then takes the field's place at the field's own height cap (`maxRows`).
+   */
+  noSplit?: boolean;
 }
 
 const EMPTY_PREVIEW = 'Nothing to preview';
@@ -110,6 +117,7 @@ export function MarkdownEditor({
   trailing,
   actions,
   overlay,
+  noSplit = false,
 }: MarkdownEditorProps) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
@@ -120,20 +128,25 @@ export function MarkdownEditor({
     cycleMode: cycleUncontrolledMode,
     allowSplit,
   } = useMarkdownMode(surfaceKind, defaultMode, { persistPreview: variant !== 'composer' });
-  const mode = controlledMode
-    ? (!allowSplit && controlledMode === 'split' ? 'preview' : controlledMode)
-    : uncontrolledMode;
+  const [ownMode, setOwnMode] = useState<MarkdownMode>('write');
+  const mode = noSplit
+    ? ownMode
+    : controlledMode
+      ? (!allowSplit && controlledMode === 'split' ? 'preview' : controlledMode)
+      : uncontrolledMode;
   const setMode = useCallback(
     (next: MarkdownMode) => {
-      if (controlledMode) onModeChange?.(next);
+      if (noSplit) setOwnMode(next === 'split' ? 'write' : next);
+      else if (controlledMode) onModeChange?.(next);
       else setUncontrolledMode(next);
     },
-    [controlledMode, onModeChange, setUncontrolledMode],
+    [noSplit, controlledMode, onModeChange, setUncontrolledMode],
   );
   const cycleMode = useCallback(() => {
-    if (controlledMode) onModeChange?.(nextMarkdownMode(mode, allowSplit));
+    if (noSplit) setOwnMode(nextMarkdownMode(mode, false));
+    else if (controlledMode) onModeChange?.(nextMarkdownMode(mode, allowSplit));
     else cycleUncontrolledMode();
-  }, [controlledMode, onModeChange, mode, allowSplit, cycleUncontrolledMode]);
+  }, [noSplit, controlledMode, onModeChange, mode, allowSplit, cycleUncontrolledMode]);
   const [grown, setGrown] = useState(false);
 
   const valueRef = useRef(value);
@@ -223,9 +236,11 @@ export function MarkdownEditor({
       ref={previewRef}
       className={cn(
         'overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3',
-        variant === 'composer' ? 'max-h-64' : 'h-full',
+        variant === 'composer' ? !noSplit && 'max-h-64' : 'h-full',
         variant === 'panel' && mode === 'split' ? 'w-1/2' : 'w-full min-w-0',
       )}
+      // In place of the field, as tall as the field may get: the composer's `text-sm leading-snug py-2` + its border.
+      style={noSplit ? { maxHeight: `calc(${maxRows} * 0.875rem * 1.375 + 1rem + 2px)` } : undefined}
       onScroll={handlePreviewScroll}
     >
       {value.trim() ? (
@@ -299,7 +314,7 @@ export function MarkdownEditor({
     <MarkdownModeToggle
       mode={mode}
       onChange={setMode}
-      allowSplit={allowSplit}
+      allowSplit={allowSplit && !noSplit}
       collapsible={variant === 'panel'}
     />
   );
