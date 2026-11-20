@@ -294,7 +294,7 @@ export class FleexSkin implements Skin {
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
       if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
-      if (token && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + B * 0.52, B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
+      if (token && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + this.numberDy(B), B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
       /* priority: a pip in the top-left corner for what is urgent or high */
       const pip = PRIORITY_PIP[info.priority];
       if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - B / 2 + B * 0.06, py - B / 2 + B * 0.06, B * 0.15, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
@@ -867,6 +867,9 @@ export class FleexSkin implements Skin {
   }
 
   /** A machine's icon, as strokes, in a square of that side. */
+  /** How far under a ticket's middle its number is written, in tiles. */
+  protected numberDy(B: number): number { return B * 0.52; }
+
   /** A ticket at work, its own way: true when drawn (otherwise an arc turns round it). */
   protected runMark(_px: number, _py: number, _B: number, _seed: number): boolean { return false; }
 

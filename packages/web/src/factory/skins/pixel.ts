@@ -110,7 +110,7 @@ const ICONS: Record<string, readonly string[]> = {
 const TYPE_ICONS: Record<string, readonly string[]> = {
   build: ['.XXXXXXXX..', 'XowooooooX.', 'XooooooooXX', '.XXXXooXXX.', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XXXX...'],
   fix: ['..X.....X..', '...XXXXX...', '..XowoooX..', 'XXXoooooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', '...XXXXX...', '...........'],
-  review: ['...........', '...........', '...XXXXX...', '.XXoooooXX.', 'XoooowXoooX', 'XoooXXXoooX', 'XooooXooooX', '.XXoooooXX.', '...XXXXX...', '...........', '...........'],
+  review: ['...........', '...........', '...XXXXX...', '.XXoooooXX.', 'XoooXXXoooX', 'XooXXwXXooX', 'XoooXXXoooX', '.XXoooooXX.', '...XXXXX...', '...........', '...........'],
   ops: ['....XXX....', '.X.XoooX.X.', 'XoXowoooXoX', '.XooXXXooX.', 'XooX...XooX', 'XooX...XooX', 'XooX...XooX', '.XooXXXooX.', 'XoXoooooXoX', '.X.XoooX.X.', '....XXX....'],
   lead: ['...........', '....XXX....', '...X...X...', 'XXXXXXXXXXX', 'XowoooooooX', 'XoooooooooX', 'XXXXXwXXXXX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
   think: ['...XXXXX...', '..XowoooX..', '.XowoooooX.', '.XoooooooX.', '.XoooooooX.', '..XoooooX..', '...XoooX...', '...XXXXX...', '...XgggX...', '...XXXXX...', '....XXX....'],
@@ -319,6 +319,9 @@ export class PixelSkin extends FleexSkin {
     return true;
   }
 
+  /** Crisp: a ticket's number, under its eleven pixels and a pixel apart, whatever the zoom (its plate is 12 pixels of the screen high). */
+  protected override numberDy(B: number): number { return this.look.crisp && this.toLow ? 6.5 / ART + 6 / this.cam.z : super.numberDy(B); }
+
   /** Crisp: a ticket as the object of its type, eleven pixels square on whole pixels, in its type's colour. */
   private typeIcon(rows: readonly string[], look: TokenLook, tint: string, px: number, py: number, alpha: number): boolean {
     const ctx = this.ctx, o = 1 / ART, x = Math.round(px * ART - 5.5) * o, y = Math.round(py * ART - 5.5) * o, ghost = look === 'ghost';
@@ -375,10 +378,12 @@ export class PixelSkin extends FleexSkin {
   protected override stationHead(v: StationView, tint: string, pal: Palette): void {
     if (!this.sprites) { super.stationHead(v, tint, pal); return; }
     const o = 1 / ART, { m, gate, parts: P } = v, kind = v.run;
-    const bx = this.sn(P.badge.x), by = this.sn(P.badge.y), bw = Math.max(9, Math.round(P.badge.w * ART)), bh = Math.max(9, Math.round(P.badge.h * ART));
+    /* the badge has its icon's parity, so the icon sits in its middle to the pixel: one pixel wider (or higher) when it would not */
+    const odd = (n: number) => (n % 2 === 7 % 2 ? n : n + 1);
+    const bx = this.sn(P.badge.x), by = this.sn(P.badge.y), bw = odd(Math.max(9, Math.round(P.badge.w * ART))), bh = odd(Math.max(9, Math.round(P.badge.h * ART)));
     this.notched(bx, by, bw * o, bh * o, kind ? tint : mix(tint, pal.body, 0.7));
     const icon = ICONS[m.exec];
-    if (icon) this.bits(icon, bx + Math.floor((bw - 7) / 2) * o, by + Math.floor((bh - 7) / 2) * o, kind ? INK : mix(tint, '#000000', 0.3));
+    if (icon) this.bits(icon, bx + ((bw - 7) / 2) * o, by + ((bh - 7) / 2) * o, kind ? INK : mix(tint, '#000000', 0.3));
     /* its name beside the badge; under it what it runs, when there is room for a second line; its kind is its hue and its icon */
     const nx = bx + (bw + 3) * o, fit = P.lamp.x - nx - 0.1, mid = by + (bh * o) / 2, two = 0.19 * this.cam.z * this.on.dpr >= 7;
     this.label(m.name || (gate ? 'Gate' : 'Station'), nx, two ? mid - 0.13 : mid, 0.31, pal.text, { weight: 700, fit });

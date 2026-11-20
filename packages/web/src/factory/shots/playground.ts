@@ -196,4 +196,41 @@ export function compare(cvs: HTMLCanvasElement[], skins: { skin: 'pixel' | 'pixe
   };
 }
 
-declare global { interface Window { FactoryPlayground: { mount: typeof mount; compare: typeof compare } } }
+/**
+ * Every type of ticket on belts, as a skin draws it: build, fix, review, ops, lead, think, and one with no type; on the
+ * rows below, the same left out by a filter. One view per zoom, each exactly as wide as the floor it shows, so its
+ * pixels are those of the page.
+ */
+export const TYPES = ['build', 'fix', 'review', 'ops', 'lead', 'think', ''] as const;
+export function types(cvs: HTMLCanvasElement[], zooms: number[], start: { theme: string; skin: 'pixel' | 'fleex' | 'today' }) {
+  const theme = (id: string) => { const t = BUILT_IN_THEMES.find((x) => x.id === id); if (t) applyTheme(t); };
+  theme(start.theme);
+  /* two rows of belts into an exit; a ticket every other tile */
+  const spot = (i: number, dimmed: boolean) => ({ x: 1 + (i % 4) * 2, y: Math.floor(i / 4) * 2 + (dimmed ? 4 : 0) });
+  const machines: MachineSpec[] = [{ id: 'out', kind: 'exit', x: 9, y: 0, w: 2, h: 8, name: 'Exit' }];
+  for (const y of [0, 2, 4, 6]) for (let x = 0; x < 9; x++) machines.push({ id: `b${x}-${y}`, kind: 'belt', x, y, w: 1, h: 1, dir: 0 });
+  const tks: FactoryTicket[] = [];
+  TYPES.forEach((type, i) => { for (const dimmed of [false, true]) { const at = spot(i, dimmed); tks.push({ ...tickets[3]!, ticketId: `ty-${i}-${dimmed}`, machineId: `b${at.x}-${at.y}`, p: 0.5, fx: 1, fy: 0, info: { ...tickets[3]!.info!, id: `ty-${i}`, displayId: 700 + i, type, favorite: false, priority: 'medium' } }); } });
+  const layout: FactoryLayout = { version: 2, w: 0, h: 0, machines };
+  const st = floorState({ layout, tickets: tks, arms: new Map(), hoverMachine: null, selTicket: null, named: null, found: null, exits: null, dim: new Set(tks.filter((t) => t.ticketId.endsWith('true')).map((t) => t.ticketId)) });
+  let skin = start.skin;
+  const make = () => (skin === 'fleex' ? new FleexSkin() : new PixelSkin(skin === 'today' ? {} : { sprites: true }));
+  const views = cvs.map((cv, i) => {
+    const z = zooms[i]!;
+    cv.style.width = `${Math.round(11 * z)}px`; cv.style.height = `${Math.round(8 * z)}px`;
+    const v = new FactoryView(cv, make()); v.resize(); v.cam = { x: 5.5, y: 4, z }; return v;
+  });
+  let last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    views.forEach((v, i) => { v.resize(); v.cam.z = zooms[i]!; v.cam.x = 5.5; v.cam.y = 4; v.draw(st, dt); });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return {
+    theme(id: string) { theme(id); views.forEach((v) => v.setSkin(make())); },
+    skin(next: typeof skin) { skin = next; views.forEach((v) => v.setSkin(make())); },
+  };
+}
+
+declare global { interface Window { FactoryPlayground: { mount: typeof mount; compare: typeof compare; types: typeof types } } }
