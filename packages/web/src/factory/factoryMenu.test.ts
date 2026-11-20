@@ -88,6 +88,14 @@ describe('the command card', () => {
     expect(factoryMenu(ctx({ ticket: { phase: 'belt', released: false, favorite: null, outcomes: [], item: { url: null } } })).slots[5]!.disabled).toBe(true);
   });
 
+  it('an item a station asked about, or failed on: run again, or send it on by an outcome; at a gate, decide', () => {
+    const c = ctx({ ticket: { phase: 'question', released: false, favorite: null, outcomes: ['junk', 'mine'], item: { url: null } } }), m = factoryMenu(c);
+    expect(rows(m)[0]).toEqual(['Run again', 'junk', 'mine', null, null]);
+    m.slots[0]!.run!(); expect(c.act.retry).toHaveBeenCalled();
+    m.slots[2]!.run!(); expect(c.act.putBack).toHaveBeenCalledWith('mine');
+    expect(rows(factoryMenu(ctx({ ticket: { phase: 'review', released: false, favorite: null, outcomes: ['approve', 'reject'], item: { url: null } } })))[0]).toEqual(['approve', 'reject', null, null, null]);
+  });
+
   it('build sorts what can be placed into Move, Station and Place', () => {
     const build = factoryMenu(ctx({ building: true }));
     expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);

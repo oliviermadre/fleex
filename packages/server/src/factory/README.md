@@ -94,10 +94,19 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
 
 - **On the floor** an item travels as a ticket does (belts, arms, zones, teleporters), saved in its own row
   (`machine_id`, `state`). Arms see it with the type `src:<source>` and the tag `source:<source>`, so a condition
-  routes it. What only a ticket has is skipped: no status is set, a gantry leaves it untouched, no run row is written,
-  a station sets it aside ("Stations do not work on items yet"), and **an exit archives it** (soft delete,
+  routes it. What only a ticket has is skipped: no status is set, a gantry leaves it untouched, and **an exit archives
+  it** (soft delete,
   `archived_reason = 'exit'`). Archive (the command card, its card on the floor) archives it as junk; Give back does
   the same. It is never listed among the tickets the rest of Fleex leaves alone (`managedIds`).
+- **A station runs on an item** (agent, skill, panel; a gate decides on it). There is no ticket: the run is one with a
+  subject, as a routine's (`ticketId: null`), whose brief is the item in words (`item-brief.ts`, generic: source,
+  author, title, messages, link, tags, the lines it came with, then what stations said about it before), under the
+  heading "Factory item from <source>" (`RunSubject.heading`). The station's prompt and outcomes work as for a ticket:
+  the item leaves by the outcome the agent names. An item has no thread, so each visit is kept in
+  `factory_item_runs` (migration 047) with the agent's reply and the deliverable it produced (saved with no ticket, so
+  it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
+  the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
+  visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
 - **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
   2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
   connectors will call, and what its popup's "Make an item by hand" calls until they exist. A new conversation one of
@@ -566,8 +575,9 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in four tables created by migrations `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`) and `046_factory_items` (`factory_items`). No existing table is altered: a ticket is "handed over" when it
+Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
+(`factory_floors`, `factory_tickets`, `factory_runs`), `046_factory_items` (`factory_items`) and
+`047_factory_item_runs` (`factory_item_runs`). No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -602,7 +612,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` and `046_factory_items` |
+| `infrastructure/migrations/index.ts` | registers `045_factory`, `046_factory_items` and `047_factory_item_runs` |
+| shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module, exposes `container.factory` |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
@@ -630,7 +641,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 046 then 045), or drop the four tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 047, 046, then 045), or drop the five tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step

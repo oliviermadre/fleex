@@ -133,6 +133,8 @@ export interface FactoryRun {
   id: string; ticketId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: 'running' | 'completed' | 'failed' | 'needs_review' | 'question' | 'interrupted';
   outcome: string | null; executionId: string | null; error: string | null; startedAt: string; finishedAt: string | null;
+  /** A visit to an item: what the station answered (an item has no thread), and the deliverable it produced. */
+  reply?: string | null; deliverableId?: string | null;
 }
 /** What one machine did over the period. Mirrors `MachineStats` in the server's `factory/stats.ts`. */
 export interface MachineStats {

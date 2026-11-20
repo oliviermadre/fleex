@@ -104,9 +104,16 @@ export function factoryMenu(c: MenuContext): Menu {
 
   // ---------- a ticket ----------
   if (c.ticket?.item && !c.building) {
-    const t = c.ticket, url = c.ticket.item.url;
+    const t = c.ticket, url = c.ticket.item.url, first: Record<number, Command> = {};
+    if (t.phase === 'review') t.outcomes.slice(0, 4).forEach((o, i) => { first[i] = { id: `decide-${i}`, label: o, icon: i ? 'loop' : 'check', tone: i ? 'ticket' : 'go', title: `Decide: ${o}`, run: () => a.resolve(o) }; });
+    else if (t.phase === 'zone' && !t.released) first[0] = { id: 'release', label: 'Release', icon: 'play', tone: 'go', title: 'Let an arm take this item out now, without waiting for its conversation to be quiet', run: a.release };
+    else if (SET_ASIDE.includes(t.phase)) {
+      /* as a ticket: the station runs again (with what it said before), or the item leaves by an outcome */
+      first[0] = { id: 'retry', label: 'Run again', icon: 'loop', tone: 'go', title: 'The station runs on it again, told what it said before', run: a.retry };
+      t.outcomes.slice(0, 4).forEach((o, i) => { first[i + 1] = { id: `as-${i}`, label: o, icon: 'exit', tone: 'ticket', title: `Send it on as "${o}": it leaves the station by that arm`, run: () => a.putBack(o) }; });
+    }
     return menu('Item', {
-      0: t.phase === 'zone' && !t.released ? { id: 'release', label: 'Release', icon: 'play', tone: 'go', title: 'Let an arm take this item out now, without waiting for its conversation to be quiet', run: a.release } : null,
+      ...first,
       5: { id: 'source', label: 'Source', icon: 'open', tone: 'ticket', disabled: !url, title: url ? 'Open the conversation where it lives (also Enter)' : 'This item has no link to its source', run: a.openSource },
       [FIT_SLOT]: fit,
       9: { id: 'archive', label: 'Archive', icon: 'trash', tone: 'danger', title: 'Junk, or done with: it leaves the floor. A new message in its conversation brings it back', run: a.archive },

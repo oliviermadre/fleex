@@ -40,6 +40,8 @@ export const factoryApi = {
   /** A conversation moved in a source (made by hand until the sources are connected): a new item, or an update. */
   ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null }) =>
     post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped'; snapshot: FactorySnapshot }>('/items', item),
+  /** What stations did with an item and what they answered, oldest first. */
+  itemRuns: (itemId: string) => call<FactoryRun[]>(`/items/${itemId}/runs`, undefined, true),
   /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
   archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
   stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),
