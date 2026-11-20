@@ -36,13 +36,13 @@ describe('the people of the floor', () => {
     expect(still.people.map((p) => [p.x, p.y])).toEqual(first);
   });
 
-  it('give a station's worker what the station does: a hand up, work, a wait, or sleep', () => {
+  it("give a station's worker what the station does: a hand up, work, a wait, or sleep", () => {
     const t = (phase: string) => ({ t: { t: { phase } } }), a = (phase: string) => ({ t: { phase } });
     expect(workerState({ m: {}, places: [t('running')], aside: [a('failed')] }, true)).toBe('call');
     expect(workerState({ m: {}, places: [t('running')], aside: [a('question')] }, true)).toBe('ask');
     expect(workerState({ m: {}, places: [t('running')], aside: [a('failed')] }, false)).toBe('work');
-    expect(workerState({ m: {}, places: [t('wait'), null], aside: [] }, true)).toBe('wait');
-    expect(workerState({ m: {}, places: [null, null], aside: [] }, true)).toBe('sleep');
+    expect(workerState({ m: {}, places: [t('wait'), { t: null }], aside: [] }, true)).toBe('wait');
+    expect(workerState({ m: {}, places: [{ t: null }, { t: null }], aside: [] }, true)).toBe('sleep');
     expect(workerState({ m: { off: true }, places: [t('wait')], aside: [] }, true)).toBe('sleep');
   });
 });
