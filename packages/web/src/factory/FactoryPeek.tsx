@@ -1,11 +1,13 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import type { TicketComment } from '@fleex/shared';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import type { AgentExecution, TicketComment } from '@fleex/shared';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { PriorityIndicator } from '../components/tickets/PriorityIndicator';
 import { ComplexityBadge } from '../components/tickets/ComplexityBadge';
 import { Composer } from '../components/work/task/Composer';
+import { RunCard } from '../components/work/task/RunCard';
+import { buildStream } from '../components/work/selectors';
 import { useTicketDeliverables } from '../components/work/panel/useTicketDeliverables';
 import { useUIStore } from '../stores/uiStore';
 import * as api from '../services/api';
@@ -22,6 +24,15 @@ const noop = () => {};
 /** The stations whose run starts an agent execution, so a log to show once its id is known. */
 const LOGGED: readonly StationExec[] = ['agent', 'skill', 'panel'];
 
+function Bubble({ c }: { c: TicketComment }) {
+  return (
+    <div className={cn('max-w-[92%] rounded-lg px-2.5 py-1.5 text-[12.5px]', c.authorType === 'user' ? 'self-end bg-[var(--theme-accent-muted)]' : 'self-start border border-[var(--theme-border)]')}>
+      {c.authorType !== 'user' && <div className="mb-0.5 text-[10.5px] text-[var(--theme-text-muted)]">{c.authorName}</div>}
+      <div className="text-[var(--theme-text-primary)]"><MarkdownRenderer content={c.body} onToggleCheckbox={noop} /></div>
+    </div>
+  );
+}
+
 export interface PeekHandle {
   /** Where the ticket's machine (or the ticket itself) is on the floor, in the floor's own pixels: the card sits beside it. */
   place(r: { x: number; y: number; w: number; h: number }): void;
@@ -35,6 +46,9 @@ export interface PeekHandle {
  * Once a station has run the ticket, a Thread · Run switch shows that run's log in the card too. A ticket a station
  * is running opens on its live log: on a running ticket, that is what one clicks to see. Anything else opens on the
  * thread, the log one click away. The tab is not remembered: each opening applies the rule again.
+ *
+ * The thread carries the ticket's runs among its messages, as the Work stream does: a run card sits where the run
+ * started. A click on one shows its log in the Run tab; a run no station started (no Run tab for it) pops out.
  */
 export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: () => void; onClose: () => void; onPopOut?: (executionId: string, title: string) => void }>(function FactoryPeek({ ticketId, onOpen, onClose, onPopOut }, ref) {
   const store = useFactoryStore();
@@ -47,6 +61,7 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const [picked, setPicked] = useState<{ id: string; base: string | null } | null>(null);
   const pick = picked?.id ?? null;
   const [comments, setComments] = useState<TicketComment[] | null>(null);
+  const [executions, setExecutions] = useState<AgentExecution[]>([]);
   const [draft, setDraft] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -66,10 +81,16 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
     },
   }), []);
 
-  const load = useCallback(async () => { try { setComments(await api.fetchTicketComments(ticketId)); } catch { /* the API helper already raised a toast */ } }, [ticketId]);
-  useEffect(() => { setComments(null); setDraft(''); setReason(''); seen.current = -1; void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
+  const load = useCallback(async () => {
+    /* the runs come with the messages, so a run card's state follows the run; without them the thread still shows */
+    const [c, e] = await Promise.allSettled([api.fetchTicketComments(ticketId), api.fetchExecutionsForTicket(ticketId)]);
+    if (c.status === 'fulfilled') setComments(c.value);   // else the API helper already raised a toast
+    if (e.status === 'fulfilled') setExecutions(e.value);
+  }, [ticketId]);
+  const stream = useMemo(() => (comments ? buildStream(comments, [], executions) : null), [comments, executions]);
+  useEffect(() => { setComments(null); setExecutions([]); setDraft(''); setReason(''); seen.current = -1; void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
   /* it opens on the end of the thread and follows what is added; scrolled up, it stays where it was put */
-  useEffect(() => { const n = thread.current; if (n && comments && comments.length !== seen.current) { seen.current = comments.length; n.scrollTop = n.scrollHeight; } }, [comments]);
+  useEffect(() => { const n = thread.current; if (n && stream && stream.length !== seen.current) { seen.current = stream.length; n.scrollTop = n.scrollHeight; } }, [stream]);
 
   const current = runs.current;
   const pending = ft?.phase === 'running' && logged && !!ft.runId && !(current?.id === ft.runId && current.executionId);
@@ -81,6 +102,11 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const setPick = (id: string) => setPicked({ id, base: current?.id ?? null });
   const next = pick && current && current.id !== pick && current.id !== picked?.base && current.status === 'running' ? current : null;
   useEffect(() => { if (view === 'run' && !pick && current?.executionId) setPicked({ id: current.id, base: current.id }); }, [view, pick, current]);
+  /* a run card in the thread: a station's run opens on the Run tab, any other one in the floating panel */
+  const openRun = (executionId: string, title: string) => {
+    const r = runs.list.find((x) => x.executionId === executionId);
+    if (r) { setPick(r.id); setTab('run'); } else if (onPopOut) { onPopOut(executionId, title); onClose(); }
+  };
 
   if (!ft) return null;
   const info = ft.info, need = needKind(ft), gate = ft.phase === 'review' && machine?.kind === 'station' ? machine : null;
@@ -137,14 +163,10 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
         </div>
       )}
       <div ref={thread} className="flex min-h-[72px] flex-1 flex-col gap-2 overflow-y-auto p-2.5">
-        {comments === null ? <div className="flex justify-center py-4"><Spinner /></div>
-          : comments.length === 0 ? <div className="py-4 text-center text-xs text-[var(--theme-text-muted)]">No message on this ticket yet.</div>
-          : comments.map((c) => (
-            <div key={c.id} className={cn('max-w-[92%] rounded-lg px-2.5 py-1.5 text-[12.5px]', c.authorType === 'user' ? 'self-end bg-[var(--theme-accent-muted)]' : 'self-start border border-[var(--theme-border)]')}>
-              {c.authorType !== 'user' && <div className="mb-0.5 text-[10.5px] text-[var(--theme-text-muted)]">{c.authorName}</div>}
-              <div className="text-[var(--theme-text-primary)]"><MarkdownRenderer content={c.body} onToggleCheckbox={noop} /></div>
-            </div>
-          ))}
+        {stream === null ? <div className="flex justify-center py-4"><Spinner /></div>
+          : stream.length === 0 ? <div className="py-4 text-center text-xs text-[var(--theme-text-muted)]">No message on this ticket yet.</div>
+          : stream.map((entry) => entry.kind === 'run' ? <RunCard key={`r-${entry.execution.id}`} execution={entry.execution} onOpen={openRun} />
+            : entry.kind === 'comment' ? <Bubble key={entry.comment.id} c={entry.comment} /> : null)}
       </div>
       <div className="flex flex-none flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] p-2">
         {gate ? (

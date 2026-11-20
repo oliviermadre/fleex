@@ -8,6 +8,7 @@ import * as api from '../services/api';
 import { FactoryPeek } from './FactoryPeek';
 import { useFactoryStore } from './factoryStore';
 import { factoryApi } from './factoryApi';
+import type { AgentExecution, TicketComment } from '@fleex/shared';
 import type { FactoryRun, FactorySnapshot, FactoryTicket, MachineSpec, TicketPhase } from './types';
 
 vi.mock('../services/api', async (original) => ({
@@ -243,6 +244,47 @@ describe('<FactoryPeek/> Thread · Run', () => {
 
     fireEvent.click(screen.getByText('⤢ Pop out'));
     expect(on.onPopOut).toHaveBeenCalledWith('e1', 'Dev · execution log');
+    expect(on.onClose).toHaveBeenCalled();
+  });
+});
+
+const exec = (id: string, status: AgentExecution['status'], startedAt: string, model = 'sonnet'): AgentExecution =>
+  ({ id, personaId: 'p1', ticketId: 't1', mentionId: 'm1', eventCount: 3, status, startedAt, completedAt: status === 'running' ? null : startedAt, lastEventAt: null, model, costUsd: 0.4 });
+const comment = (id: string, body: string, createdAt: string): TicketComment =>
+  ({ id, ticketId: 't1', authorType: 'agent', authorName: 'Factory → Build', body, visibility: 'public', privateRecipients: [], mentions: [], parentId: null, createdAt, updatedAt: createdAt });
+
+describe('<FactoryPeek/> runs in the thread', () => {
+  /* the conversation reads as on the Work screen: what ran sits among what was said, where it started */
+  it('shows each run as a card in the thread, between the messages around it', async () => {
+    vi.mocked(api.fetchTicketComments).mockResolvedValue([comment('c1', 'spec ready', '2026-11-15T09:00:00.000Z'), comment('c2', 'PR opened', '2026-11-15T09:40:00.000Z')]);
+    vi.mocked(api.fetchExecutionsForTicket).mockResolvedValue([exec('e1', 'completed', '2026-11-15T09:30:00.000Z')]);
+    seed(ticket('dev', 'question'));
+    open();
+    const card = await screen.findByTitle('Open execution log');
+    const spec = screen.getByText('spec ready'), pr = screen.getByText('PR opened');
+    expect(spec.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(pr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("a station's run card opens its log in the Run tab, not elsewhere", async () => {
+    runsAre([runRow('r0', 'e0', 'completed', 'Spec', '2026-11-15T09:00:00.000Z'), runRow('r1', 'e1', 'completed')]);
+    vi.mocked(api.fetchExecutionsForTicket).mockResolvedValue([exec('e0', 'completed', '2026-11-15T09:00:00.000Z'), exec('e1', 'completed', '2026-11-15T09:30:00.000Z')]);
+    seed({ ...ticket('dev', 'question'), runId: 'r1' });
+    const on = openWithPopOut();
+    await waitFor(() => expect(screen.getAllByTitle('Open execution log')).toHaveLength(2));
+    await waitFor(() => expect(screen.getByRole('tablist', { hidden: true })).toBeTruthy());
+    fireEvent.click(screen.getAllByTitle('Open execution log')[0]!);
+    await streamShows('e0');
+    expect(tab(/Run/).getAttribute('aria-selected')).toBe('true');
+    expect(on.onPopOut).not.toHaveBeenCalled();
+  });
+
+  it('a run no station started has no Run tab to show it in: its card pops the log out', async () => {
+    vi.mocked(api.fetchExecutionsForTicket).mockResolvedValue([exec('e9', 'completed', '2026-11-15T09:30:00.000Z', 'opus')]);
+    seed(ticket('dev', 'question'));
+    const on = openWithPopOut();
+    fireEvent.click(await screen.findByTitle('Open execution log'));
+    expect(on.onPopOut).toHaveBeenCalledWith('e9', 'opus · execution log');
     expect(on.onClose).toHaveBeenCalled();
   });
 });
