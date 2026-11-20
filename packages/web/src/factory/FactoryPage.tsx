@@ -49,7 +49,7 @@ const POLL_MS = 600;
 const POLL_BACKGROUND_MS = 3000;
 /** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
-const STATS_EVERY_MS = 30_000;
+const STATS_EVERY_MS = 60_000;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
 /** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */

@@ -29,7 +29,8 @@ import type { CommentPostedEvent } from '../domain/events.js';
 const LAUNCHES = ['agent', 'skill', 'panel'];
 
 const DAY_MS = 86_400_000;
-const STATS_TTL_MS = 20_000;
+/* a minute: the page asks every minute, and the stats span days */
+const STATS_TTL_MS = 60_000;
 /* a floor that could not be loaded is tried again after this, not at every tick */
 const INIT_RETRY_MS = 30_000;
 /* what changes a ticket as the floor sees it: its type, priority, status, tags, flags, or its removal */
