@@ -69,19 +69,19 @@ describe('the command card', () => {
     expect(at(factoryMenu(ctx({ building: true })), BACK_SLOT)).toBe('Done');
   });
 
-  it('build sorts what can be placed into Move, Station and Area', () => {
+  it('build sorts what can be placed into Move, Station and Place', () => {
     const build = factoryMenu(ctx({ building: true }));
-    expect(rows(build)).toEqual([['Move', 'Station', 'Area', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
+    expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
     expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
     expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], ['Status', null, null, 'Fit', null]]);
-    expect(rows(menuAt(build, ['area']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', null, null], [null, null, null, 'Fit', null]]);
+    expect(rows(menuAt(build, ['place']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Area', null], [null, null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });
 
   it('keeps Undo, Redo and the way back at the same place in every build menu, and leaves copy, cut and paste to the keyboard', () => {
     const build = factoryMenu(ctx({ building: true }));
-    const menus = [build, menuAt(build, ['move']).menu, menuAt(build, ['station']).menu, menuAt(build, ['area']).menu,
+    const menus = [build, menuAt(build, ['move']).menu, menuAt(build, ['station']).menu, menuAt(build, ['place']).menu,
       factoryMenu(ctx({ building: true, machine: { kind: 'belt', waiting: false } })), factoryMenu(ctx({ building: true, many: 4 }))];
     for (const m of menus) {
       expect([UNDO_SLOT, REDO_SLOT].map((i) => at(m, i))).toEqual(['Undo', 'Redo']);

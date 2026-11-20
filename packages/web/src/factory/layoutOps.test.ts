@@ -119,3 +119,23 @@ describe('factory layout edits', () => {
     expect(over.layout.machines.filter((m) => m.kind === 'station')).toHaveLength(2);
   });
 });
+
+describe('areas among the machines', () => {
+  const line = { id: 'line', kind: 'area', x: 0, y: 0, w: 10, h: 4, name: 'Line', color: '#60a5fa' } as const;
+  const floor: FactoryLayout = { w: 0, h: 0, machines: [line, { id: 'b', kind: 'belt', x: 2, y: 1, w: 1, h: 1, dir: 0 }] };
+
+  it('take no tile: machines are placed, found and framed on them as on bare floor', () => {
+    expect(canPlace(floor, { x: 4, y: 1, w: 2, h: 2 })).toBe(true);
+    expect(place(floor, specFor('zone', 5, 2, 0)!)?.machines.some((m) => m.id === 'line')).toBe(true);
+    expect(machinesIn(floor, -1, -1, 20, 20)).toEqual(['b']);
+  });
+
+  it('are copied, pasted and moved only where they do not cross another', () => {
+    const clip = copyOf(floor, new Set(['line']))!;
+    expect(canPaste(floor, clip, 8, 2)).toBe(false);
+    expect(canPaste(floor, clip, 30, 2)).toBe(true);
+    expect(moveMany(floor, new Set(['line']), 3, 0)).not.toBeNull();
+    const two: FactoryLayout = { ...floor, machines: [...floor.machines, { ...line, id: 'other', x: 12 }] };
+    expect(moveMany(two, new Set(['other']), -5, 0)).toBeNull();
+  });
+});

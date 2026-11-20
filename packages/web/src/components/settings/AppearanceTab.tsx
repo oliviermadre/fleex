@@ -10,6 +10,7 @@ import {
 import { TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE } from '../../lib/constants';
 import { ThemeColorEditor } from './ThemeColorEditor';
 import { cn } from '../../lib/cn';
+import { FactorySkinPicker } from '../../factory/FactorySkinPicker';
 
 const FONT_OPTIONS = [
   { label: 'Default', value: TERMINAL_FONT_FAMILY },
@@ -197,6 +198,9 @@ export function AppearanceTab() {
           );
         })()}
       </div>
+
+      {/* How the Factory floor is painted (only while the Factory is on) */}
+      <FactorySkinPicker />
 
       {/* Terminal font settings */}
       <div className="border-t border-[var(--theme-border)] pt-6">

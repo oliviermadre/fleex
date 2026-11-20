@@ -27,7 +27,7 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type ArmSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -36,6 +36,11 @@ const PHASE: Record<FactoryTicket['phase'], string> = {
   question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting', port: 'in the teleporter',
 };
 const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1], SIDE = ['East', 'South', 'West', 'North'];
+/** Where an area's name can be written. */
+const AREA_LABEL_OPTIONS: { value: AreaLabel; label: string }[] = [
+  { value: 'tl', label: 'Top left, inside' }, { value: 'tr', label: 'Top right, inside' }, { value: 'bl', label: 'Bottom left, inside' }, { value: 'br', label: 'Bottom right, inside' },
+  { value: 'above', label: 'Above it' }, { value: 'below', label: 'Below it' },
+];
 const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -274,6 +279,22 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
           </div>
         </>
       )}
+      {m.kind === 'area' && (
+        <>
+          <CommitInput id="f-area-name" label="Name" value={m.name} onCommit={(v) => onPatch({ name: v.trim() || 'Area' })} />
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Colour</span>
+            <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Area colour">
+              {PALETTE.map((c) => (
+                <button key={c.hex} type="button" role="radio" aria-checked={m.color === c.hex} aria-label={c.name} title={c.name} onClick={() => onPatch({ color: c.hex })}
+                  className={cn('h-6 w-6 rounded-full border-2', m.color === c.hex ? 'border-[var(--theme-text-primary)]' : 'border-transparent')} style={{ background: c.hex }} />
+              ))}
+            </div>
+          </div>
+          <Select id="f-area-label" label="Name written" value={m.label ?? 'bl'} onChange={(e) => onPatch({ label: e.target.value as AreaLabel })} options={AREA_LABEL_OPTIONS} />
+          <Hint>{m.w} × {m.h} tiles. A part of the floor with a name: machines stand on it, nothing runs on it, and nothing links it to them. In build mode, drag its sides or corners to resize it and its name to move it; out of build mode it is decor.</Hint>
+        </>
+      )}
       {m.kind === 'belt' && m.set !== undefined && (
         <GantrySettings key={m.id} ops={m.set} toll={!!m.toll} onChange={(set) => onPatch({ set })} onRemove={() => onPatch({ set: undefined, toll: undefined })}>
           {m.toll && (
@@ -486,7 +507,7 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
 /**
  * A machine, opened from the floor (a double-click, Enter, or Edit on the command card): a popup over the floor, as
  * for a ticket. A station shows its settings, the tickets it holds and what it did; a zone its settings and its
- * tickets; an arm, an exit or a label, which have only settings, a small popup. Everything a machine has to be set
+ * tickets; an arm, an exit, a label or an area, which have only settings, a small popup. Everything a machine has to be set
  * is set here: the floor has no side panel.
  */
 export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemove, onOpenTicket, onOpenMachine }: {
@@ -515,7 +536,7 @@ export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemov
           <Button size="sm" variant={m.off ? 'primary' : 'secondary'} onClick={() => void power(m.id, !!m.off)} title={m.off ? 'It starts on the tickets it holds' : 'It keeps taking tickets in and starts nothing on them; what runs finishes'}>{m.off ? 'Start' : 'Stop'}</Button>
         </>
       )}
-      <Button size="sm" variant="ghost" onClick={() => { onRemove(m.id); onClose(); }} title="Remove this machine from the floor">Remove</Button>
+      <Button size="sm" variant="ghost" onClick={() => { onRemove(m.id); onClose(); }} title={m.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor'}>Remove</Button>
     </>
   );
   const settings = <Settings m={m} view={view} onPatch={(p) => onPatch(m.id, p)} onSelect={onOpenMachine} />;

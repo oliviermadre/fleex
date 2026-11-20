@@ -1,5 +1,5 @@
 import { arrivalOf, portDrop } from './teleport';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
@@ -17,6 +17,7 @@ import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
 import { HUD } from './hudShape';
 import { FactoryHudShadow } from './FactoryHudShadow';
+import { useFactorySkin } from './useFactorySkin';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
 import { FactoryConsole } from './FactoryConsole';
@@ -24,7 +25,8 @@ import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
+import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
+import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
@@ -41,7 +43,7 @@ import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
+import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 
@@ -75,6 +77,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['zone', 'D', 'Zone', 'Tickets wait here until released'],
   ['exit', 'O', 'Exit', 'Sets the ticket to done and hands it back to Fleex'],
   ['label', 'L', 'Label', 'A name on the floor'],
+  ['area', '', 'Area', 'Drag a rectangle on the floor: an area, a part of it with a name and a colour. Areas nest or keep apart, never cross'],
   ['erase', 'X', 'Erase', 'Click or drag to remove machines'],
 ];
 
@@ -88,7 +91,16 @@ type Press =
   | { kind: 'ticket'; id: string; dragging: boolean; group: string[] }
   /* out of build mode: a frame dragged over the floor, which takes tickets */
   | { kind: 'pick'; x0: number; y0: number }
+  /* build mode: an area drawn, resized by a side or a corner, or moved by its name */
+  | { kind: 'area-draw'; ax: number; ay: number }
+  | { kind: 'area-resize'; id: string; h: Handle }
+  | { kind: 'area-move'; id: string; ax: number; ay: number; from: AreaSpec }
   | null;
+
+/** The cursor over each handle of an area. */
+const HANDLE_CURSOR: Record<Handle, string> = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize' };
+/** What a toast says when an area would cross another. */
+const CROSSING = 'Areas nest or keep apart: this one would cross another';
 
 function Disabled() {
   return (
@@ -146,6 +158,10 @@ function Floor() {
   const { snapshot, layout } = store;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  /* the skin chosen in Settings paints the floor, and the page around it when it has colours of its own */
+  const { skin, chrome, make: makeSkin, key: skinKey } = useFactorySkin(), skinRef = useRef(makeSkin);
+  skinRef.current = makeSkin;
+  const chromeStyle = useMemo<CSSProperties | undefined>(() => (chrome ? { ...chrome.vars, fontFamily: chrome.font ?? undefined, colorScheme: chrome.light ? 'light' : 'dark' } as CSSProperties : undefined), [chrome]);
   const viewRef = useRef<FactoryView | null>(null);
   const [view, setView] = useState<FactoryView | null>(null);
   const [building, setBuilding] = useState(false);
@@ -199,7 +215,7 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
+  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
@@ -237,6 +253,9 @@ function Floor() {
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
+      /* an area selected shows its handles, in build mode only (out of it, it is decor) */
+      areaSel: l.building && l.selection && 'machine' in l.selection && s.layout.machines.some((m) => m.id === (l.selection as { machine: string }).machine && m.kind === 'area') ? l.selection.machine : null,
+      areaGhost: l.building ? l.areaGhost : null,
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
       exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
@@ -246,7 +265,7 @@ function Floor() {
   // The draw loop.
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
-    const v = new FactoryView(cv); viewRef.current = v; setView(v);
+    const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
@@ -315,6 +334,16 @@ function Floor() {
     return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined, arm: spec.kind === 'arm' }], ok: canPlace(l, spec) };
   };
 
+  /** In build mode, what a press on an area takes hold of: a handle of the one selected, or the name of one, to move it. */
+  const grabArea = (v: FactoryView, wx: number, wy: number): Press => {
+    const l = useFactoryStore.getState().layout; if (!l) return null;
+    const areas = areasOf(l.machines), sel = live.current.selection, picked = sel && 'machine' in sel ? areas.find((a) => a.id === sel.machine) : null;
+    const h = picked ? handleAt(picked, wx, wy, Math.max(0.2, 8 / v.cam.z)) : null;
+    if (picked && h) return { kind: 'area-resize', id: picked.id, h };
+    const named = nameAt(areas, wx, wy);
+    return named ? { kind: 'area-move', id: named.id, ax: wx, ay: wy, from: named } : null;
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -326,9 +355,12 @@ function Floor() {
       const t = live.current.tool;
       if (t === 'belt' || t === 'fastbelt') { store.beginEdit(); press.current = { kind: 'paint', last: { x: tx, y: ty }, did: false, draft: st.layout, fast: t === 'fastbelt' }; }
       else if (t === 'erase') { store.beginEdit(); const m = machineAt(st.layout, tx, ty); const draft = m ? erase(st.layout, m.id) : st.layout; store.previewLayout(draft); press.current = { kind: 'erase', draft }; }
+      else if (t === 'area') { const r = spanOf(w.x, w.y, w.x, w.y); live.current.areaGhost = { ...r, ok: fits(r, areasOf(st.layout.machines), 'nest') }; press.current = { kind: 'area-draw', ax: w.x, ay: w.y }; }
       else if (t === 'select') {
-        const hit = v.pick(p.x, p.y, st, false), m = hit && 'machineId' in hit ? v.machine(hit.machineId) : null;
-        if (m) { const sel = live.current.selection, group = sel && 'machines' in sel && sel.machines.includes(m.id) ? sel.machines : [m.id]; press.current = { kind: 'machine', id: m.id, sx: tx, sy: ty, dragging: false, group }; }
+        const hit = v.pick(p.x, p.y, st, false), m = hit && 'machineId' in hit ? v.machine(hit.machineId) : null, area = grabArea(v, w.x, w.y);
+        /* the handles of the area selected first, then what stands on the floor, then an area's name, which moves it */
+        if (area?.kind === 'area-resize' || (area && !m)) { press.current = area; if (area.kind === 'area-move') setSelection({ machine: area.id }); }
+        else if (m) { const sel = live.current.selection, group = sel && 'machines' in sel && sel.machines.includes(m.id) ? sel.machines : [m.id]; press.current = { kind: 'machine', id: m.id, sx: tx, sy: ty, dragging: false, group }; }
         else press.current = { kind: 'marquee', x0: w.x, y0: w.y };
       } else press.current = { kind: 'place' };
     } else {
@@ -352,7 +384,8 @@ function Floor() {
       /* a ticket says what it is as soon as the pointer is over it, and so does a machine's light */
       if (hit && 'ticketId' in hit) tipRef.current?.show(hit.ticketId, p.x, p.y); else tipRef.current?.hide();
       if (hit && 'lamp' in hit) lampTipRef.current?.show(hit.lamp, p.x, p.y); else lampTipRef.current?.hide();
-      e.currentTarget.style.cursor = live.current.space ? 'grab' : hit && 'lamp' in hit ? 'pointer' : '';
+      const grab = live.current.building && live.current.tool === 'select' ? grabArea(v, w.x, w.y) : null;
+      e.currentTarget.style.cursor = live.current.space ? 'grab' : grab?.kind === 'area-resize' ? HANDLE_CURSOR[grab.h] : grab?.kind === 'area-move' && !hit ? 'move' : hit && 'lamp' in hit ? 'pointer' : '';
       return;
     }
     const dx = p.x - lastPt.current.x, dy = p.y - lastPt.current.y; moved.current += Math.abs(dx) + Math.abs(dy); lastPt.current = p;
@@ -366,6 +399,13 @@ function Floor() {
         const ids = new Set(pr.group), ox = tx - pr.sx, oy = ty - pr.sy, cells = st.layout.machines.filter((m) => ids.has(m.id)).map((m) => ({ x: m.x + ox, y: m.y + oy, w: m.w, h: m.h, label: m.kind === 'label' }));
         live.current.ghost = { cells, ok: cells.every((c) => c.label || canPlace(st.layout, c, ids)), text: pr.group.length > 1 ? `Move ${pr.group.length} machines` : 'Move' };
       }
+    } else if (pr?.kind === 'area-draw' || pr?.kind === 'area-resize' || pr?.kind === 'area-move') {
+      /* the area as it would be let go now, and whether it may be there */
+      const areas = areasOf(st.layout.machines), was = pr.kind === 'area-draw' ? null : areas.find((a) => a.id === pr.id);
+      if (pr.kind !== 'area-draw' && !was) return;
+      if (pr.kind === 'area-move' && moved.current <= 5) return;
+      const r = pr.kind === 'area-draw' ? spanOf(pr.ax, pr.ay, w.x, w.y) : pr.kind === 'area-resize' ? resize(was!, pr.h, w.x, w.y) : movedArea(pr.from, w.x - pr.ax, w.y - pr.ay);
+      live.current.areaGhost = { ...r, ok: fits(r, areas.filter((a) => a.id !== was?.id), 'nest') };
     } else if (pr?.kind === 'marquee') {
       live.current.marquee = { x0: pr.x0, y0: pr.y0, x1: w.x, y1: w.y };
     } else if (pr?.kind === 'pick') {
@@ -403,8 +443,20 @@ function Floor() {
       /* Shift adds the machine to what is selected, or takes it out; a drag moved it and leaves the selection alone */
       if (!pr.dragging && e.shiftKey) setSelection(machinesSel(addTo(machineIds(live.current.selection), [pr.id], true, true)));
       else if (!pr.dragging || pr.group.length === 1) setSelection({ machine: pr.id });
+    } else if (pr?.kind === 'area-draw' || pr?.kind === 'area-resize' || pr?.kind === 'area-move') {
+      const g = live.current.areaGhost; live.current.areaGhost = null;
+      if (!g || (pr.kind === 'area-move' && click)) return;
+      const r = { x: g.x, y: g.y, w: g.w, h: g.h };
+      if (!g.ok) { toast.warning(CROSSING); return; }
+      if (pr.kind === 'area-draw') {
+        const done = laidArea(st.layout, r, newId());
+        if (done) { commit(done.layout); setTool('select'); setSelection({ machine: done.area.id }); } else toast.warning(CROSSING);
+      } else { const done = shapedArea(st.layout, pr.id, r); if (done) commit(done); else toast.warning(CROSSING); }
     } else if (pr?.kind === 'marquee') {
       const q = live.current.marquee; live.current.marquee = null;
+      /* a click on the floor selects the area there (the innermost), if any; a frame selects machines, never areas */
+      const under = click && !e.shiftKey ? areaAt(areasOf(st.layout.machines), w.x, w.y) : null;
+      if (under) { setSelection({ machine: under.id }); return; }
       const ids = q && !click ? machinesIn(st.layout, q.x0, q.y0, q.x1, q.y1) : [];
       /* with Shift a frame adds to the selection, and a click on bare floor leaves it as it is */
       setSelection(machinesSel(e.shiftKey ? addTo(machineIds(live.current.selection), ids, true) : ids));
@@ -449,14 +501,19 @@ function Floor() {
     }
   };
 
-  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => { const v = viewRef.current; if (!v) return; const p = local(e); v.zoomAt(p.x, p.y, Math.exp(-Math.max(-120, Math.min(120, e.deltaY)) * (e.ctrlKey ? 0.012 : 0.0022))); };
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => { const v = viewRef.current; if (!v) return; const p = local(e); v.wheel(p.x, p.y, e.deltaY, e.ctrlKey, e.deltaMode === 1); };
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     const p = local(e), hit = v.pick(p.x, p.y, st, true);
     if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
     /* a machine opens in its popup: its settings, what it holds, what it did. In build mode too, with nothing in hand */
     const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
-    if (m && hasPopup(m)) setOpenMachine(m.id);
+    if (m && hasPopup(m)) { setOpenMachine(m.id); return; }
+    /* in build mode, an area opens where nothing stands on it */
+    if (!hit && live.current.building && live.current.tool === 'select') {
+      const w = v.toWorld(p.x, p.y), a = areaAt(areasOf(st.layout.machines), w.x, w.y);
+      if (a) { setSelection({ machine: a.id }); setOpenMachine(a.id); }
+    }
   };
 
   // ---------- commands and their keys ----------
@@ -608,6 +665,8 @@ function Floor() {
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';
   useEffect(() => { setPath([]); }, [building, selKind]);
+  /* out of build mode an area is decor: it does not stay selected */
+  useEffect(() => { if (!building && selMachine?.kind === 'area') setSelection(null); }, [building, selMachine]);
   /* where the card is, from the floor down: Factory › Build › Move */
   const trail = useMemo(() => [...(root.title === 'Factory' ? [] : ['Factory']), ...(building && root.title !== 'Build' ? ['Build'] : []), ...card.titles], [root.title, building, card.titles]);
   const runCommand = useCallback((c: Command) => {
@@ -683,10 +742,14 @@ function Floor() {
   }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
+  /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
+  const skinShown = useRef(skinKey);
+  useEffect(() => { if (skinShown.current !== skinKey) { skinShown.current = skinKey; viewRef.current?.setSkin(makeSkin()); } }, [skinKey, makeSkin]);
+
   const halted = snapshot?.floor.settings.halted === true;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
   return (
-    <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+    <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]" data-skin={skin.id} style={chromeStyle}>
       <style>{EDGE_CSS}</style>
       <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
@@ -706,7 +769,7 @@ function Floor() {
             onPointerLeave={() => { live.current.hover = null; live.current.hoverLamp = null; live.current.ghost = null; tipRef.current?.hide(); lampTipRef.current?.hide(); }} onWheel={onWheel} onDoubleClick={onDoubleClick} onContextMenu={(e) => e.preventDefault()}
           />
           {/* the console casts a shadow on the floor along its contour; the build tape lies over it */}
-          {!hudHidden && <FactoryHudShadow hud={HUD} />}
+          {!hudHidden && <FactoryHudShadow hud={HUD} light={chrome ? chrome.light : undefined} />}
           {/* build mode says so all round the view: tape, and a plate in its corner */}
           {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
           <FactoryTicketTip ref={tipRef} />
