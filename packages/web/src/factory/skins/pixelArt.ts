@@ -19,11 +19,12 @@ export function fillWhere(ctx: CanvasRenderingContext2D, i0: number, j0: number,
   ctx.fillStyle = color;
   ctx.beginPath();
   for (let j = j0; j < j1; j++) {
-    let run = -1;
+    /* where the run of pixels in the shape began on this row, or null: the floor goes below zero, so no number can mean "none" */
+    let run: number | null = null;
     for (let i = i0; i <= i1; i++) {
       const on = i < i1 && inside(i + 0.5, j + 0.5);
-      if (on && run < 0) run = i;
-      else if (!on && run >= 0) { ctx.rect(run * o, j * o, (i - run) * o, o); run = -1; }
+      if (on && run === null) run = i;
+      else if (!on && run !== null) { ctx.rect(run * o, j * o, (i - run) * o, o); run = null; }
     }
   }
   ctx.fill();

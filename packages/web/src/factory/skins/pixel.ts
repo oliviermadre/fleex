@@ -134,6 +134,8 @@ const TYPE_ICONS: Record<string, readonly string[]> = {
 /** A chevron pointing east, three pixels by five; three by six (it sits in the middle of a tile); four by seven, two thick. */
 const CHEVRON = ['X..', '.X.', '..X', '.X.', 'X..'];
 const CHEVRON_6 = ['X..', '.X.', '..X', '..X', '.X.', 'X..'];
+/** A chevron pointing south-east, a corner of four pixels; turned, the other slants. */
+const CORNER = ['...X', '...X', '...X', 'XXXX'];
 const CHEVRON_7 = ['X...', 'XX..', '.XX.', '..XX', '.XX.', 'XX..', 'X...'];
 /** A lamp's red, amber and green. */
 const LAMP = ['#ff4d4d', '#ffc21a', '#3ddc5a'];
@@ -766,16 +768,19 @@ export class PixelSkin extends FleexSkin {
     }
     if (v.dead) seg(ctx, i + 8 + dx * 6.7 - dy * 6.4, j + 8 + dy * 6.7 - dx * 6.4, i + 8 + dx * 6.7 + dy * 6.4, j + 8 + dy * 6.7 + dx * 6.4, 2, pal.danger);
   }
-  /** The chevrons of a bend, drawn on the curve as two strokes of a pixel. */
+  /**
+   * The chevrons of a bend, along the curve: each one the chevron of the nearest of eight ways it points, the straight
+   * ones as on a straight belt, the slanted ones a corner of four pixels.
+   */
   private bendChevrons(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = DX[f as 0], fy = DY[f as 0];
     const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5, col = b.fast ? pal.fast : pal.chev;
     const one = (u: number) => {
-      if (u < 0.06 || u > 0.94) return;
+      if (u < 0.08 || u > 0.92) return;
       const ca = Math.cos((u * Math.PI) / 2), sa = Math.sin((u * Math.PI) / 2), cx = (px + 0.5 * (fx * sa - dx * ca)) * ART, cy = (py + 0.5 * (fy * sa - dy * ca)) * ART, tx = dx * sa + fx * ca, ty = dy * sa + fy * ca;
-      const tipx = cx + tx * 1.5, tipy = cy + ty * 1.5;
-      seg(ctx, tipx, tipy, cx - tx * 1.5 + ty * 3, cy - ty * 1.5 - tx * 3, 1.3, col);
-      seg(ctx, tipx, tipy, cx - tx * 1.5 - ty * 3, cy - ty * 1.5 + tx * 3, 1.3, col);
+      const oct = ((Math.round(Math.atan2(ty, tx) / (Math.PI / 4)) % 8) + 8) % 8;
+      if (oct % 2 === 0) { const turn = oct / 2, w = turn % 2 ? 5 : 3, h = turn % 2 ? 3 : 5; sprite(ctx, CHEVRON, Math.round(cx - w / 2), Math.round(cy - h / 2), { X: col }, turn); }
+      else sprite(ctx, CORNER, Math.round(cx - 2), Math.round(cy - 2), { X: col }, (oct - 1) / 2);
     };
     for (let k = 0; k < 2; k++) { const u = off + k * 0.5; if (b.fast) { one(u - CHEVRON_PAIR / 2); one(u + CHEVRON_PAIR / 2); } else one(u); }
   }

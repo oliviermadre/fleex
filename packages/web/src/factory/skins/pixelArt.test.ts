@@ -23,6 +23,17 @@ describe('pixel art', () => {
     for (const k of lit.keys()) { const [i, j] = k.split(',').map(Number); expect(lit.has(`${15 - i!},${j}`)).toBe(true); expect(lit.has(`${i},${15 - j!}`)).toBe(true); }
   });
 
+  it('draws below zero as above it: the floor has negative tiles', () => {
+    const here = fake(), there = fake();
+    disc(here.ctx, 8, 8, 4.2, 'a');
+    disc(there.ctx, -600, -392, 4.2, 'a');
+    expect(there.lit.size).toBe(here.lit.size);
+    expect(there.at(-600, -392)).toBe('a');
+    const line = fake();
+    seg(line.ctx, -40, -8, -24, -8, 2, 's');
+    expect(line.at(-30, -9)).toBe('s');
+  });
+
   it('leaves the middle of a ring empty, and a dashed ring only where kept', () => {
     const { ctx, at, lit } = fake();
     ring(ctx, 8, 8, 4.6, 1, 'r');

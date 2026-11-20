@@ -242,13 +242,14 @@ export function types(cvs: HTMLCanvasElement[], zooms: number[], start: { theme:
  * exactly as large as the spot, so its pixels are those of the page.
  */
 export interface Spot { x: number; y: number; w: number; h: number }
-export function sheet(pairs: { fleex: HTMLCanvasElement; pixel: HTMLCanvasElement; spot: Spot }[], start: { theme: string; z: number; look?: PixelLook; skin?: 'pixel' | 'pixel-3d' }) {
+export function sheet(pairs: { fleex: HTMLCanvasElement; pixel: HTMLCanvasElement; spot: Spot }[], start: { theme: string; z: number; look?: PixelLook; skin?: 'pixel' | 'pixel-3d'; machines?: MachineSpec[]; decor?: DecorOptions | null; people?: PeopleOptions | null }) {
   const theme = (id: string) => { const t = BUILT_IN_THEMES.find((x) => x.id === id); if (t) applyTheme(t); };
   theme(start.theme);
-  const layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...LINES] };
-  const st = floorState({ layout, hoverMachine: null, selTicket: null, named: null, found: null });
+  /* the made-up floor, or the machines given (with no ticket) */
+  const layout: FactoryLayout = start.machines ? { version: 2, w: 0, h: 0, machines: start.machines } : { ...fixture, machines: [...fixture.machines, ...LINES] };
+  const st = floorState({ layout, hoverMachine: null, selTicket: null, named: null, found: null, ...(start.machines ? { tickets: [], arms: new Map(), exits: null } : {}) });
   let z = start.z, look: PixelLook = start.look ?? { sprites: true }, skin = start.skin ?? 'pixel';
-  const pixelSkin = () => (skin === 'pixel-3d' ? new PixelTqSkin({}, look) : new PixelSkin(look));
+  const pixelSkin = () => (skin === 'pixel-3d' ? new PixelTqSkin({}, look) : new PixelSkin(look)).setDecor(start.decor ?? null).setPeople(start.people ?? null);
   const views = pairs.flatMap(({ fleex, pixel, spot }) => [fleex, pixel].map((cv, i) => ({ cv, spot, pixel: i === 1, v: new FactoryView(cv, i ? pixelSkin() : new FleexSkin()) })));
   const size = () => { for (const { cv, spot } of views) { cv.style.width = `${Math.round(spot.w * z)}px`; cv.style.height = `${Math.round(spot.h * z)}px`; } };
   size();
