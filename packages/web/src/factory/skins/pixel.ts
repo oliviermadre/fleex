@@ -28,6 +28,8 @@ import type { ViewState } from '../renderer';
 import type { TokenLook } from '../ticketToken';
 import { CHEVRON_FAST, CHEVRON_PACE, CHEVRON_PAIR, clamp, FleexSkin, GHOST, HAZARD, NO_TYPE, PAINT, PICK, PRIORITY_PIP, STAR, TYPE_COLORS, WAY, ZONE_PAINT, type Palette } from './fleex';
 import { ART, box, disc, figures, fillWhere, frame, hash, poly, ring, seg, sprite } from './pixelArt';
+import { builtBox, hallOf, propsIn, type DecorOptions } from '../decor';
+import { prop, props, walls, yard, type DecorPaint } from './pixelDecor';
 import type { Piece, Surface } from './skin';
 
 /** The pixel fonts, as a canvas asks for them. */
@@ -98,7 +100,11 @@ export function workshopTheme(theme: Theme): Theme {
  *   quays, zones (padlock, stock, line of work), exits and what leaves by them, teleporters and their links, status
  *   stations, areas, the lens, the tickets' marks, and what is laid over the floor; plates have square corners.
  */
-export interface PixelLook { crisp?: boolean; sprites?: boolean }
+export interface PixelLook {
+  crisp?: boolean; sprites?: boolean;
+  /** DRAFT for the decor mock-up (`docs/factory/decor.html`): the hall, its walls, the yard and props, generated. Off in the app. */
+  decor?: DecorOptions | null;
+}
 /** What the owner picked (R2): both steps. */
 export const PIXEL_LOOK: PixelLook = { crisp: true, sprites: true };
 
@@ -215,10 +221,28 @@ export class PixelSkin extends FleexSkin {
   /** The procedural sprites: a worker at the foot of each station that runs something. */
   override pieces(S: Scene, st: ViewState, out: Piece[]): void {
     super.pieces(S, st, out);
+    this.decorPieces(st, out, false);
     for (const v of S.boxes) if (v.kind === 'station' && v.run && !v.gate) out.push({ layer: 'standing', depth: 3.5, draw: () => this.worker(v) });
     /* the light of the lamps that need someone, on the floor, under everything */
     const pal = this.palette();
     for (const [m, s] of S.lit) out.push({ layer: 'floor', depth: 0, draw: () => this.halo(m, s, pal) });
+  }
+
+  /**
+   * The decor (DRAFT, see `PixelLook.decor`): the yard and the walls under everything, then the props, on the floor
+   * for a flat skin, standing at their row for one seen from three quarters (`standing`).
+   */
+  protected decorPieces(st: ViewState, out: Piece[], standing: boolean): void {
+    const d = this.look.decor;
+    if (!d) return;
+    const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
+    const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    const paint = (): DecorPaint => ({ ctx: this.ctx, light: pal.light, clock: this.clock, z: this.cam.z, view, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') yard(p, hall, F); walls(p, hall, built, 'FLEEX FACTORY'); } });
+    if (!d.props || (st.edit && d.build === 'hide')) return;
+    if (!standing) { out.push({ layer: 'floor', depth: -0.5, draw: () => props(paint(), st.layout, hall, d.props, !!st.edit) }); return; }
+    if (this.cam.z < 10) return;
+    for (const q of propsIn(st.layout, hall, view, d.props)) out.push({ layer: 'standing', depth: q.y + 1, draw: () => { const p = paint(); if (st.edit) p.ctx.globalAlpha = 0.35; prop(p, q); p.ctx.globalAlpha = 1; } });
   }
 
   /** The low picture, enlarged without smoothing; then the words are written on the view itself. */

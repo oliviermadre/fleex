@@ -11,7 +11,8 @@ import { areaAt, areasOf, fits, freshArea, handleAt, moved, nameBox, resize, spa
 import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin } from '../skins/neon';
-import { PIXEL_STEPS, PixelSkin, type PixelLook } from '../skins/pixel';
+import { PIXEL_LOOK, PIXEL_STEPS, PixelSkin, type PixelLook } from '../skins/pixel';
+import type { DecorOptions } from '../decor';
 import { PixelTqSkin, type TqOptions } from '../skins/pixelTq';
 import type { AreaSpec, FactoryLayout, FactoryTicket, MachineSpec } from '../types';
 import { floorState, layout as fixture, tickets } from './fixture';
@@ -24,6 +25,8 @@ export interface Look {
   build?: boolean; tool?: 'select' | 'area' | 'belt';
   /** Areas: whether two may overlap, and how one is moved (by its name, by any free point of it, or not at all). */
   overlap?: Overlap; move?: 'name' | 'inside' | 'none';
+  /** Lot 7's mock-up: the decor, and its options. */
+  decor?: DecorOptions | null;
 }
 /** What the zoom is at: pixels per tile, and whether it is resting (on a step, for the pixel skins); and the name of what is pointed at. */
 export type Report = (z: number, resting: boolean, steps: readonly number[], pointed: string | null) => void;
@@ -43,7 +46,8 @@ const LINES: AreaSpec[] = [
 export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea?: (a: AreaSpec | null) => void) {
   let look: Look = { tool: 'select', overlap: 'nest', move: 'name', ...start };
   let layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...behind, ...(start.platforms === false ? [] : LINES)] };
-  const make = () => (look.skin === 'fleex' ? new FleexSkin() : look.skin === 'neon' ? new NeonSkin() : look.skin === 'pixel-3d' || look.view === 'tq' ? new PixelTqSkin({ raise: look.raise, hidden: look.hidden, buildFlat: look.buildFlat }) : new PixelSkin());
+  const pixelLook = (): PixelLook => ({ ...PIXEL_LOOK, decor: look.decor ?? null });
+  const make = () => (look.skin === 'fleex' ? new FleexSkin() : look.skin === 'neon' ? new NeonSkin() : look.skin === 'pixel-3d' || look.view === 'tq' ? new PixelTqSkin({ raise: look.raise, hidden: look.hidden, buildFlat: look.buildFlat }, pixelLook()) : new PixelSkin(pixelLook()));
   const theme = () => { const t = BUILT_IN_THEMES.find((x) => x.id === look.theme); if (t) applyTheme(t); };
   theme();
   const view = new FactoryView(cv, make()), st = floorState({ layout, tickets: [...tickets, ...riders], hoverMachine: null, selTicket: null, edit: !!look.build });
@@ -151,7 +155,7 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
       if (next.theme && next.theme !== was.theme) theme();
       st.edit = !!look.build; st.ghost = null; st.areaGhost = null;
       if (!st.edit) { st.areaSel = null; tell(); }
-      if (next.skin !== undefined || next.view !== undefined || next.raise !== undefined || next.hidden !== undefined || next.buildFlat !== undefined || next.theme !== undefined) view.setSkin(make());
+      if (next.skin !== undefined || next.view !== undefined || next.raise !== undefined || next.hidden !== undefined || next.buildFlat !== undefined || next.theme !== undefined || next.decor !== undefined) view.setSkin(make());
     },
     zoom(dir: 1 | -1) { view.zoomAt(view.w / 2, view.h / 2, dir > 0 ? 1.25 : 0.8); },
     hover(id: string | null) { st.hoverMachine = id; },
@@ -162,6 +166,8 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
     /** The areas as they stand, and the floor's camera: for checks. */
     areas,
     camera: () => ({ ...view.cam, w: view.w, h: view.h }),
+    /** Look at a place of the floor, from a zoom: for checks and for a mock-up's buttons. */
+    goto(at: { x?: number; y?: number; z?: number }) { if (at.x != null) view.cam.x = at.x; if (at.y != null) view.cam.y = at.y; if (at.z) view.cam.z = at.z; },
   };
 }
 

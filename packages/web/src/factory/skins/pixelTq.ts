@@ -99,6 +99,7 @@ export class PixelTqSkin extends PixelSkin {
     /** Paint it that high: its top, its words and plates go up with it. */
     const up = (L: number, f: () => void) => () => { const ctx = this.ctx; ctx.save(); ctx.translate(0, -L); this.lifted = L; f(); this.lifted = 0; ctx.restore(); };
     const L = (m: MachineSpec) => this.liftOf(m, st);
+    this.decorPieces(st, out, true);
 
     for (const p of this.platforms(st)) add('floor', -1, () => this.platform(p, pal));
     for (const [m, s] of S.lit) add('floor', 0, up(this.tq.raise && this.platformOf(m) ? PLATFORM : 0, () => this.halo(m, s, pal)));
