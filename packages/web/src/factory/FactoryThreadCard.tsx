@@ -51,7 +51,7 @@ export function FactoryThreadCard({ ticketId }: { ticketId: string }) {
       {kind === 'decision' && station && (
         <div className="flex basis-full flex-wrap items-center gap-1.5">
           <div className="min-w-0 basis-full">
-            <Composer bare ticketId={ticketId} value={reason} onChange={setReason} onSend={noop} submitOn="none" showExecBar={false} showSend={false} disabled={busy}
+            <Composer bare noSplit maxRows={6} ticketId={ticketId} value={reason} onChange={setReason} onSend={noop} submitOn="none" showExecBar={false} showSend={false} disabled={busy}
               placeholder="Reason (optional), kept in the thread: markdown, paste a screenshot or attach a file" />
           </div>
           {station.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} disabled={busy} onClick={() => run(() => store.resolve(ticketId, o, reason))}>{o}</Button>)}

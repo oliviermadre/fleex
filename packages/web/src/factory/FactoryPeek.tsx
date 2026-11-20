@@ -1,11 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { TicketComment } from '@fleex/shared';
-import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { PriorityIndicator } from '../components/tickets/PriorityIndicator';
 import { ComplexityBadge } from '../components/tickets/ComplexityBadge';
-import { Composer } from '../components/work/task/Composer';
 import { useTicketDeliverables } from '../components/work/panel/useTicketDeliverables';
 import { useUIStore } from '../stores/uiStore';
 import * as api from '../services/api';
@@ -13,6 +11,7 @@ import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
 import { complexityOf, priorityOf, TicketToken } from './FactoryTicketMeta';
 import { NEED_LABEL, needKind } from './needs';
+import { FactoryPeekReply } from './FactoryPeekReply';
 
 const REFRESH_MS = 3000;
 const noop = () => {};
@@ -32,12 +31,9 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const ft = store.snapshot?.tickets.find((t) => t.ticketId === ticketId) ?? null;
   const machine = ft && store.layout ? store.layout.machines.find((m) => m.id === ft.machineId) ?? null : null;
   const [comments, setComments] = useState<TicketComment[] | null>(null);
-  const [draft, setDraft] = useState('');
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
   const { deliverables } = useTicketDeliverables(ticketId);
   const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
-  const el = useRef<HTMLDivElement>(null), thread = useRef<HTMLDivElement>(null), seen = useRef(-1), at = useRef('');
+  const el = useRef<HTMLDivElement>(null), thread = useRef<HTMLDivElement>(null), seen = useRef(-1), at = useRef(''), atEnd = useRef(true);
 
   useImperativeHandle(ref, () => ({
     place: (r) => {
@@ -52,23 +48,23 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   }), []);
 
   const load = useCallback(async () => { try { setComments(await api.fetchTicketComments(ticketId)); } catch { /* the API helper already raised a toast */ } }, [ticketId]);
-  useEffect(() => { setComments(null); setDraft(''); setReason(''); seen.current = -1; void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
+  useEffect(() => { setComments(null); seen.current = -1; void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
   /* it opens on the end of the thread and follows what is added; scrolled up, it stays where it was put */
   useEffect(() => { const n = thread.current; if (n && comments && comments.length !== seen.current) { seen.current = comments.length; n.scrollTop = n.scrollHeight; } }, [comments]);
+
+  /* read to its end, the thread keeps showing its end when the reply area takes its room (⤢, a long reason) */
+  const shown = !!ft;
+  useEffect(() => {
+    const n = thread.current;
+    if (!n || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => { if (atEnd.current) n.scrollTop = n.scrollHeight; });
+    ro.observe(n);
+    return () => ro.disconnect();
+  }, [shown]);
 
   if (!ft) return null;
   const info = ft.info, need = needKind(ft), gate = ft.phase === 'review' && machine?.kind === 'station' ? machine : null;
   const where = `${machine ? machine.name || machine.kind : 'On the floor'}${need ? ` · ${NEED_LABEL[need]}` : ''}`;
-  const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn(); await load(); } catch { /* toast already shown */ } finally { setBusy(false); } };
-  /* the composer clears the draft once this resolves, and keeps it when it throws */
-  const say = async (body: string) => { setBusy(true); try { await api.postTicketComment(ticketId, body); await load(); } finally { setBusy(false); } };
-  /* Escape in a field: with something typed it only leaves the field, empty it closes the card, as it does on the floor.
-     It bubbles up from the composer's textarea; the mention menu, when open, has already taken it (defaultPrevented). */
-  const escape = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const field = e.target;
-    if (e.key !== 'Escape' || e.defaultPrevented || !(field instanceof HTMLTextAreaElement)) return;
-    e.preventDefault(); if (field.value) field.blur(); else onClose();
-  };
   const latest = [...deliverables].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
 
   return (
@@ -92,7 +88,8 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
           ))}
         </div>
       )}
-      <div ref={thread} className="flex min-h-[72px] flex-1 flex-col gap-2 overflow-y-auto p-2.5">
+      {/* the thread gives way first, down to 72px, so the reply area and its button bar keep their room (shrink-[100]) */}
+      <div ref={thread} onScroll={(e) => { const n = e.currentTarget; atEnd.current = n.scrollHeight - n.scrollTop - n.clientHeight < 8; }} className="flex min-h-[72px] flex-1 shrink-[100] flex-col gap-2 overflow-y-auto p-2.5">
         {comments === null ? <div className="flex justify-center py-4"><Spinner /></div>
           : comments.length === 0 ? <div className="py-4 text-center text-xs text-[var(--theme-text-muted)]">No message on this ticket yet.</div>
           : comments.map((c) => (
@@ -102,27 +99,8 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
             </div>
           ))}
       </div>
-      <div className="flex flex-none flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] p-2">
-        {gate ? (
-          <>
-            <span className="basis-full text-[11px] font-semibold text-[var(--theme-warning)]">{gate.name || 'The gate'} waits for your decision</span>
-            <div className="basis-full" onKeyDown={escape}>
-              <Composer bare ticketId={ticketId} value={reason} onChange={setReason} onSend={noop} submitOn="none" showExecBar={false} showSend={false}
-                placeholder="Reason (optional), kept in the thread: markdown, paste a screenshot" />
-            </div>
-            {gate.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} disabled={busy} onClick={() => run(() => store.resolve(ticketId, o, reason))}>{o}</Button>)}
-          </>
-        ) : (
-          <>
-            <div className="basis-full" onKeyDown={escape}>
-              <Composer bare ticketId={ticketId} value={draft} onChange={setDraft} onSend={say} posting={busy} showExecBar={false}
-                placeholder={ft.phase === 'question' && machine?.kind === 'station' ? 'Answer: the station takes the ticket again' : 'Reply: markdown, @ to mention, paste a screenshot'} />
-            </div>
-            {ft.phase === 'failed' && <Button size="sm" disabled={busy} onClick={() => run(() => store.putBack(ticketId))}>Run again</Button>}
-          </>
-        )}
-        <Button size="sm" variant={gate ? 'ghost' : 'primary'} className="ml-auto" onClick={onOpen} title="The whole ticket (also Enter, V, or a double-click)">Open</Button>
-      </div>
+      <FactoryPeekReply key={ticketId} ticketId={ticketId} gate={gate} asked={ft.phase === 'question' && machine?.kind === 'station'} failed={ft.phase === 'failed'}
+        reload={load} onOpen={onOpen} onClose={onClose} />
     </div>
   );
 });
