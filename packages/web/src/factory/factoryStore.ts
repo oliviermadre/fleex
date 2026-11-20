@@ -57,11 +57,20 @@ let pendingLayoutSaves = 0;
  * as opposed to a drag in progress. It lives for the page session only: a reload starts afresh.
  */
 const HISTORY = 60;
+/**
+ * The last polled snapshot, but for the server's clock: a poll that brings the same floor back is dropped, so the page
+ * (which renders from the whole store) is not rendered again for nothing several times a second. It is still taken
+ * now and then, for the ages the page works out from the server's clock.
+ */
+let lastPolled = '';
+let lastPolledAt = 0;
+const SAME_SNAPSHOT_KEPT_MS = 10_000;
+const pollKey = (s: FactorySnapshot): string => JSON.stringify({ ...s, serverTime: null });
 let committed: FactoryLayout | null = null;
 let past: FactoryLayout[] = [];
 let future: FactoryLayout[] = [];
 /** Test hook: forget the history. */
-export function resetFactoryHistory(): void { committed = null; past = []; future = []; pendingLayoutSaves = 0; }
+export function resetFactoryHistory(): void { lastPolled = ''; lastPolledAt = 0; committed = null; past = []; future = []; pendingLayoutSaves = 0; }
 
 export const useFactoryStore = create<FactoryState>((set, get) => {
   const apply = (snapshot: FactorySnapshot) => set((s) => {
@@ -94,7 +103,12 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
       try { set({ managed: new Set((await factoryApi.managed()).ticketIds) }); } catch { /* keep what we had */ }
     },
     refresh: async () => {
-      try { apply(await factoryApi.state()); } catch { /* next poll */ }
+      try {
+        const snapshot = await factoryApi.state(), key = pollKey(snapshot), now = performance.now();
+        if (key === lastPolled && pendingLayoutSaves === 0 && now - lastPolledAt < SAME_SNAPSHOT_KEPT_MS && get().snapshot) return;
+        lastPolled = key; lastPolledAt = now;
+        apply(snapshot);
+      } catch { /* next poll */ }
     },
     previewLayout: (layout) => set({ layout }),
     beginEdit: () => { pendingLayoutSaves++; },

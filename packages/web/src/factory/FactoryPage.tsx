@@ -24,6 +24,7 @@ import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
+import { frameGap } from './frameRate';
 import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
@@ -43,11 +44,11 @@ import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
-/** The draw loop's floor between two frames: 60 a second at most. A little under 1000/60, so that on a 60 Hz screen a
- *  frame that comes a hair early is still drawn, and on a 120 Hz screen every other one is. */
-const FRAME_MS = 1000 / 60 - 2;
-
 const POLL_MS = 600;
+/** The window is not the one in front: the floor is asked for less often. */
+const POLL_BACKGROUND_MS = 3000;
+/** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
+const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
 const STATS_EVERY_MS = 30_000;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
@@ -211,11 +212,35 @@ function Floor() {
     if (usePanelStore.getState().panels.length === 0) void usePanelStore.getState().loadPanels();
   }, []);
 
-  // Poll the floor while the page is open.
+  // Is the window the one in front, and when was someone last at the page: the draw loop and the poll pace themselves on it.
+  const focused = useRef(typeof document === 'undefined' || document.hasFocus());
+  const wokeAt = useRef(performance.now());
   useEffect(() => {
-    void useFactoryStore.getState().refresh();
-    const id = window.setInterval(() => { if (!document.hidden) void useFactoryStore.getState().refresh(); }, POLL_MS);
-    return () => window.clearInterval(id);
+    const wake = () => { wokeAt.current = performance.now(); };
+    const onFocus = () => { focused.current = true; wake(); }, onBlur = () => { focused.current = false; };
+    for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
+    window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
+    /* a stopped floor is drawn twice a second: what changes on it is drawn at once. A running one is drawn often enough. */
+    const unsub = useFactoryStore.subscribe((s, was) => {
+      if ((s.snapshot !== was.snapshot || s.layout !== was.layout) && s.snapshot?.floor.settings.halted) wake();
+    });
+    return () => {
+      for (const e of WAKE_EVENTS) window.removeEventListener(e, wake, { capture: true });
+      window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur); unsub();
+    };
+  }, []);
+
+  // Poll the floor while the page is open; less often while the window is behind others, and at once when it comes back.
+  useEffect(() => {
+    let timer = 0;
+    const poll = () => {
+      window.clearTimeout(timer);
+      if (!document.hidden) void useFactoryStore.getState().refresh();
+      timer = window.setTimeout(poll, focused.current ? POLL_MS : POLL_BACKGROUND_MS);
+    };
+    poll();
+    window.addEventListener('focus', poll);
+    return () => { window.clearTimeout(timer); window.removeEventListener('focus', poll); };
   }, []);
 
   // What the floor did: loaded with the page, then kept fresh while it stays open.
@@ -250,8 +275,9 @@ function Floor() {
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
       raf = requestAnimationFrame(frame);
-      /* at most 60 frames a second: a 120 Hz screen would otherwise draw the whole floor twice as often for nothing */
-      if (ts - last < FRAME_MS) return;
+      /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
+      const snap = useFactoryStore.getState().snapshot, running = !!snap && snap.floor.settings.halted !== true;
+      if (ts - last < frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running })) return;
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
@@ -508,7 +534,7 @@ function Floor() {
     const r = root.getBoundingClientRect();
     return { left: r.left, top: cv.getBoundingClientRect().top, right: r.right, bottom: r.bottom };
   }, []);
-  const edgeMove = useCallback((dx: number, dy: number) => { const v = viewRef.current; if (v) { v.cam.x += dx / v.cam.z; v.cam.y += dy / v.cam.z; } }, []);
+  const edgeMove = useCallback((dx: number, dy: number) => { wokeAt.current = performance.now(); const v = viewRef.current; if (v) { v.cam.x += dx / v.cam.z; v.cam.y += dy / v.cam.z; } }, []);
   /* not while the view is being dragged: one hand moves it at a time */
   const edgePaused = useCallback(() => press.current?.kind === 'pan', []);
   useEdgeScroll(rootRef, edgeRect, edgeMove, edgePaused);
