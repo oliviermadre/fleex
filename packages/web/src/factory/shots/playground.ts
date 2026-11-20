@@ -8,7 +8,7 @@
  */
 import { applyTheme, BUILT_IN_THEMES } from '../../lib/themes';
 import { areaAt, areasOf, fits, freshArea, handleAt, moved, resize, spanOf, type Handle, type Overlap, type Rect } from '../areas';
-import { FactoryView } from '../renderer';
+import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin } from '../skins/neon';
 import { PIXEL_STEPS, PixelSkin, type PixelLook } from '../skins/pixel';
@@ -233,4 +233,37 @@ export function types(cvs: HTMLCanvasElement[], zooms: number[], start: { theme:
   };
 }
 
-declare global { interface Window { FactoryPlayground: { mount: typeof mount; compare: typeof compare; types: typeof types } } }
+/**
+ * Every part of the floor, one card each, as Fleex draws it and as the pixel skin does, side by side at the same zoom:
+ * the sheet the pixel art is checked on, part by part. Each card is a still view of a spot of the made-up floor,
+ * exactly as large as the spot, so its pixels are those of the page.
+ */
+export interface Spot { x: number; y: number; w: number; h: number }
+export function sheet(pairs: { fleex: HTMLCanvasElement; pixel: HTMLCanvasElement; spot: Spot }[], start: { theme: string; z: number; look?: PixelLook; skin?: 'pixel' | 'pixel-3d' }) {
+  const theme = (id: string) => { const t = BUILT_IN_THEMES.find((x) => x.id === id); if (t) applyTheme(t); };
+  theme(start.theme);
+  const layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...LINES] };
+  const st = floorState({ layout, hoverMachine: null, selTicket: null, named: null, found: null });
+  let z = start.z, look: PixelLook = start.look ?? { sprites: true }, skin = start.skin ?? 'pixel';
+  const pixelSkin = () => (skin === 'pixel-3d' ? new PixelTqSkin({}, look) : new PixelSkin(look));
+  const views = pairs.flatMap(({ fleex, pixel, spot }) => [fleex, pixel].map((cv, i) => ({ cv, spot, pixel: i === 1, v: new FactoryView(cv, i ? pixelSkin() : new FleexSkin()) })));
+  const size = () => { for (const { cv, spot } of views) { cv.style.width = `${Math.round(spot.w * z)}px`; cv.style.height = `${Math.round(spot.h * z)}px`; } };
+  size();
+  let last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    for (const { v, spot } of views) { v.resize(); v.cam = { x: spot.x + spot.w / 2, y: spot.y + spot.h / 2, z }; v.draw(st, dt); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return {
+    theme(id: string) { theme(id); for (const x of views) x.v.setSkin(x.pixel ? pixelSkin() : new FleexSkin()); },
+    zoom(next: number) { z = next; size(); },
+    look(next: PixelLook) { look = next; for (const x of views) if (x.pixel) x.v.setSkin(pixelSkin()); },
+    skin(next: 'pixel' | 'pixel-3d') { skin = next; for (const x of views) if (x.pixel) x.v.setSkin(pixelSkin()); },
+    /** Change what the view is shown (build mode, what is selected or pointed at, a lens): for checks. */
+    state(patch: Partial<ViewState>) { Object.assign(st, patch); },
+  };
+}
+
+declare global { interface Window { FactoryPlayground: { mount: typeof mount; compare: typeof compare; types: typeof types; sheet: typeof sheet } } }

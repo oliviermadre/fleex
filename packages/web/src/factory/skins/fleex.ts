@@ -22,28 +22,29 @@ import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). A colour with a meaning: another skin may soften it, not replace it. */
 export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
-const STAR = '#facc15';
+export const STAR = '#facc15';
 /** A ticket with no type, and the ghost of one a filter leaves out. */
-const NO_TYPE = '#8b949e', GHOST = '#71717a';
-const PRIORITY_PIP: Record<string, string> = { urgent: '#ef4444', high: '#fb923c' };
+export const NO_TYPE = '#8b949e', GHOST = '#71717a';
+export const PRIORITY_PIP: Record<string, string> = { urgent: '#ef4444', high: '#fb923c' };
 /** The paint of a zone: the colour of the status it sets, lifted where that one is too dark to read on the floor; and the paint of a zone that sets none. */
-const ZONE_PAINT: Record<string, string> = { backlog: '#a1a1aa', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
-const PAINT = '#60a5fa';
+export const ZONE_PAINT: Record<string, string> = { backlog: '#a1a1aa', todo: '#fb923c', doing: '#60a5fa', reviewing: '#c084fc', done: '#22c55e' };
+export const PAINT = '#60a5fa';
 /* the plates things are written on: near black on a dark floor; on a light one they turn light (`write`) */
 const DARK_PLATE = /^rgba\(9,9,11,/, LIGHT_PLATE = 'rgba(255,255,255,0.95)';
 /** Hazard yellow, as paint: the same on any theme. */
-const HAZARD = '#eab308';
+export const HAZARD = '#eab308';
 /** The colour of a Set gantry, and of everything that says what it does. */
-const SET = '#f472b6';
+export const SET = '#f472b6';
 /** A plate of several lines beside a machine: what it is set to do, readable from the floor. */
-interface Board { /** How high it stands (see `lifted`). */ lift?: number; lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
+export interface Board { /** How high it stands (see `lifted`). */ lift?: number; lines: string[]; inks: string[]; wx: number; wy: number; side: 'above' | 'below' | 'right' | 'left'; col: string }
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 export interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
+export type LabelOpts = Label[5];
 type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number; /** It is written on something dark whatever the theme (a veil over the floor): its ink is left as it is. */ dark?: boolean }];
 
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+export function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   r = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -51,22 +52,22 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
   ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
 }
-const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 /** Room kept around a box in the picture of its shadow, in tiles. */
 const SHADOW_PAD = 1.2;
 /** The colour of a frame being dragged, and of what it takes. */
-const PICK = '#60a5fa';
+export const PICK = '#60a5fa';
 /** The arrow painted under an arm, pointing east, round the middle of its tile: narrow where it takes, wide where it drops. */
-const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
+export const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
-const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
+export const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 
 export class FleexSkin implements Skin {
   readonly id: string = 'fleex';
   /** The floor's clock, as the scene last said. */
   protected clock = 0;
   private labels: Label[] = [];
-  private boards: Board[] = [];
+  protected boards: Board[] = [];
   protected pal: Palette | null = null;
   protected palAt = 0;
   /** The floor as last painted, and what it was painted for. */
@@ -86,7 +87,7 @@ export class FleexSkin implements Skin {
   protected get cam(): Surface['cam'] { return this.on.cam; }
   protected toWorld(sx: number, sy: number): { x: number; y: number } { return this.on.toWorld(sx, sy); }
   protected floorOf(layout: FactoryLayout): { x: number; y: number; w: number; h: number } { return this.on.floorOf(layout); }
-  private machine(id: string | null): MachineSpec | null { return this.on.machine(id); }
+  protected machine(id: string | null): MachineSpec | null { return this.on.machine(id); }
 
   ground(on: Surface, S: Scene, st: ViewState): void {
     this.on = on; this.clock = S.clock;
@@ -175,7 +176,7 @@ export class FleexSkin implements Skin {
       const x0 = b.side === 'right' ? sx + 6 : b.side === 'left' ? sx - 6 - w : sx - w / 2, y0 = b.side === 'above' ? sy - 6 - h : b.side === 'below' ? sy + 6 : sy - h / 2;
       if (x0 > this.w || x0 + w < 0 || y0 > this.h || y0 + h < 0) continue;
       const lit = !!this.pal?.light, on = lit ? 1 : 0;
-      rr(ctx, x0, y0, w, h, 4); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = lit ? legible(b.col, 1) : b.col; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+      this.plate(ctx, x0, y0, w, h, 4); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = lit ? legible(b.col, 1) : b.col; ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
       b.lines.forEach((l, i) => { const ink = b.inks[i] ?? b.col; ctx.fillStyle = lit ? legible(ink, on) : ink; ctx.fillText(l, x0 + pad, y0 + pad / 2 + lh * (i + 0.5)); });
     }
     ctx.restore(); this.labels.length = 0; this.boards.length = 0;
@@ -189,6 +190,10 @@ export class FleexSkin implements Skin {
   }
   /** The size words are written at, in CSS pixels, given the size asked (`px`, and `size` in tiles) and whether they are on a plate; null: not written. */
   protected wordSize(px: number, _size: number, _plated: boolean): number | null { return px; }
+  /** The path of a plate words are written on, in pixels of the screen: rounded, here. */
+  protected plate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void { rr(ctx, x, y, w, h, r); }
+  /** The size of the names on the floor (`names`), in pixels of the screen. */
+  protected nameSize(): number { return 11; }
   /** Where a word is written, in CSS pixels. */
   protected wordAt(sx: number, sy: number): [number, number] { return [sx, sy]; }
   /** Words may be spaced out (a marking in capitals). */
@@ -216,7 +221,7 @@ export class FleexSkin implements Skin {
     if (plate) {
       const tw = ctx.measureText(text).width, pad = px * 0.45, ph = px * 1.5;
       const x0 = o.align === 'center' ? sx - tw / 2 - pad : o.align === 'right' ? sx - tw - pad : sx - pad;
-      ctx.fillStyle = plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
+      ctx.fillStyle = plate; this.plate(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
       if (neutral) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke(); }
     }
     if (o.spacing && this.spaced) ctx.letterSpacing = `${(px * o.spacing).toFixed(2)}px`;
@@ -333,7 +338,8 @@ export class FleexSkin implements Skin {
     if (!items.length) return;
     const ctx = this.ctx, LH = 15, PAD = 5;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.font = `500 11px ${this.fonts.sans}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const NS = this.nameSize();
+    ctx.font = `500 ${NS}px ${this.fonts.sans}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => this.seen(m)).map((b) => ({ x: sx(b.x), y: sy(b.y), w: b.w * z, h: b.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
@@ -346,16 +352,16 @@ export class FleexSkin implements Skin {
     ctx.stroke();
     for (const b of boxes) {
       const hot = b.lines.some((l) => st.found?.has(l.id));
-      rr(ctx, b.x, b.y, b.w, b.h, 5); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill();
+      this.plate(ctx, b.x, b.y, b.w, b.h, 5); ctx.fillStyle = lit ? LIGHT_PLATE : 'rgba(9,9,11,0.92)'; ctx.fill();
       ctx.strokeStyle = hot ? pal.accent : lit ? 'rgba(24,24,27,0.28)' : 'rgba(244,244,245,0.18)'; ctx.lineWidth = 1; ctx.stroke();
       b.lines.forEach((l, i) => {
         const t = byId.get(l.id), y = b.y + PAD + i * LH + LH / 2, sel = st.selTicket === l.id;
-        rr(ctx, b.x + PAD, y - 4, 8, 8, 2); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
+        this.plate(ctx, b.x + PAD, y - 4, 8, 8, 2); ctx.fillStyle = TYPE_COLORS[t?.info?.type ?? ''] ?? '#8b949e'; ctx.fill();
         if (t?.info?.favorite) { ctx.fillStyle = STAR; ctx.beginPath(); ctx.arc(b.x + PAD + 8, y - 4, 2.2, 0, 6.3); ctx.fill(); }
-        ctx.font = `${sel ? 700 : 500} 11px ${this.fonts.sans}`; ctx.fillStyle = lit ? (sel || st.found?.has(l.id) ? '#09090b' : 'rgba(24,24,27,0.86)') : sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
+        ctx.font = `${sel ? 700 : 500} ${NS}px ${this.fonts.sans}`; ctx.fillStyle = lit ? (sel || st.found?.has(l.id) ? '#09090b' : 'rgba(24,24,27,0.86)') : sel || st.found?.has(l.id) ? '#ffffff' : 'rgba(244,244,245,0.86)';
         ctx.fillText(l.text, b.x + PAD + 13, y + 0.5);
       });
-      if (b.more > 0) { ctx.font = `500 11px ${this.fonts.sans}`; ctx.fillStyle = lit ? 'rgba(24,24,27,0.6)' : 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
+      if (b.more > 0) { ctx.font = `500 ${NS}px ${this.fonts.sans}`; ctx.fillStyle = lit ? 'rgba(24,24,27,0.6)' : 'rgba(244,244,245,0.55)'; ctx.fillText(`+${b.more} more`, b.x + PAD + 13, b.y + PAD + b.lines.length * LH + LH / 2 + 0.5); }
     }
     ctx.restore();
   }
@@ -562,9 +568,11 @@ export class FleexSkin implements Skin {
     const under = g.under, col = g.failed ? pal.danger : SET;
     /* laid out for a belt that runs east-west; turned a quarter for one that runs north-south */
     const box = (rx: number, ry: number, rw: number, rh: number, r: number) => { if (across) rr(ctx, x + rx, y + ry, rw, rh, r); else rr(ctx, x + ry, y + rx, rh, rw, r); };
-    ctx.strokeStyle = col; ctx.lineWidth = 0.045;
-    for (const off of [-0.11, 0.89]) { box(0.09, off, 0.82, 0.22, 0.07); ctx.fillStyle = pal.body; ctx.fill(); ctx.stroke(); }
-    box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
+    if (!this.gantryFrame(v, col, pal)) {
+      ctx.strokeStyle = col; ctx.lineWidth = 0.045;
+      for (const off of [-0.11, 0.89]) { box(0.09, off, 0.82, 0.22, 0.07); ctx.fillStyle = pal.body; ctx.fill(); ctx.stroke(); }
+      box(0.365, -0.07, 0.27, 1.14, 0.09); ctx.fillStyle = col; ctx.globalAlpha = under ? 0.85 : 0.32; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 0.035; ctx.stroke();
+    }
     if (this.cam.z < 13 && !g.asked) return;
     const lines = g.lines, side = g.side;
     this.boards.push({ lift: this.lifted, lines, inks: lines.map((l, i) => (l.endsWith(' yet') || l.endsWith(' more') ? pal.text3 : i >= g.set ? pal.danger : col)), col, side, wx: x + (side === 'right' ? 1 : side === 'left' ? 0 : 0.5), wy: y + (side === 'below' ? 1.1 : side === 'above' ? -0.1 : 0.5) });
@@ -575,6 +583,9 @@ export class FleexSkin implements Skin {
    * rejects from the middle of the belt to the middle of the next tile, swinging by the way the belt runs, so it
    * does not cross what is coming.
    */
+  /** A gantry's posts and beam, its own way: true when drawn. */
+  protected gantryFrame(_v: BeltView, _col: string, _pal: Palette): boolean { return false; }
+
   protected tollArm(v: BeltView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { ex, ey, hx, hy, carried } = v.toll!;
     const col = pal.danger, steel = mix(pal.body, pal.text2, 0.38), link = (dx: number, dy: number) => { ctx.beginPath(); ctx.moveTo(ex + dx, ey + dy); ctx.lineTo(hx + dx, hy + dy); ctx.stroke(); };
@@ -657,20 +668,22 @@ export class FleexSkin implements Skin {
   protected arm(v: ArmView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, { m: a, bx, by, dx, dy, hx, hy, carried, filtered } = v;
     const col = armColor(a, { plain: pal.text2, sorts: pal.warn }), steel = mix(pal.body, pal.text2, 0.38);
-    const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
-    this.wayMark(bx, by, dx, dy, col, st.edit ? 1 : 0.62);
-    ctx.lineCap = 'round';
-    if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.31; link(0.06, 0.1); }
-    /* what it carries is held: it moves with the cup */
-    if (carried) { ctx.lineCap = 'butt'; this.ticket(carried, st); ctx.lineCap = 'round'; }
-    ctx.strokeStyle = steel; ctx.lineWidth = 0.29; link(0, 0);
-    ctx.strokeStyle = col; ctx.lineWidth = 0.08; link(0, 0);
-    ctx.lineCap = 'butt';
-    /* the cup: a ring, through which the ticket shows, the one it holds as the one that waits for it on the quay */
-    ctx.beginPath(); ctx.arc(hx, hy, 0.2, 0, 6.3); ctx.fillStyle = 'rgba(24,24,27,0.3)'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.055; ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx, hy, 0.055, 0, 6.3); ctx.fillStyle = pal.text; ctx.fill();
-    ctx.beginPath(); ctx.arc(bx, by, 0.25, 0, 6.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.068; ctx.stroke();
-    ctx.beginPath(); ctx.arc(bx, by, 0.09, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
+    if (!this.armBody(v, st, pal, col, steel)) {
+      const link = (ox: number, oy: number) => { ctx.beginPath(); ctx.moveTo(bx + ox, by + oy); ctx.lineTo(hx + ox, hy + oy); ctx.stroke(); };
+      this.wayMark(bx, by, dx, dy, col, st.edit ? 1 : 0.62);
+      ctx.lineCap = 'round';
+      if (!st.edit) { ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.31; link(0.06, 0.1); }
+      /* what it carries is held: it moves with the cup */
+      if (carried) { ctx.lineCap = 'butt'; this.ticket(carried, st); ctx.lineCap = 'round'; }
+      ctx.strokeStyle = steel; ctx.lineWidth = 0.29; link(0, 0);
+      ctx.strokeStyle = col; ctx.lineWidth = 0.08; link(0, 0);
+      ctx.lineCap = 'butt';
+      /* the cup: a ring, through which the ticket shows, the one it holds as the one that waits for it on the quay */
+      ctx.beginPath(); ctx.arc(hx, hy, 0.2, 0, 6.3); ctx.fillStyle = 'rgba(24,24,27,0.3)'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.055; ctx.stroke();
+      ctx.beginPath(); ctx.arc(hx, hy, 0.055, 0, 6.3); ctx.fillStyle = pal.text; ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, 0.25, 0, 6.3); ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.068; ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, 0.09, 0, 6.3); ctx.fillStyle = steel; ctx.fill();
+    }
     const { tag, asked } = v;
     if (!tag || (!asked && (st.armTags === false || this.cam.z < 11))) return;
     /*
@@ -696,6 +709,9 @@ export class FleexSkin implements Skin {
     else this.label(tag, bx, fy > 0 ? a.y + 1.3 : a.y - 0.3, 0.3, ink, { ...o, align: 'center', fit: 2.6 });
   }
 
+  /** An arm's way mark, link, cup and base (and what it carries), its own way: true when drawn. */
+  protected armBody(_v: ArmView, _st: ViewState, _pal: Palette, _col: string, _steel: string): boolean { return false; }
+
   /** The arrow painted under an arm, from where it takes to where it drops. */
   private wayMark(bx: number, by: number, dx: number, dy: number, col: string, strength: number): void {
     const ctx = this.ctx;
@@ -712,7 +728,7 @@ export class FleexSkin implements Skin {
    * zone, which is paint itself), and the tickets on their way out, in line at the quay of the arm that will take
    * them. They slide there, slowly enough to be seen going.
    */
-  private quays(quays: Quay[], st: ViewState, pal: Palette, painted: boolean): void {
+  protected quays(quays: Quay[], st: ViewState, pal: Palette, painted: boolean): void {
     const ctx = this.ctx;
     for (const { a, q, line, more, moreAt } of quays) {
       rr(ctx, q.x, q.y, q.w, q.h, 0.11);
@@ -753,7 +769,7 @@ export class FleexSkin implements Skin {
     /* what is done and that no arm takes: it will not leave by itself, and says so in red */
     if (P.out) {
       const o = P.out;
-      pit(o); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke(); tiny('NO ARM', o, pal.danger);
+      this.tray(o, pal); tiny('NO ARM', o, pal.danger);
       for (const p of v.stuck) this.ticket(p, st);
       if (v.stuckMore > 0) this.label(`+${v.stuckMore}`, o.x + o.w / 2, o.y + o.h - 0.16, 0.2, pal.text2, { mono: true, align: 'center' });
     }
@@ -761,11 +777,7 @@ export class FleexSkin implements Skin {
     if (P.aside) {
       const a = P.aside, band = 0.42, aside = v.asideCount;
       pit(a);
-      ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
-      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
-      ctx.strokeStyle = veil(pal.light ? HAZARD : pal.warn, aside ? (pal.light ? 1 : 0.75) : pal.light ? 0.7 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
-      for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
-      ctx.stroke(); ctx.restore();
+      this.hazard(a, band, aside > 0, pal);
       this.label('SET ASIDE', a.x + band + 0.1, a.y + 0.17, 0.15, pal.light ? (aside ? pal.warn : pal.text3) : veil(pal.warn, aside ? 0.9 : 0.45), { weight: 700 });
       for (const p of v.aside) this.ticket(p, st);
       if (v.asideMore > 0) this.label(`+${v.asideMore}`, a.x + a.w - 0.1, a.y + a.h / 2, 0.22, pal.text2, { mono: true, align: 'right' });
@@ -782,6 +794,21 @@ export class FleexSkin implements Skin {
       this.boards.push({ lift: this.lifted, lines, inks: lines.map((l) => (l.startsWith('no command') || l.endsWith(' yet') ? pal.text3 : col)), col, side: above ? 'above' : 'below', wx: x + w / 2, wy: above ? y : y + h });
     }
     if (L === 'off') { ctx.globalAlpha = 0.28; this.trace(m); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
+  }
+
+  /** The tray of what is done and that no arm takes: a place with a red edge. */
+  protected tray(o: Rect, pal: Palette): void {
+    const ctx = this.ctx;
+    this.pit(o, pal); ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.04; ctx.stroke();
+  }
+  /** The hazard stripes on the edge of the bay, `band` wide; brighter when something is set aside. */
+  protected hazard(a: Rect, band: number, full: boolean, pal: Palette): void {
+    const ctx = this.ctx;
+    ctx.save(); rr(ctx, a.x, a.y, a.w, a.h, 0.14); ctx.clip(); ctx.beginPath(); ctx.rect(a.x, a.y, band, a.h); ctx.clip();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(a.x, a.y, band, a.h);
+    ctx.strokeStyle = veil(pal.light ? HAZARD : pal.warn, full ? (pal.light ? 1 : 0.75) : pal.light ? 0.7 : 0.35); ctx.lineWidth = 0.09; ctx.beginPath();
+    for (let k = -a.h; k < band + a.h; k += 0.22) { ctx.moveTo(a.x + k, a.y + a.h); ctx.lineTo(a.x + k + a.h, a.y); }
+    ctx.stroke(); ctx.restore();
   }
 
   /** A place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read. */
@@ -843,7 +870,7 @@ export class FleexSkin implements Skin {
   }
 
   /** The outline of a machine's body, as a path: each kind that runs something has its own (see `machineArt.ts`). */
-  private trace(m: StationSpec): void {
+  protected trace(m: StationSpec): void {
     const ctx = this.ctx, b = bodyOf(m), x = b.x + 0.07, y = b.y + 0.07, w = b.w - 0.14, h = b.h - 0.14;
     if (m.exec !== 'skill') { rr(ctx, x, y, w, h, m.exec === 'agent' ? SHOULDER : m.exec === 'script' ? 0.07 : ROUND); return; }
     const c = Math.min(CUT, w / 4, h / 4);
@@ -1203,14 +1230,14 @@ export class FleexSkin implements Skin {
    * Where an arm on that tile, pointing that way, takes from and drops on: the tile behind it in the frame's blue,
    * dashed, the tile in front of it in green, each with its name. So an arm is not put down the wrong way round.
    */
-  private armWay(w: ArmWay, pal: Palette): void {
+  protected armWay(w: ArmWay, pal: Palette, wordsOnly = false): void {
     const ctx = this.ctx, { x, y, dir, turn, idle, shut, takes, drops } = w, dx = DX[dir as 0], dy = DY[dir as 0];
     const tile = (tx: number, ty: number, color: string, dashed: boolean) => {
       ctx.fillStyle = color; ctx.globalAlpha = 0.16; rr(ctx, tx + 0.06, ty + 0.06, 0.88, 0.88, 0.16); ctx.fill();
       ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 0.06; if (dashed) ctx.setLineDash([0.14, 0.1]); ctx.stroke(); ctx.setLineDash([]);
     };
     const sx = x - dx, sy = y - dy, tx = x + dx, ty = y + dy, red = 'rgba(69,10,10,0.95)', pink = '#fecaca';
-    tile(sx, sy, idle ? pal.danger : PICK, true); tile(tx, ty, shut ? pal.danger : pal.ok, false);
+    if (!wordsOnly) { tile(sx, sy, idle ? pal.danger : PICK, true); tile(tx, ty, shut ? pal.danger : pal.ok, false); }
     const o = { mono: true, weight: 700, min: 9, max: 11 } as const;
     const blue = { ...o, plate: idle ? red : 'rgba(23,37,84,0.95)' }, green = { ...o, plate: shut ? red : 'rgba(5,46,22,0.95)' };
     if (dy === 0) {

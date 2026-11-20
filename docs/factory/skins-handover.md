@@ -232,6 +232,17 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   platforms raise what stands wholly on them (E1), a hidden ticket's outline is drawn through what hides it (C2), build
   mode goes flat (B2). A skin says how high it paints each machine (`liftOf`); the view's pick, frame, ticket card and
   names follow what is seen. Two Pixel 3D pictures among the checks. Open questions 5, 7 and 9 are answered.
+- **Readability, in progress (before lot 8)**: the owner asked for pixel art that reads ("lisibilité first").
+  `PixelLook` in `skins/pixel.ts`, off in the app until the owner picks: `crisp` (step 1: the view on the grid of art
+  pixels, words in Silkscreen at whole multiples of 8 screen pixels, each ticket the 11-pixel object of its type, no
+  line under a pixel) and `sprites` (step 2: every part of the floor drawn pixel by pixel with `skins/pixelArt.ts`, a
+  pixel full when its middle is in the shape: stations and their traffic-light lamp, belts and bends, bridges,
+  gantries, arms and tolls, quays, zones with their padlock and stencilled stock, exits as a frame of light, teleporters
+  and their links, status stations, areas, the lens, the tickets' marks, the overlay; plates with cut corners).
+  Mock-ups: `pixel-crisp.html` (today / step 1 / steps 1 and 2), `pixel-tickets.html` (every type),
+  `pixel-parts.html` (every part, Fleex and pixel side by side). Fleex's and neon's pictures unchanged; the lamp's
+  light is brighter on the day workshop. To do once the owner picks: make the chosen steps the default of Pixel and
+  Pixel 3D, and their check pictures.
 - **Next, lot 8 before lot 7**: the owner described the platforms as a feature of build mode (below). A mock-up first.
 
 ### Lot 8 as the owner described it (decided)
