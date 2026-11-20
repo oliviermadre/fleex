@@ -125,7 +125,16 @@ export interface IntakeSpec extends MachineBase {
   quietSec?: number;
   drop?: DropRule[];
 }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec | IntakeSpec;
+/** Where an Area's name is written: in one of its corners, or over or under it. */
+export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
+export const AREA_LABELS: readonly AreaLabel[] = ['tl', 'tr', 'bl', 'br', 'above', 'below'];
+/**
+ * A part of the floor named as a place ("Build line"): a rectangle of tiles, a name, a colour. Decor: the engine
+ * ignores it, it takes no tile (machines stand on it), and nothing links it to them. Two areas never cross: one lies
+ * wholly inside the other, or they do not meet.
+ */
+export interface AreaSpec extends MachineBase { kind: 'area'; name: string; color: string; label?: AreaLabel }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | AreaSpec | DeskSpec | IntakeSpec;
 
 /**
  * `w` and `h` are the extent of what is built, kept for reference: the floor itself has no edge. `version` says what

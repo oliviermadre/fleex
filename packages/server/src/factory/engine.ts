@@ -7,8 +7,8 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
-  DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
-  type ArmSpec, type BeltSpec, type DropRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
+  AREA_LABELS, DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
+  type AreaLabel, type ArmSpec, type BeltSpec, type DropRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
   type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
@@ -157,6 +157,15 @@ function cleanDefaults(input: unknown): { boardId?: string; type?: string; prior
   return Object.keys(out).length ? out : undefined;
 }
 
+/** The largest side of an area, in tiles; the colour of one given none. */
+const AREA_MAX = 200, AREA_COLOR = '#60a5fa';
+/** Two rectangles of tiles that meet with neither wholly inside the other. */
+function crosses(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean {
+  const meet = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const holds = (o: typeof a, i: typeof a) => i.x >= o.x && i.y >= o.y && i.x + i.w <= o.x + o.w && i.y + i.h <= o.y + o.h;
+  return meet && !holds(a, b) && !holds(b, a);
+}
+
 /** Reject a layout that cannot be built: out of bounds, overlapping, or with malformed machines. Returns it normalised. */
 export function normaliseLayout(input: FactoryLayout): FactoryLayout {
   if (!Array.isArray(input?.machines)) throw new FactoryError('layout.machines must be an array');
@@ -229,9 +238,18 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
         .filter((r) => r && ['author', 'title', 'text'].includes(r.field) && typeof r.contains === 'string' && r.contains.trim())
         .slice(0, 100).map((r) => ({ field: r.field, contains: r.contains.trim().slice(0, 200) }));
     }
+    else if (m.kind === 'area') {
+      m.w = Math.max(1, Math.min(AREA_MAX, Math.floor(m.w || 1))); m.h = Math.max(1, Math.min(AREA_MAX, Math.floor(m.h || 1)));
+      m.name = typeof m.name === 'string' && m.name.trim() ? m.name.trim().slice(0, 40) : 'Area';
+      m.color = typeof m.color === 'string' && /^#[0-9a-f]{6}$/i.test(m.color) ? m.color.toLowerCase() : AREA_COLOR;
+      if (!AREA_LABELS.includes(m.label as AreaLabel)) m.label = 'bl';
+      /* two areas nest or keep apart: one across the edge of another would be two places at once */
+      for (const o of machines) if (o.kind === 'area' && crosses(m, o)) throw new FactoryError(`the areas "${m.name}" and "${o.name}" cross: one must lie wholly inside the other, or apart`);
+    }
     else throw new FactoryError(`unknown machine kind "${String((m as { kind?: string }).kind)}"`);
     if ((m.kind === 'belt' || m.kind === 'arm') && ![0, 1, 2, 3].includes(m.dir)) throw new FactoryError('belts and arms need a direction 0..3');
-    if (m.kind !== 'label') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
+    /* a label and an area take no tile: machines stand on them */
+    if (m.kind !== 'label' && m.kind !== 'area') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) {
       const k = `${i},${j}`;
       if (taken.has(k)) throw new FactoryError(`two machines overlap at ${k}`);
       taken.add(k);
@@ -357,7 +375,7 @@ export class FactoryEngine {
     this.byId = new Map(this.machines.map((m) => [m.spec.id, m]));
     this.grid = new Map();
     for (const m of this.machines) {
-      if (m.spec.kind === 'label') continue;
+      if (m.spec.kind === 'label' || m.spec.kind === 'area') continue;
       for (let j = m.spec.y; j < m.spec.y + m.spec.h; j++) for (let i = m.spec.x; i < m.spec.x + m.spec.w; i++) this.grid.set(`${i},${j}`, m);
     }
     for (const m of this.machines) {

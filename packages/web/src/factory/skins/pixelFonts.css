@@ -1,0 +1,25 @@
+/*
+ * The pixel skin's fonts, served by Fleex (packages/web/public/fonts, SIL Open Font License, see the OFL files
+ * there). Latin only. A canvas does not ask for a font by itself: the skin asks for them (`PIXEL_FONTS`).
+ */
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/silkscreen-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Silkscreen';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/silkscreen-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/pixelify-sans.woff2') format('woff2');
+}

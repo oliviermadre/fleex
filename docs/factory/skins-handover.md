@@ -27,6 +27,15 @@ be overturned.
    and their shadow, as if the camera were tilted.
 4. **Lines are marked by platforms and guard rails** (L2 + L3 in `pixel-3d.html`). Floor paint (L1) was not picked.
 5. **The neon skin is cheap**: a palette, thicker edges, a glow. It needs no new shape.
+7. **The console takes the skin's colours** (open question 1, answered).
+8. **The skin is chosen in Settings, as the theme is** (open question 2, answered): Fleex has one user, so it is a
+   setting next to the theme, not a setting of the floor. A skin should follow the theme where it can (a pixel skin
+   with a dark floor on a dark theme, the theme's accent where the skin has one): then the console taking the skin's
+   colours stays in keeping with the rest of the app.
+9. **Pixel zoom** (open question 3, answered): the zoom moves continuously but only ever stops on a step, where
+   pixels are whole; never at rest between two steps.
+10. **Sprites** (open question 4, answered): drawn by code. What they do is procedural and the page's own: where a
+   worker stands is not kept by the server, and after a reload it may well be somewhere else.
 6. **Working method, unchanged**: an interactive HTML mock-up drawn like the floor comes first for anything
    functional or visual, the owner picks, then "go build". One commit per lot. Replies to the owner in French,
    product text in English, never "..." in a wording.
@@ -192,6 +201,92 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
 9. **Build mode in three quarters**: ghosts stay on tiles; is the build tape enough, or does build mode go flat?
 10. **Order against the intake PR** (`docs/factory/intake-handover.md`): which comes first? They touch different
     things (items in the engine against paint in the page), but both touch the renderer's ticket drawing.
+
+## Where it stands
+
+- **Lot 0, done**: `packages/web/src/factory/shots/` and `packages/web/scripts/factory-shots/run.mjs` paint a made-up
+  floor with one of everything in eleven situations and compare two runs pixel by pixel. It is the check for every lot
+  below that should change nothing that shows.
+- **Lot 1, done**: `scene.ts` says what is shown and where, and owns everything that lives from one frame to the next
+  (easing, belts, cups, quays, exits, jumps). `renderer.ts` only paints the scene. Checked: the eleven pictures are
+  identical to the pixel to those of `main`.
+- **Lots 2 and 3, done together**: `skins/skin.ts` is the contract (`Skin`: `ground`, `pieces`, `top`, `minimap`; a
+  `Surface` to paint on; `Piece` with a layer, a depth and what carries it; `order`, tested). `skins/fleex.ts` is
+  today's drawing, colours and light-theme rules included, as a flat skin: one layer, its depth the old paint order.
+  `renderer.ts` is only the view (camera, pick, the frame loop). Same check, identical pictures.
+- **Lot 4, done**: picked on `docs/factory/skin-choice.html` (a soft glow, the belts' chevrons in the theme's accent,
+  the choice made on cards with a preview). `factorySkin` in the settings, chosen in Settings › Appearance under the
+  theme (`FactorySkinPicker.tsx`, previews painted live from `shots/fixture.ts`). The neon skin (`skins/neon.ts`):
+  a palette and one glow over the whole picture. The page around the floor takes the skin's colours through the CSS
+  variables of a night theme (`nightTheme` + `themeVars`, set on the page's element), the minimap too; popups keep the
+  theme. `neon.test.ts`: every ink on every ground, for every built-in theme. Fleex's pictures still identical.
+- **Lot 5, done**: picked on `docs/factory/pixel-flat.html` (a live mock-up embedding the real renderer: a workshop at
+  night on a dark theme, pixel fonts). `skins/pixel.ts`: painted at 16 art pixels a tile and enlarged without
+  smoothing, the words crisp after; tiles, flat outlined bodies, hard shadows, a lamp light in rings that flicker
+  (asked for after a first dithered try read as dotted outlines), crates, and a
+  procedural worker at each station that runs something. The zoom by steps is the view's (`steps` on `Skin`,
+  `FactoryView.wheel` / `glide`): it glides and only rests on a step. Fonts served by Fleex (`public/fonts`, OFL).
+  The page in the workshop's colours (`workshopTheme`); `pixel.test.ts`; two pixel pictures among the checks.
+  Not done: an exit's light is still a soft glow under the pixel skin.
+- **Lot 6, done**: picked on `docs/factory/pixel-3q.html` (live): a skin of its own, **Pixel 3D** (`skins/pixelTq.ts`),
+  platforms raise what stands wholly on them (E1), a hidden ticket's outline is drawn through what hides it (C2), build
+  mode goes flat (B2). A skin says how high it paints each machine (`liftOf`); the view's pick, frame, ticket card and
+  names follow what is seen. Two Pixel 3D pictures among the checks. Open questions 5, 7 and 9 are answered.
+- **Readability, done (before lot 8)**: the owner asked for pixel art that reads ("lisibilité first") and picked R2,
+  both steps. `PixelLook` in `skins/pixel.ts`, both on by default (`PIXEL_LOOK`) for Pixel and Pixel 3D: `crisp` (step 1: the view on the grid of art
+  pixels, words in Silkscreen at whole multiples of 8 screen pixels, each ticket the 11-pixel object of its type, no
+  line under a pixel) and `sprites` (step 2: every part of the floor drawn pixel by pixel with `skins/pixelArt.ts`, a
+  pixel full when its middle is in the shape: stations and their traffic-light lamp, belts and bends, bridges,
+  gantries, arms and tolls, quays, zones with their padlock and stencilled stock, exits as a frame of light, teleporters
+  and their links, status stations, areas, the lens, the tickets' marks, the overlay; plates with cut corners).
+  Mock-ups: `pixel-crisp.html` (today / step 1 / steps 1 and 2), `pixel-tickets.html` (every type),
+  `pixel-parts.html` (every part, Fleex and pixel side by side). Fleex's and neon's pictures unchanged; the lamp's
+  light is brighter on the day workshop; the four pixel check pictures now show both steps.
+- **Lot 8, done**: picked on `docs/factory/areas.html` (D1, moved by its name; O2, nesting only). Kind `area` in the
+  server's layout (decor: no tile, ignored by the engine, two never cross, `normaliseLayout` refuses it), Build › Place
+  › Area (the sub-menu formerly called Area), drawn by a drag, resized by its sides and corners, moved by its name,
+  selected by a click where nothing stands, a popup for its name, colour and where the name goes; remove, undo, copy and
+  paste as for a machine; out of build mode it answers no click. Checked in Chromium on the real page against a stand-in
+  API that runs the server's `normaliseLayout` (the `qa` workspace does not exist on the session's machine).
+- **Lot 7, done**: picked on `docs/factory/decor.html`: walls round what is built with a yard outside (W2), a few
+  props (A1), faded in build mode (B1); a decor for Fleex and Neon too (F1), in their own language (an architect's plan,
+  lit tubes); a switch "Decor" in Settings › Appearance under the skins, kept skin by skin (T1), on by default for
+  Pixel and Pixel 3D, off for Fleex and Neon (`factoryDecor`, `DECOR` and `decorOn` in `skins/index.ts`). Generated
+  from the layout and a seed per tile (`decor.ts`, tested): the hall, the top wall's windows, sign over what is built,
+  clock at the real time, door, boards, extinguishers, vents; props on free tiles a tile off every machine, never in an
+  area; trees in the yard. Painted by `skins/pixelDecor.ts` (pixel art, the top wall seen from the front) and
+  `skins/flatDecor.ts` (Fleex, Neon). Four check pictures with the decor, their clock stopped. Not done: painting
+  the still decor once into a kept picture (the props are worked out once per layout and view; the rest is painted
+  each frame, which the checks show to be cheap enough so far).
+- **Lot 9, done**: picked on `docs/factory/people.html`: a few walkers (N1), a reviewer at a gate that waits and a
+  hand raised at a station whose run failed or asked (E1), faded in build mode (M1), with the decor's switch (R1);
+  `PEOPLE` in `skins/index.ts`. `people.ts` (tested): the walkable tiles, the shortest way on the grid, the crowd
+  moved by the floor's clock (still for `prefers-reduced-motion`), `workerState`. At each station a worker does what
+  the station does, asked for by the owner after the mock-up: works, raises a hand under "!" or "?", waits, or sleeps
+  with its "z"s. Pixel art in the pixel skins, a figure seen from above in Fleex's, in light in the neon one
+  (`skins/peoplePaint.ts`). The decor's check pictures show them.
+- **Every lot of the plan is done.** Later, maybe: someone carrying a parcel out by the door when a ticket leaves
+  by an exit; decor placed by hand in build mode; painting the still decor once into a kept picture.
+
+### Lot 8 as the owner described it (decided)
+
+The platforms are a feature of their own, drawn in build mode:
+
+- **Independent of the machines.** An area of the floor is laid where one wants; nothing in the data links it to the
+  stations on it. Whether a machine is raised is worked out when painting, from where it stands (wholly on it).
+- **Drawn with the mouse.** Click and drag makes a rectangle of X by Y tiles. Areas are always rectangles, on the
+  tiles.
+- **Its settings:** a name, a colour, where the name is written.
+- **Changed in build mode only.** A placed area is resized by dragging its sides (width, height) or its corners. It
+  can be edited and removed there.
+- **Out of build mode it is decor:** nothing of it answers a click.
+- **How skins show it:** a raised platform under Pixel 3D; the other skins need a look of their own (to mock up).
+- **Its name in the product: Area.** "zone" is taken (a machine where tickets wait: Inbound, Ready). The build
+  sub-menu that was called Area (zone, exit, label) is renamed **Place**, and Area is placed from it.
+- **In the flat skins** (Fleex, Neon, Pixel): a tinted slab bordered in its colour, its name on the floor.
+- **Moved by its name** (D1, picked on `docs/factory/areas.html`): a drag on the floor stays the frame that selects
+  machines. **Areas nest, never cross** (O2): one may lie wholly inside another, never across its edge; the smallest is
+  on top and is the one selected.
 
 ## Proposed order of work
 

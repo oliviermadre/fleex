@@ -512,53 +512,50 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function applyTheme(theme: Theme): void {
-  const root = document.documentElement;
+/**
+ * Every CSS variable a theme sets, by name. Pure: `applyTheme` sets them on the root element; a part of the page that
+ * paints itself in other colours (the Factory under a skin) sets those of another theme on its own element.
+ */
+export function themeVars(theme: Theme): Record<string, string> {
+  const vars: Record<string, string> = {};
 
   // Apply theme colors
-  for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
-    root.style.setProperty(cssVar, theme.colors[key as keyof ThemeColors]);
-  }
+  for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) vars[cssVar] = theme.colors[key as keyof ThemeColors];
 
   // Apply syntax colors
-  for (const [key, cssVar] of Object.entries(SYNTAX_CSS_VAR_MAP)) {
-    root.style.setProperty(cssVar, theme.syntax[key as keyof SyntaxThemeColors]);
-  }
+  for (const [key, cssVar] of Object.entries(SYNTAX_CSS_VAR_MAP)) vars[cssVar] = theme.syntax[key as keyof SyntaxThemeColors];
 
   // Computed glass variables (semi-transparent backgrounds for liquidglass effect)
-  root.style.setProperty(
-    '--theme-glass-surface',
-    hexToRgba(theme.colors.bgSurface, 0.55),
-  );
-  root.style.setProperty(
-    '--theme-glass-surface-dense',
-    hexToRgba(theme.colors.bgSurface, 0.92),
-  );
-  root.style.setProperty(
-    '--theme-glass-overlay',
-    hexToRgba(theme.colors.bgOverlay, 0.55),
-  );
+  vars['--theme-glass-surface'] = hexToRgba(theme.colors.bgSurface, 0.55);
+  vars['--theme-glass-surface-dense'] = hexToRgba(theme.colors.bgSurface, 0.92);
+  vars['--theme-glass-overlay'] = hexToRgba(theme.colors.bgOverlay, 0.55);
 
   // Decorative tint tokens (badges, tags, dots…) — derived from the theme's
   // luminance so custom themes are covered automatically. See lib/tints.ts.
   const tints = isLightTheme(theme) ? LIGHT_TINTS : DARK_TINTS;
   for (const hue of TINT_HUES) {
     const t = tints[hue];
-    root.style.setProperty(`--tint-${hue}-text`, t.text);
-    root.style.setProperty(`--tint-${hue}-bg`, t.bg);
-    root.style.setProperty(`--tint-${hue}-border`, t.border);
-    root.style.setProperty(`--tint-${hue}-solid`, t.solid);
+    vars[`--tint-${hue}-text`] = t.text;
+    vars[`--tint-${hue}-bg`] = t.bg;
+    vars[`--tint-${hue}-border`] = t.border;
+    vars[`--tint-${hue}-solid`] = t.solid;
     // Foreground for text ON the solid (light solids are 600/700 → white text;
     // dark solids are 400 → near-black text).
-    root.style.setProperty(`--tint-${hue}-solid-fg`, bestForegroundOn(t.solid));
+    vars[`--tint-${hue}-solid-fg`] = bestForegroundOn(t.solid);
   }
 
   // Foreground for text sitting on the solid accent (`bg-[var(--theme-accent)]`).
   // White works on dark/blue accents but fails on bright ones (Verdant's green:
   // 2.28:1). Computed per theme via WCAG contrast, so custom themes are
   // readable by construction.
-  root.style.setProperty('--theme-accent-fg', bestForegroundOn(theme.colors.accent));
-  root.style.setProperty('--theme-danger-fg', bestForegroundOn(theme.colors.danger));
+  vars['--theme-accent-fg'] = bestForegroundOn(theme.colors.accent);
+  vars['--theme-danger-fg'] = bestForegroundOn(theme.colors.danger);
+  return vars;
+}
+
+export function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  for (const [name, value] of Object.entries(themeVars(theme))) root.style.setProperty(name, value);
 }
 
 /** WCAG relative luminance (gamma-corrected) of an #rrggbb / #rgb color. */

@@ -70,7 +70,15 @@ export interface DropRule { field: 'author' | 'title' | 'text'; contains: string
  * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
  */
 export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; drop?: DropRule[] }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | DeskSpec | IntakeSpec;
+/** Where an Area's name is written: in one of its corners, or over or under it. */
+export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
+/**
+ * A part of the floor named as a place ("Build line"): a rectangle of tiles, a name, a colour. Decor: the engine
+ * ignores it, it takes no tile (machines stand on it), nothing links it to them, and out of build mode it answers no
+ * click. Seen from three quarters it is a platform that raises what stands wholly on it.
+ */
+export interface AreaSpec extends MachineBase { kind: 'area'; name: string; color: string; label?: AreaLabel }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | AreaSpec | DeskSpec | IntakeSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */

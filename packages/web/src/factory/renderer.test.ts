@@ -145,3 +145,60 @@ describe('the model under a station', () => {
     expect(texts.some((t) => t.includes('opus') || t.includes('inherit'))).toBe(false);
   });
 });
+
+describe('a skin whose zoom goes by steps', () => {
+  const built = layout(station('a', 0, 0), station('b', 60, 10));
+  const stepped = { id: 'stepped', steps: [4, 8, 16, 32, 48, 64, 80], ground: () => {}, pieces: () => {}, top: () => {}, minimap: () => {} };
+  const stepView = (w: number, h: number): FactoryView => { const v = new FactoryView({ getContext: () => null, clientWidth: w, clientHeight: h, width: 0, height: 0 } as unknown as HTMLCanvasElement, stepped); v.resize(); v.constrain(built); return v; };
+  /** The draw loop's frames, as far as the zoom is concerned. */
+  const frames = (v: FactoryView, n: number) => { for (let i = 0; i < n; i++) { v.glide(1 / 60); v.constrain(built); } };
+
+  it('goes to the next step, gliding, and rests exactly on it', () => {
+    const v = stepView(1300, 600);
+    v.cam.z = 32; v.cam.x = 30; v.cam.y = 8;
+    v.zoomAt(650, 300, 1.1);
+    frames(v, 3);
+    expect(v.cam.z).toBeGreaterThan(32); expect(v.cam.z).toBeLessThan(48);   // on its way
+    expect(v.resting).toBe(false);
+    frames(v, 60);
+    expect(v.cam.z).toBe(48);
+    expect(v.resting).toBe(true);
+  });
+
+  it('takes a notch of the wheel for a step, not each of its small moves', () => {
+    const v = stepView(1300, 600);
+    v.cam.z = 32;
+    v.wheel(650, 300, -10); v.wheel(650, 300, -10);
+    frames(v, 60);
+    expect(v.cam.z).toBe(32);
+    v.wheel(650, 300, -10); v.wheel(650, 300, -15);
+    frames(v, 60);
+    expect(v.cam.z).toBe(48);
+    v.wheel(650, 300, 3, false, true);                                          // a line-mode wheel: one line is a notch
+    frames(v, 60);
+    expect(v.cam.z).toBe(32);
+  });
+
+  it('never stops between two: what puts it elsewhere glides to the nearest step', () => {
+    const v = stepView(1300, 600);
+    v.cam.z = 22;                                                                // a jump to a ticket does this
+    frames(v, 60);
+    expect(v.cam.z).toBe(16);
+  });
+
+  it('frames what is built on the closest step that still shows it all', () => {
+    const v = stepView(1300, 600);
+    v.fit(built, false);
+    expect([4, 8, 16, 32, 48, 64, 80]).toContain(v.cam.z);
+    expect(v.resting).toBe(true);
+  });
+
+  it('leaves the zoom free for a skin without steps', () => {
+    const v = view(1300, 600);
+    v.constrain(built); v.cam.z = 22;
+    v.zoomAt(650, 300, 1.1);
+    v.glide(1 / 60);
+    expect(v.cam.z).toBeCloseTo(24.2);
+    expect(v.resting).toBe(true);
+  });
+});

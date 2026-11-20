@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
+import { Composer } from '../components/work/task/Composer';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
@@ -14,6 +14,9 @@ import { RUNS } from './types';
  * someone set aside only says where it is put back. A Factory run creates no mention and no workflow step run, so
  * the thread's own "waiting for you" cards never fire for it: this is that signal. Nothing otherwise.
  */
+/* the reason is never sent on its own: only a decision button sends it, with the outcome */
+const noop = () => {};
+
 export function FactoryThreadCard({ ticketId }: { ticketId: string }) {
   const seen = useFactoryTicket(ticketId);
   const [reason, setReason] = useState('');
@@ -46,12 +49,13 @@ export function FactoryThreadCard({ ticketId }: { ticketId: string }) {
         {detail && <span className="ml-2 break-words opacity-90">{detail}</span>}
       </span>
       {kind === 'decision' && station && (
-        <span className="flex min-w-0 flex-1 basis-72 flex-wrap items-center gap-1.5">
-          <span className="min-w-0 flex-1 basis-40">
-            <Input aria-label="Reason" placeholder="Reason (optional), kept in the thread" value={reason} onChange={(e) => setReason(e.target.value)} className="h-7 w-full px-2 py-0 text-xs" />
-          </span>
+        <div className="flex basis-full flex-wrap items-center gap-1.5">
+          <div className="min-w-0 basis-full">
+            <Composer bare ticketId={ticketId} value={reason} onChange={setReason} onSend={noop} submitOn="none" showExecBar={false} showSend={false} disabled={busy}
+              placeholder="Reason (optional), kept in the thread: markdown, paste a screenshot or attach a file" />
+          </div>
           {station.outcomes.map((o, i) => <Button key={o} size="sm" variant={i === 0 ? 'primary' : 'secondary'} disabled={busy} onClick={() => run(() => store.resolve(ticketId, o, reason))}>{o}</Button>)}
-        </span>
+        </div>
       )}
       {kind === 'failed' && inStation && <Button size="sm" variant="primary" disabled={busy} onClick={() => run(() => store.putBack(ticketId))}>Run again</Button>}
     </div>

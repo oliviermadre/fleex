@@ -1,13 +1,17 @@
 /** Pure edits of a Factory layout: every function returns a new layout, or null when the edit cannot be done. */
 import { DX, DY, type Dir, type FactoryLayout, type MachineSpec, type StationExec, type ArmCondition } from './types';
 import { relink } from './teleport';
+import { areasOf, fits } from './areas';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
+/** What takes no tile: a label and an area are written or laid on the floor, machines stand on them. */
+export const decor = (m: Pick<MachineSpec, 'kind'>): boolean => m.kind === 'label' || m.kind === 'area';
 
-const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'area' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
+
+export const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
 export function machineAt(layout: FactoryLayout, x: number, y: number): MachineSpec | null {
-  for (const m of layout.machines) if (x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h) return m;
+  for (const m of layout.machines) if (m.kind !== 'area' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h) return m;
   return null;
 }
 
@@ -52,7 +56,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
 export function canPlace(layout: FactoryLayout, spec: Pick<MachineSpec, 'x' | 'y' | 'w' | 'h'>, ignore?: string | ReadonlySet<string>): boolean {
   const skip = (id: string) => (typeof ignore === 'string' ? ignore === id : !!ignore && ignore.has(id));
   for (const m of layout.machines) {
-    if (skip(m.id) || m.kind === 'belt' || m.kind === 'label') continue;
+    if (skip(m.id) || m.kind === 'belt' || decor(m)) continue;
     if (m.x < spec.x + spec.w && spec.x < m.x + m.w && m.y < spec.y + spec.h && spec.y < m.y + m.h) return false;
   }
   return true;
@@ -62,7 +66,7 @@ const overlaps = (m: MachineSpec, s: Pick<MachineSpec, 'x' | 'y' | 'w' | 'h'>) =
 
 export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout | null {
   if (!canPlace(layout, spec)) return null;
-  const kept = spec.kind === 'label' ? layout.machines : layout.machines.filter((m) => !(m.kind === 'belt' && overlaps(m, spec)));
+  const kept = decor(spec) ? layout.machines : layout.machines.filter((m) => !(m.kind === 'belt' && overlaps(m, spec)));
   return { ...layout, machines: [...kept, spec] };
 }
 
@@ -71,7 +75,7 @@ export function place(layout: FactoryLayout, spec: MachineSpec): FactoryLayout |
  * with a belt of its own. Null where something else stands, or where the belt already has one.
  */
 export function gantryAt(layout: FactoryLayout, x: number, y: number, dir: Dir, toll = false): { layout: FactoryLayout; id: string } | null {
-  const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
+  const there = layout.machines.find((m) => !decor(m) && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
   if (!there) { const spec = specFor(toll ? 'toll' : 'set', x, y, dir)!; return { layout: { ...layout, machines: [...layout.machines, spec] }, id: spec.id }; }
   /* a gantry becomes a toll, keeping what it sets; a toll is already both */
   if (there.kind !== 'belt' || there.toll || (there.set !== undefined && !toll)) return null;
@@ -86,7 +90,7 @@ const speedOf = (fast: boolean): { fast?: true } => (fast ? { fast: true } : {})
 
 /** Lay one belt tile, or re-aim the one that is there and give it this speed; leaves any other machine alone. */
 export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir, fast = false): FactoryLayout {
-  const there = layout.machines.find((m) => m.kind !== 'label' && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
+  const there = layout.machines.find((m) => !decor(m) && x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h);
   if (there && there.kind !== 'belt') return layout;
   if (there) {
     if (there.dir === dir && !!there.fast === fast) return layout;
@@ -123,23 +127,24 @@ export function move(layout: FactoryLayout, id: string, x: number, y: number): F
   const m = layout.machines.find((q) => q.id === id);
   if (!m || !canPlace(layout, { x, y, w: m.w, h: m.h }, id)) return null;
   const target = { x, y, w: m.w, h: m.h };
-  return { ...layout, machines: layout.machines.filter((q) => q.id === id || q.kind !== 'belt' || m.kind === 'label' || !overlaps(q, target)).map((q) => (q.id === id ? ({ ...q, x, y } as MachineSpec) : q)) };
+  return { ...layout, machines: layout.machines.filter((q) => q.id === id || q.kind !== 'belt' || decor(m) || !overlaps(q, target)).map((q) => (q.id === id ? ({ ...q, x, y } as MachineSpec) : q)) };
 }
 
 /** Move several machines by the same offset, all or none. Belts under where they land give way; the moved ones keep their tickets. */
 export function moveMany(layout: FactoryLayout, ids: ReadonlySet<string>, dx: number, dy: number): FactoryLayout | null {
   if (!dx && !dy) return layout;
   const moved = layout.machines.filter((m) => ids.has(m.id)).map((m) => ({ ...m, x: m.x + dx, y: m.y + dy }) as MachineSpec);
-  for (const m of moved) if (m.kind !== 'label' && !canPlace(layout, m, ids)) return null;
-  const solid = moved.filter((m) => m.kind !== 'label');
+  for (const m of moved) if (!decor(m) && !canPlace(layout, m, ids)) return null;
+  if (!areasFit(layout, moved.filter((m) => m.kind === 'area'), ids)) return null;
+  const solid = moved.filter((m) => !decor(m));
   const rest = layout.machines.filter((m) => !ids.has(m.id) && !(m.kind === 'belt' && solid.some((q) => overlaps(m, q))));
   return { ...layout, machines: [...rest, ...moved] };
 }
 export const eraseMany = (layout: FactoryLayout, ids: ReadonlySet<string>): FactoryLayout => ({ ...layout, machines: layout.machines.filter((m) => !ids.has(m.id)) });
-/** Ids of the machines that touch a rectangle given in world units. */
+/** Ids of the machines that touch a rectangle given in world units. Areas are not taken: a frame selects machines, an area is selected by itself. */
 export function machinesIn(layout: FactoryLayout, x0: number, y0: number, x1: number, y1: number): string[] {
   const ax = Math.min(x0, x1), ay = Math.min(y0, y1), bx = Math.max(x0, x1), by = Math.max(y0, y1);
-  return layout.machines.filter((m) => m.x < bx && ax < m.x + m.w && m.y < by && ay < m.y + m.h).map((m) => m.id);
+  return layout.machines.filter((m) => m.kind !== 'area' && m.x < bx && ax < m.x + m.w && m.y < by && ay < m.y + m.h).map((m) => m.id);
 }
 
 /** Machines lifted off the floor to be put down elsewhere: positions are relative to the group's top-left corner. */
@@ -161,7 +166,15 @@ export function clipAt(clip: Clip, x: number, y: number): MachineSpec[] {
   const ox = x - Math.floor(clip.w / 2), oy = y - Math.floor(clip.h / 2);
   return clip.machines.map((m) => ({ ...m, x: m.x + ox, y: m.y + oy }) as MachineSpec);
 }
-export const canPaste = (layout: FactoryLayout, clip: Clip, x: number, y: number): boolean => clipAt(clip, x, y).every((m) => m.kind === 'label' || canPlace(layout, m));
+export const canPaste = (layout: FactoryLayout, clip: Clip, x: number, y: number): boolean => {
+  const at = clipAt(clip, x, y);
+  return at.every((m) => decor(m) || canPlace(layout, m)) && areasFit(layout, at.filter((m) => m.kind === 'area'));
+};
+/** Whether areas may stand where they are given, among those of the floor (but `ignore`) and one another: they nest or keep apart, never cross. */
+export function areasFit(layout: FactoryLayout, areas: readonly MachineSpec[], ignore?: ReadonlySet<string>): boolean {
+  const others = areasOf(layout.machines).filter((a) => !ignore?.has(a.id));
+  return areas.every((a, i) => fits(a, [...others, ...areas.slice(0, i)], 'nest'));
+}
 
 /**
  * Put a clip down centred on a tile, all or none. The copies get new ids (returned, to select them);
@@ -171,7 +184,7 @@ export function pasteAt(layout: FactoryLayout, clip: Clip, x: number, y: number)
   if (!canPaste(layout, clip, x, y)) return null;
   const ids = new Map<string, string>();
   const copies = relink(clipAt(clip, x, y).map((m) => { const id = newId(); ids.set(m.id, id); return { ...structuredClone(m), id, ...(m.kind === 'zone' ? { inbound: false } : {}) } as MachineSpec; }), ids);
-  const solid = copies.filter((m) => m.kind !== 'label');
+  const solid = copies.filter((m) => !decor(m));
   const rest = layout.machines.filter((m) => !(m.kind === 'belt' && solid.some((q) => overlaps(m, q))));
   return { layout: { ...layout, machines: [...rest, ...copies] }, ids: copies.map((m) => m.id) };
 }
