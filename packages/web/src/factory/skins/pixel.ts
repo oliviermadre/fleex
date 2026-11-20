@@ -30,6 +30,8 @@ import { CHEVRON_FAST, CHEVRON_PACE, CHEVRON_PAIR, clamp, FleexSkin, GHOST, HAZA
 import { ART, box, disc, figures, fillWhere, frame, hash, poly, ring, seg, sprite } from './pixelArt';
 import { builtBox, hallOf, propsIn, type DecorOptions } from '../decor';
 import { prop, props, walls, yard, type DecorPaint } from './pixelDecor';
+import { pixelPerson } from './peoplePaint';
+import type { PeopleOptions, Person } from '../people';
 import type { Piece, Surface } from './skin';
 
 /** The pixel fonts, as a canvas asks for them. */
@@ -954,6 +956,11 @@ export class PixelSkin extends FleexSkin {
     super.armWay(w, pal, true);
   }
 
+  /** A person in pixel art. */
+  protected override person(p: Person, pal: Palette): void { pixelPerson(this.ctx, p, pal.light); }
+  /** The pixel skins have their own worker at each station (`worker`), who raises a hand when the run failed. */
+  protected override stationPeople(_S: Scene, _out: Piece[], _standing: boolean, _o: PeopleOptions, _pal: Palette): void { /* see `worker` */ }
+
   /** A worker at the foot of a station, in the hue of its kind; it bobs while something runs there. */
   protected worker(v: StationView): void {
     const ctx = this.ctx, m = v.m, busy = v.places.some((p) => p.t?.t.phase === 'running'), o = 1 / ART;
@@ -966,7 +973,13 @@ export class PixelSkin extends FleexSkin {
     r(-4, -11, 8, 6, shirt);
     r(-2, -15, 4, 4, '#f2c79e');
     r(-3, -17, 6, 2, '#f2b01e');
-    if (busy) r(4, -10 - step, 2, 3, '#f2c79e');
+    /* with people on the floor: a hand up and a sign over the head when the run failed, a "?" when it asked */
+    const call = this.peopleOpts?.hands ? (v.aside.some((q) => q.t.phase === 'failed') ? 'failed' : v.aside.some((q) => q.t.phase === 'question') ? 'question' : null) : null;
+    if (call) {
+      const pal = this.palette(), up = Math.floor(this.clock * 2) % 2;
+      r(4, -18 - up, 2, 8, '#f2c79e');
+      if (this.sprites) this.sign(x * ART + 0.5, y * ART - 23.5 - up, call === 'failed' ? pal.danger : pal.amber, call === 'failed' ? '!' : '?');
+    } else if (busy) r(4, -10 - step, 2, 3, '#f2c79e');
   }
 }
 

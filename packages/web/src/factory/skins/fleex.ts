@@ -19,7 +19,9 @@ import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, LabelView, PortVi
 import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
-import { builtBox, hallOf, type DecorOptions } from '../decor';
+import { builtBox, hallOf, propsIn, wallThings, type DecorOptions } from '../decor';
+import { Crowd, type PeopleOptions, type Person } from '../people';
+import { flatPerson } from './peoplePaint';
 import { flatProps, flatWalls, flatYard, type DecorStyle, type FlatDecorPaint } from './flatDecor';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). A colour with a meaning: another skin may soften it, not replace it. */
@@ -126,8 +128,53 @@ export class FleexSkin implements Skin {
     if (d.props && !(st.edit && d.build === 'hide')) out.push({ layer: 'floor', depth: -0.5, draw: () => flatProps(paint(), st.layout, hall, d.props, !!st.edit) });
   }
 
+  /** The people (DRAFT, see `people.ts`): none until they are asked for. */
+  protected peopleOpts: PeopleOptions | null = null;
+  protected readonly crowd = new Crowd();
+  private crowdAt = -1;
+  /** Bring people onto the floor, or send them away. */
+  setPeople(o: PeopleOptions | null): this { this.peopleOpts = o; return this; }
+  /**
+   * The people at this frame: moved by the floor's clock (they stop when it does), none from far. Standing at their
+   * row for a skin seen from three quarters, over the floor otherwise.
+   */
+  protected peoplePieces(S: Scene, st: ViewState, out: Piece[], standing: boolean): void {
+    const o = this.peopleOpts;
+    if (!o) return;
+    const d = this.decorOpts, L = st.layout, hall = hallOf(L, this.floorOf(L), d?.wall ?? 'built'), pal = this.palette();
+    const blocked = new Set(d?.props ? propsIn(L, hall, hall, d.props).map((q) => `${q.x},${q.y}`) : []);
+    const dt = this.crowdAt < 0 ? 0 : Math.max(0, Math.min(0.2, this.clock - this.crowdAt)); this.crowdAt = this.clock;
+    const waiting = S.boxes.filter((v) => v.kind === 'station' && v.gate && v.deciding.length > 0).map((v) => v.m);
+    const door = wallThings(hall, builtBox(L.machines)).find((t) => t.kind === 'door');
+    const still = o.still ?? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const people = this.crowd.update(dt, L, hall, blocked, waiting, { ...o, still }, door ? { x: door.x, y: hall.y } : undefined);
+    if (this.cam.z < 10 || (st.edit && o.build === 'hide')) return;
+    const a = st.edit ? 0.35 : 1, faded = (f: () => void) => () => { this.ctx.globalAlpha = a; f(); this.ctx.globalAlpha = 1; };
+    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, draw: faded(() => this.person(p, pal)) });
+    this.stationPeople(S, out, standing, o, pal);
+  }
+  /** A person, as this skin draws one. */
+  protected person(p: Person, pal: Palette): void { flatPerson(this.ctx, p, pal, this.decorStyle() === 'neon'); }
+  /** A worker in the corner of each station that runs something, a hand up when its run failed, a "?" when it asked. */
+  protected stationPeople(S: Scene, out: Piece[], standing: boolean, o: PeopleOptions, pal: Palette): void {
+    for (const v of S.boxes) {
+      if (v.kind !== 'station' || !v.run || v.gate) continue;
+      const m = v.m, busy = v.places.some((q) => q.t?.t.phase === 'running');
+      const p: Person = { id: m.x * 31 + m.y, role: 'walker', x: m.x + m.w - 0.95, y: m.y + m.h - 0.9, dir: 3, path: [], wait: 0, stride: busy ? this.clock * 3 : 0, shirt: ['agent', 'skill', 'panel', 'script'].indexOf(v.run) + 1 };
+      const call = o.hands ? (v.aside.some((q) => q.t.phase === 'failed') ? 'failed' : v.aside.some((q) => q.t.phase === 'question') ? 'question' : null) : null;
+      out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, draw: () => {
+        this.person(p, pal);
+        if (!call) return;
+        const ctx = this.ctx, bx = p.x + 0.75, by = p.y + 0.1, col = call === 'failed' ? pal.danger : pal.amber;
+        ctx.beginPath(); ctx.arc(bx, by, 0.17, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+        this.label(call === 'failed' ? '!' : '?', bx, by + 0.01, 0.24, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 18, dark: true });
+      } });
+    }
+  }
+
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
     this.decorPieces(st, out, false);
+    this.peoplePieces(S, st, out, false);
     const ctx = this.ctx, pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void) => { out.push({ layer: 'standing', depth, draw }); };
     /* the areas: decor on the floor, under everything */
     for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });

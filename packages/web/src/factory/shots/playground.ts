@@ -13,6 +13,7 @@ import { FleexSkin } from '../skins/fleex';
 import { NeonSkin } from '../skins/neon';
 import { PIXEL_LOOK, PIXEL_STEPS, PixelSkin, type PixelLook } from '../skins/pixel';
 import type { DecorOptions } from '../decor';
+import type { PeopleOptions } from '../people';
 import { PixelTqSkin, type TqOptions } from '../skins/pixelTq';
 import type { AreaSpec, FactoryLayout, FactoryTicket, MachineSpec } from '../types';
 import { floorState, layout as fixture, tickets } from './fixture';
@@ -27,6 +28,8 @@ export interface Look {
   overlap?: Overlap; move?: 'name' | 'inside' | 'none';
   /** Lot 7's mock-up: the decor, and its options. */
   decor?: DecorOptions | null;
+  /** Lot 9's mock-up: the people, and their options. */
+  people?: PeopleOptions | null;
 }
 /** What the zoom is at: pixels per tile, and whether it is resting (on a step, for the pixel skins); and the name of what is pointed at. */
 export type Report = (z: number, resting: boolean, steps: readonly number[], pointed: string | null) => void;
@@ -47,7 +50,7 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
   let look: Look = { tool: 'select', overlap: 'nest', move: 'name', ...start };
   let layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...behind, ...(start.platforms === false ? [] : LINES)] };
   const skinOf = () => (look.skin === 'fleex' ? new FleexSkin() : look.skin === 'neon' ? new NeonSkin() : look.skin === 'pixel-3d' || look.view === 'tq' ? new PixelTqSkin({ raise: look.raise, hidden: look.hidden, buildFlat: look.buildFlat }, PIXEL_LOOK) : new PixelSkin(PIXEL_LOOK));
-  const make = () => skinOf().setDecor(look.decor ?? null);
+  const make = () => skinOf().setDecor(look.decor ?? null).setPeople(look.people ?? null);
   const theme = () => { const t = BUILT_IN_THEMES.find((x) => x.id === look.theme); if (t) applyTheme(t); };
   theme();
   const view = new FactoryView(cv, make()), st = floorState({ layout, tickets: [...tickets, ...riders], hoverMachine: null, selTicket: null, edit: !!look.build });
@@ -155,7 +158,7 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
       if (next.theme && next.theme !== was.theme) theme();
       st.edit = !!look.build; st.ghost = null; st.areaGhost = null;
       if (!st.edit) { st.areaSel = null; tell(); }
-      if (next.skin !== undefined || next.view !== undefined || next.raise !== undefined || next.hidden !== undefined || next.buildFlat !== undefined || next.theme !== undefined || next.decor !== undefined) view.setSkin(make());
+      if (next.skin !== undefined || next.view !== undefined || next.raise !== undefined || next.hidden !== undefined || next.buildFlat !== undefined || next.theme !== undefined || next.decor !== undefined || next.people !== undefined) view.setSkin(make());
     },
     zoom(dir: 1 | -1) { view.zoomAt(view.w / 2, view.h / 2, dir > 0 ? 1.25 : 0.8); },
     hover(id: string | null) { st.hoverMachine = id; },
