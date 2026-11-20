@@ -28,10 +28,10 @@ export function factoryRoutes(factory: FactoryModule | null) {
         if (err instanceof FactoryError) return reply.code(400).send({ error: 'FACTORY_REFUSED', message: err.message });
         throw err;
       }
-      return f.engine.snapshot();
+      return f.state();
     };
 
-    app.get('/api/factory/state', async () => (await ready()).engine.snapshot());
+    app.get('/api/factory/state', async () => (await ready()).state());
     /** Ids only, for the "managed by the Factory" banner on a ticket; empty rather than 403 when off. */
     app.get('/api/factory/managed', async () => {
       if (!factory.enabled()) return { ticketIds: [] };
@@ -39,7 +39,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
       return { ticketIds: [...factory.engine.managedIds()] };
     });
 
-    app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.engine.snapshot(); });
+    app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.state(); });
     app.put<{ Body: { layout: FactoryLayout } }>('/api/factory/layout', (request, reply) => guard(reply, (f) => f.engine.setLayout(request.body?.layout)));
     app.post<{ Body: { on?: boolean } }>('/api/factory/halt', (request, reply) => guard(reply, (f) => f.engine.setHalted(request.body?.on !== false)));
     app.put<{ Body: Partial<FactorySettings> }>('/api/factory/settings', (request, reply) => guard(reply, (f) => f.engine.setSettings(request.body ?? {})));

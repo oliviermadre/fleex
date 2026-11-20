@@ -12,6 +12,7 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
+import { watchFactory } from './factoryLive';
 import { stationModel } from './stationModel';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
@@ -44,8 +45,9 @@ import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
+/** Without the WS, the floor is polled: this often while the window is in front, */
 const POLL_MS = 600;
-/** The window is not the one in front: the floor is asked for less often. */
+/** and this often while it is behind others. */
 const POLL_BACKGROUND_MS = 3000;
 /** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
@@ -230,18 +232,8 @@ function Floor() {
     };
   }, []);
 
-  // Poll the floor while the page is open; less often while the window is behind others, and at once when it comes back.
-  useEffect(() => {
-    let timer = 0;
-    const poll = () => {
-      window.clearTimeout(timer);
-      if (!document.hidden) void useFactoryStore.getState().refresh();
-      timer = window.setTimeout(poll, focused.current ? POLL_MS : POLL_BACKGROUND_MS);
-    };
-    poll();
-    window.addEventListener('focus', poll);
-    return () => { window.clearTimeout(timer); window.removeEventListener('focus', poll); };
-  }, []);
+  // Keep the floor live while the page is open (factoryLive.ts): pushed over the WS, polled when it is down.
+  useEffect(() => watchFactory(() => (focused.current ? POLL_MS : POLL_BACKGROUND_MS)), []);
 
   // What the floor did: loaded with the page, then kept fresh while it stays open.
   useEffect(() => {

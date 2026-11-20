@@ -15,7 +15,8 @@ import { AgentStepExecutor } from '../application/services/step-executors/agent-
 import { SkillStepExecutor } from '../application/services/step-executors/skill-step-executor.js';
 import { PanelStepExecutor } from '../application/services/step-executors/panel-step-executor.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import { FactoryEngine } from './engine.js';
+import { FactoryEngine, type FactorySnapshot } from './engine.js';
+import { FactoryFeed, type FactoryPatch } from './factory-feed.js';
 import { StationRunner } from './station-runner.js';
 import { runScript, normaliseScript, type ScriptContext, type Shell } from './script-runner.js';
 import { buildTicketWorkspaceId } from '@fleex/shared';
@@ -64,7 +65,9 @@ export class FactoryModule {
   readonly engine: FactoryEngine;
   readonly store: FactoryStorePort;
   private initPromise: Promise<void> | null = null;
+  private loaded = false;
   private retryAt = 0;
+  private readonly feed = new FactoryFeed();
 
   /**
    * A script station on a ticket: where the ticket's workspace and worktrees are, what each of its repositories
@@ -172,8 +175,18 @@ export class FactoryModule {
 
   /** Loads the floor on first use, so a workspace that never enables the Factory never queries its tables. */
   ensureReady(): Promise<void> {
-    if (!this.initPromise) this.initPromise = this.engine.init().catch((err) => { this.initPromise = null; throw err; });
+    if (!this.initPromise) this.initPromise = this.engine.init().then(() => { this.loaded = true; }, (err) => { this.initPromise = null; throw err; });
     return this.initPromise;
+  }
+
+  /** The floor as the routes give it: a snapshot, and the last live patch it already holds (see `FactoryFeed`). */
+  state(): FactorySnapshot & { epoch: string; seq: number } {
+    return { ...this.engine.snapshot(), epoch: this.feed.epoch, seq: this.feed.seq };
+  }
+
+  /** What changed on the floor since the last patch, for the pages watching it live; null when off, not loaded or unchanged. */
+  patch(): FactoryPatch | null {
+    return this.enabled() && this.loaded ? this.feed.diff(this.engine.snapshot()) : null;
   }
 
   /** Tickets the rest of Fleex should leave alone, or null when the Factory is off or not loaded yet. */

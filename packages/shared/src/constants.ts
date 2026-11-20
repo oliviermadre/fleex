@@ -15,7 +15,10 @@ export const DEFAULT_ROWS = 30;
 export const WS_PATH = '/ws';
 
 // Channels multiplexed over the single WS connection
-export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events' | 'pinned-status';
+export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events' | 'pinned-status' | 'factory';
+
+/** How often what changed on the Factory floor is pushed to the pages watching it (`factory` channel, `factory:patch`). */
+export const FACTORY_PUSH_INTERVAL_MS = 500;
 
 /** @deprecated Use WS_PATH — terminal is now multiplexed as binary frames */
 export const WS_TERMINAL_PATH = '/ws/terminal';

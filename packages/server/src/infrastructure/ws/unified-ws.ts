@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 import {
   WS_PATH,
   DASHBOARD_BROADCAST_INTERVAL_MS,
+  FACTORY_PUSH_INTERVAL_MS,
   DEFAULT_COLS,
   DEFAULT_ROWS,
 } from '@fleex/shared';
@@ -37,6 +38,8 @@ interface UnifiedClient {
   subscribedTickets: Set<string>;
   // Subscribe to ALL execution start/end events (for execution log page)
   subscribedToAllExecutions: boolean;
+  // Watches the Factory floor: gets what changes on it (`factory:patch`)
+  subscribedFactory: boolean;
 }
 
 function sendChannelJson(ws: WebSocket, channel: WsChannel, msg: { type: string; data: unknown }): void {
@@ -177,6 +180,24 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     }
 
+    // ─── Factory: what changed on the floor, to the pages watching it. Nothing is computed while no one watches ───
+    function factoryPush(): void {
+      const factory = container.factory;
+      if (!factory) return;
+      let watching = false;
+      for (const c of clients.values()) if (c.subscribedFactory && c.socket.readyState === 1) { watching = true; break; }
+      if (!watching) return;
+      try {
+        const patch = factory.patch();
+        if (!patch) return;
+        const payload = JSON.stringify({ channel: 'factory' as WsChannel, type: 'factory:patch', data: patch });
+        for (const c of clients.values()) if (c.subscribedFactory && c.socket.readyState === 1) c.socket.send(payload);
+      } catch (err) {
+        container.logger.warn('Factory push failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    const factoryInterval = setInterval(factoryPush, FACTORY_PUSH_INTERVAL_MS);
+
     // Wire up repository scheduler broadcast
     container.repositoryRefreshScheduler.setBroadcast((type, data) =>
       channelBroadcast('repositories', type, data)
@@ -292,6 +313,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         subscribedExecutions: new Set(),
         subscribedTickets: new Set(),
         subscribedToAllExecutions: false,
+        subscribedFactory: false,
       };
       clients.set(ws, client);
       heartbeat.register(ws);
@@ -438,6 +460,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
                 if (msg.ticketId) client.subscribedTickets.delete(msg.ticketId);
                 if (msg.allExecutions) client.subscribedToAllExecutions = false;
               }
+            } else if (msg.channel === 'factory') {
+              if (msg.action === 'subscribe') client.subscribedFactory = true;
+              else if (msg.action === 'unsubscribe') client.subscribedFactory = false;
             }
           } catch {
             // Ignore malformed JSON
@@ -459,6 +484,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     app.addHook('onClose', () => {
       container.pinnedStatus.stop();
       clearInterval(dashboardInterval);
+      clearInterval(factoryInterval);
       clearInterval(diffStatsInterval);
       if (batchTimer) clearTimeout(batchTimer);
       if (fileWatcher) fileWatcher.closeAll();
