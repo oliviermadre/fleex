@@ -18,9 +18,9 @@
 import './pixelFonts.css';
 import type { Theme } from '../../lib/themes';
 import { isLight, mix, readable, toHex } from '../floorLook';
-import type { Lamp, RunKind } from '../machineArt';
+import { bodyOf, type Lamp, type Rect, type RunKind } from '../machineArt';
 import type { StationSpec } from '../types';
-import type { Scene, StationView } from '../scene';
+import type { BeltView, Scene, StationView } from '../scene';
 import type { ViewState } from '../renderer';
 import type { TokenLook } from '../ticketToken';
 import { FleexSkin, type Palette } from './fleex';
@@ -83,6 +83,28 @@ export function workshopTheme(theme: Theme): Theme {
   };
 }
 
+/**
+ * How sharp the pixel art is. DRAFT for the readability mock-up (`docs/factory/pixel-crisp.html`): neither is on in
+ * the app until the owner picks.
+ * - `crisp` (step 1): the view rests on the grid of art pixels; the words are in Silkscreen at whole multiples of 8
+ *   pixels of the screen (the only sizes it is sharp at) on whole pixels, or not written; tickets are bigger crates on
+ *   whole pixels; no line is thinner than a pixel.
+ * - `sprites` (step 2): a station's body, head, badge, lamp and places, the belts' chevrons, the crates and the mark of
+ *   what runs are drawn pixel by pixel, every pixel full or empty.
+ */
+export interface PixelLook { crisp?: boolean; sprites?: boolean }
+
+/** The icons of the kinds of station, seven pixels square: an agent's head, a tool, three seats, a prompt, a shield. */
+const ICONS: Record<string, readonly string[]> = {
+  agent: ['...X...', '.XXXXX.', 'X.....X', 'X.X.X.X', 'X.....X', 'X.XXX.X', '.XXXXX.'],
+  skill: ['....XX.', '...X..X', '...X.X.', '..X.X..', '.X.X...', 'X.X....', 'XX.....'],
+  panel: ['XX...XX', 'XX...XX', '.......', '..XXX..', '..XXX..', '.......', 'XXXXXXX'],
+  script: ['XXXXXXX', 'X.....X', 'X.X...X', 'X..X..X', 'X.X.XXX', 'X.....X', 'XXXXXXX'],
+  human_gate: ['XXXXXXX', 'X.....X', 'X....XX', 'XX..X.X', 'X.XX..X', '.X...X.', '..XXX..'],
+};
+/** A chevron pointing east, three pixels by five. */
+const CHEVRON = ['X..', '.X.', '..X', '.X.', 'X..'];
+
 export class PixelSkin extends FleexSkin {
   override readonly id: string = 'pixel';
   /** The zoom rests on these only. */
@@ -94,9 +116,14 @@ export class PixelSkin extends FleexSkin {
   /** Painting into the low picture (from the floor to the pieces), or onto the view (the words). */
   private toLow = false;
 
-  constructor() {
+  private readonly look: PixelLook;
+  /** The view's camera moved onto the grid of art pixels, for this frame (crisp only). */
+  private snapCam: { x: number; y: number; z: number } | null = null;
+  constructor(look: PixelLook = {}) {
     super();
-    this.fonts = { sans: WORKSHOP_FONT, mono: '"Silkscreen", ui-monospace, monospace' };
+    this.look = { ...look, crisp: look.crisp || look.sprites };
+    this.fonts = this.look.crisp ? { sans: '"Silkscreen", ui-monospace, monospace', mono: '"Silkscreen", ui-monospace, monospace' } : { sans: WORKSHOP_FONT, mono: '"Silkscreen", ui-monospace, monospace' };
+    this.spaced = !this.look.crisp;
     /* a canvas does not ask for a font it is told to use: ask now, and the words take it at the frame after it came */
     if (typeof document !== 'undefined' && document.fonts) for (const f of PIXEL_FONTS) void document.fonts.load(f).catch(() => undefined);
   }
@@ -104,6 +131,10 @@ export class PixelSkin extends FleexSkin {
   protected override get ctx(): CanvasRenderingContext2D { return this.toLow && this.lowCtx ? this.lowCtx : this.on.ctx; }
   protected override get cv(): HTMLCanvasElement { return this.toLow && this.low ? this.low : this.on.cv; }
   protected override get dpr(): number { return this.toLow ? this.scale : this.on.dpr; }
+  protected override get cam(): Surface['cam'] { return this.snapCam ?? this.on.cam; }
+  /** A length of the floor, on the grid of art pixels. */
+  private sn(v: number): number { return Math.round(v * ART) / ART; }
+  private get sprites(): boolean { return !!this.look.sprites && this.toLow; }
 
   override ground(on: Surface, S: Scene, st: ViewState): void {
     this.on = on;
@@ -114,9 +145,35 @@ export class PixelSkin extends FleexSkin {
       const low = this.low ?? (this.low = document.createElement('canvas')), w = Math.max(1, Math.ceil(on.w * this.scale)), h = Math.max(1, Math.ceil(on.h * this.scale));
       if (low.width !== w || low.height !== h) { low.width = w; low.height = h; }
       this.lowCtx = low.getContext('2d');
-      if (this.lowCtx) this.lowCtx.imageSmoothingEnabled = false; else this.toLow = false;
+      if (this.lowCtx) { this.lowCtx.imageSmoothingEnabled = false; if (this.look.crisp) thick(this.lowCtx); } else this.toLow = false;
+    }
+    /* crisp: the camera onto the grid of art pixels, so that what is on whole pixels of the floor is on whole pixels of the picture */
+    const crisp = !!this.look.crisp && this.toLow;
+    this.snapCam = null;
+    if (crisp) {
+      const z = on.cam.z, k = this.scale, tx = Math.round((on.w / 2 - on.cam.x * z) * k), ty = Math.round((on.h / 2 - on.cam.y * z) * k);
+      this.snapCam = { x: (on.w / 2 - tx / k) / z, y: (on.h / 2 - ty / k) / z, z };
     }
     super.ground(on, S, st);
+  }
+
+  /**
+   * Crisp: Silkscreen is sharp only at whole multiples of 8 pixels of the screen, on whole pixels. A word keeps about
+   * the size it asks for, brought down to such a multiple; one that would be under 8 pixels is not written (what is on
+   * a plate always is). Words are written over the picture, at the screen's resolution: written into it, on the grid of
+   * art pixels, they would be half a tile high.
+   */
+  protected override wordSize(px: number, size: number, plated: boolean): number | null {
+    if (!this.look.crisp) return px;
+    /* the size asked, as the zoom makes it (not held under a maximum: pixel art grows with the zoom, its words with it) */
+    const d = this.on.dpr, asked = Math.max(px, size * this.cam.z), n = Math.floor((asked * d) / 8 + 0.25);
+    if (n < 1 && !plated) return null;
+    return (Math.max(1, n) * 8) / d;
+  }
+  protected override wordAt(sx: number, sy: number): [number, number] {
+    if (!this.look.crisp) return [sx, sy];
+    const d = this.on.dpr;
+    return [Math.round(sx * d) / d, Math.round(sy * d) / d];
   }
 
   /** The procedural sprites: a worker at the foot of each station that runs something. */
@@ -224,6 +281,7 @@ export class PixelSkin extends FleexSkin {
 
   /** A ticket is a crate: wood, a band in the colour of its type on top, a plank line, an outline. */
   protected override token(look: TokenLook, _type: string, tint: string, px: number, py: number, T: number, alpha: number): boolean {
+    if (this.look.crisp && this.toLow) return this.crate(look, tint, px, py, T, alpha);
     const ctx = this.ctx, w = T * 0.86, h = T * 0.66, x = px - w / 2, y = py - h / 2, o = 1 / ART;
     ctx.globalAlpha = look === 'ghost' ? alpha * 0.8 : alpha;
     ctx.fillStyle = look === 'ghost' ? '#9a9a9a' : WOOD; ctx.fillRect(x, y, w, h);
@@ -234,10 +292,126 @@ export class PixelSkin extends FleexSkin {
     return true;
   }
 
+  /** Crisp: a crate on whole pixels, at least twelve wide: wood, a band in its type's colour, a plank line, a one-pixel outline. */
+  private crate(look: TokenLook, tint: string, px: number, py: number, T: number, alpha: number): boolean {
+    const ctx = this.ctx, o = 1 / ART, w = Math.max(12, Math.round(T * ART * 0.95)), h = Math.round(w * 0.75), x = Math.round(px * ART - w / 2) * o, y = Math.round(py * ART - h / 2) * o;
+    const ghost = look === 'ghost', r = (dx: number, dy: number, ww: number, hh: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x + dx * o, y + dy * o, ww * o, hh * o); };
+    ctx.globalAlpha = ghost ? alpha * 0.8 : alpha;
+    r(0, 0, w, h, INK);
+    r(1, 1, w - 2, h - 2, ghost ? '#9a9a9a' : WOOD);
+    r(1, 1, w - 2, Math.max(2, Math.round(h * 0.3)), tint);
+    r(1, Math.round(h * 0.62), w - 2, 1, ghost ? '#7a7a7a' : PLANK);
+    r(2, h - 2, 1, 1, PLANK); r(w - 3, h - 2, 1, 1, PLANK);
+    ctx.globalAlpha = 1;
+    return true;
+  }
+
+  // ---------- step 2: drawn pixel by pixel ----------
+  /** A bitmap of the floor, from rows of `X`, its top-left on a whole art pixel. */
+  private bits(rows: readonly string[], x: number, y: number, color: string, turn = 0): void {
+    const ctx = this.ctx, o = 1 / ART, n = rows.length, m = rows[0]!.length;
+    ctx.fillStyle = color;
+    for (let j = 0; j < n; j++) for (let i = 0; i < m; i++) {
+      if (rows[j]![i] !== 'X') continue;
+      /* turned a quarter at a time, clockwise: east, south, west, north */
+      const [u, v] = turn === 1 ? [n - 1 - j, i] : turn === 2 ? [m - 1 - i, j] : turn === 3 ? [j, m - 1 - i] : [i, j];
+      ctx.fillRect(x + u * o, y + v * o, o, o);
+    }
+  }
+  /** A rectangle with its corners cut one pixel in, on whole pixels. */
+  private notched(x: number, y: number, w: number, h: number, c: string, cut = 1): void {
+    const ctx = this.ctx, o = 1 / ART;
+    ctx.fillStyle = c;
+    ctx.fillRect(x + cut * o, y, w - 2 * cut * o, h); ctx.fillRect(x, y + cut * o, w, h - 2 * cut * o);
+  }
+  protected override stationBody(v: StationView, tint: string, pal: Palette): void {
+    if (!this.sprites) { super.stationBody(v, tint, pal); return; }
+    const ctx = this.ctx, o = 1 / ART, { m, gate } = v, kind = v.run, b = bodyOf(m);
+    const X = this.sn(b.x) + o, Y = this.sn(b.y) + o, W = this.sn(b.x + b.w) - o - X, H = this.sn(b.y + b.h) - o - Y;
+    const edge = this.bodyEdge(gate, tint, pal).color, fill = this.bodyFill(kind, Y, H, pal) as string;
+    if (kind === 'panel') for (const k of [2, 1]) { this.notched(X + k * 2 * o, Y - k * 2 * o, W, H, mix(edge, pal.body, 0.4 * k), 2); this.notched(X + k * 2 * o + 2 * o, Y - k * 2 * o + 2 * o, W - 4 * o, H - 4 * o, pal.body, 1); }
+    if (kind === 'agent') { const ax = this.sn(b.x + 0.92); ctx.fillStyle = tint; ctx.fillRect(ax, Y - 3 * o, o, 3 * o); ctx.fillRect(ax - o, Y - 5 * o, 3 * o, 2 * o); }
+    if (gate) {
+      this.notched(X, Y, W, H, fill, 2);
+      /* a dashed edge: four pixels on, three off, two thick */
+      ctx.fillStyle = edge;
+      for (let x = X + 2 * o; x < X + W - 2 * o; x += 7 * o) { const l = Math.min(4 * o, X + W - 2 * o - x); ctx.fillRect(x, Y, l, 2 * o); ctx.fillRect(x, Y + H - 2 * o, l, 2 * o); }
+      for (let y = Y + 2 * o; y < Y + H - 2 * o; y += 7 * o) { const l = Math.min(4 * o, Y + H - 2 * o - y); ctx.fillRect(X, y, 2 * o, l); ctx.fillRect(X + W - 2 * o, y, 2 * o, l); }
+    } else {
+      this.notched(X, Y, W, H, edge, 2);
+      this.notched(X + 2 * o, Y + 2 * o, W - 4 * o, H - 4 * o, fill, 1);
+      /* light along the top edge, shade along the bottom */
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(X + 3 * o, Y + 2 * o, W - 6 * o, o);
+      ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(X + 3 * o, Y + H - 3 * o, W - 6 * o, o);
+    }
+    if (kind === 'script') {
+      ctx.fillStyle = mix(tint, fill, 0.6); ctx.fillRect(X + 2 * o, Y + 2 * o, W - 4 * o, 3 * o);
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = mix(tint, '#000000', i * 0.2); ctx.fillRect(X + (4 + i * 3) * o, Y + 3 * o, 2 * o, o); }
+    }
+  }
+  protected override stationHead(v: StationView, tint: string, pal: Palette): void {
+    if (!this.sprites) { super.stationHead(v, tint, pal); return; }
+    const o = 1 / ART, { m, gate, parts: P } = v, kind = v.run;
+    const bx = this.sn(P.badge.x), by = this.sn(P.badge.y), bw = Math.max(9, Math.round(P.badge.w * ART)), bh = Math.max(9, Math.round(P.badge.h * ART));
+    this.notched(bx, by, bw * o, bh * o, kind ? tint : mix(tint, pal.body, 0.7));
+    const icon = ICONS[m.exec];
+    if (icon) this.bits(icon, bx + Math.floor((bw - 7) / 2) * o, by + Math.floor((bh - 7) / 2) * o, kind ? INK : mix(tint, '#000000', 0.3));
+    /* its name beside the badge; under it what it runs, when there is room for a second line; its kind is its hue and its icon */
+    const nx = bx + (bw + 3) * o, fit = P.lamp.x - nx - 0.1, mid = by + (bh * o) / 2, two = 0.19 * this.cam.z * this.on.dpr >= 7;
+    this.label(m.name || (gate ? 'Gate' : 'Station'), nx, two ? mid - 0.13 : mid, 0.31, pal.text, { weight: 700, fit });
+    if (two) this.label(v.what, nx, mid + 0.2, 0.19, pal.text3, { fit });
+  }
+  protected override lamp(v: StationView, pointed: boolean, pal: Palette): void {
+    if (!this.sprites) { super.lamp(v, pointed, pal); return; }
+    const ctx = this.ctx, o = 1 / ART, { parts: P, lamp: L } = v;
+    const x = this.sn(P.lamp.x), y = this.sn(P.lamp.y), w = 7, h = 3 * 4 + 3;
+    this.notched(x, y, w * o, h * o, pointed ? pal.text : '#0f0e14');
+    this.notched(x + o, y + o, (w - 2) * o, (h - 2) * o, '#1d1b26');
+    for (let i = 0; i < 3; i++) {
+      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = ['#ff4d4d', '#ffc21a', '#3ddc5a'][i]!;
+      const ly = y + (2 + i * 4) * o;
+      if (on && (i !== 1 || Math.floor(this.clock * 3) % 2 === 0)) { ctx.fillStyle = mix(col, '#ffffff', 0.4); ctx.fillRect(x + 2 * o, ly, 3 * o, 3 * o); ctx.fillStyle = col; ctx.fillRect(x + 3 * o, ly + o, o, o); }
+      else { ctx.fillStyle = on ? col : '#3a3644'; ctx.fillRect(x + 2 * o, ly, 3 * o, 3 * o); }
+    }
+  }
+  protected override pit(r: Rect, pal: Palette): void {
+    if (!this.sprites) { super.pit(r, pal); return; }
+    const ctx = this.ctx, o = 1 / ART, x = this.sn(r.x), y = this.sn(r.y), w = this.sn(r.x + r.w) - x, h = this.sn(r.y + r.h) - y;
+    ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.35)'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.16)' : 'rgba(0,0,0,0.4)'; ctx.fillRect(x, y, w, o); ctx.fillRect(x, y + o, o, h - o);
+    ctx.fillStyle = pal.light ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.08)'; ctx.fillRect(x + o, y + h - o, w - o, o); ctx.fillRect(x + w - o, y + o, o, h - 2 * o);
+  }
+  protected override idle(kind: RunKind, cx: number, cy: number, size: number, c: Rect, tint: string): void {
+    if (!this.sprites) { super.idle(kind, cx, cy, size, c, tint); return; }
+    const ctx = this.ctx, o = 1 / ART;
+    ctx.globalAlpha = 0.35; this.bits(ICONS[kind]!, this.sn(cx) - 3 * o, this.sn(cy) - 3 * o, tint); ctx.globalAlpha = 1;
+  }
+  /** At work: a pixel running round the crate, with two behind it. */
+  protected override runMark(px: number, py: number, B: number, seed: number): boolean {
+    if (!this.sprites) return false;
+    const ctx = this.ctx, o = 1 / ART, w = Math.max(12, Math.round(B * ART * 0.95)) + 4, h = Math.round((w - 4) * 0.75) + 4;
+    const x = Math.round(px * ART - w / 2) * o, y = Math.round(py * ART - h / 2) * o, per = 2 * (w + h) - 4, head = Math.floor(this.clock * 18 + seed * 7) % per;
+    const at = (k: number): [number, number] => { k = ((k % per) + per) % per; if (k < w) return [k, 0]; k -= w - 1; if (k < h) return [w - 1, k]; k -= h - 1; if (k < w) return [w - 1 - k, h - 1]; k -= w - 1; return [0, h - 1 - k]; };
+    for (let i = 0; i < 4; i++) { const [u, v] = at(head - i); ctx.fillStyle = i ? (i === 1 ? '#3ddc5a' : 'rgba(61,220,90,0.5)') : '#ffffff'; ctx.fillRect(x + u * o, y + v * o, o, o); }
+    return true;
+  }
+  /** A straight belt's chevrons, on whole pixels; a bend keeps the curved ones. */
+  protected override beltChevrons(v: BeltView, pal: Palette): void {
+    if (!this.sprites || v.bend >= 0) { super.beltChevrons(v, pal); return; }
+    const b = v.m, fast = !!b.fast, off = (this.clock * (fast ? 1.2 : 0.6)) % 0.5, dx = [1, 0, -1, 0][b.dir]!, dy = [0, 1, 0, -1][b.dir]!, o = 1 / ART;
+    const us: number[] = [];
+    for (let k = 0; k < 2; k++) { const u = off + k * 0.5; if (fast) us.push(u - 0.075, u + 0.075); else us.push(u); }
+    for (const u of us) {
+      if (u < 0.08 || u > 0.92) continue;
+      const cx = b.x + 0.5 + dx * (u - 0.5), cy = b.y + 0.5 + dy * (u - 0.5), wide = dx ? 3 : 5, high = dx ? 5 : 3;
+      this.bits(CHEVRON, this.sn(cx) - Math.floor(wide / 2) * o, this.sn(cy) - Math.floor(high / 2) * o, fast ? pal.fast : pal.chev, b.dir);
+    }
+  }
+
   /** A worker at the foot of a station, in the hue of its kind; it bobs while something runs there. */
   protected worker(v: StationView): void {
     const ctx = this.ctx, m = v.m, busy = v.places.some((p) => p.t?.t.phase === 'running'), o = 1 / ART;
-    const x = m.x + m.w - 0.75, y = m.y + m.h - 0.02 - (busy && Math.floor(this.clock * 6) % 2 ? o : 0);
+    const x = m.x + m.w - 0.75, y = (this.look.crisp ? m.y + m.h : m.y + m.h - 0.02) - (busy && Math.floor(this.clock * 6) % 2 ? o : 0);
     const shirt = v.run ? { agent: '#8b7cf6', skill: '#38a8e8', panel: '#f08a3c', script: '#7cc43a' }[v.run] : '#f2b01e';
     const r = (dx: number, dy: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x + dx * o, y + dy * o, w * o, h * o); };
     r(-4, -1, 8, 2, 'rgba(40,30,20,0.25)');
@@ -248,4 +422,21 @@ export class PixelSkin extends FleexSkin {
     r(-3, -17, 6, 2, '#f2b01e');
     if (busy) r(4, -10 - step, 2, 3, '#f2c79e');
   }
+}
+
+/**
+ * Crisp: no line thinner than a pixel of the picture. A canvas draws a thinner one as a smear of half-lit pixels, which
+ * is what blurs pixel art; it is widened to one pixel, whatever the transform it is drawn under.
+ */
+const thickened = new WeakSet<CanvasRenderingContext2D>();
+function thick(ctx: CanvasRenderingContext2D): void {
+  if (thickened.has(ctx)) return;
+  thickened.add(ctx);
+  const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'lineWidth');
+  if (!d?.get || !d.set) return;
+  Object.defineProperty(ctx, 'lineWidth', {
+    configurable: true,
+    get() { return d.get!.call(this); },
+    set(v: number) { const t = (this as CanvasRenderingContext2D).getTransform(), unit = 1 / Math.max(1e-6, Math.hypot(t.a, t.b)); d.set!.call(this, Math.max(v, unit)); },
+  });
 }

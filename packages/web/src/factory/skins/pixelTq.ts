@@ -19,7 +19,7 @@ import { areasOf } from '../areas';
 import type { Placed, Scene } from '../scene';
 import type { ViewState } from '../renderer';
 import type { Palette } from './fleex';
-import { PixelSkin, ART } from './pixel';
+import { PixelSkin, ART, type PixelLook } from './pixel';
 import type { Layer, Piece } from './skin';
 
 /** How high each kind stands, in tiles. */
@@ -49,7 +49,7 @@ export class PixelTqSkin extends PixelSkin {
   private grid = new Map<string, MachineSpec>();
   private readonly tq: TqOptions;
   /** Options left unset keep the owner's picks. */
-  constructor(options: TqOptions = {}) { super(); this.tq = { ...PIXEL_3D, ...Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined)) }; }
+  constructor(options: TqOptions = {}, look: PixelLook = {}) { super(look); this.tq = { ...PIXEL_3D, ...Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined)) }; }
 
   /** Seen from three quarters at this frame: not in build mode when it goes flat. */
   private standing(st: ViewState): boolean { return !(st.edit && this.tq.buildFlat); }

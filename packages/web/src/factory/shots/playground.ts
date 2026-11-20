@@ -11,7 +11,7 @@ import { areaAt, areasOf, fits, freshArea, handleAt, moved, resize, spanOf, type
 import { FactoryView } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin } from '../skins/neon';
-import { PIXEL_STEPS, PixelSkin } from '../skins/pixel';
+import { PIXEL_STEPS, PixelSkin, type PixelLook } from '../skins/pixel';
 import { PixelTqSkin, type TqOptions } from '../skins/pixelTq';
 import type { AreaSpec, FactoryLayout, FactoryTicket, MachineSpec } from '../types';
 import { floorState, layout as fixture, tickets } from './fixture';
@@ -171,4 +171,29 @@ export function mount(cv: HTMLCanvasElement, report: Report, start: Look, onArea
   };
 }
 
-declare global { interface Window { FactoryPlayground: { mount: typeof mount } } }
+/**
+ * Several views of the same floor, side by side, each painted by its own skin, all looking at the same place from the
+ * same zoom: to compare how they read. Each view is still (no drag, no wheel): the page moves them all together.
+ */
+export function compare(cvs: HTMLCanvasElement[], skins: { skin: 'pixel' | 'pixel-3d'; look: PixelLook }[], start: { theme: string; x: number; y: number; z: number }) {
+  const theme = (id: string) => { const t = BUILT_IN_THEMES.find((x) => x.id === id); if (t) applyTheme(t); };
+  theme(start.theme);
+  const layout: FactoryLayout = { ...fixture, machines: [...fixture.machines, ...behind] };
+  const st = floorState({ layout, tickets: [...tickets, ...riders], hoverMachine: null, selTicket: null, named: null, found: null });
+  const make = (i: number) => (skins[i]!.skin === 'pixel-3d' ? new PixelTqSkin({}, skins[i]!.look) : new PixelSkin(skins[i]!.look));
+  const views = cvs.map((cv, i) => { const v = new FactoryView(cv, make(i)); v.resize(); v.cam = { x: start.x, y: start.y, z: start.z }; return v; });
+  let last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    for (const v of views) { v.resize(); v.draw(st, dt); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return {
+    look(at: { x?: number; y?: number; z?: number }) { for (const v of views) { if (at.z) v.cam.z = at.z; if (at.x != null) v.cam.x = at.x; if (at.y != null) v.cam.y = at.y; } },
+    theme(id: string) { theme(id); views.forEach((v, i) => v.setSkin(make(i))); },
+    skins(next: typeof skins) { skins = next; views.forEach((v, i) => v.setSkin(make(i))); },
+  };
+}
+
+declare global { interface Window { FactoryPlayground: { mount: typeof mount; compare: typeof compare } } }

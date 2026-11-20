@@ -134,8 +134,7 @@ export class FleexSkin implements Skin {
     const pal = this.palette();
     if (st.lens) this.lens(st.lens, st.layout, pal);
     this.overlay(st, S, pal);
-    this.lit();
-    this.flushLabels();
+    if (this.wordsInPicture) { this.flushLabels(); this.lit(); } else { this.lit(); this.flushLabels(); }
     this.names(st, S, pal);
   }
 
@@ -169,7 +168,7 @@ export class FleexSkin implements Skin {
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const l of this.labels) this.write(l);
     /* plates of several lines: one box as wide as its longest line, standing off the side of its machine it was given */
-    const z = this.cam.z, px = clamp(0.22 * z, 9, 11), lh = px * 1.3, pad = px * 0.55;
+    const z = this.cam.z, px = this.wordSize(clamp(0.22 * z, 9, 11), 0.22, true) ?? clamp(0.22 * z, 9, 11), lh = px * 1.3, pad = px * 0.55;
     ctx.font = `700 ${px.toFixed(1)}px ${this.fonts.mono}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     for (const b of this.boards) {
       const w = Math.max(...b.lines.map((l) => ctx.measureText(l).width)) + pad * 2, h = b.lines.length * lh + pad, sx = (b.wx - this.cam.x) * z + this.w / 2, sy = (b.wy - (b.lift ?? 0) - this.cam.y) * z + this.h / 2;
@@ -188,13 +187,25 @@ export class FleexSkin implements Skin {
     this.write([text, wx, wy - this.lifted, size, color, opts]);
     ctx.restore();
   }
+  /** The size words are written at, in CSS pixels, given the size asked (`px`, and `size` in tiles) and whether they are on a plate; null: not written. */
+  protected wordSize(px: number, _size: number, _plated: boolean): number | null { return px; }
+  /** Where a word is written, in CSS pixels. */
+  protected wordAt(sx: number, sy: number): [number, number] { return [sx, sy]; }
+  /** Words may be spaced out (a marking in capitals). */
+  protected spaced = true;
+  /** The words are written into the picture before it is finished (`lit`), not over it after. */
+  protected wordsInPicture = false;
+
   private write([raw, wx, wy, size, color, o]: Label): void {
     const ctx = this.ctx, z = this.cam.z;
     let px = size * z;
     if (px < 3.6) return;
     if (o.min) px = Math.max(px, o.min);
     if (o.max) px = Math.min(px, o.max);
-    const sx = (wx - this.cam.x) * z + this.w / 2, sy = (wy - this.cam.y) * z + this.h / 2 + (o.dy ?? 0);
+    const sized = this.wordSize(px, size, !!o.plate);
+    if (sized == null) return;
+    px = sized;
+    const [sx, sy] = this.wordAt((wx - this.cam.x) * z + this.w / 2, (wy - this.cam.y) * z + this.h / 2 + (o.dy ?? 0));
     if (sx < -300 || sx > this.w + 300 || sy < -40 || sy > this.h + 40) return;
     ctx.font = `${o.weight ?? 500} ${px.toFixed(1)}px ${o.mono ? this.fonts.mono : this.fonts.sans}`;
     ctx.textAlign = o.align ?? 'left'; ctx.textBaseline = 'middle';
@@ -208,9 +219,9 @@ export class FleexSkin implements Skin {
       ctx.fillStyle = plate; rr(ctx, x0, sy - ph / 2, tw + pad * 2, ph, Math.min(4, ph / 3)); ctx.fill();
       if (neutral) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke(); }
     }
-    if (o.spacing) ctx.letterSpacing = `${(px * o.spacing).toFixed(2)}px`;
+    if (o.spacing && this.spaced) ctx.letterSpacing = `${(px * o.spacing).toFixed(2)}px`;
     ctx.fillStyle = lit ? legible(color, plate ? luminance(plate) ?? 1 : 1) : color; ctx.fillText(text, sx, sy);
-    if (o.spacing) ctx.letterSpacing = '0px';
+    if (o.spacing && this.spaced) ctx.letterSpacing = '0px';
   }
 
   /** A ticket as a thing, in the shape of its type, `T` tiles wide round (px, py). False when there is none to draw: a plain square is drawn instead. */
@@ -249,7 +260,7 @@ export class FleexSkin implements Skin {
     /* marks are placed around the token's box when there is one, around the square otherwise */
     const B = token ? T : s;
     const blink = Math.floor(this.clock * 2.4) % 2 === 0;
-    if (mark === 'run' && s * z > 6) {
+    if (mark === 'run' && s * z > 6 && !this.runMark(px, py, B, t.ticketId.length)) {
       /* at work: an arc turning, around a token, inside a square */
       const a0 = this.clock * 4 + t.ticketId.length, r = token ? B * 0.6 : s * 0.24;
       ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(px, py, r, a0, a0 + (token ? 2.6 : 4.2));
@@ -720,40 +731,10 @@ export class FleexSkin implements Skin {
   protected station(v: StationView, st: ViewState, pal: Palette): void {
     const ctx = this.ctx, z = this.cam.z, { m, gate, parts: P, sorted: S, lamp: L } = v, { x, y, w, h } = m;
     const kind = v.run, look = kind ? KIND_LOOK[kind] : null, tint = look?.hue ?? pal.amber, tiny = (text: string, r: Rect, color = pal.text3) => this.label(text, r.x + 0.1, r.y + 0.17, 0.15, color, { weight: 700 });
-    /* a place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read */
-    const pit = (r: Rect) => { rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = pal.light ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.06)'; ctx.stroke(); };
-    /* the body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
-    if (kind) this.behind(m, kind, tint, pal);
-    this.trace(m);
-    ctx.fillStyle = this.bodyFill(kind, y, h, pal);
-    ctx.fill();
-    const edge = this.bodyEdge(gate, tint, pal);
-    ctx.lineWidth = edge.width; ctx.strokeStyle = edge.color;
-    if (gate) ctx.setLineDash([0.3, 0.2]);
-    ctx.stroke(); ctx.setLineDash([]);
-    if (kind === 'script') {
-      /* the title bar of a terminal window, with its three buttons */
-      ctx.fillStyle = veil(tint, 0.22); ctx.fillRect(x + 0.1, y + 0.1, w - 0.2, BAR - 0.04);
-      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x + 0.3 + i * 0.2, y + 0.08 + BAR / 2, 0.055, 0, 6.3); ctx.fillStyle = veil(tint, 0.9 - i * 0.25); ctx.fill(); }
-    }
-    /* head plate: what it is (a full badge for what runs something, its word over the name), and its name */
-    rr(ctx, P.badge.x, P.badge.y, P.badge.w, P.badge.h, 0.18);
-    if (kind) { ctx.fillStyle = tint; ctx.fill(); } else { ctx.fillStyle = veil(tint, 0.16); ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = veil(tint, 0.55); ctx.stroke(); }
-    if (P.badge.w * z >= 11) this.glyph(m.exec, P.badge.x + P.badge.w * 0.15, P.badge.y + P.badge.h * 0.15, P.badge.w * 0.7, kind ? '#09090b' : tint, kind ? 2.2 : 2);
-    /* the word needs room to be read: seen from far, the head keeps its two lines and the shape and the hue say the kind */
-    const fit = P.lamp.x - P.name.x - 0.1, worded = !!look && 0.17 * z >= 6;
-    if (worded) this.label(look.word, P.name.x, P.name.y - 0.13, 0.17, tint, { mono: true, weight: 700, spacing: 0.16, fit });
-    this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y + (worded ? 0.14 : 0), worded ? 0.31 : 0.33, pal.text, { weight: 650, min: 9, max: 17, fit });
-    const what = v.what;
-    this.label(worded ? what : `${gate ? 'gate' : m.exec} · ${what}`, P.name.x, P.name.y + (worded ? 0.44 : 0.36), worded ? 0.19 : 0.2, pal.text3, { fit });
-    /* the light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
-    rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = st.hoverLamp === m.id ? pal.text : pal.edge; ctx.stroke();
-    P.lights.forEach((l, i) => {
-      /* a lamp is a light on a dark housing: on a light theme its colours are the bright ones, not the theme's text colours */
-      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = pal.light ? ['#ef4444', HAZARD, '#22c55e'][i]! : i === 0 ? pal.danger : i === 1 ? pal.warn : pal.ok;
-      if (on) { ctx.globalAlpha = 0.28 * (i === 1 ? 0.6 + 0.4 * Math.sin(this.clock * 4) ** 2 : 1); ctx.beginPath(); ctx.arc(l.x, l.y, l.r * 2.3, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
-      ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 6.3); ctx.fillStyle = on ? col : '#2a2a2f'; ctx.fill();
-    });
+    const pit = (r: Rect) => this.pit(r, pal);
+    this.stationBody(v, tint, pal);
+    this.stationHead(v, tint, pal);
+    this.lamp(v, st.hoverLamp === m.id, pal);
     /* places, or what a gate decides on */
     if (gate) {
       pit(P.work); tiny(`TO DECIDE · ${S.deciding.length}`, P.work);
@@ -803,6 +784,53 @@ export class FleexSkin implements Skin {
     if (L === 'off') { ctx.globalAlpha = 0.28; this.trace(m); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1; }
   }
 
+  /** A place is a hollow in the body: deep on a dark machine, a faint shade on a light one, where what is written in it must still read. */
+  protected pit(r: Rect, pal: Palette): void {
+    const ctx = this.ctx;
+    rr(ctx, r.x, r.y, r.w, r.h, 0.14); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.07)' : 'rgba(0,0,0,0.4)'; ctx.fill(); ctx.lineWidth = 0.02; ctx.strokeStyle = pal.light ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.06)'; ctx.stroke();
+  }
+  /** The body: a plate lit from above. A gate keeps its dashed amber edge; what runs something has its kind's shape and hue. */
+  protected stationBody(v: StationView, tint: string, pal: Palette): void {
+    const ctx = this.ctx, { m, gate } = v, kind = v.run, { x, y, w, h } = m;
+    if (kind) this.behind(m, kind, tint, pal);
+    this.trace(m);
+    ctx.fillStyle = this.bodyFill(kind, y, h, pal);
+    ctx.fill();
+    const edge = this.bodyEdge(gate, tint, pal);
+    ctx.lineWidth = edge.width; ctx.strokeStyle = edge.color;
+    if (gate) ctx.setLineDash([0.3, 0.2]);
+    ctx.stroke(); ctx.setLineDash([]);
+    if (kind === 'script') {
+      /* the title bar of a terminal window, with its three buttons */
+      ctx.fillStyle = veil(tint, 0.22); ctx.fillRect(x + 0.1, y + 0.1, w - 0.2, BAR - 0.04);
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x + 0.3 + i * 0.2, y + 0.08 + BAR / 2, 0.055, 0, 6.3); ctx.fillStyle = veil(tint, 0.9 - i * 0.25); ctx.fill(); }
+    }
+  }
+  /** The head plate: what it is (a full badge for what runs something, its word over the name), its name, and what it runs. */
+  protected stationHead(v: StationView, tint: string, pal: Palette): void {
+    const ctx = this.ctx, z = this.cam.z, { m, gate, parts: P } = v, kind = v.run, look = kind ? KIND_LOOK[kind] : null;
+    rr(ctx, P.badge.x, P.badge.y, P.badge.w, P.badge.h, 0.18);
+    if (kind) { ctx.fillStyle = tint; ctx.fill(); } else { ctx.fillStyle = veil(tint, 0.16); ctx.fill(); ctx.lineWidth = 0.035; ctx.strokeStyle = veil(tint, 0.55); ctx.stroke(); }
+    if (P.badge.w * z >= 11) this.glyph(m.exec, P.badge.x + P.badge.w * 0.15, P.badge.y + P.badge.h * 0.15, P.badge.w * 0.7, kind ? '#09090b' : tint, kind ? 2.2 : 2);
+    /* the word needs room to be read: seen from far, the head keeps its two lines and the shape and the hue say the kind */
+    const fit = P.lamp.x - P.name.x - 0.1, worded = !!look && 0.17 * z >= 6;
+    if (worded) this.label(look.word, P.name.x, P.name.y - 0.13, 0.17, tint, { mono: true, weight: 700, spacing: 0.16, fit });
+    this.label(m.name || (gate ? 'Gate' : 'Station'), P.name.x, P.name.y + (worded ? 0.14 : 0), worded ? 0.31 : 0.33, pal.text, { weight: 650, min: 9, max: 17, fit });
+    const what = v.what;
+    this.label(worded ? what : `${gate ? 'gate' : m.exec} · ${what}`, P.name.x, P.name.y + (worded ? 0.44 : 0.36), worded ? 0.19 : 0.2, pal.text3, { fit });
+  }
+  /** The light: red off, amber it needs someone, green it works. On a machine that runs something it is the switch. */
+  protected lamp(v: StationView, pointed: boolean, pal: Palette): void {
+    const ctx = this.ctx, { parts: P, lamp: L } = v;
+    rr(ctx, P.lamp.x, P.lamp.y, P.lamp.w, P.lamp.h, 0.12); ctx.fillStyle = '#0d0d10'; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = pointed ? pal.text : pal.edge; ctx.stroke();
+    P.lights.forEach((l, i) => {
+      /* a lamp is a light on a dark housing: on a light theme its colours are the bright ones, not the theme's text colours */
+      const on = (i === 0 && L === 'off') || (i === 1 && L === 'call') || (i === 2 && L === 'on'), col = pal.light ? ['#ef4444', HAZARD, '#22c55e'][i]! : i === 0 ? pal.danger : i === 1 ? pal.warn : pal.ok;
+      if (on) { ctx.globalAlpha = 0.28 * (i === 1 ? 0.6 + 0.4 * Math.sin(this.clock * 4) ** 2 : 1); ctx.beginPath(); ctx.arc(l.x, l.y, l.r * 2.3, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.beginPath(); ctx.arc(l.x, l.y, l.r, 0, 6.3); ctx.fillStyle = on ? col : '#2a2a2f'; ctx.fill();
+    });
+  }
+
   /** What a station's body is filled with: a plate lit from above; a terminal's dark glass for a script. */
   protected bodyFill(kind: RunKind | null, y: number, h: number, pal: Palette): string | CanvasGradient {
     if (kind === 'script') return mix(pal.body, '#000000', pal.light ? 0.1 : 0.55);
@@ -839,6 +867,9 @@ export class FleexSkin implements Skin {
   }
 
   /** A machine's icon, as strokes, in a square of that side. */
+  /** A ticket at work, its own way: true when drawn (otherwise an arc turns round it). */
+  protected runMark(_px: number, _py: number, _B: number, _seed: number): boolean { return false; }
+
   private glyph(exec: string, x: number, y: number, side: number, color: string, lw: number): void {
     if (typeof Path2D === 'undefined') return;
     const ctx = this.ctx, k = side / 24;
@@ -852,7 +883,7 @@ export class FleexSkin implements Skin {
    * A free place says what will work there, faintly: a robot's head (agent), a tool in its holder (skill), three
    * seats (panel), a prompt (script). A ticket that comes in covers it.
    */
-  private idle(kind: RunKind, cx: number, cy: number, size: number, c: Rect, tint: string): void {
+  protected idle(kind: RunKind, cx: number, cy: number, size: number, c: Rect, tint: string): void {
     const ctx = this.ctx, s = Math.min(size, 0.7);
     if (kind === 'agent') this.glyph('agent', cx - s / 2, cy - s / 2, s, veil(tint, 0.3), 1.6);
     else if (kind === 'skill') {
