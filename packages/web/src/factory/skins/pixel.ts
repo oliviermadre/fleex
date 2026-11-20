@@ -87,8 +87,8 @@ export function workshopTheme(theme: Theme): Theme {
  * How sharp the pixel art is. DRAFT for the readability mock-up (`docs/factory/pixel-crisp.html`): neither is on in
  * the app until the owner picks.
  * - `crisp` (step 1): the view rests on the grid of art pixels; the words are in Silkscreen at whole multiples of 8
- *   pixels of the screen (the only sizes it is sharp at) on whole pixels, or not written; tickets are bigger crates on
- *   whole pixels; no line is thinner than a pixel.
+ *   pixels of the screen (the only sizes it is sharp at) on whole pixels, or not written; a ticket is the object of its
+ *   type, eleven pixels square (a crate when it has none), on whole pixels; no line is thinner than a pixel.
  * - `sprites` (step 2): a station's body, head, badge, lamp and places, the belts' chevrons, the crates and the mark of
  *   what runs are drawn pixel by pixel, every pixel full or empty.
  */
@@ -101,6 +101,19 @@ const ICONS: Record<string, readonly string[]> = {
   panel: ['XX...XX', 'XX...XX', '.......', '..XXX..', '..XXX..', '.......', 'XXXXXXX'],
   script: ['XXXXXXX', 'X.....X', 'X.X...X', 'X..X..X', 'X.X.XXX', 'X.....X', 'XXXXXXX'],
   human_gate: ['XXXXXXX', 'X.....X', 'X....XX', 'XX..X.X', 'X.XX..X', '.X...X.', '..XXX..'],
+};
+/**
+ * The tickets' types, eleven pixels square, as the rest of Fleex draws them (`TicketTypeIconSvg`): a hammer, a bug,
+ * an eye, a gear, a briefcase, a light bulb. `X` the outline, `o` the type's colour, `w` its light, `g` grey. A ticket
+ * with no type is a crate, as in the rest of Fleex.
+ */
+const TYPE_ICONS: Record<string, readonly string[]> = {
+  build: ['.XXXXXXXX..', 'XowooooooX.', 'XooooooooXX', '.XXXXooXXX.', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XooX...', '....XXXX...'],
+  fix: ['..X.....X..', '...XXXXX...', '..XowoooX..', 'XXXoooooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', 'XXXooXooXXX', '..XooXooX..', '...XXXXX...', '...........'],
+  review: ['...........', '...........', '...XXXXX...', '.XXoooooXX.', 'XoooowXoooX', 'XoooXXXoooX', 'XooooXooooX', '.XXoooooXX.', '...XXXXX...', '...........', '...........'],
+  ops: ['....XXX....', '.X.XoooX.X.', 'XoXowoooXoX', '.XooXXXooX.', 'XooX...XooX', 'XooX...XooX', 'XooX...XooX', '.XooXXXooX.', 'XoXoooooXoX', '.X.XoooX.X.', '....XXX....'],
+  lead: ['...........', '....XXX....', '...X...X...', 'XXXXXXXXXXX', 'XowoooooooX', 'XoooooooooX', 'XXXXXwXXXXX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
+  think: ['...XXXXX...', '..XowoooX..', '.XowoooooX.', '.XoooooooX.', '.XoooooooX.', '..XoooooX..', '...XoooX...', '...XXXXX...', '...XgggX...', '...XXXXX...', '....XXX....'],
 };
 /** A chevron pointing east, three pixels by five. */
 const CHEVRON = ['X..', '.X.', '..X', '.X.', 'X..'];
@@ -280,8 +293,8 @@ export class PixelSkin extends FleexSkin {
   }
 
   /** A ticket is a crate: wood, a band in the colour of its type on top, a plank line, an outline. */
-  protected override token(look: TokenLook, _type: string, tint: string, px: number, py: number, T: number, alpha: number): boolean {
-    if (this.look.crisp && this.toLow) return this.crate(look, tint, px, py, T, alpha);
+  protected override token(look: TokenLook, type: string, tint: string, px: number, py: number, T: number, alpha: number): boolean {
+    if (this.look.crisp && this.toLow) return TYPE_ICONS[type] ? this.typeIcon(TYPE_ICONS[type]!, look, tint, px, py, alpha) : this.crate(look, tint, px, py, T, alpha);
     const ctx = this.ctx, w = T * 0.86, h = T * 0.66, x = px - w / 2, y = py - h / 2, o = 1 / ART;
     ctx.globalAlpha = look === 'ghost' ? alpha * 0.8 : alpha;
     ctx.fillStyle = look === 'ghost' ? '#9a9a9a' : WOOD; ctx.fillRect(x, y, w, h);
@@ -302,6 +315,16 @@ export class PixelSkin extends FleexSkin {
     r(1, 1, w - 2, Math.max(2, Math.round(h * 0.3)), tint);
     r(1, Math.round(h * 0.62), w - 2, 1, ghost ? '#7a7a7a' : PLANK);
     r(2, h - 2, 1, 1, PLANK); r(w - 3, h - 2, 1, 1, PLANK);
+    ctx.globalAlpha = 1;
+    return true;
+  }
+
+  /** Crisp: a ticket as the object of its type, eleven pixels square on whole pixels, in its type's colour. */
+  private typeIcon(rows: readonly string[], look: TokenLook, tint: string, px: number, py: number, alpha: number): boolean {
+    const ctx = this.ctx, o = 1 / ART, x = Math.round(px * ART - 5.5) * o, y = Math.round(py * ART - 5.5) * o, ghost = look === 'ghost';
+    const fill = ghost ? '#9a9a9a' : tint, ink: Record<string, string> = { X: INK, o: fill, w: mix(fill, '#ffffff', 0.55), g: '#9a93ab' };
+    ctx.globalAlpha = ghost ? alpha * 0.8 : alpha;
+    rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const c = ink[row[i]!]; if (c) { ctx.fillStyle = c; ctx.fillRect(x + i * o, y + j * o, o, o); } } });
     ctx.globalAlpha = 1;
     return true;
   }
@@ -389,7 +412,7 @@ export class PixelSkin extends FleexSkin {
   /** At work: a pixel running round the crate, with two behind it. */
   protected override runMark(px: number, py: number, B: number, seed: number): boolean {
     if (!this.sprites) return false;
-    const ctx = this.ctx, o = 1 / ART, w = Math.max(12, Math.round(B * ART * 0.95)) + 4, h = Math.round((w - 4) * 0.75) + 4;
+    const ctx = this.ctx, o = 1 / ART, w = 15, h = 15;
     const x = Math.round(px * ART - w / 2) * o, y = Math.round(py * ART - h / 2) * o, per = 2 * (w + h) - 4, head = Math.floor(this.clock * 18 + seed * 7) % per;
     const at = (k: number): [number, number] => { k = ((k % per) + per) % per; if (k < w) return [k, 0]; k -= w - 1; if (k < h) return [w - 1, k]; k -= h - 1; if (k < w) return [w - 1 - k, h - 1]; k -= w - 1; return [0, h - 1 - k]; };
     for (let i = 0; i < 4; i++) { const [u, v] = at(head - i); ctx.fillStyle = i ? (i === 1 ? '#3ddc5a' : 'rgba(61,220,90,0.5)') : '#ffffff'; ctx.fillRect(x + u * o, y + v * o, o, o); }
