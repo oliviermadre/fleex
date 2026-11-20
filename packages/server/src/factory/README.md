@@ -109,10 +109,16 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
 - **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
   2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
-  connectors will call, and what its popup's "Make an item by hand" calls until they exist. A new conversation one of
-  its **rules** recognises (a field, From, Title or Title or text, contains a text) is **dropped**: saved archived with
-  the reason `dropped`, counted, and it never reaches the floor. Otherwise it waits in the intake **while its
-  conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
+  connectors will call, and what its popup's "Make an item by hand" calls until they exist. Its settings come in two
+  parts. **Every source**: a name, its source, the quiet delay, and rules on what every item has (From, Title, Title
+  or text). **Its source only**: rules on that source's own fields, which its connector fills and an item carries in
+  `fields` (`item-sources.ts`: a Slack channel, kind and bot; Gmail's To, Cc, labels, attachment; GitHub's repository,
+  reason, draft; nothing for an item made by hand). A rule is a way, a field, an operator (`contains`; `is`, `is not`
+  with values separated by commas) and a value. **Drop if** drops what it matches; **Keep only if** rules let in only
+  what one of them matches. A new item goes to the first intake of its source that lets it in, in the order they were
+  built; when none does it is **dropped**: saved archived with the reason `dropped`, counted at the first, and it
+  never reaches the floor. The drop rules of older floors (`drop`) are read as rules. Otherwise it waits in the intake
+  **while its conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
   said); an arm then takes it. A new message on a known key updates the item where it is (in its intake, it waits
   again); an archived item comes back to its intake. Nothing on the floor can put anything into an intake.
 - **On the page** desks and intakes are one view of the scene (`DockView`, `dock` in `scene.ts`) that each skin
@@ -577,7 +583,7 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
 (`factory_floors`, `factory_tickets`, `factory_runs`), `046_factory_items` (`factory_items`) and
-`047_factory_item_runs` (`factory_item_runs`). No existing table is altered: a ticket is "handed over" when it
+`047_factory_item_runs` (`factory_item_runs`); `048_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -612,7 +618,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory`, `046_factory_items` and `047_factory_item_runs` |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `048_factory_item_fields` |
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module, exposes `container.factory` |
@@ -641,7 +647,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 047, 046, then 045), or drop the five tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 048 to 045), or drop the five tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step

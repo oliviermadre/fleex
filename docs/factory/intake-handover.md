@@ -23,7 +23,10 @@ the previous session's opinion and can be overturned.
   its own row, and run rows stay for tickets only.
 - **Done: a station on an item** (step 5): the item in words is the run's brief, the visits and replies are kept in
   `factory_item_runs` (047).
-- **Next**: per-source intake settings with the Slack connector, Triage (step 4), Make a ticket (6), then the sources' connectors, each calling
+- **Done: intake settings in two parts** (every source, then its source's own fields), keep-only rules, several
+  intakes per source. Stopped before the Slack connector, as asked: it will fill Slack's `fields` (channel, kind,
+  bot) and call `POST /api/factory/items`.
+- **Next**: the Slack connector, Triage (step 4), Make a ticket (6), then the sources' connectors, each calling
   `POST /api/factory/items` (Slack first: polling `conversations.history` with the user token, or the events API).
 - **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
   machines. Rename one of them before step 7.

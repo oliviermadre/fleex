@@ -28,8 +28,9 @@ import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
 import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
+import { COMMON_FIELDS, opsFor, SOURCE_FIELDS, type SourceField } from './itemSources';
 import { toast } from '../lib/toast';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type DropRule, type IntakeSpec, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -206,48 +207,92 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
   );
 }
 
-const RULE_FIELD: Record<DropRule['field'], string> = { author: 'From', title: 'Title', text: 'Title or text' };
 const QUIET = [0, 30, 60, 120, 300, 600, 1800, 3600];
 const quietLabel = (s: number) => (s === 0 ? 'at once' : s < 60 ? `${s} s` : s < 3600 ? `${s / 60} min` : `${s / 3600} h`);
+const OP_LABEL: Record<ItemRule['op'], string> = { contains: 'contains', is: 'is', is_not: 'is not' };
+/** An intake's rules as they stand: those of a floor saved before rules read as drop rules on "contains". */
+const rulesOf = (m: IntakeSpec): ItemRule[] => [...(m.drop ?? []).map((r): ItemRule => ({ field: r.field, op: 'contains', value: r.contains })), ...(m.rules ?? [])];
 
 /**
- * An intake: which source it takes items from, how long a conversation must be quiet before its item leaves, the
- * rules that drop what is not worth a look (a newsletter, a bot), and, until the sources are connected, a way to make
- * an item by hand to see the floor work.
+ * Rules on some of an intake's fields (the common ones, or its source's): each a way (drop if, keep only if), a field,
+ * an operator that suits it and a value, a list of choices or yes and no where the field has them.
  */
-function IntakeSettings({ m, onPatch, takers, onSelect }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void }) {
-  const rules = m.drop ?? [], quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
-  const setRules = (drop: DropRule[]) => onPatch({ drop } as Partial<MachineSpec>);
-  const [test, setTest] = useState({ title: '', author: '', excerpt: '' });
-  const make = async () => {
-    try {
-      const r = await factoryApi.ingest({ source: m.source, key: `manual-${Date.now().toString(36)}`, title: test.title, author: test.author, excerpt: test.excerpt });
-      useFactoryStore.setState({ snapshot: r.snapshot });
-      if (r.status === 'dropped') toast.info('Dropped by a rule of this intake: it does not reach the floor'); else toast.success('Item made: it waits in the intake while its conversation is not quiet');
-      setTest({ title: '', author: '', excerpt: '' });
-    } catch { /* the API helper raised a toast */ }
-  };
+function RuleList({ id, rules, fields, onChange }: { id: string; rules: ItemRule[]; fields: readonly SourceField[]; onChange: (rules: ItemRule[]) => void }) {
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const set = (i: number, patch: Partial<ItemRule>) => onChange(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const blank = (f: SourceField): ItemRule => ({ field: f.key, op: opsFor(f.kind)[0]!, value: f.kind === 'bool' ? 'yes' : f.kind === 'choice' ? f.choices![0]! : '' });
   return (
     <>
-      <Hint>Where items of one source come in. An item waits here while its conversation moves, and leaves once it has been quiet for the delay below: an arm then takes it. What a rule recognises is dropped here, counted, and never reaches the floor. The sources are not connected yet: items come in through POST /api/factory/items, or by hand below.</Hint>
-      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={SOURCE_LABEL[m.source]} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      {rules.map((r, i) => {
+        const f = byKey.get(r.field) ?? fields[0]!;
+        return (
+          <div key={i} className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,8rem)_minmax(0,6rem)_minmax(0,1fr)_auto] items-end gap-1.5">
+            <Select id={`${id}-${i}-way`} label={i === 0 ? 'Way' : ''} value={r.keep ? 'keep' : 'drop'} onChange={(e) => set(i, { keep: e.target.value === 'keep' || undefined })}
+              options={[{ value: 'drop', label: 'Drop if' }, { value: 'keep', label: 'Keep only if' }]} />
+            <Select id={`${id}-${i}-field`} label={i === 0 ? 'Field' : ''} value={f.key} onChange={(e) => set(i, blank(byKey.get(e.target.value)!))}
+              options={fields.map((x) => ({ value: x.key, label: x.label }))} />
+            <Select id={`${id}-${i}-op`} label={i === 0 ? 'Operator' : ''} value={r.op} onChange={(e) => set(i, { op: e.target.value as ItemRule['op'] })}
+              options={opsFor(f.kind).map((o) => ({ value: o, label: OP_LABEL[o] }))} />
+            {f.kind === 'bool' ? (
+              <Select id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} onChange={(e) => set(i, { value: e.target.value })} options={[{ value: 'yes', label: 'yes' }, { value: 'no', label: 'no' }]} />
+            ) : f.kind === 'choice' && !r.value.includes(',') ? (
+              <Select id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} onChange={(e) => set(i, { value: e.target.value })} options={f.choices!.map((c) => ({ value: c, label: c }))} />
+            ) : (
+              <CommitInput id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} placeholder={f.hint ?? (r.op === 'contains' ? 'newsletter, noreply@…' : 'one, or several separated by commas')}
+                onCommit={(v) => onChange(rules.map((q, j) => (j === i ? { ...q, value: v } : q)).filter((q) => q.value.trim()))} />
+            )}
+            <Button size="sm" variant="ghost" onClick={() => onChange(rules.filter((_, j) => j !== i))} title="Remove this rule">Remove</Button>
+          </div>
+        );
+      })}
+      <div><Button size="sm" onClick={() => onChange([...rules, { ...blank(fields[0]!), value: fields[0]!.kind === 'text' ? 'noreply' : blank(fields[0]!).value }])}>Add a rule</Button></div>
+    </>
+  );
+}
+
+/**
+ * An intake, in two parts. What every intake has, whatever its source: a name, its source, how long an item must have
+ * been quiet before it leaves, rules on what every item has (who it is from, its title, its text). Then what only
+ * its source has: rules on that source's own fields (a Slack channel, Gmail labels, a GitHub repository), which its
+ * connector fills. A drop rule drops what it matches; keep rules let in only what one of them matches; what is dropped
+ * never reaches the floor. Until the sources are connected, an item can be made by hand, with its source's fields, to
+ * see the rules and the floor work.
+ */
+function IntakeSettings({ m, onPatch, takers, onSelect }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void }) {
+  const all = rulesOf(m), quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
+  const own = SOURCE_FIELDS[m.source], commonKeys = new Set(COMMON_FIELDS.map((f) => f.key)), source = SOURCE_LABEL[m.source];
+  const common = all.filter((r) => commonKeys.has(r.field)), mine = all.filter((r) => !commonKeys.has(r.field));
+  const save = (rules: ItemRule[]) => onPatch({ rules, drop: undefined } as Partial<MachineSpec>);
+  const [test, setTest] = useState<{ title: string; author: string; excerpt: string; fields: ItemFields }>({ title: '', author: '', excerpt: '', fields: {} });
+  const make = async () => {
+    try {
+      const r = await factoryApi.ingest({ source: m.source, key: `manual-${Date.now().toString(36)}`, title: test.title, author: test.author, excerpt: test.excerpt, fields: test.fields });
+      useFactoryStore.setState({ snapshot: r.snapshot });
+      if (r.status === 'dropped') toast.info(`Dropped: no ${source} intake lets it in`); else toast.success('Item made: it waits in its intake until it has been quiet long enough');
+      setTest({ title: '', author: '', excerpt: '', fields: {} });
+    } catch { /* the API helper raised a toast */ }
+  };
+  const setField = (k: string, v: string | string[] | boolean | undefined) => setTest((t) => { const fields = { ...t.fields }; if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete fields[k]; else fields[k] = v; return { ...t, fields }; });
+  return (
+    <>
+      <Hint>Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first that lets it in. The sources are not connected yet: items come in through POST /api/factory/items, or by hand below.</Hint>
+      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={source} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
       <div className="grid grid-cols-2 gap-2">
-        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value } as Partial<MachineSpec>)}
+        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: common, drop: undefined } as Partial<MachineSpec>)}
           options={ITEM_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))} />
         <Select id="f-intake-quiet" label="Leaves once quiet for" value={String(quiet)} onChange={(e) => onPatch({ quietSec: Number(e.target.value) } as Partial<MachineSpec>)}
           options={[...new Set([...QUIET, quiet])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
       </div>
-      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Drop what matches</Head>
-      {rules.length === 0 && <Hint>No rule: everything comes in. A rule drops an item whose field contains its text, whatever the case.</Hint>}
-      {rules.map((r, i) => (
-        <div key={i} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-end gap-1.5">
-          <Select id={`f-rule-${i}-field`} label={i === 0 ? 'Field' : ''} value={r.field} onChange={(e) => setRules(rules.map((q, j) => (j === i ? { ...q, field: e.target.value as DropRule['field'] } : q)))}
-            options={(Object.keys(RULE_FIELD) as DropRule['field'][]).map((f) => ({ value: f, label: RULE_FIELD[f] }))} />
-          <CommitInput id={`f-rule-${i}-text`} label={i === 0 ? 'contains' : ''} value={r.contains} placeholder="newsletter, noreply@…" onCommit={(v) => setRules(rules.map((q, j) => (j === i ? { ...q, contains: v } : q)).filter((q) => q.contains.trim()))} />
-          <Button size="sm" variant="ghost" onClick={() => setRules(rules.filter((_, j) => j !== i))} title="Remove this rule">Remove</Button>
-        </div>
-      ))}
-      <div><Button size="sm" onClick={() => setRules([...rules, { field: 'author', contains: 'noreply' }])}>Add a rule</Button></div>
+      {common.length === 0 && <Hint>No rule on who it is from or what it says: everything comes in.</Hint>}
+      <RuleList id="f-common" rules={common} fields={COMMON_FIELDS} onChange={(rules) => save([...rules, ...mine])} />
+      <Head>{source} only</Head>
+      {own.length === 0
+        ? <Hint>An item made by hand has nothing more than what every item has.</Hint>
+        : <>
+            <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
+            <RuleList id="f-own" rules={mine} fields={own} onChange={(rules) => save([...common, ...rules])} />
+          </>}
       <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
       {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: items will pile up. Put an arm against one of its sides.</div>}
       {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
@@ -256,7 +301,22 @@ function IntakeSettings({ m, onPatch, takers, onSelect }: { m: IntakeSpec; onPat
         <Input id="f-test-title" label="Title" value={test.title} onChange={(e) => setTest({ ...test, title: e.target.value })} placeholder="Can you look at the cart?" />
         <Input id="f-test-author" label="From" value={test.author} onChange={(e) => setTest({ ...test, author: e.target.value })} placeholder="Ana" />
       </div>
-      <Input id="f-test-text" label="Text" value={test.excerpt} onChange={(e) => setTest({ ...test, excerpt: e.target.value })} placeholder="The first lines of the conversation" />
+      <Input id="f-test-text" label="Text" value={test.excerpt} onChange={(e) => setTest({ ...test, excerpt: e.target.value })} placeholder="The first lines of it" />
+      {own.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {own.map((f) => {
+            const v = test.fields[f.key];
+            if (f.kind === 'bool') return (
+              <label key={f.key} className="flex cursor-pointer items-center gap-2 self-end pb-2 text-xs text-[var(--theme-text-primary)]">
+                <input type="checkbox" checked={v === true} onChange={(e) => setField(f.key, e.target.checked || undefined)} className="accent-[var(--theme-accent)]" />{f.label}
+              </label>
+            );
+            if (f.kind === 'choice') return <Select key={f.key} id={`f-test-${f.key}`} label={f.label} value={typeof v === 'string' ? v : ''} onChange={(e) => setField(f.key, e.target.value || undefined)} options={[{ value: '', label: 'none' }, ...f.choices!.map((c) => ({ value: c, label: c }))]} />;
+            return <Input key={f.key} id={`f-test-${f.key}`} label={f.label} value={Array.isArray(v) ? v.join(', ') : typeof v === 'string' ? v : ''} placeholder={f.hint}
+              onChange={(e) => setField(f.key, f.kind === 'list' ? e.target.value.split(',').map((x) => x.trim()).filter(Boolean) : e.target.value)} />;
+          })}
+        </div>
+      )}
       <div><Button size="sm" disabled={!test.title.trim()} onClick={() => void make()}>Make the item</Button></div>
     </>
   );

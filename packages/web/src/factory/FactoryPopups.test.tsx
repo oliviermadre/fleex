@@ -141,6 +141,28 @@ describe('<FactoryMachinePopup/>', () => {
     expect(again.onPatch).toHaveBeenLastCalledWith('a1', { color: undefined });
   });
 
+  it('sets up an intake in two parts: what every source has, then what only its source has', () => {
+    const slack: MachineSpec = { id: 'in', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: '', source: 'slack', quietSec: 120,
+      drop: [{ field: 'author', contains: 'newsletter' }], rules: [{ field: 'channel', op: 'is', value: '#ops', keep: true }] };
+    seed([], [dev, slack]);
+    const on = open('in'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(popup.textContent).toContain('Every source');
+    expect(popup.textContent).toContain('Slack only');
+    expect(popup.textContent).toContain('Channel, Kind, From a bot');
+    /* an older floor's drop rule reads as a rule on what every source has; Slack's rule is in Slack's part */
+    expect((screen.getByLabelText('Value', { selector: '#f-common-0-value' }) as HTMLInputElement).value).toBe('newsletter');
+    expect((screen.getByLabelText('Way', { selector: '#f-own-0-way' }) as HTMLSelectElement).value).toBe('keep');
+    /* a Slack field of a kind has its choices: the operator is "is" or "is not", the value one of them */
+    fireEvent.change(screen.getByLabelText('Field', { selector: '#f-own-0-field' }), { target: { value: 'kind' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('in', { rules: [{ field: 'author', op: 'contains', value: 'newsletter' }, { field: 'kind', op: 'is', value: 'dm', keep: true }], drop: undefined });
+    /* the item made by hand gets Slack's fields too */
+    expect(screen.getByLabelText('Channel')).toBeTruthy();
+    cleanup();
+    seed([], [dev, { ...slack, source: 'manual', drop: undefined, rules: [] } as MachineSpec]);
+    open('in');
+    expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('An item made by hand has nothing more than what every item has');
+  });
+
   it('sets up a teleporter: its name, which of the two it is, where a departure leads, its colour', () => {
     const go: MachineSpec = { id: 'go', kind: 'teleporter', x: 20, y: 1, w: 1, h: 1, name: 'goto bugfix', role: 'departure' };
     const land: MachineSpec = { id: 'land', kind: 'teleporter', x: 25, y: 1, w: 1, h: 1, name: 'entrypoint bugfix', role: 'arrival', color: '#f472b6' };

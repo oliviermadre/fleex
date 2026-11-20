@@ -1088,7 +1088,8 @@ export class FleexSkin implements Skin {
     if (intake && z >= 10) {
       this.label(`HELD ${v.waiting}`, x + 0.26, y + h - 0.48, 0.16, v.waiting ? pal.warn : pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
       this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
-      if (z >= 14 && v.noArm) this.label('no arm takes from it', x + w - 0.2, y + h - 0.26, 0.14, pal.danger, { mono: true, align: 'right' });
+      /* on HELD's line, which is short: DROPPED's is longer */
+      if (z >= 14 && v.noArm) this.label('no arm takes from it', x + w - 0.2, y + h - 0.48, 0.14, pal.danger, { mono: true, align: 'right' });
     } else if (!intake && z >= 14) {
       if (v.noArm) this.label('no arm takes from it', x + w / 2, y + h - 0.28, 0.16, pal.danger, { mono: true, align: 'center', fit: w - 0.3 });
       else this.label(st.edit ? 'double-click: settings' : 'double-click: the form', x + 0.24, y + h - 0.28, 0.16, pal.text3, { mono: true, fit: w - 0.4 });

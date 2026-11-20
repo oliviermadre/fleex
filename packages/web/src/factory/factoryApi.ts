@@ -1,6 +1,7 @@
 import { API_URL } from '../lib/constants';
 import { toast } from '../lib/toast';
 import type { ItemSource } from './items';
+import type { ItemFields } from './types';
 import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
@@ -38,7 +39,7 @@ export const factoryApi = {
   runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
   machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),
   /** A conversation moved in a source (made by hand until the sources are connected): a new item, or an update. */
-  ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null }) =>
+  ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null; fields?: ItemFields }) =>
     post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped'; snapshot: FactorySnapshot }>('/items', item),
   /** What stations did with an item and what they answered, oldest first. */
   itemRuns: (itemId: string) => call<FactoryRun[]>(`/items/${itemId}/runs`, undefined, true),

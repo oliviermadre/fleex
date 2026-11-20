@@ -63,13 +63,19 @@ export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 
  */
 export interface DeskSpec extends MachineBase { kind: 'desk'; defaults?: DeskDefaults }
 export interface DeskDefaults { boardId?: string; type?: string; priority?: string }
-/** A rule of an intake: an item whose field contains this text (any case) is dropped there, and never reaches the floor. */
+/** How floors saved before `ItemRule` wrote a rule: read as a drop rule on "contains". */
 export interface DropRule { field: 'author' | 'title' | 'text'; contains: string }
+/**
+ * A rule of an intake, on a field every item has or on one of its source's (`itemSources.ts`): a drop rule drops what
+ * it matches; keep rules (`keep`) let in only what one of them matches. `is` and `is not` take values separated by commas.
+ */
+export interface ItemRule { field: string; op: 'contains' | 'is' | 'is_not'; value: string; keep?: boolean }
+export type ItemFields = Record<string, string | string[] | boolean>;
 /**
  * Where items of one source come in: a dock of 3 by 2. An item waits in it while its conversation moves, and leaves
  * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
  */
-export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; drop?: DropRule[] }
+export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[] }
 /** Where an Area's name is written: in one of its corners, or over or under it. */
 export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
 /**
@@ -109,7 +115,7 @@ export interface FactoryTicket {
   /** Set on an item, which is not a ticket: where it came from. Its `info.type` is `src:<source>`. */
   item?: FactoryItemInfo;
 }
-export interface FactoryItemInfo { source: ItemSource; author: string; excerpt: string; url: string | null; messages: number; lastActivityAt: string }
+export interface FactoryItemInfo { source: ItemSource; author: string; excerpt: string; url: string | null; messages: number; lastActivityAt: string; /** What its source says of it beyond that. Absent on a server older than this field. */ fields?: ItemFields }
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: FactoryTicket[];

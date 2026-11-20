@@ -9,6 +9,7 @@ import { factoryApi } from './factoryApi';
 import { TicketToken } from './FactoryTicketMeta';
 import { placeBeside, type PeekHandle } from './FactoryPeek';
 import { SOURCE_LABEL } from './items';
+import { SOURCE_FIELDS } from './itemSources';
 import { span } from './format';
 import { SET_ASIDE, type FactoryRun } from './types';
 
@@ -62,6 +63,13 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onClose:
           {item.messages} message{item.messages === 1 ? '' : 's'} · last one {span(quietFor)} ago
           {inIntake && !t.released && ' · waits here while the conversation moves'}
         </div>
+        {Object.keys(item.fields ?? {}).length > 0 && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--theme-text-secondary)]">
+            {Object.entries(item.fields!).map(([k, v]) => (
+              <span key={k}><span className="text-[var(--theme-text-muted)]">{SOURCE_FIELDS[item.source].find((f) => f.key === k)?.label ?? k}</span> {Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'yes' : 'no') : v}</span>
+            ))}
+          </div>
+        )}
         {item.excerpt
           ? <p className="whitespace-pre-wrap break-words text-[var(--theme-text-primary)]">{item.excerpt}</p>
           : <p className="text-[var(--theme-text-muted)]">Nothing more came with it: open it where it lives.</p>}
