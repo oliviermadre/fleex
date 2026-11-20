@@ -20,6 +20,7 @@ const PATHS: Record<string, ReactNode> = {
   zone: <><path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><path d="M4 8l8 4 8-4M12 12v8" /></>,
   exit: <><path d="M4 12h11M11 7l5 5-5 5" /><path d="M20 4v16" /></>,
   label: <path d="M5 6h14M12 6v13" />,
+  area: <><path d="M3.5 8V5.5H7M10 5.5h4M17 5.5h3.5V8M20.5 11v2M20.5 16v2.5H17M14 18.5h-4M7 18.5H3.5V16M3.5 13v-2" /><path d="M6.5 15.5h5" /></>,
   erase: <><path d="M4 16l9-9 6 6-7 7H8z" /><path d="M9.5 10.5l6 6" /></>,
   rotate: <><path d="M20 12a8 8 0 1 1-3-6.2" /><path d="M20 4v5h-5" /></>,
   back: <path d="M15 6l-6 6 6 6" />,

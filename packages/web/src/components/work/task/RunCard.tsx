@@ -8,6 +8,7 @@ import type { AgentExecution } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../../stores/agentPersonaStore';
 import { cn } from '../../../lib/cn';
 import { tintText } from '../../../lib/tints';
+import { formatDuration } from '../../../lib/formatDuration';
 
 type RunState = AgentExecution['status'];
 
@@ -17,16 +18,6 @@ const STATE_LABEL: Record<RunState, string> = {
   failed: 'failed',
   interrupted: 'interrupted',
 };
-
-/** Compact duration between two ISO timestamps, e.g. "12s" or "3m 05s". */
-function formatDuration(startedAt: string, completedAt: string): string | null {
-  const ms = Date.parse(completedAt) - Date.parse(startedAt);
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-}
 
 export function RunCard({
   execution,

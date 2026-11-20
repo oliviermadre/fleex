@@ -3,7 +3,7 @@
  *
  *   Factory ─ Build ─┬─ Move      (belt, bridge, arm, the way they face)
  *                    ├─ Station   (agent, skill, panel, gate, status)
- *                    ├─ Area      (zone, exit, label)
+ *                    ├─ Place     (zone, exit, label, area)
  *                    └─ a selection (turn, remove)
  *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its popup)
  *
@@ -167,7 +167,7 @@ export function factoryMenu(c: MenuContext): Menu {
     return frame(c.many > 1 ? 'Selection' : 'Machine', {
       0: turns && { id: 'turn', label: 'Turn', icon: 'rotate', tone: 'move', title: 'Quarter turn', run: a.turn },
       1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts selected fast: they carry tickets twice as fast' : 'Make the belts selected plain belts again', run: a.speed },
-      4: { id: 'remove', also: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : 'Remove this machine from the floor', run: a.remove },
+      4: { id: 'remove', also: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : c.machine?.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor', run: a.remove },
       5: c.many <= 1 && !!c.machine?.popup && edit,
     }, back('Previous', 'Back to the build menu', a.deselect));
   }
@@ -191,17 +191,18 @@ export function factoryMenu(c: MenuContext): Menu {
     4: place('gate', 'Gate', 'station', 'Waits for your decision; each outcome leaves by its own arm'),
     5: place('native', 'Status', 'station', 'Sets a status on the ticket and lets it through'),
   }, previous);
-  const area = frame('Area', {
+  const where = frame('Place', {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),
     1: place('exit', 'Exit', 'area', 'Sets the ticket to done and hands it back to Fleex'),
     2: place('label', 'Label', 'area', 'A name on the floor'),
+    3: place('area', 'Area', 'area', 'Drag a rectangle on the floor: a part of it with a name and a colour, a line or a team. Machines stand on it; nothing runs on it'),
   }, previous);
 
   const inHand = c.tool !== 'select';
   return frame('Build', {
     0: { id: 'move', label: 'Move', icon: 'belt', tone: 'move', title: 'What carries tickets: belts, bridges, arms, teleporters, and the gantries that go on a belt', menu: move },
     1: { id: 'station', label: 'Station', icon: 'agent', tone: 'station', title: 'What works on tickets: agents, skills, panels, scripts, gates, status changes', menu: station },
-    2: { id: 'area', label: 'Area', icon: 'zone', tone: 'area', title: 'Where tickets wait or leave, and names on the floor', menu: area },
+    2: { id: 'place', label: 'Place', icon: 'zone', tone: 'area', title: 'Where tickets wait or leave, names on the floor, and areas', menu: where },
     3: { id: 'plan', label: 'Plan', icon: 'plan', tone: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: a.plan },
     4: { ...place('erase', 'Erase', 'danger', 'Click or drag to remove machines') },
   }, inHand ? back('Cancel', 'Put down what is in hand', a.select) : back('Done', 'Leave build mode', a.done));

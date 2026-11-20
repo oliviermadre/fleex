@@ -108,6 +108,38 @@ geometry cannot be: the step returns null, the old layout is kept as an archived
 `factory_floors`), the floor starts over with only Inbound, the tickets go back to Inbound, and the page says so once
 (`notice` in the snapshot, `POST /api/factory/notice/ack`). Version 2 is the first such step: stations grew from 3 by 3.
 
+## Areas
+
+An area (`kind: 'area'`) is a part of the floor named as a place, "Build line", "Rework": a rectangle of whole
+tiles, a name, a colour, and where its name is written (in a corner, or over or under it). It is decor. The engine
+ignores it, it takes no tile (machines stand on it, as on a label), and nothing in the data links it to the machines on
+it. Two areas nest or keep apart, never cross: one lies wholly inside the other or they do not meet (`normaliseLayout`
+refuses a layout where two cross; the page refuses to draw, move, resize or paste one across another).
+
+It is changed in build mode only (Build › Place › Area): a drag draws it, it is resized by its sides and corners,
+moved by its name (a drag elsewhere on the floor stays the frame that selects machines, which never takes an area),
+selected by a click on the floor where nothing stands, edited in its popup and removed like a machine; undo, copy and
+paste work as for machines (`packages/web/src/factory/areas.ts`). Out of build mode it answers no click. The flat
+skins paint it as a tinted slab bordered in its colour with its name on the floor; Pixel 3D raises it as a platform,
+and what stands wholly on it with it.
+
+## The decor
+
+Each skin can give the floor a decor (`packages/web/src/factory/decor.ts`): a hall round what is built, a few tiles
+off it, with a yard outside; on its top wall windows, a sign over what is built, a clock at the real time, a door,
+notice boards; props on free tiles (a tile off every machine, never in an area); trees in the yard. It is generated
+from the layout and a seed per tile, so it is the same from one visit to the next and moves when the floor does;
+nothing of it is kept or answers a click, and props fade in build mode. The pixel skins draw it in pixel art, Fleex's
+skin as an architect's plan, the neon one in lit tubes. A switch under the skins in Settings › Appearance turns it on
+or off for the skin in use (`factoryDecor` in the settings, skin by skin): on by default for Pixel and Pixel 3D, off for
+Fleex and Neon. The server knows nothing of it.
+
+With the decor come the people (`packages/web/src/factory/people.ts`): a few walkers about the hall on the free tiles,
+a reviewer who comes in by the door to wait at the foot of a gate that waits for a decision, and at each station that
+runs something a worker who does what it does: works, raises a hand under "!" (its run failed) or "?" (the agent
+asked), waits, or sleeps. They carry nothing, take no tile, answer no click, follow the floor's clock, fade in build
+mode, and stand still for whoever asked for less motion.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`
@@ -121,7 +153,7 @@ steps and native actions other than a status change have no equivalent yet.
 ## The command card
 
 The commands of the page are a grid of five columns by three rows (`packages/web/src/factory/menu.ts`), organised as
-menus that open sub-menus: Factory, then Build, then Move, Station or Area. Three levels at most. A command is found
+menus that open sub-menus: Factory, then Build, then Move, Station or Place. Three levels at most. A command is found
 by its place, and its key is its place: the grid lies on the keyboard, the top row of letters for the first row, the
 home row for the second, the bottom row for the third (`keys.ts`). A key is bound to where it is, not to what it
 types, so the command at the top left is under the same finger on any keyboard; the tile prints what that key types
@@ -408,7 +440,7 @@ The floor takes the whole width of the page. Nothing of the Factory opens beside
   and started there (Q), and **Edit** (V, at the place where a ticket has Open; also Enter or a double-click) opens
   its popup.
 - **A machine's popup** (`FactoryMachinePopup.tsx`): a station shows its settings, the tickets it holds with what each
-  needs, and what it did with its latest runs; a zone its settings and its tickets; an arm, an exit or a label, which
+  needs, and what it did with its latest runs; a zone its settings and its tickets; an arm, an exit, a label or an area, which
   have only settings, a small popup. Everything a machine has to be set is set there, in build mode or out of it. A
   belt and a bridge have nothing to set and no popup.
 - **The floor's popup** (`FactoryFloorPopup.tsx`, **Stats** on the card when nothing is selected): what the floor did
@@ -527,6 +559,10 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `components/ui/Modal.tsx` | three opt-in props for the Factory's popups: `variant="glass"`, `flush` (no padding), `guardEscape` (Escape stays in a field, and is left to what is opened over the dialog). Unset, a dialog is unchanged; they can stay |
 | web: `uiStore.ts`, `RouterSync.tsx`, `MainPanel.tsx`, `AppLayout.tsx`, `NavSidebar.tsx` | the `/factory` page and its nav entry |
 | web: `SettingsPanel.tsx`, `settingsStore.ts` | the switch |
+| `application/ports/config.port.ts`, web: `settingsStore.ts` | `factorySkin`: how the floor is painted, read by the page only |
+| web: `components/settings/AppearanceTab.tsx` | one line to mount the choice of skin under the theme |
+| web: `public/fonts/` | the pixel skin's fonts and their licences (Silkscreen, Pixelify Sans, SIL OFL); only the Factory under the pixel skin loads them |
+| web: `lib/themes.ts` | `themeVars(theme)`: the CSS variables of a theme, which `applyTheme` sets on the root; the Factory sets those of a night theme on its own page under the neon skin. Pure, it can stay |
 | `application/ports/config.port.ts` | `namedActions`, and `actions` in a repository's config: the named actions script stations run |
 | `infrastructure/container.ts` | gives the module the host's shell and where a ticket's workspace and worktrees are (`host`), for script stations |
 | web: `SettingsPanel.tsx`, `repository-dashboard/RepoConfigPanel.tsx`, `settingsStore.ts` | one line each to mount the list of named actions and a repository's commands for them; their two fields in the settings type |
@@ -547,8 +583,75 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Not covered by tests
 
-How the floor is painted (`renderer.ts`) is checked by eye, in a browser against a made-up server: what is tested is
-the geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
+Drawing the floor is two things. The scene (`packages/web/src/factory/scene.ts`) says what is shown at each frame and
+where, with no paint: every machine with its state, its places and what they hold, its quays, its plates' words, every
+ticket where it is drawn, every arm where its cup is. It keeps what moves from one frame to the next (tickets easing
+towards where the server says they are, riding the belts, carried by cups, sliding to quays, leaving by exits, jumping
+between teleporters), and is tested (`scene.test.ts`). A skin (`skins/`) paints that scene and keeps nothing of the
+floor: sizes, colours, fonts, and what is left out from far are its own. The view (`renderer.ts`) holds the camera, says
+what is under the pointer, and at each frame builds the scene, gives it to the skin, and paints the pieces the skin
+returns in their order (`order` in `skins/skin.ts`: by layer, floor then what stands then what is overhead, by depth on
+a layer, and what is carried just after what carries it). See `docs/factory/skins-handover.md`.
+
+The skin is chosen in Settings › Appearance, under the theme (`factorySkin` in the settings, `FactorySkinPicker.tsx`,
+shown only while the Factory is on): one card a skin, each with a made-up floor painted live by the real renderer in
+that skin and the theme in use. There are four (`skins/index.ts`):
+
+- **Fleex** (`skins/fleex.ts`), the default: the floor as it has always been drawn, following the theme. A flat skin:
+  everything on one layer, its depth the order the floor has always been painted in.
+- **Neon** (`skins/neon.ts`), chosen on `docs/factory/skin-choice.html`: Fleex's shapes on a night floor whatever the
+  theme, every line glowing. It takes the theme's accent, lifted until it shines on the night (the chevrons of the
+  belts, the Inbound, what is selected). The glow is one picture: once all is painted, a quarter-size copy is blurred
+  and laid back over it, before the words, so it costs the same however large the floor. The page around the floor
+  (header, console, minimap, what lies over the floor) takes the skin's colours: the CSS variables of a night theme
+  made from the theme in use (`nightTheme`, set on the page's own element through `themeVars`), and a monospace
+  font. Popups, which open over the whole app, keep the theme. `neon.test.ts` holds every ink of the floor and of
+  the page to 4.5 on every ground it is written on, for every built-in theme.
+- **Pixel** (`skins/pixel.ts`), chosen on `docs/factory/pixel-flat.html`: a workshop in pixel art, by day on a light
+  theme and at night on a dark one, the theme's accent made to read on it. The same painters as Fleex, painted at
+  16 art pixels a tile and enlarged without smoothing; the words are written crisp after, in pixel fonts (Silkscreen,
+  Pixelify Sans) that Fleex serves itself (`packages/web/public/fonts`, under the SIL Open Font License, declared in
+  `skins/pixelFonts.css`). Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue,
+  hard shadows, tickets as crates in the colour of their type, and a worker at the foot of
+  each station that runs something, busy while a ticket runs there. Workers are procedural: drawn from the scene at
+  each frame, kept by no one. The light of a lamp that needs someone (or is off) is solid rings round its station,
+  paler the farther they are, that flicker a few times a second: the rings breathe, their tint shifts, a few pixels
+  flare, at random from the station and the moment, so nothing is kept; it stands still when the floor does. The page
+  around the floor is painted in the same workshop (`workshopTheme`), in
+  Pixelify Sans; `pixel.test.ts` holds its inks as the neon's are held.
+
+- **Pixel 3D** (`skins/pixelTq.ts`), chosen on `docs/factory/pixel-3q.html`: the pixel workshop seen from three
+  quarters. Every machine keeps its tiles, where its shadow and feet are, and its top is painted higher by a height of
+  its kind (a station half a tile, a belt or a bridge a quarter, a teleporter an eighth; zones and exits are paint on
+  the floor), its front face filling the gap. What stands is painted by depth (the foot of its tiles: lower on the
+  screen passes in front), what is overhead (arms with what they carry, gantries, tolls) after it, what is carried
+  just after its carrier, at its height (`order` in `skins/skin.ts`); words and plates rise with what they are written
+  on. A ticket hidden behind a station of the row below has its outline drawn through it. Build mode goes flat:
+  things are placed on tiles, seen from above. A platform raises what stands wholly on it (none yet: see lot 8 in
+  `docs/factory/skins-handover.md`).
+
+A skin seen from three quarters says how high it paints each machine (`liftOf` on `Skin`). The view then answers
+for what is seen: a click hits the top or the front face of a machine, the nearest first (`pick`); a ticket is where
+it is drawn, as high as what carries it, for a click, a frame dragged over the floor, the card beside it and the
+names over it (`ticketPos`, `ticketPlaces`, `anchorOf`). What is dropped (a ticket let go, a machine placed, a ghost)
+stays on its tiles.
+
+A skin may give the steps its zoom rests on (`steps` on `Skin`): the pixel skin's pixels are whole only at 16, 32,
+48, 64 and 80 pixels a tile (and it does not pixelate at 4 and 8, from far). The view then zooms by steps
+(`FactoryView.wheel`, `zoomAt`, `glide`): a notch of the wheel, or a click on the zoom buttons, sends it to the next
+step, it glides there and lands exactly on it; whatever puts it elsewhere (a jump to a ticket, a paste) glides to
+the nearest step; framing picks the closest step that still shows everything. It never rests between two. Other
+skins zoom freely.
+
+How the floor is painted is checked by eye, in a browser against a made-up server: what is tested is the scene and the
+geometry and the sorting it draws from (`quays.ts`, `machineArt.ts`, `armRules.ts`, `ticketMotion.ts`).
+
+A change to the renderer that should show nothing is checked picture against picture. `packages/web/src/factory/shots/`
+is a made-up floor with one of everything (each kind of station in each state, zones, belts that bend, run fast and
+cross, gantry, toll, arms, teleporters, an exit, tickets in every phase, one leaving and one jumping), painted the same
+frames each time in eleven situations: dark and light themes, close and far, build mode, a lens, the emergency stop.
+From `packages/web`, `node scripts/factory-shots/run.mjs shoot <dir>` saves them, on `main` and on the branch, and
+`node scripts/factory-shots/run.mjs compare <a> <b> [diff]` says which differ, by how many pixels, and paints where.
 
 The engine, what the module hears from the rest of Fleex, the stats and the SQLite store are tested
 (`factory-engine.test.ts`, `factory-module.test.ts`, `factory-stats.test.ts`, `factory-store-sqlite.bun.test.ts`). The Supabase store and a real agent run through a station are not: they need a

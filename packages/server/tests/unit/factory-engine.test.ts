@@ -625,6 +625,20 @@ describe('teleporters', () => {
 });
 
 describe('normaliseLayout', () => {
+  it('keeps areas as decor: they take no tile, nest or keep apart, never cross, and the engine runs past them', async () => {
+    const area = (id: string, x: number, y: number, w: number, h: number, over: Record<string, unknown> = {}) => ({ id, kind: 'area', x, y, w, h, name: id, color: '#F472B6', ...over }) as unknown as MachineSpec;
+    const out = normaliseLayout({ w: 30, h: 30, machines: [area('line', 0, 0, 10, 4, { name: '  Build line  ', label: 'tr' }), area('inner', 1, 1, 3, 2, { color: 'pink', label: 'middle', name: '' }), belt('b', 2, 1), area('far', 20, 20, 0, 999)] });
+    expect(out.machines[0]).toMatchObject({ kind: 'area', w: 10, h: 4, name: 'Build line', color: '#f472b6', label: 'tr' });
+    expect(out.machines[1]).toMatchObject({ name: 'Area', color: '#60a5fa', label: 'bl' });
+    expect(out.machines[3]).toMatchObject({ w: 1, h: 200 });
+    expect(() => normaliseLayout({ w: 30, h: 30, machines: [area('a', 0, 0, 5, 5), area('b', 3, 3, 5, 5)] })).toThrow(/cross/);
+    /* a ticket rides belts that stand on an area into a zone that does too, as on bare floor */
+    await boot([area('under', 0, 0, 8, 4), belt('b1', 1, 1), belt('b2', 2, 1), zone('todo', 3, 1, { status: 'todo' })]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(3);
+    expect(where('a')).toBe('todo:zone');
+  });
+
   it('keeps of a teleporter what makes one: a role, a name, a colour, and for a departure an arrival of this floor', () => {
     const out = normaliseLayout({ w: 20, h: 20, machines: [
       { id: 'd', kind: 'teleporter', x: 0, y: 0, w: 3, h: 3, role: 'departure', to: 'a', name: '  goto bugfix  ', color: '#F472B6' } as MachineSpec,
