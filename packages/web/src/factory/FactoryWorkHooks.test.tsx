@@ -12,7 +12,7 @@ import { useFactoryStore } from './factoryStore';
 import type { FactorySnapshot, FactoryTicket, MachineSpec, TicketPhase } from './types';
 
 const station: MachineSpec = { id: 'dev', kind: 'station', x: 1, y: 1, w: 5, h: 4, name: 'Dev', exec: 'agent', outcomes: ['done', 'blocked'], cap: 2 };
-const gate: MachineSpec = { id: 'qa', kind: 'station', x: 8, y: 1, w: 5, h: 4, name: 'Check spec', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
+const gate: MachineSpec = { id: 'qa', kind: 'station', x: 8, y: 1, w: 5, h: 4, name: 'Check spec', exec: 'human_gate', outcomes: ['approve', 'reject', 'help'], cap: 8 };
 const zone: MachineSpec = { id: 'parked', kind: 'zone', x: 1, y: 7, w: 2, h: 2, name: 'Parked', release: 'manual' };
 const belt: MachineSpec = { id: 'b', kind: 'belt', x: 7, y: 2, w: 1, h: 1, dir: 0 };
 
@@ -128,13 +128,20 @@ describe('<FactoryHandover/>', () => {
 });
 
 describe('<FactoryThreadCard/>', () => {
-  it('asks for a gate decision with one button per outcome, and sends the reason with it', () => {
+  it('asks for a gate decision with one button per outcome, and sends a several-line markdown reason with it', () => {
     const acts = seed(ticket('qa', 'review'));
     render(<FactoryThreadCard ticketId="t1" />);
     expect(screen.getByRole('alert').textContent).toContain('Check spec waits for your decision');
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Scope is too wide' } });
-    fireEvent.click(screen.getByRole('button', { name: 'reject' }));
-    expect(acts.resolve).toHaveBeenCalledWith('t1', 'reject', 'Scope is too wide');
+    /* a long reason (say why you need help) does not fit one line: it is the thread's multi-line composer */
+    const field = screen.getByPlaceholderText(/Reason \(optional\)/) as HTMLTextAreaElement;
+    expect(field.tagName).toBe('TEXTAREA');
+    const reason = 'I need help:\n- the stack does not start\n\n```\nNo legacy PostgreSQL DSN\n```';
+    fireEvent.change(field, { target: { value: reason } });
+    /* Enter is a newline: typing the reason never picks an outcome, only a button does */
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(acts.resolve).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'help' }));
+    expect(acts.resolve).toHaveBeenCalledWith('t1', 'help', reason);
   });
 
   it('says a reply gives the ticket back to the station that asked, with no button to press', () => {
