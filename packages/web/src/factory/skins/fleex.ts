@@ -310,16 +310,18 @@ export class FleexSkin implements Skin {
     const sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
     for (const { t, x, y, box: m } of S.named) {
       byId.set(t.ticketId, t);
+      /* where they are seen: as high as what carries them (on a skin seen from three quarters) */
+      const b = m ? this.seen(m) : null, carrier = this.machine(t.machineId), lift = carrier ? this.seen(carrier).h - carrier.h : 0;
       items.push({
-        id: t.ticketId, text: `#${t.info!.displayId} ${t.info!.title}`, x: sx(x), y: sy(y),
-        box: m ? { id: m.id, rect: { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z } } : undefined,
+        id: t.ticketId, text: `#${t.info!.displayId} ${t.info!.title}`, x: sx(x), y: sy(y - lift),
+        box: m && b ? { id: m.id, rect: { x: sx(b.x), y: sy(b.y), w: b.w * z, h: b.h * z } } : undefined,
       });
     }
     if (!items.length) return;
     const ctx = this.ctx, LH = 15, PAD = 5;
     ctx.save(); ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.font = `500 11px ${this.fonts.sans}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => ({ x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z }));
+    const solid = st.layout.machines.filter((m) => m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit').map((m) => this.seen(m)).map((b) => ({ x: sx(b.x), y: sy(b.y), w: b.w * z, h: b.h * z }));
     const boxes = layoutNames(items, { w: this.w, h: this.h }, (s) => ctx.measureText(s).width, { maxLines: all ? 8 : 6, maxWidth: 230, lineHeight: LH, pad: PAD, chip: 13, nearX: 120, nearY: 24, radius: Math.max(5, z * 0.26) }, solid);
     /* the lines that tie each box to what it names go under every box */
     const lit = pal.light;

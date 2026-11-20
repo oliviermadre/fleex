@@ -231,23 +231,39 @@ export class FactoryView {
   /** The first machine a belt leads to, following the belts as they point. */
   leadsTo(m: MachineSpec | null, dir = 0): MachineSpec | null { return this.scene.leadsTo(m, dir); }
 
-  ticketPos(ticketId: string): { x: number; y: number } | null { return this.scene.shown.get(ticketId) ?? null; }
-  /** Where every ticket is drawn, for a frame to be laid over them. */
-  ticketPlaces(): Iterable<[string, { x: number; y: number }]> { return this.scene.shown; }
+  /** The state of the last frame drawn: what a skin seen from three quarters needs to say how high a ticket is. */
+  private lastState: ViewState | null = null;
+  /** How high a machine stands, as the skin paints it (0 on a flat skin). */
+  private raised(m: MachineSpec | null): number { const st = this.lastState, f = this.skin.liftOf; return m && st && f ? f.call(this.skin, m, st) : 0; }
+  /** Where a ticket is seen: where it is drawn, as high as what carries it. */
+  ticketPos(ticketId: string): { x: number; y: number } | null {
+    const p = this.scene.shown.get(ticketId);
+    if (!p || !this.skin.liftOf) return p ?? null;
+    const t = this.lastState?.tickets.find((q) => q.ticketId === ticketId);
+    return { x: p.x, y: p.y - this.raised(this.machine(t?.machineId ?? null)) };
+  }
+  /** Where every ticket is seen, for a frame to be laid over them. */
+  ticketPlaces(): Iterable<[string, { x: number; y: number }]> {
+    if (!this.skin.liftOf || !this.lastState) return this.scene.shown;
+    const on = new Map(this.lastState.tickets.map((t) => [t.ticketId, t.machineId])), out: [string, { x: number; y: number }][] = [];
+    for (const [id, p] of this.scene.shown) out.push([id, { x: p.x, y: p.y - this.raised(this.machine(on.get(id) ?? null)) }]);
+    return out;
+  }
   /** Where a ticket's machine is on screen (the ticket itself, when it stands on no box), in the canvas's own pixels: what a card about the ticket sits beside. */
   anchorOf(ticketId: string, st: ViewState): { x: number; y: number; w: number; h: number } | null {
     const t = st.tickets.find((q) => q.ticketId === ticketId); if (!t) return null;
     const z = this.cam.z, sx = (wx: number) => (wx - this.cam.x) * z + this.w / 2, sy = (wy: number) => (wy - this.cam.y) * z + this.h / 2;
     this.use(st.layout);
     const m = this.machine(t.machineId);
-    if (m && isBox(m)) return { x: sx(m.x), y: sy(m.y), w: m.w * z, h: m.h * z };
-    const p = this.scene.shown.get(ticketId);
+    if (m && isBox(m)) { const L = this.raised(m); return { x: sx(m.x), y: sy(m.y - L), w: m.w * z, h: (m.h + L) * z }; }
+    const p = this.ticketPos(ticketId);
     return p ? { x: sx(p.x - 0.7), y: sy(p.y - 0.7), w: 1.4 * z, h: 1.4 * z } : null;
   }
 
   draw(st: ViewState, dtReal: number): void {
     this.resize();
     const S = this.scene.build(st, dtReal);
+    this.lastState = st;
     this.glide(dtReal);
     this.constrain(st.layout);
     this.skin.ground(this, S, st);

@@ -228,10 +228,26 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   `FactoryView.wheel` / `glide`): it glides and only rests on a step. Fonts served by Fleex (`public/fonts`, OFL).
   The page in the workshop's colours (`workshopTheme`); `pixel.test.ts`; two pixel pictures among the checks.
   Not done: an exit's light is still a soft glow under the pixel skin.
-- **Next, lot 6**: the three-quarter view (a lift per kind, front faces and feet, `pick()` on the boxes seen). Then
-  lot 7, the decor (wall and props generated from the floor), lot 8, lines, lot 9, people. A mock-up first for lot 6,
-  live like the pixel one: it answers open questions 5 (do platforms raise what stands on them), 7 (hidden tickets)
-  and 9 (build mode in three quarters).
+- **Lot 6, done**: picked on `docs/factory/pixel-3q.html` (live): a skin of its own, **Pixel 3D** (`skins/pixelTq.ts`),
+  platforms raise what stands wholly on them (E1), a hidden ticket's outline is drawn through what hides it (C2), build
+  mode goes flat (B2). A skin says how high it paints each machine (`liftOf`); the view's pick, frame, ticket card and
+  names follow what is seen. Two Pixel 3D pictures among the checks. Open questions 5, 7 and 9 are answered.
+- **Next, lot 8 before lot 7**: the owner described the platforms as a feature of build mode (below). A mock-up first.
+
+### Lot 8 as the owner described it (decided)
+
+The platforms are a feature of their own, drawn in build mode:
+
+- **Independent of the machines.** An area of the floor is laid where one wants; nothing in the data links it to the
+  stations on it. Whether a machine is raised is worked out when painting, from where it stands (wholly on it).
+- **Drawn with the mouse.** Click and drag makes a rectangle of X by Y tiles. Areas are always rectangles, on the
+  tiles.
+- **Its settings:** a name, a colour, where the name is written.
+- **Changed in build mode only.** A placed area is resized by dragging its sides (width, height) or its corners. It
+  can be edited and removed there.
+- **Out of build mode it is decor:** nothing of it answers a click.
+- **How skins show it:** a raised platform under Pixel 3D; the other skins need a look of their own (to mock up).
+- **Its name in the product:** "zone" is already taken (a machine where tickets wait: Inbound, Ready). To choose.
 
 ## Proposed order of work
 

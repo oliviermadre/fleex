@@ -1,5 +1,5 @@
 /**
- * The pixel skin seen from three quarters. DRAFT for the mock-up of lot 6 (`docs/factory/pixel-3q.html`).
+ * The pixel skin seen from three quarters: the skin "pixel-3d", chosen on `docs/factory/pixel-3q.html`.
  *
  * The matrix does not move: every machine keeps its tiles, where its shadow and its feet are. Its top is painted that
  * much higher (`LIFT`, under half a tile so the row above stays readable), and its front face fills the gap. What
@@ -9,8 +9,9 @@
  * hits what is seen (`liftOf`, read by the view's `pick`); what is dropped (a ticket let go, a machine placed, a ghost)
  * stays on its tiles.
  *
- * The mock-up's open questions are options here: whether a line's platform raises what stands on it, how a ticket
- * hidden behind a station of the row below shows, and whether build mode goes flat.
+ * The mock-up's open questions were options here, and the owner picked (`PIXEL_3D`): a platform raises what stands
+ * wholly on it, a ticket hidden behind a station of the row below has its outline drawn through, and build mode goes
+ * flat (placing things on tiles, seen from above). Platforms come from the floor's own areas (lot 8); none yet.
  */
 import { mix } from '../floorLook';
 import type { MachineSpec, FactoryLayout } from '../types';
@@ -37,12 +38,17 @@ export interface TqOptions {
   buildFlat?: boolean;
 }
 
+/** What the owner picked on the mock-up. */
+export const PIXEL_3D: TqOptions = { raise: true, hidden: 'outline', buildFlat: true };
+
 export class PixelTqSkin extends PixelSkin {
-  override readonly id: string = 'pixel-3q';
+  override readonly id: string = 'pixel-3d';
   private st: ViewState | null = null;
   private gridFor: FactoryLayout | null = null;
   private grid = new Map<string, MachineSpec>();
-  constructor(private readonly tq: TqOptions = {}) { super(); }
+  private readonly tq: TqOptions;
+  /** Options left unset keep the owner's picks. */
+  constructor(options: TqOptions = {}) { super(); this.tq = { ...PIXEL_3D, ...Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined)) }; }
 
   /** Seen from three quarters at this frame: not in build mode when it goes flat. */
   private standing(st: ViewState): boolean { return !(st.edit && this.tq.buildFlat); }

@@ -9,10 +9,11 @@ import { themeVars } from '../../lib/themes';
 import { FleexSkin } from './fleex';
 import { NeonSkin, nightTheme, NIGHT_FONT } from './neon';
 import { PixelSkin, WORKSHOP_FONT, workshopTheme } from './pixel';
+import { PixelTqSkin } from './pixelTq';
 import { isLight } from '../floorLook';
 import type { Skin } from './skin';
 
-export type SkinId = 'fleex' | 'neon' | 'pixel';
+export type SkinId = 'fleex' | 'neon' | 'pixel' | 'pixel-3d';
 export const DEFAULT_SKIN: SkinId = 'fleex';
 
 /** The page around the floor, painted in the skin's colours: CSS variables over the theme's, and a font. */
@@ -32,6 +33,7 @@ export const SKINS: readonly SkinInfo[] = [
   { id: 'fleex', name: 'Fleex', blurb: 'Follows the theme', make: () => new FleexSkin(), chrome: () => null },
   { id: 'neon', name: 'Neon', blurb: 'Night floor, your accent', make: () => new NeonSkin(), chrome: (theme) => ({ vars: themeVars(nightTheme(theme)), font: NIGHT_FONT, light: false }) },
   { id: 'pixel', name: 'Pixel', blurb: 'A workshop, by day or at night', make: () => new PixelSkin(), chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
+  { id: 'pixel-3d', name: 'Pixel 3D', blurb: 'The workshop, seen from three quarters', make: () => new PixelTqSkin(), chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
 ];
 
 /** The skin of that id; Fleex's for one that is not (or no longer) known. */

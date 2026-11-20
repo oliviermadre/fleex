@@ -9,6 +9,7 @@ import { FactoryView, type ViewState } from '../renderer';
 import { FleexSkin } from '../skins/fleex';
 import { NeonSkin, type NeonOptions } from '../skins/neon';
 import { PIXEL_FONTS, PixelSkin } from '../skins/pixel';
+import { PixelTqSkin } from '../skins/pixelTq';
 import type { Skin } from '../skins/skin';
 import { floorState, later, lens } from './fixture';
 
@@ -40,6 +41,8 @@ const SHOTS: Shot[] = [
   { name: 'neon-light', theme: 'light', cam: { x: 13, y: 10, z: 38 }, st: { edit: true, selMachine: 'a4' }, skin: () => new NeonSkin() },
   { name: 'pixel-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 32 }, st: {}, skin: () => new PixelSkin() },
   { name: 'pixel-light', theme: 'light', cam: { x: 11, y: 6, z: 48 }, st: { selMachine: 'st_agent' }, skin: () => new PixelSkin() },
+  { name: 'pixel3d-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 32 }, st: { hoverMachine: 'st_skill' }, skin: () => new PixelTqSkin() },
+  { name: 'pixel3d-light', theme: 'light', cam: { x: 11, y: 6, z: 48 }, st: { selMachine: 'st_agent' }, skin: () => new PixelTqSkin({ platforms: [{ x: 4, y: 0, w: 17, h: 4, color: '#3d6fd1', name: 'Build line' }] }) },
   {
     name: 'halted-drag', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
     st: { halted: true, selTickets: new Set(['t28', 't29']), pickTickets: new Set(['t0']), drag: { ticketId: 't1', x: 12.4, y: 5.6, ok: true, text: 'Drop on Build' } },

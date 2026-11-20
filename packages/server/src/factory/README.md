@@ -563,7 +563,7 @@ a layer, and what is carried just after what carries it). See `docs/factory/skin
 
 The skin is chosen in Settings › Appearance, under the theme (`factorySkin` in the settings, `FactorySkinPicker.tsx`,
 shown only while the Factory is on): one card a skin, each with a made-up floor painted live by the real renderer in
-that skin and the theme in use. There are three (`skins/index.ts`):
+that skin and the theme in use. There are four (`skins/index.ts`):
 
 - **Fleex** (`skins/fleex.ts`), the default: the floor as it has always been drawn, following the theme. A flat skin:
   everything on one layer, its depth the order the floor has always been painted in.
@@ -587,6 +587,22 @@ that skin and the theme in use. There are three (`skins/index.ts`):
   flare, at random from the station and the moment, so nothing is kept; it stands still when the floor does. The page
   around the floor is painted in the same workshop (`workshopTheme`), in
   Pixelify Sans; `pixel.test.ts` holds its inks as the neon's are held.
+
+- **Pixel 3D** (`skins/pixelTq.ts`), chosen on `docs/factory/pixel-3q.html`: the pixel workshop seen from three
+  quarters. Every machine keeps its tiles, where its shadow and feet are, and its top is painted higher by a height of
+  its kind (a station half a tile, a belt or a bridge a quarter, a teleporter an eighth; zones and exits are paint on
+  the floor), its front face filling the gap. What stands is painted by depth (the foot of its tiles: lower on the
+  screen passes in front), what is overhead (arms with what they carry, gantries, tolls) after it, what is carried
+  just after its carrier, at its height (`order` in `skins/skin.ts`); words and plates rise with what they are written
+  on. A ticket hidden behind a station of the row below has its outline drawn through it. Build mode goes flat:
+  things are placed on tiles, seen from above. A platform raises what stands wholly on it (none yet: see lot 8 in
+  `docs/factory/skins-handover.md`).
+
+A skin seen from three quarters says how high it paints each machine (`liftOf` on `Skin`). The view then answers
+for what is seen: a click hits the top or the front face of a machine, the nearest first (`pick`); a ticket is where
+it is drawn, as high as what carries it, for a click, a frame dragged over the floor, the card beside it and the
+names over it (`ticketPos`, `ticketPlaces`, `anchorOf`). What is dropped (a ticket let go, a machine placed, a ghost)
+stays on its tiles.
 
 A skin may give the steps its zoom rests on (`steps` on `Skin`): the pixel skin's pixels are whole only at 16, 32,
 48, 64 and 80 pixels a tile (and it does not pixelate at 4 and 8, from far). The view then zooms by steps
