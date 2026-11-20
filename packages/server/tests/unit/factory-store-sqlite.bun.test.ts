@@ -105,7 +105,7 @@ describe('SqliteFactoryStore', () => {
   it('round-trips an item, finds it by its key archived or not, and counts what each intake dropped', async () => {
     const item = (id: string, over: Partial<FactoryItemRow> = {}): FactoryItemRow => ({
       id, floorId: 'default', source: 'slack', sourceKey: `T1/C1/${id}`, title: 'hi', author: 'Ana', excerpt: 'can you look', url: 'https://x.slack.com/a',
-      tags: ['team:ops'], messages: 1, lastActivityAt: NOW, intakeId: 'in1', machineId: 'in1',
+      tags: ['team:ops'], fields: { channel: '#ops', labels: ['INBOX'], bot: false }, messages: 1, lastActivityAt: NOW, intakeId: 'in1', machineId: 'in1',
       state: { x: 1, y: 2, phase: 'zone', p: 0, fx: 1, fy: 0, outcome: '', released: false, since: NOW, runId: null, note: '' },
       archivedAt: null, archivedReason: null, createdAt: NOW, updatedAt: NOW, ...over,
     });
@@ -122,7 +122,7 @@ describe('SqliteFactoryStore', () => {
 
   it('keeps an item\'s visits apart from tickets\' runs, with what the station answered, and flags them after a restart', async () => {
     const nowState = { x: 1, y: 2, phase: 'zone' as const, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: NOW, runId: null, note: '' };
-    await store.saveItem({ id: 'i1', floorId: 'default', source: 'manual', sourceKey: 'k', title: 'hi', author: '', excerpt: '', url: null, tags: [], messages: 1, lastActivityAt: NOW, intakeId: null, machineId: null, state: nowState, archivedAt: null, archivedReason: null, createdAt: NOW, updatedAt: NOW });
+    await store.saveItem({ id: 'i1', floorId: 'default', source: 'manual', sourceKey: 'k', title: 'hi', author: '', excerpt: '', url: null, tags: [], fields: {}, messages: 1, lastActivityAt: NOW, intakeId: null, machineId: null, state: nowState, archivedAt: null, archivedReason: null, createdAt: NOW, updatedAt: NOW });
     await store.saveItemRun(runRow('v1', { ticketId: 'i1', reply: null, deliverableId: null }));
     await store.saveItemRun(runRow('v1', { ticketId: 'i1', status: 'completed', outcome: 'mine', reply: 'Answer Ana.', deliverableId: 'd1', finishedAt: NOW }));
     await store.saveItemRun(runRow('v2', { ticketId: 'i1', reply: null, deliverableId: null, startedAt: '2026-11-15T11:00:00.000Z' }));

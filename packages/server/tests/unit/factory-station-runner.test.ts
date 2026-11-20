@@ -19,7 +19,7 @@ function runner(output: Record<string, unknown> = { result: 'ok', schemaFields: 
 }
 const item = (over: Partial<FactoryItemRow> = {}): FactoryItemRow => ({
   id: 'i1', floorId: 'default', source: 'slack', sourceKey: 'T/C/1', title: 'Can you look at the cart?', author: 'Ana', excerpt: 'It forgets its items since Monday.',
-  url: 'https://x.slack.com/a', tags: ['team:shop'], messages: 3, lastActivityAt: '2026-11-20T09:00:00.000Z', intakeId: 'in', machineId: 's1', state: null,
+  url: 'https://x.slack.com/a', tags: ['team:shop'], fields: { channel: '#shop', kind: 'mention', bot: false }, messages: 3, lastActivityAt: '2026-11-20T09:00:00.000Z', intakeId: 'in', machineId: 's1', state: null,
   archivedAt: null, archivedReason: null, createdAt: '2026-11-20T08:00:00.000Z', updatedAt: '2026-11-20T09:00:00.000Z', ...over,
 });
 
@@ -54,7 +54,7 @@ describe('StationRunner', () => {
     const input = seen[0]!;
     expect(input.ticketId).toBeNull();
     expect(input.subject).toMatchObject({ repos: [], heading: 'Factory item from Slack' });
-    for (const bit of ['It is not a ticket', '**Title**: Can you look at the cart?', '**From**: Ana', '**Messages**: 3', 'https://x.slack.com/a', 'team:shop', 'It forgets its items since Monday.', '### Read (left as "ok")', 'Ana is the shop lead.']) expect(input.subject!.brief).toContain(bit);
+    for (const bit of ['It is not a ticket', '**Title**: Can you look at the cart?', '**From**: Ana', '**Messages**: 3', 'https://x.slack.com/a', 'team:shop', '**Channel**: #shop', '**Kind**: mention', '**From a bot**: no', 'It forgets its items since Monday.', '### Read (left as "ok")', 'Ana is the shop lead.']) expect(input.subject!.brief).toContain(bit);
     expect(input.step.outputSchema).toMatchObject({ properties: { outcome: { description: 'Which way the item leaves this station.' } } });
     /* nothing is posted on a ticket: there is none; the deliverable has no ticket either */
     expect(posted).toEqual([]);

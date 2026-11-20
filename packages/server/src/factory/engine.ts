@@ -2,13 +2,14 @@ import { normaliseScript, scriptOutcomes } from './script-runner.js';
 import { applyOps, normaliseOps, type TicketChange } from './set-ops.js';
 import { randomUUID } from 'node:crypto';
 import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
+import { fieldsOf } from './item-sources.js';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
   AREA_LABELS, DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
-  type AreaLabel, type ArmSpec, type BeltSpec, type DropRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
+  type AreaLabel, type ArmSpec, type BeltSpec, type ItemFields, type ItemRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
   type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
@@ -69,15 +70,43 @@ export function itemInfo(row: FactoryItemRow): FactoryTicketInfo {
     boardId: '', complexity: null, favorite: false, blocked: false,
   };
 }
-const itemOf = (row: FactoryItemRow): FactoryItemInfo => ({ source: row.source, author: row.author, excerpt: row.excerpt, url: row.url, messages: row.messages, lastActivityAt: row.lastActivityAt });
-/** Whether one of an intake's rules drops this conversation. */
-export function dropsIt(rules: readonly DropRule[] | undefined, i: { title: string; author: string; excerpt: string }): DropRule | null {
-  for (const r of rules ?? []) {
-    const needle = r.contains.trim().toLowerCase(); if (!needle) continue;
-    const hay = r.field === 'author' ? i.author : r.field === 'title' ? i.title : `${i.title}\n${i.excerpt}`;
-    if (hay.toLowerCase().includes(needle)) return r;
+const itemOf = (row: FactoryItemRow): FactoryItemInfo => ({ source: row.source, author: row.author, excerpt: row.excerpt, url: row.url, messages: row.messages, lastActivityAt: row.lastActivityAt, fields: row.fields });
+
+/** Whether a rule holds for an item: on a field every item has, or on one of its source's. */
+export function ruleHolds(r: ItemRule, i: { title: string; author: string; excerpt: string; fields: ItemFields }): boolean {
+  const raw = r.field === 'author' ? i.author : r.field === 'title' ? i.title : r.field === 'text' ? `${i.title}\n${i.excerpt}` : i.fields[r.field];
+  const have = (Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]).map((v) => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)).toLowerCase());
+  const wanted = r.op === 'contains' ? [r.value.trim().toLowerCase()] : r.value.split(',').map((v) => v.trim().toLowerCase()).filter(Boolean);
+  if (!wanted.length || !wanted[0]) return false;
+  /* a yes-or-no field the source did not fill is a no */
+  if (!have.length && (wanted[0] === 'no')) have.push('no');
+  if (r.op === 'contains') return have.some((h) => h.includes(wanted[0]!));
+  const any = have.some((h) => wanted.includes(h));
+  return r.op === 'is' ? any : !any;
+}
+/**
+ * Whether an intake lets an item in: not when a drop rule holds; and when it has keep rules, only when one of them
+ * holds. Returns the rule that decided, if any.
+ */
+export function lets(rules: readonly ItemRule[] | undefined, i: Parameters<typeof ruleHolds>[1]): { in: boolean; by: ItemRule | null } {
+  const all = rules ?? [], drop = all.find((r) => !r.keep && ruleHolds(r, i));
+  if (drop) return { in: false, by: drop };
+  const keeps = all.filter((r) => r.keep);
+  if (!keeps.length) return { in: true, by: null };
+  const keep = keeps.find((r) => ruleHolds(r, i));
+  return keep ? { in: true, by: keep } : { in: false, by: null };
+}
+/** What a source sent beyond what every item has, made safe to keep: short keys, short strings, short lists. */
+function cleanFields(input: unknown): ItemFields {
+  const out: ItemFields = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const [k, v] of Object.entries(input as Record<string, unknown>).slice(0, 30)) {
+    const key = k.trim().slice(0, 40); if (!key) continue;
+    if (typeof v === 'boolean') out[key] = v;
+    else if (typeof v === 'string' || typeof v === 'number') out[key] = String(v).slice(0, 500);
+    else if (Array.isArray(v)) out[key] = v.filter((x) => typeof x === 'string' || typeof x === 'number').map((x) => String(x).slice(0, 200)).slice(0, 50);
   }
-  return null;
+  return out;
 }
 
 export interface FactorySnapshot {
@@ -234,9 +263,13 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       if (!ITEM_SOURCES.includes(m.source)) throw new FactoryError(`unknown item source "${String(m.source)}"`);
       m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
       m.quietSec = Math.max(0, Math.min(7 * 86_400, Math.floor(Number(m.quietSec ?? DEFAULT_QUIET_SEC) || 0)));
-      m.drop = (Array.isArray(m.drop) ? m.drop : [])
-        .filter((r) => r && ['author', 'title', 'text'].includes(r.field) && typeof r.contains === 'string' && r.contains.trim())
-        .slice(0, 100).map((r) => ({ field: r.field, contains: r.contains.trim().slice(0, 200) }));
+      /* rules on a field every item has or on one of this source's; the drop rules of older floors become rules */
+      const known = new Set(fieldsOf(m.source).map((f) => f.key));
+      const old = (Array.isArray(m.drop) ? m.drop : []).filter((r) => r && typeof r.contains === 'string').map((r): ItemRule => ({ field: r.field, op: 'contains', value: r.contains }));
+      m.rules = [...old, ...(Array.isArray(m.rules) ? m.rules : [])]
+        .filter((r) => r && known.has(r.field) && ['contains', 'is', 'is_not'].includes(r.op) && typeof r.value === 'string' && r.value.trim())
+        .slice(0, 100).map((r) => ({ field: r.field, op: r.op, value: r.value.trim().slice(0, 300), ...(r.keep === true ? { keep: true } : {}) }));
+      delete m.drop;
     }
     else if (m.kind === 'area') {
       m.w = Math.max(1, Math.min(AREA_MAX, Math.floor(m.w || 1))); m.h = Math.max(1, Math.min(AREA_MAX, Math.floor(m.h || 1)));
@@ -979,17 +1012,17 @@ export class FactoryEngine {
   }
 
   /**
-   * A source says a conversation moved: a new one, or a new message on one already known. A new one is dropped when a
-   * rule of its intake recognises it (it never reaches the floor, the intake counts it), and comes in otherwise. A new
-   * message updates the item where it is; in its intake, the item waits for the conversation to be quiet again. An
-   * archived item comes back to its intake.
+   * A source says something moved: a new item, or a new entry under a key already known. A new one goes to the first
+   * intake of its source whose rules let it in (in the order they were built), and is dropped when none does: it never
+   * reaches the floor, and the first of them counts it. A new entry updates the item where it is; in its intake, the
+   * item waits to be quiet again. An archived item comes back to the intake it came in by (or the first of its source).
    */
   async ingest(input: ItemInput): Promise<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped' }> {
     if (!input || !ITEM_SOURCES.includes(input.source)) throw new FactoryError(`unknown item source "${String(input?.source)}"`);
     const key = String(input.key ?? '').trim().slice(0, 500);
     if (!key) throw new FactoryError('an item needs its key in its source');
-    const intake = this.machines.find((m) => m.spec.kind === 'intake' && m.spec.source === input.source);
-    if (!intake) throw new FactoryError(`No ${input.source} intake on the floor: put one there first (Build › Area › Intake)`);
+    const intakes = this.machines.filter((m) => m.spec.kind === 'intake' && m.spec.source === input.source);
+    if (!intakes.length) throw new FactoryError(`No ${input.source} intake on the floor: put one there first (Build › Place › Intake)`);
     const nowIso = new Date(this.now()).toISOString();
     const url = typeof input.url === 'string' && /^https?:\/\//.test(input.url) ? input.url.slice(0, 2000) : null;
     const fields = {
@@ -997,6 +1030,7 @@ export class FactoryEngine {
       author: String(input.author ?? '').trim().slice(0, 200),
       excerpt: String(input.excerpt ?? '').trim().slice(0, 2000),
       tags: (Array.isArray(input.tags) ? input.tags : []).map(String).map((t) => t.trim()).filter(Boolean).slice(0, 20),
+      fields: cleanFields(input.fields),
     };
     const count = (was: number) => Math.max(1, Math.floor(Number(input.messages) || was + 1));
 
@@ -1015,15 +1049,18 @@ export class FactoryEngine {
     const row: FactoryItemRow = {
       id: stored?.id ?? randomUUID(), floorId: this.floor.id, source: input.source, sourceKey: key, ...fields, url: url ?? stored?.url ?? null,
       messages: stored ? count(stored.messages) : Math.max(1, Math.floor(Number(input.messages) || 1)), lastActivityAt: nowIso,
-      intakeId: intake.spec.id, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: stored?.createdAt ?? nowIso, updatedAt: nowIso,
+      intakeId: intakes[0]!.spec.id, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: stored?.createdAt ?? nowIso, updatedAt: nowIso,
     };
     /* what was archived by hand or at an exit comes back; what was dropped, and anything new, goes through the rules */
     const back = !!stored && stored.archivedReason !== 'dropped';
-    if (!back && dropsIt((intake.spec as IntakeSpec).drop, row)) {
+    const intake = back ? intakes.find((m) => m.spec.id === stored!.intakeId) ?? intakes[0]! : intakes.find((m) => lets((m.spec as IntakeSpec).rules, row).in);
+    if (!intake) {
+      const first = intakes[0]!;
       await this.deps.store.saveItem({ ...row, archivedAt: nowIso, archivedReason: 'dropped' });
-      this.dropped.set(intake.spec.id, (this.dropped.get(intake.spec.id) ?? 0) + 1);
+      this.dropped.set(first.spec.id, (this.dropped.get(first.spec.id) ?? 0) + 1);
       return { itemId: null, status: 'dropped' };
     }
+    row.intakeId = intake.spec.id;
     const t: Ticket = { ticketId: row.id, machineId: null, s: this.looseState(), createdAt: row.createdAt, info: itemInfo(row), item: row };
     this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${key}`, row.id);
     this.accept(intake, t);

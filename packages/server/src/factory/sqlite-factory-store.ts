@@ -11,7 +11,7 @@ interface RunRow {
 
 export interface ItemDbRow {
   id: string; floor_id: string; source: string; source_key: string; title: string; author: string; excerpt: string; url: string | null;
-  tags: string | string[]; messages: number; last_activity_at: string; intake_id: string | null; machine_id: string | null; state: unknown;
+  tags: string | string[]; fields?: unknown; messages: number; last_activity_at: string; intake_id: string | null; machine_id: string | null; state: unknown;
   archived_at: string | null; archived_reason: string | null; created_at: string; updated_at: string;
 }
 const iso = (v: string | null): string | null => (v ? new Date(v).toISOString() : null);
@@ -20,7 +20,7 @@ export function itemFromRow(r: ItemDbRow): FactoryItemRow {
   const parse = <T>(v: unknown): T => (typeof v === 'string' ? JSON.parse(v) : v) as T;
   return {
     id: r.id, floorId: r.floor_id, source: r.source as ItemSource, sourceKey: r.source_key, title: r.title, author: r.author, excerpt: r.excerpt,
-    url: r.url, tags: parse<string[]>(r.tags) ?? [], messages: Number(r.messages) || 1, lastActivityAt: iso(r.last_activity_at)!,
+    url: r.url, tags: parse<string[]>(r.tags) ?? [], fields: (r.fields == null ? {} : parse(r.fields)) ?? {}, messages: Number(r.messages) || 1, lastActivityAt: iso(r.last_activity_at)!,
     intakeId: r.intake_id, machineId: r.machine_id, state: r.state == null ? null : parse(r.state),
     archivedAt: iso(r.archived_at), archivedReason: (r.archived_reason as FactoryItemRow['archivedReason']) ?? null,
     createdAt: iso(r.created_at)!, updatedAt: iso(r.updated_at)!,
@@ -29,7 +29,7 @@ export function itemFromRow(r: ItemDbRow): FactoryItemRow {
 export function itemToRow(i: FactoryItemRow, json: (v: unknown) => unknown): ItemDbRow {
   return {
     id: i.id, floor_id: i.floorId, source: i.source, source_key: i.sourceKey, title: i.title, author: i.author, excerpt: i.excerpt, url: i.url,
-    tags: json(i.tags) as string, messages: i.messages, last_activity_at: i.lastActivityAt, intake_id: i.intakeId, machine_id: i.machineId,
+    tags: json(i.tags) as string, fields: json(i.fields ?? {}), messages: i.messages, last_activity_at: i.lastActivityAt, intake_id: i.intakeId, machine_id: i.machineId,
     state: i.state == null ? null : json(i.state), archived_at: i.archivedAt, archived_reason: i.archivedReason, created_at: i.createdAt, updated_at: i.updatedAt,
   };
 }
@@ -91,9 +91,9 @@ export class SqliteFactoryStore implements FactoryStorePort {
 
   async saveItem(i: FactoryItemRow): Promise<void> {
     this.conn.db.prepare(`
-      INSERT INTO factory_items (id, floor_id, source, source_key, title, author, excerpt, url, tags, messages, last_activity_at, intake_id, machine_id, state, archived_at, archived_reason, created_at, updated_at)
-      VALUES (@id, @floor_id, @source, @source_key, @title, @author, @excerpt, @url, @tags, @messages, @last_activity_at, @intake_id, @machine_id, @state, @archived_at, @archived_reason, @created_at, @updated_at)
-      ON CONFLICT(id) DO UPDATE SET title = excluded.title, author = excluded.author, excerpt = excluded.excerpt, url = excluded.url, tags = excluded.tags,
+      INSERT INTO factory_items (id, floor_id, source, source_key, title, author, excerpt, url, tags, fields, messages, last_activity_at, intake_id, machine_id, state, archived_at, archived_reason, created_at, updated_at)
+      VALUES (@id, @floor_id, @source, @source_key, @title, @author, @excerpt, @url, @tags, @fields, @messages, @last_activity_at, @intake_id, @machine_id, @state, @archived_at, @archived_reason, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET title = excluded.title, author = excluded.author, excerpt = excluded.excerpt, url = excluded.url, tags = excluded.tags, fields = excluded.fields,
         messages = excluded.messages, last_activity_at = excluded.last_activity_at, intake_id = excluded.intake_id, machine_id = excluded.machine_id,
         state = excluded.state, archived_at = excluded.archived_at, archived_reason = excluded.archived_reason, updated_at = excluded.updated_at
     `).run(itemToRow(i, (v) => JSON.stringify(v)) as unknown as Record<string, unknown>);

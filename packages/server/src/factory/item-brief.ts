@@ -1,4 +1,5 @@
 import type { FactoryItemRow, FactoryRunRow } from './types.js';
+import { SOURCE_FIELDS } from './item-sources.js';
 
 const SOURCE: Record<string, string> = { slack: 'Slack', gmail: 'Gmail', github: 'GitHub', manual: 'made by hand' };
 /** How many earlier visits a brief recalls, and how much of each answer. */
@@ -22,6 +23,7 @@ export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[
     `- **Messages**: ${item.messages}, the last one at ${item.lastActivityAt}`,
     item.url ? `- **Link**: ${item.url}` : null,
     item.tags.length ? `- **Tags**: ${item.tags.join(', ')}` : null,
+    ...details(item),
     '',
     '## What came with it',
     '',
@@ -38,6 +40,12 @@ export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[
     }
   }
   return lines.join('\n');
+}
+
+/** What its source says of it beyond that, by the names its source's fields have (a field not in the list keeps its key). */
+function details(item: FactoryItemRow): string[] {
+  const label = new Map(SOURCE_FIELDS[item.source].map((f) => [f.key, f.label]));
+  return Object.entries(item.fields ?? {}).map(([k, v]) => `- **${label.get(k) ?? k}**: ${Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'yes' : 'no') : v}`);
 }
 
 /** The prompt's first line for a run on an item. */
