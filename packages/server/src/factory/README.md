@@ -111,7 +111,7 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   0.375 tile high). An item is an object in relief, as a ticket is (`ticketToken.ts`), drawn from its source's mark
   instead of a type's icon, in its source's colour (`items.ts`); the pixel skins draw that mark as an eleven-pixel
   icon like a type's object (a solid shape in a one-pixel outline, one pixel of light), at any zoom, where a ticket
-  would be a crate. A dock shows two of what it holds, far enough apart for those icons, then a count: four capsules in a pinwheel for Slack, an envelope
+  would be a crate. A dock shows two of what it holds, far enough apart for those icons, then a count. The marks: four capsules in a pinwheel for Slack, an envelope
   for Gmail, a cat's head for GitHub, a written sheet for one made by hand. These marks recall the sources; they are not their logos.
   An intake shows its source's mark in relief on its badge, `HELD` (what waits for its conversation to be quiet,
   drawn faded in the dock) and `DROPPED` (over 24 hours). A click on an item opens its card beside it
