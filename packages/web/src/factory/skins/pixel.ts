@@ -1,16 +1,16 @@
 /**
  * The pixel skin, "workshop": the floor in pixel art, chosen on `docs/factory/pixel-flat.html`.
  *
- * Pixel art from the same painters: the picture is painted at a low resolution, `ART` pixels to a tile, then enlarged
- * without smoothing. The words are not: they wait, and are written crisp over the enlarged picture, in pixel fonts
- * (`pixelFonts.css`). Pixels are whole only when a tile is a whole number of screen pixels per art pixel, so the zoom
+ * The picture is painted at a low resolution, `ART` pixels to a tile, then enlarged without smoothing; every part of
+ * the floor is drawn pixel by pixel (`PixelLook`, `pixelArt.ts`). The words are not: they wait, and are written crisp
+ * over the enlarged picture, in pixel fonts (`pixelFonts.css`). Pixels are whole only when a tile is a whole number of screen pixels per art pixel, so the zoom
  * rests on `PIXEL_STEPS` only: the view glides between them and never stops between them (`steps`, read by the view).
  * Seen from far (under `ART` pixels a tile), the picture is not pixelated: a pixel of art would be smaller than a pixel
  * of the screen.
  *
- * Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue, hard shadows, a dithered
- * lamp light, tickets as crates in the colour of their type, and a worker at the foot of each station that runs
- * something, busy while it does. Workers are procedural: drawn from the scene at each frame, kept by no one.
+ * Its own drawing: a floor of tiles, flat bodies with a thick outline in their kind's hue, hard shadows, a lamp light
+ * in rings that flicker, each ticket as the object of its type (a crate when it has none), and a worker at the foot of
+ * each station that runs something, busy while it does. Workers are procedural: drawn from the scene at each frame, kept by no one.
  *
  * It follows the theme: a cream workshop on a light theme, a workshop at night on a dark one, with the theme's accent
  * made to read on it. The page around the floor is painted in the same workshop (`workshopTheme`).
@@ -88,8 +88,8 @@ export function workshopTheme(theme: Theme): Theme {
 }
 
 /**
- * How sharp the pixel art is. DRAFT for the readability mock-up (`docs/factory/pixel-crisp.html`): neither is on in
- * the app until the owner picks.
+ * How sharp the pixel art is, chosen on the readability mock-ups (`docs/factory/pixel-crisp.html`, `pixel-parts.html`):
+ * both are on in the app (`PIXEL_LOOK`); a mock-up may turn them off to show the pixel skin as it was.
  * - `crisp` (step 1): the view rests on the grid of art pixels; the words are in Silkscreen at whole multiples of 8
  *   pixels of the screen (the only sizes it is sharp at) on whole pixels, or not written; a ticket is the object of its
  *   type, eleven pixels square (a crate when it has none), on whole pixels; no line is thinner than a pixel.
@@ -99,6 +99,8 @@ export function workshopTheme(theme: Theme): Theme {
  *   stations, areas, the lens, the tickets' marks, and what is laid over the floor; plates have square corners.
  */
 export interface PixelLook { crisp?: boolean; sprites?: boolean }
+/** What the owner picked (R2): both steps. */
+export const PIXEL_LOOK: PixelLook = { crisp: true, sprites: true };
 
 /** The icons of the kinds of station, seven pixels square: an agent's head, a tool, three seats, a prompt, a shield. */
 const ICONS: Record<string, readonly string[]> = {
@@ -153,7 +155,7 @@ export class PixelSkin extends FleexSkin {
   private readonly look: PixelLook;
   /** The view's camera moved onto the grid of art pixels, for this frame (crisp only). */
   private snapCam: { x: number; y: number; z: number } | null = null;
-  constructor(look: PixelLook = {}) {
+  constructor(look: PixelLook = PIXEL_LOOK) {
     super();
     this.look = { ...look, crisp: look.crisp || look.sprites };
     this.fonts = this.look.crisp ? { sans: '"Silkscreen", ui-monospace, monospace', mono: '"Silkscreen", ui-monospace, monospace' } : { sans: WORKSHOP_FONT, mono: '"Silkscreen", ui-monospace, monospace' };
