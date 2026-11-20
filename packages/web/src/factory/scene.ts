@@ -100,10 +100,10 @@ export interface PortView {
 }
 /**
  * A dock of 3 by 2: a desk, where a ticket is born, or an intake, where items of a source come in. What no arm has
- * taken yet stands in it (`held`; in an intake, what waits for its conversation to be quiet is marked `wait`); what is
+ * taken yet stands in it (`held`, two at most, then `more`); what is
  * let out waits at the quays of its arms. An intake counts what waits (`waiting`) and what its rules dropped over 24 h.
  */
-export interface DockView { kind: 'dock'; m: DeskSpec | IntakeSpec; held: Placed[]; quays: Quay[]; noArm: boolean; waiting: number; dropped: number }
+export interface DockView { kind: 'dock'; m: DeskSpec | IntakeSpec; held: Placed[]; more: number; quays: Quay[]; noArm: boolean; waiting: number; dropped: number }
 export type BoxView = LabelView | ZoneView | StationView | StatusView | ExitView | PortView | DockView;
 
 export interface ArmView {
@@ -512,10 +512,13 @@ export class FloorScene {
 
   private dock(m: DeskSpec | IntakeSpec, tickets: FactoryTicket[]): DockView {
     const { x, y, h } = m, intake = m.kind === 'intake', takers = this.takersOf(m), D = this.leavers(m, takers, tickets);
-    const held = tickets.filter((t) => !D.quay.has(t.ticketId)).slice(0, intake ? 3 : 4)
-      .map((t, i) => intake ? this.place(t, x + 1.55 + i * 0.42, y + h - 0.5, 0.3, t.released ? '' : 'wait') : this.place(t, x + 1.1 + i * 0.42, y + h - 0.55, 0.34, ''));
+    /* two at most, far enough apart for a pixel skin's icon (eleven pixels of sixteen to the tile); the rest is a count */
+    const inDock = tickets.filter((t) => !D.quay.has(t.ticketId)), x0 = x + (intake ? 1.55 : 1.15);
+    /* not faded while it waits: what stands in the dock waits by definition (what is let out goes to a quay), HELD says so, and a faded pixel icon loses its outline */
+    const held = inDock.slice(0, 2).map((t, i) => this.place(t, x0 + i * 0.72, y + h - 0.52, intake ? 0.3 : 0.34, ''));
+    for (const t of inDock.slice(2)) this.shown.set(t.ticketId, { x: x0 + 0.72, y: y + h - 0.52 });
     return {
-      kind: 'dock', m, held, quays: this.quays(takers, D), noArm: !takers.length,
+      kind: 'dock', m, held, more: Math.max(0, inDock.length - 2), quays: this.quays(takers, D), noArm: !takers.length,
       waiting: tickets.filter((t) => !t.released).length, dropped: intake ? this.st.intakes?.[m.id]?.dropped ?? 0 : 0,
     };
   }

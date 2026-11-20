@@ -3,9 +3,9 @@
  * floor an item is an object in relief, as a ticket is (`ticketToken.ts`), drawn from its source's mark instead of a
  * type's icon: its type is `src:<source>` (the server gives it so), which is all the floor needs to draw it.
  *
- * The marks are drawn for the floor, in strokes on a 24-unit box like Fleex's icons: they recall each source (a hash of
- * four bars and four dots, an envelope with its fold, a branch with its commits, a sheet), they are not the sources'
- * own logos.
+ * The marks are drawn for the floor, in strokes on a 24-unit box like Fleex's icons: they recall each source (four
+ * capsules in a pinwheel, an envelope with its flap, a cat's head, a written sheet), they are not the sources' own
+ * logos. The pixel skins draw the same four as eleven-pixel icons (`TYPE_ICONS` in `skins/pixel.ts`).
  */
 import type { Part } from './ticketToken';
 import type { FactoryTicket } from './types';
@@ -18,13 +18,13 @@ export const SOURCE_COLORS: Record<ItemSource, string> = { slack: '#e879f9', gma
 
 export const SOURCE_PARTS: Record<ItemSource, Part[]> = {
   slack: [
-    { kind: 'path', d: 'M9.5 4v7' }, { kind: 'path', d: 'M14.5 13v7' }, { kind: 'path', d: 'M4 14.5h7' }, { kind: 'path', d: 'M13 9.5h7' },
-    { kind: 'circle', cx: 14.5, cy: 5.5, r: 1.1 }, { kind: 'circle', cx: 5.5, cy: 9.5, r: 1.1 }, { kind: 'circle', cx: 18.5, cy: 14.5, r: 1.1 }, { kind: 'circle', cx: 9.5, cy: 18.5, r: 1.1 },
+    { kind: 'rect', x: 6.5, y: 2.5, w: 4, h: 8, rx: 2 }, { kind: 'rect', x: 13.5, y: 6.5, w: 8, h: 4, rx: 2 },
+    { kind: 'rect', x: 13.5, y: 13.5, w: 4, h: 8, rx: 2 }, { kind: 'rect', x: 2.5, y: 13.5, w: 8, h: 4, rx: 2 },
   ],
   gmail: [{ kind: 'rect', x: 3.5, y: 5.5, w: 17, h: 13, rx: 2.2 }, { kind: 'path', d: 'M4.5 7l7.5 6 7.5-6' }],
   github: [
-    { kind: 'circle', cx: 7, cy: 6, r: 2.2 }, { kind: 'circle', cx: 7, cy: 18, r: 2.2 }, { kind: 'circle', cx: 17, cy: 8, r: 2.2 },
-    { kind: 'path', d: 'M7 8.5v7' }, { kind: 'path', d: 'M17 10.5c0 3.5-3 4.5-8 5.5' },
+    { kind: 'path', d: 'M4.5 11.5V4l4.5 3.5h6L19.5 4v7.5c0 5-3.4 8.5-7.5 8.5s-7.5-3.5-7.5-8.5z' },
+    { kind: 'circle', cx: 9, cy: 12.5, r: 0.6 }, { kind: 'circle', cx: 15, cy: 12.5, r: 0.6 },
   ],
   manual: [{ kind: 'rect', x: 5.5, y: 3.5, w: 13, h: 17, rx: 2 }, { kind: 'path', d: 'M9 9h6M9 12.5h6M9 16h3.5' }],
 };

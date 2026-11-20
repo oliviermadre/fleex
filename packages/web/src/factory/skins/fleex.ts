@@ -1094,6 +1094,7 @@ export class FleexSkin implements Skin {
       else this.label(st.edit ? 'double-click: settings' : 'double-click: the form', x + 0.24, y + h - 0.28, 0.16, pal.text3, { mono: true, fit: w - 0.4 });
     }
     for (const p of v.held) this.ticket(p, st);
+    if (v.more > 0) this.label(`+${v.more}`, x + w - 0.16, y + h - 0.6, 0.2, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
     this.quays(v.quays, st, pal, false);
   }
 

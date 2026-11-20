@@ -130,11 +130,11 @@ const TYPE_ICONS: Record<string, readonly string[]> = {
   ops: ['...XX.XX...', '..XooXooX..', '.XXooXooXX.', 'XowoooooooX', 'XoooXXXoooX', '.XXoX.XoXX.', 'XoooXXXoooX', 'XoooooooooX', '.XXooXooXX.', '..XooXooX..', '...XX.XX...'],
   lead: ['...........', '....XXX....', '...X...X...', 'XXXXXXXXXXX', 'XowoooooooX', 'XoooooooooX', 'XXXXXwXXXXX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
   think: ['...XXXXX...', '..XowoooX..', '.XowoooooX.', '.XoooooooX.', '.XoooooooX.', '..XoooooX..', '...XoooX...', '...XXXXX...', '...XgggX...', '...XXXXX...', '....XXX....'],
-  /* items: the mark of their source (see `../items.ts`), eleven pixels square as a type's object */
-  'src:slack': ['...X...X...', '..XoX.XoX..', 'XXXoXXXoXXX', 'XowooooooXX', 'XXXoXXXoXXX', '..XoX.XoX..', 'XXXoXXXoXXX', 'XoooooooooX', 'XXXoXXXoXXX', '..XoX.XoX..', '...X...X...'],
+  /* items: the mark of their source (see `../items.ts`), drawn as a type's object is, a solid shape in a one-pixel outline: Slack's four bars in a pinwheel, Gmail's envelope, GitHub's cat, a written sheet */
+  'src:slack': ['...XX......', '..XwwX.....', '..XwwXXXXX.', '..XwwXooooX', '..XwwXooooX', '.XXXX.XXXX.', 'XooooXwwX..', 'XooooXwwX..', '.XXXXXwwX..', '.....XwwX..', '......XX...'],
   'src:gmail': ['...........', 'XXXXXXXXXXX', 'XwXoooooXoX', 'XooXoooXooX', 'XoooXoXoooX', 'XooooXooooX', 'XoooooooooX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
-  'src:github': ['.XXX.......', 'XowoX..XXX.', 'XoooX.XowoX', '.XoX..XoooX', '.XoX...XoX.', '.XoX..XoX..', '.XoX.XoX...', '.XoXXoX....', 'XoooXX.....', 'XoooX......', '.XXX.......'],
-  'src:manual': ['.XXXXXXX...', '.XwooooXX..', '.XoooooXoX.', '.XoXXXoXXXX', '.XoooooooX.', '.XoXXXXXoX.', '.XoooooooX.', '.XoXXXXXoX.', '.XoooooooX.', '.XoooooooX.', '.XXXXXXXXX.'],
+  'src:github': ['.X.......X.', 'XoX.....XoX', 'XooXXXXXooX', 'XowoooooooX', 'XoooooooooX', 'XooXoooXooX', 'XooXoooXooX', 'XoooooooooX', '.XoooooooX.', '..XoooooX..', '...XXXXX...'],
+  'src:manual': ['..XXXX.....', '.XwoooX....', '.XooooXX...', '.XooooXwX..', '.XoooooooX.', '.XoXXXXooX.', '.XoooooooX.', '.XoXXXXooX.', '.XoooooooX.', '.XoXXXoooX.', '..X...XXX..'],
 };
 /** A chevron pointing east, three pixels by five; three by six (it sits in the middle of a tile); four by seven, two thick. */
 const CHEVRON = ['X..', '.X.', '..X', '.X.', 'X..'];
