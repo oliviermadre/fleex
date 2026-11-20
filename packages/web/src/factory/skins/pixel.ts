@@ -102,7 +102,7 @@ export function workshopTheme(theme: Theme): Theme {
  */
 export interface PixelLook {
   crisp?: boolean; sprites?: boolean;
-  /** DRAFT for the decor mock-up (`docs/factory/decor.html`): the hall, its walls, the yard and props, generated. Off in the app. */
+  /** The decor: the hall, its walls, the yard and props, generated (`decor.ts`); none when unset. The page sets it (`setDecor`). */
   decor?: DecorOptions | null;
 }
 /** What the owner picked (R2): both steps. */
@@ -229,7 +229,7 @@ export class PixelSkin extends FleexSkin {
   }
 
   /**
-   * The decor (DRAFT, see `PixelLook.decor`): the yard and the walls under everything, then the props, on the floor
+   * The decor, in pixel art: the yard and the walls under everything, then the props, on the floor
    * for a flat skin, standing at their row for one seen from three quarters (`standing`).
    */
   protected override decorPieces(st: ViewState, out: Piece[], standing: boolean): void {
@@ -237,7 +237,7 @@ export class PixelSkin extends FleexSkin {
     if (!d) return;
     const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
     const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    const paint = (): DecorPaint => ({ ctx: this.ctx, light: pal.light, clock: this.clock, z: this.cam.z, view, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    const paint = (): DecorPaint => ({ ctx: this.ctx, light: pal.light, clock: this.clock, time: this.wallClock(), z: this.cam.z, view, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
     out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') yard(p, hall, F); walls(p, hall, built, 'FLEEX FACTORY'); } });
     if (!d.props || (st.edit && d.build === 'hide')) return;
     if (!standing) { out.push({ layer: 'floor', depth: -0.5, draw: () => props(paint(), st.layout, hall, d.props, !!st.edit) }); return; }

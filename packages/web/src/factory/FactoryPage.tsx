@@ -158,8 +158,8 @@ function Floor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   /* the skin chosen in Settings paints the floor, and the page around it when it has colours of its own */
-  const { skin, chrome } = useFactorySkin(), skinRef = useRef(skin);
-  skinRef.current = skin;
+  const { skin, chrome, make: makeSkin, key: skinKey } = useFactorySkin(), skinRef = useRef(makeSkin);
+  skinRef.current = makeSkin;
   const chromeStyle = useMemo<CSSProperties | undefined>(() => (chrome ? { ...chrome.vars, fontFamily: chrome.font ?? undefined, colorScheme: chrome.light ? 'light' : 'dark' } as CSSProperties : undefined), [chrome]);
   const viewRef = useRef<FactoryView | null>(null);
   const [view, setView] = useState<FactoryView | null>(null);
@@ -262,7 +262,7 @@ function Floor() {
   // The draw loop.
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
-    const v = new FactoryView(cv, skinRef.current.make()); viewRef.current = v; setView(v);
+    const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
@@ -739,9 +739,9 @@ function Floor() {
   }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
-  /* another skin chosen while the page is open: the floor is painted with it from the next frame */
-  const skinShown = useRef(skin);
-  useEffect(() => { if (skinShown.current !== skin) { skinShown.current = skin; viewRef.current?.setSkin(skin.make()); } }, [skin]);
+  /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
+  const skinShown = useRef(skinKey);
+  useEffect(() => { if (skinShown.current !== skinKey) { skinShown.current = skinKey; viewRef.current?.setSkin(makeSkin()); } }, [skinKey, makeSkin]);
 
   const halted = snapshot?.floor.settings.halted === true;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;

@@ -1,6 +1,6 @@
 /**
  * The decor of the floor, generated, never placed: a hall with its walls, what hangs on the top wall, and props on the
- * free tiles. DRAFT for the decor mock-up (`docs/factory/decor.html`): off in the app until the owner picks.
+ * free tiles. Picked on `docs/factory/decor.html` (the options it uses are in `DECOR`, `skins/index.ts`).
  *
  * Everything here follows from the layout and a seed per tile, so it does not change from one frame or one visit to
  * the next, and it moves when the floor does: a column of machines built further out pushes the wall out with it.
@@ -68,11 +68,10 @@ const ODDS: Record<1 | 2, { wall: number; open: number }> = { 1: { wall: 0.1, op
  */
 export function propsIn(layout: FactoryLayout, hall: Rect, view: Rect, density: DecorOptions['props']): Prop[] {
   if (!density) return [];
-  const solid = new Set<string>(), kept = new Set<string>();
-  for (const m of layout.machines) {
-    if (m.kind === 'label') continue;
-    for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) (m.kind === 'area' ? kept : solid).add(`${i},${j}`);
-  }
+  /* worked out once for a layout and a view on whole tiles: a frame that moves less than a tile reuses it */
+  const key = `${hall.x},${hall.y},${hall.w},${hall.h}|${Math.floor(view.x)},${Math.floor(view.y)},${Math.ceil(view.x + view.w)},${Math.ceil(view.y + view.h)}|${density}`, last = lastProps.get(layout);
+  if (last?.key === key) return last.out;
+  const { solid, kept } = tilesOf(layout);
   const near = (i: number, j: number) => { for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) if (solid.has(`${i + a},${j + b}`)) return true; return false; };
   const odds = ODDS[density], out: Prop[] = [];
   const i0 = Math.max(hall.x, Math.floor(view.x)), j0 = Math.max(hall.y, Math.floor(view.y)), i1 = Math.min(hall.x + hall.w, Math.ceil(view.x + view.w)), j1 = Math.min(hall.y + hall.h, Math.ceil(view.y + view.h));
@@ -84,7 +83,22 @@ export function propsIn(layout: FactoryLayout, hall: Rect, view: Rect, density: 
       : k < 0.3 ? 'plant' : k < 0.55 ? 'crates' : k < 0.72 ? 'barrel' : k < 0.88 ? 'pallet' : 'cone';
     out.push({ kind, x: i, y: j });
   }
+  lastProps.set(layout, { key, out });
   return out;
+}
+const lastProps = new WeakMap<FactoryLayout, { key: string; out: Prop[] }>();
+const tiles = new WeakMap<FactoryLayout, { solid: Set<string>; kept: Set<string> }>();
+/** The tiles machines take, and those of areas, once for a layout. */
+function tilesOf(layout: FactoryLayout): { solid: Set<string>; kept: Set<string> } {
+  const had = tiles.get(layout);
+  if (had) return had;
+  const solid = new Set<string>(), kept = new Set<string>();
+  for (const m of layout.machines) {
+    if (m.kind === 'label') continue;
+    for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) (m.kind === 'area' ? kept : solid).add(`${i},${j}`);
+  }
+  tiles.set(layout, { solid, kept });
+  return { solid, kept };
 }
 
 /** The trees of the yard, outside a hall that follows what is built: on the floor, off the walls, a few to the tile. */

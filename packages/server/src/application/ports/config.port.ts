@@ -106,6 +106,8 @@ export interface AppConfig {
   namedActions?: NamedAction[];
   /** How the Factory floor is painted ('fleex', 'neon'): chosen in Settings › Appearance, read by the page only. Unset → 'fleex'. */
   factorySkin?: string;
+  /** Whether the Factory floor has its decor, skin by skin (`factory/skins/index.ts` in the page). A skin not listed has its own default. */
+  factoryDecor?: Record<string, boolean>;
   /**
    * Local hour (0-23) after which the nightly memory consolidation becomes due.
    * Unset → 3. The pass runs on the first tick past this hour, so a laptop that

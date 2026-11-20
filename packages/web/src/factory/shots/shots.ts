@@ -11,6 +11,7 @@ import { NeonSkin, type NeonOptions } from '../skins/neon';
 import { PIXEL_FONTS, PixelSkin } from '../skins/pixel';
 import { PixelTqSkin } from '../skins/pixelTq';
 import type { Skin } from '../skins/skin';
+import { DECOR } from '../skins';
 import { floorState, later, lens } from './fixture';
 
 const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
@@ -19,6 +20,8 @@ const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
 interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number; skin?: () => Skin }
 
 const base = (): ViewState => floorState();
+/** A skin with the decor, its clock stopped at ten past ten: a check picture must not change with the time. */
+const decorated = <T extends FleexSkin>(skin: T): T => { skin.setDecor(DECOR).wallClock = () => new Date(2026, 0, 1, 10, 10); return skin; };
 
 const SHOTS: Shot[] = [
   { name: 'floor-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {} },
@@ -43,6 +46,10 @@ const SHOTS: Shot[] = [
   { name: 'pixel-light', theme: 'light', cam: { x: 11, y: 6, z: 48 }, st: { selMachine: 'st_agent' }, skin: () => new PixelSkin() },
   { name: 'pixel3d-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 32 }, st: { hoverMachine: 'st_skill' }, skin: () => new PixelTqSkin() },
   { name: 'pixel3d-light', theme: 'light', cam: { x: 11, y: 6, z: 48 }, st: { selMachine: 'st_agent' }, skin: () => new PixelTqSkin({ platforms: [{ x: 4, y: 0, w: 17, h: 4, color: '#3d6fd1', name: 'Build line' }] }) },
+  { name: 'decor-pixel-light', theme: 'light', cam: { x: 13, y: 2, z: 32 }, st: { selTicket: null }, skin: () => decorated(new PixelSkin()) },
+  { name: 'decor-pixel3d-dark', theme: 'verdant', cam: { x: 13, y: 1, z: 48 }, st: { edit: true, selTicket: null }, skin: () => decorated(new PixelTqSkin()) },
+  { name: 'decor-fleex-light', theme: 'light', cam: { x: 13, y: 6, z: 24 }, st: { selTicket: null }, skin: () => decorated(new FleexSkin()) },
+  { name: 'decor-neon-dark', theme: 'verdant', cam: { x: 13, y: 6, z: 24 }, st: { selTicket: null }, skin: () => decorated(new NeonSkin()) },
   {
     name: 'halted-drag', theme: 'verdant', cam: { x: 13, y: 10, z: 38 },
     st: { halted: true, selTickets: new Set(['t28', 't29']), pickTickets: new Set(['t0']), drag: { ticketId: 't1', x: 12.4, y: 5.6, ok: true, text: 'Drop on Build' } },

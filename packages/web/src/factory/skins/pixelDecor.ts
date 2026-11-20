@@ -1,8 +1,8 @@
 /**
  * The decor of the pixel skins, painted pixel by pixel (`pixelArt.ts`) from what `decor.ts` generates: the yard round
  * a hall that follows what is built, the hall's walls, what hangs on the top wall (windows, the sign, a clock that
- * gives the time, a door, notice boards, extinguishers, vents) and the props on free tiles. DRAFT for the decor
- * mock-up (`docs/factory/decor.html`).
+ * gives the time, a door, notice boards, extinguishers, vents) and the props on free tiles. Picked on
+ * `docs/factory/decor.html`.
  *
  * By day the windows show the sky, at night the stars. Nothing here is kept: it is painted from the layout at each
  * frame, the parts of it the view shows.
@@ -16,8 +16,10 @@ import { ART, box, disc, fillWhere, seg } from './pixelArt';
 export interface DecorPaint {
   ctx: CanvasRenderingContext2D;
   light: boolean;
-  /** The floor's clock, in seconds; the clock on the wall reads the real time. */
+  /** The floor's clock, in seconds. */
   clock: number;
+  /** The time the clock on the wall gives. */
+  time: Date;
   /** Pixels of the screen to a tile. */
   z: number;
   /** The tiles the view shows. */
@@ -120,7 +122,7 @@ function fixture(p: DecorPaint, kind: ReturnType<typeof wallThings>[number]['kin
     box(ctx, X + 6, WY + 26, 2, 6, INK); box(ctx, X + w * A - 8, WY + 26, 2, 6, INK);
     p.say(sign, x + w / 2, top + 1, 0.5, '#f2b01e', { align: 'center', weight: 700, mono: true, min: 8, max: 32, dark: true });
   } else if (kind === 'clock') {
-    const cx = X + 8, cy = WY + 16, now = new Date(), m = now.getMinutes() + now.getSeconds() / 60, h = (now.getHours() % 12) + m / 60;
+    const cx = X + 8, cy = WY + 16, now = p.time, m = now.getMinutes() + now.getSeconds() / 60, h = (now.getHours() % 12) + m / 60;
     disc(ctx, cx, cy, 7.5, INK); disc(ctx, cx, cy, 6.5, '#fafafa');
     for (let k = 0; k < 4; k++) box(ctx, cx + [5, 0, -6, 0][k]!, cy + [0, 5, 0, -6][k]!, 1, 1, INK);
     const a = (t: number) => (t * Math.PI * 2) - Math.PI / 2;

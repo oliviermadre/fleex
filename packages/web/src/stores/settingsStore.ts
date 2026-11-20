@@ -58,6 +58,8 @@ export interface AppSettings {
   namedActions?: { name: string; description?: string }[];
   /** How the Factory floor is painted (`factory/skins/index.ts`). Unset → Fleex's own skin. */
   factorySkin?: string;
+  /** Whether the Factory floor has its decor, skin by skin; a skin not listed has its own default (`skins/index.ts`). */
+  factoryDecor?: Record<string, boolean>;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**

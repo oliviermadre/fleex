@@ -66,6 +66,8 @@ export const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 
 export class FleexSkin implements Skin {
   readonly id: string = 'fleex';
+  /** The zooms the view rests on, for a skin whose pixels must be whole (see `Skin.steps`): none here. */
+  readonly steps?: readonly number[];
   /** The floor's clock, as the scene last said. */
   protected clock = 0;
   private labels: Label[] = [];
@@ -105,8 +107,10 @@ export class FleexSkin implements Skin {
    * what lies on the floor, the arms with what they carry, the tolls' arms, what leaves by an exit, and the links
    * between teleporters over all of it.
    */
-  /** The decor (DRAFT, see `decor.ts`): none until it is asked for. */
+  /** The decor (`decor.ts`): none until it is asked for (`setDecor`; the page asks as the settings say, `skins/index.ts`). */
   protected decorOpts: DecorOptions | null = null;
+  /** The time the decor's clock gives: now, unless a check picture needs a time that does not move. */
+  wallClock: () => Date = () => new Date();
   /** Give the floor a decor, or take it away. */
   setDecor(d: DecorOptions | null): this { this.decorOpts = d; return this; }
   /** How this skin draws its decor: an architect's plan. */
@@ -117,7 +121,7 @@ export class FleexSkin implements Skin {
     if (!d) return;
     const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
     const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    const paint = (): FlatDecorPaint => ({ ctx: this.ctx, pal, style: this.decorStyle(), z: this.cam.z, view, clock: this.clock, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    const paint = (): FlatDecorPaint => ({ ctx: this.ctx, pal, style: this.decorStyle(), z: this.cam.z, view, clock: this.clock, time: this.wallClock(), say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
     out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') flatYard(p, hall, F); flatWalls(p, hall, built, 'FLEEX FACTORY'); } });
     if (d.props && !(st.edit && d.build === 'hide')) out.push({ layer: 'floor', depth: -0.5, draw: () => flatProps(paint(), st.layout, hall, d.props, !!st.edit) });
   }

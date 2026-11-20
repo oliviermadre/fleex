@@ -1,7 +1,7 @@
 /**
  * The decor of Fleex's skin and of the neon one, from the same generation as the pixel skins' (`decor.ts`): the same
- * hall, its walls, what is on the top wall, the props on the free tiles, the yard. DRAFT for the decor mock-up
- * (`docs/factory/decor.html`), off in the app.
+ * hall, its walls, what is on the top wall, the props on the free tiles, the yard. Asked for on
+ * `docs/factory/decor.html`: off by default for these two skins (`skins/index.ts`).
  *
  * Fleex's is an architect's plan: walls as a solid band, windows as a double line in it, a door as a gap with the arc
  * its leaves sweep, props as the symbols a plan gives furniture, the yard hatched. The neon one is the same plan in
@@ -15,6 +15,8 @@ import { rr, type Palette } from './fleex';
 export type DecorStyle = 'fleex' | 'neon';
 export interface FlatDecorPaint {
   ctx: CanvasRenderingContext2D; pal: Palette; style: DecorStyle; z: number; view: Rect; clock: number;
+  /** The time the clock on the wall gives. */
+  time: Date;
   say: (text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; min?: number; max?: number; dark?: boolean; spacing?: number }) => void;
 }
 
@@ -97,7 +99,7 @@ export function flatWalls(p: FlatDecorPaint, hall: Rect, built: Rect | null, sig
       else { ctx.fillStyle = pal.body; ctx.fill(); ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.05; ctx.stroke(); }
       p.say(sign, x + w / 2, y + h / 2, 0.46, neon ? pal.accent : pal.text, { align: 'center', weight: 800, mono: neon, min: 8, max: 30, spacing: 0.08, dark: neon });
     } else if (t.kind === 'clock') {
-      const cx = t.x + 0.5, cy = oy - 0.75, now = new Date(), m = now.getMinutes() + now.getSeconds() / 60, hr = (now.getHours() % 12) + m / 60;
+      const cx = t.x + 0.5, cy = oy - 0.75, now = p.time, m = now.getMinutes() + now.getSeconds() / 60, hr = (now.getHours() % 12) + m / 60;
       ctx.beginPath(); ctx.arc(cx, cy, 0.42, 0, 6.3);
       ctx.fillStyle = neon ? '#0b0a16' : pal.body; ctx.fill(); ctx.strokeStyle = neon ? TUBE.wall : pal.text3; ctx.lineWidth = 0.04; ctx.stroke();
       const a = (f: number) => f * Math.PI * 2 - Math.PI / 2;

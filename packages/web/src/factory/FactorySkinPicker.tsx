@@ -1,7 +1,8 @@
 /**
  * Settings › Appearance, under the theme: how the Factory floor is painted. One card a skin, each with the made-up
  * floor of `shots/fixture.ts` painted by the real renderer in that skin and the theme in use, as the theme cards
- * above show their colours. Shown only while the Factory is on; it saves by itself (`factorySkin`).
+ * above show their colours. Under the cards, the switch of the chosen skin's decor (`factoryDecor`, kept skin by skin:
+ * on by default for the pixel skins, off for the others). Shown only while the Factory is on; it saves by itself.
  */
 import { useEffect, useRef } from 'react';
 import { useActiveTheme } from '../hooks/useActiveTheme';
@@ -10,7 +11,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useFactoryStore } from './factoryStore';
 import { FactoryView } from './renderer';
 import { floorState, tickets } from './shots/fixture';
-import { DEFAULT_SKIN, SKINS, type SkinInfo } from './skins';
+import { DEFAULT_SKIN, decorOn, SKINS, skinInfo, type SkinInfo } from './skins';
 
 /** A few frames of the made-up floor, in that skin: enough for tickets to settle where they stand. */
 function Preview({ skin, theme }: { skin: SkinInfo; theme: string }) {
@@ -34,6 +35,7 @@ function Preview({ skin, theme }: { skin: SkinInfo; theme: string }) {
 
 export function FactorySkinPicker() {
   const on = useFactoryStore((s) => s.enabled), chosen = useSettingsStore((s) => s.settings.factorySkin) ?? DEFAULT_SKIN, saveSettings = useSettingsStore((s) => s.saveSettings), theme = useActiveTheme();
+  const decorSet = useSettingsStore((s) => s.settings.factoryDecor), skin = skinInfo(chosen), decor = decorOn(skin, decorSet);
   if (!on) return null;
   return (
     <div className="flex flex-col gap-3" role="group" aria-label="Factory skin">
@@ -59,6 +61,19 @@ export function FactorySkinPicker() {
           );
         })}
       </div>
+      <label className="flex cursor-pointer items-center gap-2.5">
+        <button
+          type="button" role="switch" aria-checked={decor} aria-label={`Decor for ${skin.name}`}
+          onClick={() => void saveSettings({ factoryDecor: { ...decorSet, [skin.id]: !decor } })}
+          className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', decor ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]')}
+        >
+          <span className={cn('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', decor && 'translate-x-4')} />
+        </button>
+        <span className="flex flex-col">
+          <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Decor</span>
+          <span className="text-[10px] text-[var(--theme-text-muted)]">A hall round what is built, its walls and a few props: decor, nothing of it can be clicked. Kept for each skin; {skin.decor ? 'on' : 'off'} by default for {skin.name}.</span>
+        </span>
+      </label>
     </div>
   );
 }

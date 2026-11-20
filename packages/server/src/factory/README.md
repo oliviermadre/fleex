@@ -123,6 +123,17 @@ paste work as for machines (`packages/web/src/factory/areas.ts`). Out of build m
 skins paint it as a tinted slab bordered in its colour with its name on the floor; Pixel 3D raises it as a platform,
 and what stands wholly on it with it.
 
+## The decor
+
+Each skin can give the floor a decor (`packages/web/src/factory/decor.ts`): a hall round what is built, a few tiles
+off it, with a yard outside; on its top wall windows, a sign over what is built, a clock at the real time, a door,
+notice boards; props on free tiles (a tile off every machine, never in an area); trees in the yard. It is generated
+from the layout and a seed per tile, so it is the same from one visit to the next and moves when the floor does;
+nothing of it is kept or answers a click, and props fade in build mode. The pixel skins draw it in pixel art, Fleex's
+skin as an architect's plan, the neon one in lit tubes. A switch under the skins in Settings › Appearance turns it on
+or off for the skin in use (`factoryDecor` in the settings, skin by skin): on by default for Pixel and Pixel 3D, off for
+Fleex and Neon. The server knows nothing of it.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`

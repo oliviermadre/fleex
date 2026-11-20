@@ -11,7 +11,7 @@ import { NeonSkin, nightTheme, NIGHT_FONT } from './neon';
 import { PixelSkin, WORKSHOP_FONT, workshopTheme } from './pixel';
 import { PixelTqSkin } from './pixelTq';
 import { isLight } from '../floorLook';
-import type { Skin } from './skin';
+import type { DecorOptions } from '../decor';
 
 export type SkinId = 'fleex' | 'neon' | 'pixel' | 'pixel-3d';
 export const DEFAULT_SKIN: SkinId = 'fleex';
@@ -24,17 +24,27 @@ export interface SkinInfo {
   name: string;
   /** What it looks like, in a few words. */
   blurb: string;
-  make: () => Skin;
+  make: () => FleexSkin;
+  /** Whether its floor has a decor until one says otherwise: the pixel skins do, Fleex's and the neon one do not. */
+  decor: boolean;
   /** Its colours for the page around the floor, given the theme in use; null when it keeps the theme's. */
   chrome: (theme: Theme) => SkinChrome | null;
 }
 
 export const SKINS: readonly SkinInfo[] = [
-  { id: 'fleex', name: 'Fleex', blurb: 'Follows the theme', make: () => new FleexSkin(), chrome: () => null },
-  { id: 'neon', name: 'Neon', blurb: 'Night floor, your accent', make: () => new NeonSkin(), chrome: (theme) => ({ vars: themeVars(nightTheme(theme)), font: NIGHT_FONT, light: false }) },
-  { id: 'pixel', name: 'Pixel', blurb: 'A workshop, by day or at night', make: () => new PixelSkin(), chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
-  { id: 'pixel-3d', name: 'Pixel 3D', blurb: 'The workshop, seen from three quarters', make: () => new PixelTqSkin(), chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
+  { id: 'fleex', name: 'Fleex', blurb: 'Follows the theme', make: () => new FleexSkin(), decor: false, chrome: () => null },
+  { id: 'neon', name: 'Neon', blurb: 'Night floor, your accent', make: () => new NeonSkin(), decor: false, chrome: (theme) => ({ vars: themeVars(nightTheme(theme)), font: NIGHT_FONT, light: false }) },
+  { id: 'pixel', name: 'Pixel', blurb: 'A workshop, by day or at night', make: () => new PixelSkin(), decor: true, chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
+  { id: 'pixel-3d', name: 'Pixel 3D', blurb: 'The workshop, seen from three quarters', make: () => new PixelTqSkin(), decor: true, chrome: (theme) => ({ vars: themeVars(workshopTheme(theme)), font: WORKSHOP_FONT, light: isLight(theme.colors.bgSurface) }) },
 ];
+
+/**
+ * The decor, as the owner picked it on `docs/factory/decor.html`: walls round what is built with a yard outside (W2),
+ * a few props (A1), faded in build mode (B1).
+ */
+export const DECOR: DecorOptions = { wall: 'built', props: 1, build: 'fade' };
+/** Whether a skin's floor has its decor: as set for that skin (`factoryDecor`), else that skin's default. */
+export const decorOn = (skin: SkinInfo, set: Record<string, boolean> | undefined): boolean => set?.[skin.id] ?? skin.decor;
 
 /** The skin of that id; Fleex's for one that is not (or no longer) known. */
 export function skinInfo(id: string | null | undefined): SkinInfo {

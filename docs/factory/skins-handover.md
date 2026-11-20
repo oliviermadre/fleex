@@ -248,7 +248,17 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   selected by a click where nothing stands, a popup for its name, colour and where the name goes; remove, undo, copy and
   paste as for a machine; out of build mode it answers no click. Checked in Chromium on the real page against a stand-in
   API that runs the server's `normaliseLayout` (the `qa` workspace does not exist on the session's machine).
-- **Next, lot 7**: the decor.
+- **Lot 7, done**: picked on `docs/factory/decor.html`: walls round what is built with a yard outside (W2), a few
+  props (A1), faded in build mode (B1); a decor for Fleex and Neon too (F1), in their own language (an architect's plan,
+  lit tubes); a switch "Decor" in Settings › Appearance under the skins, kept skin by skin (T1), on by default for
+  Pixel and Pixel 3D, off for Fleex and Neon (`factoryDecor`, `DECOR` and `decorOn` in `skins/index.ts`). Generated
+  from the layout and a seed per tile (`decor.ts`, tested): the hall, the top wall's windows, sign over what is built,
+  clock at the real time, door, boards, extinguishers, vents; props on free tiles a tile off every machine, never in an
+  area; trees in the yard. Painted by `skins/pixelDecor.ts` (pixel art, the top wall seen from the front) and
+  `skins/flatDecor.ts` (Fleex, Neon). Four check pictures with the decor, their clock stopped. Not done: painting
+  the still decor once into a kept picture (the props are worked out once per layout and view; the rest is painted
+  each frame, which the checks show to be cheap enough so far).
+- **Next, lot 9**: people.
 
 ### Lot 8 as the owner described it (decided)
 
