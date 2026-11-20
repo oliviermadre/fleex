@@ -14,7 +14,8 @@
  * flat (placing things on tiles, seen from above). Platforms come from the floor's own areas (lot 8); none yet.
  */
 import { mix } from '../floorLook';
-import type { MachineSpec, FactoryLayout } from '../types';
+import type { AreaLabel, MachineSpec, FactoryLayout } from '../types';
+import { areasOf } from '../areas';
 import type { Placed, Scene } from '../scene';
 import type { ViewState } from '../renderer';
 import type { Palette } from './fleex';
@@ -27,7 +28,7 @@ export const LIFT: Partial<Record<MachineSpec['kind'], number>> = { station: 0.5
 export const PLATFORM = 0.15;
 
 /** A line drawn as a platform: a rectangle of the floor, raised, in its colour. Decor for the mock-up (lot 8 makes it a kind of the layout). */
-export interface Platform { x: number; y: number; w: number; h: number; color: string; name: string }
+export interface Platform { x: number; y: number; w: number; h: number; color: string; name: string; label?: AreaLabel }
 export interface TqOptions {
   platforms?: readonly Platform[];
   /** A platform raises what stands on it (its height adds to theirs), or is only a coloured slab under them. */
@@ -55,16 +56,26 @@ export class PixelTqSkin extends PixelSkin {
   private tileAt(layout: FactoryLayout, x: number, y: number): MachineSpec | null {
     if (this.gridFor !== layout) {
       this.gridFor = layout; this.grid = new Map();
-      for (const m of layout.machines) if (m.kind !== 'label') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) this.grid.set(`${i},${j}`, m);
+      for (const m of layout.machines) if (m.kind !== 'label' && m.kind !== 'area') for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) this.grid.set(`${i},${j}`, m);
     }
     return this.grid.get(`${x},${y}`) ?? null;
   }
-  /** The platform a machine stands on, if one holds all its tiles. */
-  private platformOf(m: { x: number; y: number; w: number; h: number }): Platform | null {
-    return (this.tq.platforms ?? []).find((p) => m.x >= p.x && m.y >= p.y && m.x + m.w <= p.x + p.w && m.y + m.h <= p.y + p.h) ?? null;
+  /** The platforms: the floor's areas, and any given. */
+  private platformsFor: FactoryLayout | null = null;
+  private platformList: readonly Platform[] = [];
+  private platforms(st: ViewState | null): readonly Platform[] {
+    if (!st) return this.tq.platforms ?? [];
+    if (this.platformsFor !== st.layout) { this.platformsFor = st.layout; this.platformList = [...(this.tq.platforms ?? []), ...areasOf(st.layout.machines)]; }
+    return this.platformList;
+  }
+  /** The platform a machine stands on, if one holds all its tiles (an area is not raised by itself). */
+  private platformOf(m: { x: number; y: number; w: number; h: number; kind?: string }): Platform | null {
+    if (m.kind === 'area') return null;
+    return this.platforms(this.st).find((p) => m.x >= p.x && m.y >= p.y && m.x + m.w <= p.x + p.w && m.y + m.h <= p.y + p.h) ?? null;
   }
 
   liftOf(m: MachineSpec, st: ViewState): number {
+    this.st = st;
     if (!this.standing(st)) return 0;
     const base = this.tq.raise && this.platformOf(m) ? PLATFORM : 0;
     if (m.kind !== 'arm') return base + (LIFT[m.kind] ?? 0);
@@ -89,7 +100,7 @@ export class PixelTqSkin extends PixelSkin {
     const up = (L: number, f: () => void) => () => { const ctx = this.ctx; ctx.save(); ctx.translate(0, -L); this.lifted = L; f(); this.lifted = 0; ctx.restore(); };
     const L = (m: MachineSpec) => this.liftOf(m, st);
 
-    for (const p of this.tq.platforms ?? []) add('floor', -1, () => this.platform(p, pal));
+    for (const p of this.platforms(st)) add('floor', -1, () => this.platform(p, pal));
     for (const [m, s] of S.lit) add('floor', 0, up(this.tq.raise && this.platformOf(m) ? PLATFORM : 0, () => this.halo(m, s, pal)));
 
     /* what is painted on the floor: zones, exits, labels (on a raised platform, at its height) */
@@ -157,7 +168,7 @@ export class PixelTqSkin extends PixelSkin {
     ctx.fillStyle = mix(p.color, '#000000', 0.25); ctx.fillRect(p.x, p.y + p.h - H, p.w, H);
     ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(p.x + o, p.y + p.h, p.w, o * 2);
     ctx.strokeStyle = mix(p.color, pal.floor, 0.3); ctx.lineWidth = o * 1.5; ctx.strokeRect(p.x + o, p.y - H + o, p.w - o * 2, p.h - o * 2);
-    this.lifted = H; this.label(p.name.toUpperCase(), p.x + 0.25, p.y + p.h - 0.38, 0.28, mix(p.color, pal.light ? '#000000' : '#ffffff', 0.35), { mono: true, weight: 700 }); this.lifted = 0;
+    this.lifted = H; this.areaName({ ...p, color: mix(p.color, pal.light ? '#000000' : '#ffffff', 0.35) }); this.lifted = 0;
   }
 
   /**

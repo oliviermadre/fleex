@@ -247,7 +247,9 @@ The platforms are a feature of their own, drawn in build mode:
   can be edited and removed there.
 - **Out of build mode it is decor:** nothing of it answers a click.
 - **How skins show it:** a raised platform under Pixel 3D; the other skins need a look of their own (to mock up).
-- **Its name in the product:** "zone" is already taken (a machine where tickets wait: Inbound, Ready). To choose.
+- **Its name in the product: Area.** "zone" is taken (a machine where tickets wait: Inbound, Ready). The build
+  sub-menu that was called Area (zone, exit, label) is renamed **Place**, and Area is placed from it.
+- **In the flat skins** (Fleex, Neon, Pixel): a tinted slab bordered in its colour, its name on the floor.
 
 ## Proposed order of work
 

@@ -18,7 +18,7 @@ import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatc
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState, type PortState } from './teleport';
 import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
-import { DX, DY, humanCall, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type HumanCall, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
+import { DX, DY, humanCall, type AreaSpec, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type HumanCall, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 import type { DragState, ViewState } from './renderer';
 
 /** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
@@ -113,6 +113,8 @@ export interface ArmWay { x: number; y: number; dir: number; turn: boolean; idle
 
 export interface Scene {
   layout: FactoryLayout;
+  /** The areas of the floor, in the order they were laid: decor under everything. */
+  areas: AreaSpec[];
   /** The floor's own clock, in seconds: it stands still while the floor is stopped. */
   clock: number;
   /** The stations that light the floor round them: one that needs someone, one that is off. Not in build mode, nor under a lens. */
@@ -168,7 +170,8 @@ export class FloorScene {
     this.gridFor = layout; this.grid = new Map(); this.byId = new Map();
     for (const m of layout.machines) {
       this.byId.set(m.id, m);
-      if (m.kind === 'label') continue;
+      /* a label and an area take no tile: machines stand on them */
+      if (m.kind === 'label' || m.kind === 'area') continue;
       for (let j = m.y; j < m.y + m.h; j++) for (let i = m.x; i < m.x + m.w; i++) this.grid.set(`${i},${j}`, m);
     }
   }
@@ -338,7 +341,7 @@ export class FloorScene {
     if (g && !g.erase) for (const c of g.cells) if (c.arm && c.dir != null) ways.push(this.armWay(c.x, c.y, c.dir, g.cells.length === 1));
 
     return {
-      layout: L, clock: this.clock, lit, belts, bridges, boxes, loose, arms, leaving, links, noEntry, wip,
+      layout: L, areas: L.machines.filter((m): m is AreaSpec => m.kind === 'area'), clock: this.clock, lit, belts, bridges, boxes, loose, arms, leaving, links, noEntry, wip,
       feeders, emptiers, ways, dropBox: this.dropBox(st.drag), named: this.named(st),
     };
   }

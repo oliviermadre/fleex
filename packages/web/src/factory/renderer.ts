@@ -51,6 +51,9 @@ export interface ViewState {
   lens?: LensLayer | null;
   /** Tickets a filter leaves out: drawn faded, never hidden. */
   dim?: ReadonlySet<string> | null;
+  /** Build mode: the area selected (its handles show), and the one being drawn, moved or resized (and whether it may be there). */
+  areaSel?: string | null;
+  areaGhost?: { x: number; y: number; w: number; h: number; ok: boolean } | null;
   /** Tickets a filter keeps: ringed, and named when `named` says so. */
   found?: ReadonlySet<string> | null;
   /** Tickets that carry their name on the floor, on top of favourites and the selected one. */
@@ -293,7 +296,7 @@ export class FactoryView {
   private seenAt(x: number, y: number, layout: FactoryLayout, raise: (m: MachineSpec) => number): MachineSpec | null {
     let best: MachineSpec | null = null;
     for (const m of layout.machines) {
-      if (m.kind === 'label' || x < m.x || x >= m.x + m.w || y >= m.y + m.h || y < m.y - raise(m)) continue;
+      if (m.kind === 'label' || m.kind === 'area' || x < m.x || x >= m.x + m.w || y >= m.y + m.h || y < m.y - raise(m)) continue;
       if (!best || m.y + m.h > best.y + best.h) best = m;
     }
     return best;

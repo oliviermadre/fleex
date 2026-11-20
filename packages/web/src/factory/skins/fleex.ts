@@ -16,7 +16,7 @@ import { portColor } from '../teleport';
 import { modelTag } from '../stationModel';
 import { tokenSprite, type TokenLook } from '../ticketToken';
 import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, LabelView, PortView, Placed, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
-import { DX, DY, humanCall, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
+import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
 
@@ -104,6 +104,8 @@ export class FleexSkin implements Skin {
    */
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
     const ctx = this.ctx, pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void) => { out.push({ layer: 'standing', depth, draw }); };
+    /* the areas: decor on the floor, under everything */
+    for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
     for (const b of S.belts) at(0, () => this.beltBase(b, pal));
     if (z >= 8) at(1, () => { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of S.belts) this.beltChevrons(b, pal); ctx.lineCap = 'butt'; });
     for (const b of S.bridges) at(2, () => this.bridge(b, st, pal));
@@ -1082,6 +1084,20 @@ export class FleexSkin implements Skin {
     }
   }
 
+  /** An area: a tinted slab bordered in its colour, its name on the floor. */
+  protected area(a: AreaSpec, pal: Palette): void {
+    const ctx = this.ctx, { x, y, w, h } = a, c = a.color;
+    ctx.fillStyle = c; ctx.globalAlpha = pal.light ? 0.1 : 0.07; ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = pal.light ? 0.75 : 0.55; ctx.strokeStyle = c; ctx.lineWidth = 0.06; ctx.strokeRect(x + 0.03, y + 0.03, w - 0.06, h - 0.06); ctx.globalAlpha = 1;
+    this.areaName(a);
+  }
+  /** An area's name, where it was asked to be: in a corner, or over or under it. */
+  protected areaName(a: { x: number; y: number; w: number; h: number; name: string; color: string; label?: AreaLabel }): void {
+    const { x, y, w, h } = a, at = a.label ?? 'bl', right = at === 'tr' || at === 'br';
+    const wy = at === 'tl' || at === 'tr' ? y + 0.38 : at === 'above' ? y - 0.32 : at === 'below' ? y + h + 0.32 : y + h - 0.38;
+    this.label(a.name.toUpperCase(), right ? x + w - 0.25 : x + (at === 'above' || at === 'below' ? 0.05 : 0.25), wy, 0.3, a.color, { mono: true, weight: 700, align: right ? 'right' : 'left', min: 9, max: 16, spacing: 0.08, fit: w - 0.4 });
+  }
+
   /** The box a machine is seen in: its tiles, for a flat skin; with its front face and its top lifted, seen from three quarters. */
   protected seen(m: MachineSpec): { x: number; y: number; w: number; h: number } { return m; }
 
@@ -1103,6 +1119,23 @@ export class FleexSkin implements Skin {
     }
     /* in build mode, an arm that is selected or about to be placed says where it takes from and where it drops */
     for (const w of S.ways) this.armWay(w, pal);
+    /* build mode: the area selected, with its handles; the one being drawn, moved or resized */
+    if (st.edit) {
+      const sa = st.areaSel ? this.machine(st.areaSel) : null, hs = Math.max(0.16, 7 / this.cam.z);
+      if (sa?.kind === 'area') {
+        ctx.strokeStyle = pal.accent; ctx.lineWidth = 0.07; ctx.setLineDash([0.22, 0.14]); ctx.strokeRect(sa.x, sa.y, sa.w, sa.h); ctx.setLineDash([]);
+        for (const [hx, hy] of [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]] as const) {
+          const px = sa.x + sa.w * hx, py = sa.y + sa.h * hy;
+          ctx.fillStyle = pal.light ? '#ffffff' : '#09090b'; ctx.fillRect(px - hs / 2, py - hs / 2, hs, hs); ctx.lineWidth = 0.05; ctx.strokeRect(px - hs / 2, py - hs / 2, hs, hs);
+        }
+      }
+      const ag = st.areaGhost;
+      if (ag) {
+        ctx.fillStyle = ag.ok ? 'rgba(96,165,250,0.16)' : 'rgba(239,68,68,0.2)'; ctx.fillRect(ag.x, ag.y, ag.w, ag.h);
+        ctx.strokeStyle = ag.ok ? PICK : pal.danger; ctx.lineWidth = 0.07; ctx.setLineDash([0.22, 0.14]); ctx.strokeRect(ag.x, ag.y, ag.w, ag.h); ctx.setLineDash([]);
+        this.label(`${ag.w} × ${ag.h}`, ag.x + ag.w / 2, ag.y - 0.35, 0.28, pal.text, { align: 'center', mono: true, weight: 700, plate: ag.ok ? 'rgba(30,64,120,0.95)' : 'rgba(127,29,29,0.95)', min: 10, max: 13 });
+      }
+    }
     const g = st.ghost;
     if (g) {
       for (const c of g.cells) {
@@ -1174,10 +1207,13 @@ export class FleexSkin implements Skin {
     }
     c.fillStyle = pal.floor; c.fillRect(ox + F.x * s, oy + F.y * s, F.w * s, F.h * s);
     c.strokeStyle = pal.edge; c.lineWidth = 1; c.strokeRect(Math.round(ox + F.x * s) + 0.5, Math.round(oy + F.y * s) + 0.5, Math.round(F.w * s) - 1, Math.round(F.h * s) - 1);
+    /* the areas, faint, under the machines */
+    for (const a of L.machines) if (a.kind === 'area') { c.globalAlpha = st.lens ? 0.12 : 0.28; c.fillStyle = a.color; c.fillRect(ox + a.x * s, oy + a.y * s, a.w * s, a.h * s); }
+    c.globalAlpha = 1;
     /* under a layer, a station or a zone takes the colour of its reading, and the rest goes grey */
     const lens = st.lens, heat = (id: string): string | null => { if (!lens) return null; const v = lens.values.get(id) ?? 0; if (!(lens.max > 0 && v > 0)) return null; return `hsl(${Math.round(52 - 52 * Math.sqrt(v / lens.max))}, 95%, 52%)`; };
     for (const m of L.machines) {
-      if (m.kind === 'label') continue;
+      if (m.kind === 'label' || m.kind === 'area') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
       c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);

@@ -56,7 +56,15 @@ export interface BridgeSpec extends MachineBase { kind: 'bridge' }
  * that arrival's id); an arrival holds one ticket, takes nothing from the floor, and an arm takes the ticket out.
  */
 export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 'departure' | 'arrival'; to?: string; /** One of `PALETTE`; without one, see `portColor`. */ color?: string }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec;
+/** Where an Area's name is written: in one of its corners, or over or under it. */
+export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
+/**
+ * A part of the floor named as a place ("Build line"): a rectangle of tiles, a name, a colour. Decor: the engine
+ * ignores it, it takes no tile (machines stand on it), nothing links it to them, and out of build mode it answers no
+ * click. Seen from three quarters it is a platform that raises what stands wholly on it.
+ */
+export interface AreaSpec extends MachineBase { kind: 'area'; name: string; color: string; label?: AreaLabel }
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | AreaSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
