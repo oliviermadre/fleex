@@ -11,7 +11,7 @@ import { NeonSkin, type NeonOptions } from '../skins/neon';
 import { PIXEL_FONTS, PixelSkin } from '../skins/pixel';
 import { PixelTqSkin } from '../skins/pixelTq';
 import type { Skin } from '../skins/skin';
-import { DECOR } from '../skins';
+import { DECOR, PEOPLE } from '../skins';
 import { floorState, later, lens } from './fixture';
 
 const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
@@ -20,8 +20,8 @@ const W = 1400, H = 900, FRAMES = 48, DT = 1 / 60;
 interface Shot { name: string; theme: string; cam: { x: number; y: number; z: number }; st: Partial<ViewState>; then?: Partial<ViewState>; after?: number; skin?: () => Skin }
 
 const base = (): ViewState => floorState();
-/** A skin with the decor, its clock stopped at ten past ten: a check picture must not change with the time. */
-const decorated = <T extends FleexSkin>(skin: T): T => { skin.setDecor(DECOR).wallClock = () => new Date(2026, 0, 1, 10, 10); return skin; };
+/** A skin with the decor and its people, its clock stopped at ten past ten: a check picture must not change with the time. */
+const decorated = <T extends FleexSkin>(skin: T): T => { skin.setDecor(DECOR).setPeople(PEOPLE).wallClock = () => new Date(2026, 0, 1, 10, 10); return skin; };
 
 const SHOTS: Shot[] = [
   { name: 'floor-dark', theme: 'verdant', cam: { x: 13, y: 10, z: 38 }, st: {} },

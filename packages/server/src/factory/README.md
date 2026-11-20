@@ -134,6 +134,12 @@ skin as an architect's plan, the neon one in lit tubes. A switch under the skins
 or off for the skin in use (`factoryDecor` in the settings, skin by skin): on by default for Pixel and Pixel 3D, off for
 Fleex and Neon. The server knows nothing of it.
 
+With the decor come the people (`packages/web/src/factory/people.ts`): a few walkers about the hall on the free tiles,
+a reviewer who comes in by the door to wait at the foot of a gate that waits for a decision, and at each station that
+runs something a worker who does what it does: works, raises a hand under "!" (its run failed) or "?" (the agent
+asked), waits, or sleeps. They carry nothing, take no tile, answer no click, follow the floor's clock, fade in build
+mode, and stand still for whoever asked for less motion.
+
 ## Plans
 
 A workflow can be put down on the floor as a plan (Build › Import plan): `packages/web/src/factory/workflowPlan.ts`

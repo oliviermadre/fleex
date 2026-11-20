@@ -20,8 +20,8 @@ import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, t
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
 import { builtBox, hallOf, propsIn, wallThings, type DecorOptions } from '../decor';
-import { Crowd, type PeopleOptions, type Person } from '../people';
-import { flatPerson } from './peoplePaint';
+import { Crowd, workerState, type PeopleOptions, type Person } from '../people';
+import { flatPerson, flatWorker, zees } from './peoplePaint';
 import { flatProps, flatWalls, flatYard, type DecorStyle, type FlatDecorPaint } from './flatDecor';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). A colour with a meaning: another skin may soften it, not replace it. */
@@ -128,7 +128,7 @@ export class FleexSkin implements Skin {
     if (d.props && !(st.edit && d.build === 'hide')) out.push({ layer: 'floor', depth: -0.5, draw: () => flatProps(paint(), st.layout, hall, d.props, !!st.edit) });
   }
 
-  /** The people (DRAFT, see `people.ts`): none until they are asked for. */
+  /** The people (`people.ts`): none until they are asked for (`setPeople`; the page asks with the decor). */
   protected peopleOpts: PeopleOptions | null = null;
   protected readonly crowd = new Crowd();
   private crowdAt = -1;
@@ -155,19 +155,22 @@ export class FleexSkin implements Skin {
   }
   /** A person, as this skin draws one. */
   protected person(p: Person, pal: Palette): void { flatPerson(this.ctx, p, pal, this.decorStyle() === 'neon'); }
-  /** A worker in the corner of each station that runs something, a hand up when its run failed, a "?" when it asked. */
+  /**
+   * A worker in the corner of each station that runs something, doing what the station does (`workerState`): at work,
+   * a hand up under "!" or "?", waiting, or asleep with its "z"s rising.
+   */
   protected stationPeople(S: Scene, out: Piece[], standing: boolean, o: PeopleOptions, pal: Palette): void {
+    const neon = this.decorStyle() === 'neon';
     for (const v of S.boxes) {
       if (v.kind !== 'station' || !v.run || v.gate) continue;
-      const m = v.m, busy = v.places.some((q) => q.t?.t.phase === 'running');
-      const p: Person = { id: m.x * 31 + m.y, role: 'walker', x: m.x + m.w - 0.95, y: m.y + m.h - 0.9, dir: 3, path: [], wait: 0, stride: busy ? this.clock * 3 : 0, shirt: ['agent', 'skill', 'panel', 'script'].indexOf(v.run) + 1 };
-      const call = o.hands ? (v.aside.some((q) => q.t.phase === 'failed') ? 'failed' : v.aside.some((q) => q.t.phase === 'question') ? 'question' : null) : null;
+      const m = v.m, state = workerState(v, o.hands), cx = m.x + m.w - 0.45, cy = m.y + m.h - 0.4, id = m.x * 31 + m.y;
       out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, draw: () => {
-        this.person(p, pal);
-        if (!call) return;
-        const ctx = this.ctx, bx = p.x + 0.75, by = p.y + 0.1, col = call === 'failed' ? pal.danger : pal.amber;
-        ctx.beginPath(); ctx.arc(bx, by, 0.17, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
-        this.label(call === 'failed' ? '!' : '?', bx, by + 0.01, 0.24, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 18, dark: true });
+        flatWorker(this.ctx, cx, cy, state, this.clock, pal, neon, id, ['agent', 'skill', 'panel', 'script'].indexOf(v.run!) + 1);
+        if (state === 'sleep') for (const { k, size } of zees(this.clock)) this.label(size > 0.24 ? 'Z' : 'z', cx + 0.2 + k * 0.3, cy - 0.3 - k * 0.6, size, neon ? `rgba(167,163,214,${(1 - k).toFixed(2)})` : pal.light ? `rgba(75,70,85,${(1 - k).toFixed(2)})` : `rgba(210,204,219,${(1 - k).toFixed(2)})`, { weight: 800, mono: true, min: 7, max: 16, dark: true });
+        if (state !== 'call' && state !== 'ask') return;
+        const ctx = this.ctx, bx = cx + 0.36, by = cy - 0.8, col = state === 'call' ? pal.danger : pal.amber, pulse = 0.17 + 0.02 * Math.sin(this.clock * 6);
+        ctx.beginPath(); ctx.arc(bx, by, pulse, 0, 6.3); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.stroke();
+        this.label(state === 'call' ? '!' : '?', bx, by + 0.01, 0.24, 'rgba(0,0,0,0.85)', { align: 'center', weight: 800, min: 7, max: 18, dark: true });
       } });
     }
   }

@@ -1,10 +1,10 @@
 /**
  * The people of the floor, as each skin draws them (`people.ts` moves them): in pixel art, a little worker seen from
  * above and the front, its legs going as it walks; in Fleex's skin, a figure seen from above as a plan draws one
- * (shoulders and a head); in the neon one, the same in light, with a trail. DRAFT for `docs/factory/people.html`.
+ * (shoulders and a head); in the neon one, the same in light, with a trail. Picked on `docs/factory/people.html`.
  */
 import { mix } from '../floorLook';
-import type { Person } from '../people';
+import type { Person, WorkerState } from '../people';
 import { ART, box } from './pixelArt';
 import type { Palette } from './fleex';
 
@@ -53,4 +53,34 @@ export function flatPerson(ctx: CanvasRenderingContext2D, p: Person, pal: Palett
   if (neon) { ctx.fillStyle = '#0b0a16'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.045; ctx.stroke(); }
   else { ctx.fillStyle = skin; ctx.fill(); ctx.strokeStyle = mix(skin, '#000000', 0.4); ctx.lineWidth = 0.025; ctx.stroke(); ctx.beginPath(); ctx.arc(cx - dx * 0.02, cy - dy * 0.02, 0.11, 0, 6.3); ctx.fillStyle = HAIR[(p.id * 3) % HAIR.length]!; ctx.fill(); }
   if (p.role === 'reviewer') { const bx = cx + dx * 0.24 + ax * 0.12, by = cy + dy * 0.24 + ay * 0.12; ctx.fillStyle = neon ? '#0b0a16' : '#fafafa'; ctx.strokeStyle = neon ? '#ffd23f' : mix('#c8955a', '#000000', 0.3); ctx.lineWidth = 0.03; ctx.fillRect(bx - 0.09, by - 0.11, 0.18, 0.22); ctx.strokeRect(bx - 0.09, by - 0.11, 0.18, 0.22); }
+}
+
+/** How far into its rise a "z" of sleep is (0 to 1), for each of the three, at a time in seconds. */
+export const zees = (t: number): { k: number; size: number }[] => [0, 1, 2].map((i) => ({ k: (t / 2.4 + i / 3) % 1, size: [0.16, 0.2, 0.26][i]! }));
+
+/**
+ * A station's worker seen from above, as a plan draws one, standing in the station's corner and facing it: working
+ * (both hands on the job, one then the other, a spark between them), calling or asking (a hand up, high and still),
+ * waiting (hands at the sides, breathing), asleep (the head fallen to a side; the "z"s are the skin's to write).
+ */
+export function flatWorker(ctx: CanvasRenderingContext2D, cx: number, cy: number, state: WorkerState, t: number, pal: Palette, neon: boolean, id: number, shirtIx: number): void {
+  const shirt = SHIRTS[shirtIx % SHIRTS.length]!, skin = SKIN[id % SKIN.length]!, hair = HAIR[(id * 3) % HAIR.length]!;
+  const breathe = state === 'wait' || state === 'sleep' ? Math.sin(t * (state === 'sleep' ? 1.6 : 2.4)) * 0.012 : 0;
+  const fill = (c: string) => (neon ? '#0b0a16' : c), edge = (c: string) => (neon ? c : mix(c, '#000000', 0.35));
+  if (!neon) { ctx.beginPath(); ctx.ellipse(cx + 0.05, cy + 0.08, 0.36, 0.24, 0, 0, 6.3); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.35)'; ctx.fill(); }
+  const hand = (x: number, y: number, r = 0.075) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.3); ctx.fillStyle = fill(skin); ctx.fill(); ctx.strokeStyle = neon ? shirt : edge(skin); ctx.lineWidth = neon ? 0.035 : 0.02; ctx.stroke(); };
+  /* the hands, under the shoulders when they reach forward (up the screen, into the station) */
+  if (state === 'work') {
+    const beat = Math.floor(t * 4) % 2, lx = cx - 0.2, rx = cx + 0.2;
+    hand(lx, cy - 0.26 - (beat ? 0.1 : 0)); hand(rx, cy - 0.26 - (beat ? 0 : 0.1));
+    if (Math.floor(t * 8) % 4 === 0) { ctx.beginPath(); for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + t; ctx.moveTo(cx + Math.cos(a) * 0.05, cy - 0.42 + Math.sin(a) * 0.05); ctx.lineTo(cx + Math.cos(a) * 0.12, cy - 0.42 + Math.sin(a) * 0.12); } ctx.strokeStyle = neon ? '#ffd23f' : '#f59e0b'; ctx.lineWidth = 0.025; ctx.stroke(); }
+  } else if (state === 'wait' || state === 'sleep') { hand(cx - 0.33, cy + 0.02); hand(cx + 0.33, cy + 0.02); }
+  ctx.beginPath(); ctx.ellipse(cx, cy, 0.32 + breathe, 0.16 + breathe, 0, 0, 6.3);
+  ctx.fillStyle = fill(mix(shirt, pal.floor, pal.light ? 0.05 : 0.1)); ctx.fill(); ctx.strokeStyle = edge(shirt); ctx.lineWidth = neon ? 0.05 : 0.03; ctx.stroke();
+  /* a hand raised high over the shoulder, and it stays there */
+  if (state === 'call' || state === 'ask') { ctx.beginPath(); ctx.moveTo(cx + 0.24, cy - 0.04); ctx.lineTo(cx + 0.34, cy - 0.42); ctx.strokeStyle = neon ? shirt : edge(shirt); ctx.lineWidth = 0.09; ctx.lineCap = 'round'; ctx.stroke(); ctx.lineCap = 'butt'; hand(cx + 0.35, cy - 0.47, 0.085); hand(cx - 0.33, cy + 0.02); }
+  /* the head, facing the station; asleep, fallen to one side */
+  const hx = cx + (state === 'sleep' ? 0.12 : 0), hy = cy - 0.04 + (state === 'sleep' ? 0.06 : 0);
+  ctx.beginPath(); ctx.arc(hx, hy, 0.15, 0, 6.3); ctx.fillStyle = fill(skin); ctx.fill(); ctx.strokeStyle = neon ? pal.text : edge(skin); ctx.lineWidth = neon ? 0.045 : 0.025; ctx.stroke();
+  if (!neon) { ctx.beginPath(); ctx.arc(hx, hy + 0.03, 0.11, 0, 6.3); ctx.fillStyle = hair; ctx.fill(); }
 }

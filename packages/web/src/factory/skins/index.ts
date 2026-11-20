@@ -12,6 +12,7 @@ import { PixelSkin, WORKSHOP_FONT, workshopTheme } from './pixel';
 import { PixelTqSkin } from './pixelTq';
 import { isLight } from '../floorLook';
 import type { DecorOptions } from '../decor';
+import type { PeopleOptions } from '../people';
 
 export type SkinId = 'fleex' | 'neon' | 'pixel' | 'pixel-3d';
 export const DEFAULT_SKIN: SkinId = 'fleex';
@@ -43,6 +44,12 @@ export const SKINS: readonly SkinInfo[] = [
  * a few props (A1), faded in build mode (B1).
  */
 export const DECOR: DecorOptions = { wall: 'built', props: 1, build: 'fade' };
+/**
+ * The people, as the owner picked them on `docs/factory/people.html`: a few walkers (N1), a reviewer at a gate that
+ * waits and a hand raised at a station whose run failed or asked (E1), faded in build mode (M1). They come with the
+ * decor (R1): one switch.
+ */
+export const PEOPLE: PeopleOptions = { walkers: 1, gate: true, hands: true, build: 'fade' };
 /** Whether a skin's floor has its decor: as set for that skin (`factoryDecor`), else that skin's default. */
 export const decorOn = (skin: SkinInfo, set: Record<string, boolean> | undefined): boolean => set?.[skin.id] ?? skin.decor;
 

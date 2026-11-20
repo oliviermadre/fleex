@@ -1,7 +1,7 @@
 /**
  * The people of the floor: cosmetic, the page's own. They carry no ticket, take no tile, answer no click, and nothing
- * of them is kept: after a reload they are somewhere else. They say what the floor is doing. DRAFT for the people
- * mock-up (`docs/factory/people.html`): off in the app until the owner picks.
+ * of them is kept: after a reload they are somewhere else. They say what the floor is doing. Picked on
+ * `docs/factory/people.html` (`PEOPLE` in `skins/index.ts`); they come with the decor's switch.
  * `hands`: a worker raises a hand at a station whose run failed, and a "?" over one that asked a question.
  *
  * - Walkers go about the hall on the free tiles (no machine, no area, no prop), from one far point to another along a
@@ -157,4 +157,18 @@ export class Crowd {
     }
     p.stride += dt * 6;
   }
+}
+
+/**
+ * What a station's worker is doing, from the station: calling (a hand up under "!", its run failed), asking (a hand
+ * up under "?", the agent asked a question), working (something runs), waiting (it holds tickets, none runs), or
+ * asleep (it holds nothing, or it is switched off). `hands`: whether a worker raises a hand at all.
+ */
+export type WorkerState = 'call' | 'ask' | 'work' | 'wait' | 'sleep';
+export function workerState(v: { m: { off?: boolean }; places: { t: { t: { phase: string } } | null }[]; aside: { t: { phase: string } }[] }, hands: boolean): WorkerState {
+  if (hands && v.aside.some((q) => q.t.phase === 'failed')) return 'call';
+  if (hands && v.aside.some((q) => q.t.phase === 'question')) return 'ask';
+  if (v.places.some((q) => q.t?.t.phase === 'running')) return 'work';
+  if (v.m.off) return 'sleep';
+  return v.places.some((q) => q.t) || v.aside.length ? 'wait' : 'sleep';
 }

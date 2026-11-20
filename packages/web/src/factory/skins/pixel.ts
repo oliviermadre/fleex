@@ -30,8 +30,8 @@ import { CHEVRON_FAST, CHEVRON_PACE, CHEVRON_PAIR, clamp, FleexSkin, GHOST, HAZA
 import { ART, box, disc, figures, fillWhere, frame, hash, poly, ring, seg, sprite } from './pixelArt';
 import { builtBox, hallOf, propsIn, type DecorOptions } from '../decor';
 import { prop, props, walls, yard, type DecorPaint } from './pixelDecor';
-import { pixelPerson } from './peoplePaint';
-import type { PeopleOptions, Person } from '../people';
+import { pixelPerson, zees } from './peoplePaint';
+import { workerState, type PeopleOptions, type Person } from '../people';
 import type { Piece, Surface } from './skin';
 
 /** The pixel fonts, as a canvas asks for them. */
@@ -140,6 +140,8 @@ const LAMP = ['#ff4d4d', '#ffc21a', '#3ddc5a'];
 /** A padlock, shut and open (its shackle lifted two pixels, out of its body on the right): `h` its glint, `k` its keyhole. */
 const LOCK_SHUT = ['..XXXXX..', '.XX...XX.', '.X.....X.', '.X.....X.', 'XXXXXXXXX', 'XhXXXXXXX', 'XXXXkXXXX', 'XXXXkXXXX', 'XXXXXXXXX', '.XXXXXXX.'];
 const LOCK_OPEN = ['..XXXXX..', '.XX...XX.', '.X.....X.', '.X.....X.', '.X.......', '.X.......', 'XXXXXXXXX', 'XhXXXXXXX', 'XXXXkXXXX', 'XXXXkXXXX', 'XXXXXXXXX', '.XXXXXXX.'];
+/** A "z" of sleep, small and large. */
+const Z4 = ['XXXX', '..X.', '.X..', 'XXXX'], Z5 = ['XXXXX', '...X.', '..X..', '.X...', 'XXXXX'];
 /** A tick, for what has left. */
 const TICK = ['....X', '...X.', 'X.X..', '.X...'];
 /** A round sign, seven pixels, `k` its outline; and what is written on it, three by five. */
@@ -961,25 +963,41 @@ export class PixelSkin extends FleexSkin {
   /** The pixel skins have their own worker at each station (`worker`), who raises a hand when the run failed. */
   protected override stationPeople(_S: Scene, _out: Piece[], _standing: boolean, _o: PeopleOptions, _pal: Palette): void { /* see `worker` */ }
 
-  /** A worker at the foot of a station, in the hue of its kind; it bobs while something runs there. */
+  /**
+   * A worker at the foot of a station, in the hue of its kind, doing what the station does (`workerState`): at work
+   * (a spanner going up and down, sparks), a hand up under "!" or "?" (with people on the floor), waiting (arms at the
+   * sides, a blink now and then), or asleep (slumped, eyes shut, "z"s rising). It never walks on the spot.
+   */
   protected worker(v: StationView): void {
-    const ctx = this.ctx, m = v.m, busy = v.places.some((p) => p.t?.t.phase === 'running'), o = 1 / ART;
-    const x = m.x + m.w - 0.75, y = (this.look.crisp ? m.y + m.h : m.y + m.h - 0.02) - (busy && Math.floor(this.clock * 6) % 2 ? o : 0);
-    const shirt = v.run ? { agent: '#8b7cf6', skill: '#38a8e8', panel: '#f08a3c', script: '#7cc43a' }[v.run] : '#f2b01e';
+    const ctx = this.ctx, m = v.m, o = 1 / ART, t = this.clock, state = workerState(v, !!this.peopleOpts?.hands), beat = Math.floor(t * 4) % 2;
+    const x = m.x + m.w - 0.75, y = (this.look.crisp ? m.y + m.h : m.y + m.h - 0.02) - (state === 'work' && beat ? o : 0) + (state === 'sleep' ? o : 0);
+    const shirt = v.run ? { agent: '#8b7cf6', skill: '#38a8e8', panel: '#f08a3c', script: '#7cc43a' }[v.run] : '#f2b01e', skin = '#f2c79e', pal = this.palette();
     const r = (dx: number, dy: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x + dx * o, y + dy * o, w * o, h * o); };
     r(-4, -1, 8, 2, 'rgba(40,30,20,0.25)');
-    const step = busy ? Math.floor(this.clock * 6) % 2 : 0;
-    r(-3, -6, 2, 5 - step, '#3d4a7a'); r(1, -6, 2, 5 - (1 - step), '#3d4a7a');
+    r(-3, -6, 2, 5, '#3d4a7a'); r(1, -6, 2, 5, '#3d4a7a');
     r(-4, -11, 8, 6, shirt);
-    r(-2, -15, 4, 4, '#f2c79e');
-    r(-3, -17, 6, 2, '#f2b01e');
-    /* with people on the floor: a hand up and a sign over the head when the run failed, a "?" when it asked */
-    const call = this.peopleOpts?.hands ? (v.aside.some((q) => q.t.phase === 'failed') ? 'failed' : v.aside.some((q) => q.t.phase === 'question') ? 'question' : null) : null;
-    if (call) {
-      const pal = this.palette(), up = Math.floor(this.clock * 2) % 2;
-      r(4, -18 - up, 2, 8, '#f2c79e');
-      if (this.sprites) this.sign(x * ART + 0.5, y * ART - 23.5 - up, call === 'failed' ? pal.danger : pal.amber, call === 'failed' ? '!' : '?');
-    } else if (busy) r(4, -10 - step, 2, 3, '#f2c79e');
+    /* the head: fallen to a side and lower asleep; eyes open, shut asleep or in a blink */
+    const sleep = state === 'sleep', hx = sleep ? -1 : -2, hy = sleep ? -14 : -15;
+    r(hx, hy, 4, 4, skin); r(hx - 1, hy - 2, 6, 2, '#f2b01e');
+    const blink = state === 'wait' && t % 3.2 < 0.15;
+    if (sleep || blink) r(hx + 1, hy + 2, 2, 1, INK); else { r(hx + 1, hy + 2, 1, 1, INK); r(hx + 3, hy + 2, 1, 1, INK); }
+    if (state === 'work') {
+      /* a spanner, up then down, and sparks where it strikes */
+      r(-6, -10, 2, 3, skin);
+      if (beat) { r(4, -14, 2, 4, skin); r(4, -17, 3, 3, '#9a93ab'); } else { r(4, -11, 2, 3, skin); r(5, -9, 3, 2, '#9a93ab'); }
+      if (Math.floor(t * 8) % 4 === 0) { r(7, -9, 1, 1, '#ffd23f'); r(8, -11, 1, 1, '#ffd23f'); r(6, -12, 1, 1, '#ffffff'); }
+    } else if (state === 'call' || state === 'ask') {
+      const up = Math.floor(t * 2) % 2;
+      r(-5, -10, 1, 4, skin); r(4, -18 - up, 2, 8, skin);
+      if (this.sprites) this.sign(x * ART + 0.5, y * ART - 23.5 - up, state === 'call' ? pal.danger : pal.amber, state === 'call' ? '!' : '?');
+    } else {
+      r(-5, -10, 1, 4, skin); r(4, -10, 1, 4, skin);
+      if (sleep) for (const { k, size } of zees(t)) {
+        ctx.globalAlpha = 1 - k;
+        sprite(ctx, size > 0.24 ? Z5 : Z4, Math.round(x * ART) + 3 + Math.round(k * 5), Math.round(y * ART) - 18 - Math.round(k * 12), { X: pal.text2 });
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 }
 

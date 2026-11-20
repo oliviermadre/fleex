@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hallOf } from './decor';
-import { Crowd, pathOn, spotAt, walkable } from './people';
+import { Crowd, pathOn, spotAt, walkable, workerState } from './people';
 import { layout } from './shots/fixture';
 
 const floor = { x: -150, y: -70, w: 330, h: 160 }, hall = hallOf(layout, floor, 'built');
@@ -34,5 +34,15 @@ describe('the people of the floor', () => {
     const still = new Crowd(), first = run(still, 0.1, [gate], { walkers: 1, gate: true, hands: true }).map((p) => [p.x, p.y]);
     for (let t = 0; t < 5; t += 0.05) still.update(0.05, layout, hall, new Set(), [gate], { walkers: 1, gate: true, hands: true, still: true });
     expect(still.people.map((p) => [p.x, p.y])).toEqual(first);
+  });
+
+  it('give a station's worker what the station does: a hand up, work, a wait, or sleep', () => {
+    const t = (phase: string) => ({ t: { t: { phase } } }), a = (phase: string) => ({ t: { phase } });
+    expect(workerState({ m: {}, places: [t('running')], aside: [a('failed')] }, true)).toBe('call');
+    expect(workerState({ m: {}, places: [t('running')], aside: [a('question')] }, true)).toBe('ask');
+    expect(workerState({ m: {}, places: [t('running')], aside: [a('failed')] }, false)).toBe('work');
+    expect(workerState({ m: {}, places: [t('wait'), null], aside: [] }, true)).toBe('wait');
+    expect(workerState({ m: {}, places: [null, null], aside: [] }, true)).toBe('sleep');
+    expect(workerState({ m: { off: true }, places: [t('wait')], aside: [] }, true)).toBe('sleep');
   });
 });

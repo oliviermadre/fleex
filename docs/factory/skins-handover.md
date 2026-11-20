@@ -258,7 +258,15 @@ A line is a part of the floor named as a place: "Build line", "Rework line".
   `skins/flatDecor.ts` (Fleex, Neon). Four check pictures with the decor, their clock stopped. Not done: painting
   the still decor once into a kept picture (the props are worked out once per layout and view; the rest is painted
   each frame, which the checks show to be cheap enough so far).
-- **Next, lot 9**: people.
+- **Lot 9, done**: picked on `docs/factory/people.html`: a few walkers (N1), a reviewer at a gate that waits and a
+  hand raised at a station whose run failed or asked (E1), faded in build mode (M1), with the decor's switch (R1);
+  `PEOPLE` in `skins/index.ts`. `people.ts` (tested): the walkable tiles, the shortest way on the grid, the crowd
+  moved by the floor's clock (still for `prefers-reduced-motion`), `workerState`. At each station a worker does what
+  the station does, asked for by the owner after the mock-up: works, raises a hand under "!" or "?", waits, or sleeps
+  with its "z"s. Pixel art in the pixel skins, a figure seen from above in Fleex's, in light in the neon one
+  (`skins/peoplePaint.ts`). The decor's check pictures show them.
+- **Every lot of the plan is done.** Later, maybe: someone carrying a parcel out by the door when a ticket leaves
+  by an exit; decor placed by hand in build mode; painting the still decor once into a kept picture.
 
 ### Lot 8 as the owner described it (decided)
 
