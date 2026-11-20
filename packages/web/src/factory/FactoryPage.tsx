@@ -12,6 +12,7 @@ import { toast, useToastOffset } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
+import { watchFactory } from './factoryLive';
 import { stationModel } from './stationModel';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
@@ -25,6 +26,7 @@ import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
+import { frameGap } from './frameRate';
 import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
@@ -46,9 +48,13 @@ import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
-
+/** Without the WS, the floor is polled: this often while the window is in front, */
 const POLL_MS = 600;
-const STATS_EVERY_MS = 30_000;
+/** and this often while it is behind others. */
+const POLL_BACKGROUND_MS = 3000;
+/** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
+const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
+const STATS_EVERY_MS = 60_000;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
 /** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */
@@ -227,12 +233,26 @@ function Floor() {
     if (usePanelStore.getState().panels.length === 0) void usePanelStore.getState().loadPanels();
   }, []);
 
-  // Poll the floor while the page is open.
+  // Is the window the one in front, and when was someone last at the page: the draw loop and the poll pace themselves on it.
+  const focused = useRef(typeof document === 'undefined' || document.hasFocus());
+  const wokeAt = useRef(performance.now());
   useEffect(() => {
-    void useFactoryStore.getState().refresh();
-    const id = window.setInterval(() => { if (!document.hidden) void useFactoryStore.getState().refresh(); }, POLL_MS);
-    return () => window.clearInterval(id);
+    const wake = () => { wokeAt.current = performance.now(); };
+    const onFocus = () => { focused.current = true; wake(); }, onBlur = () => { focused.current = false; };
+    for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
+    window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
+    /* a stopped floor is drawn twice a second: what changes on it is drawn at once. A running one is drawn often enough. */
+    const unsub = useFactoryStore.subscribe((s, was) => {
+      if ((s.snapshot !== was.snapshot || s.layout !== was.layout) && s.snapshot?.floor.settings.halted) wake();
+    });
+    return () => {
+      for (const e of WAKE_EVENTS) window.removeEventListener(e, wake, { capture: true });
+      window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur); unsub();
+    };
   }, []);
+
+  // Keep the floor live while the page is open (factoryLive.ts): pushed over the WS, polled when it is down.
+  useEffect(() => watchFactory(() => (focused.current ? POLL_MS : POLL_BACKGROUND_MS)), []);
 
   // What the floor did: loaded with the page, then kept fresh while it stays open.
   useEffect(() => {
@@ -268,6 +288,10 @@ function Floor() {
     const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
     let raf = 0, last = performance.now(), miniAt = 0;
     const frame = (ts: number) => {
+      raf = requestAnimationFrame(frame);
+      /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
+      const snap = useFactoryStore.getState().snapshot, running = !!snap && snap.floor.settings.halted !== true;
+      if (ts - last < frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running })) return;
       const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
@@ -276,7 +300,6 @@ function Floor() {
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
         if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
-      raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
@@ -563,7 +586,7 @@ function Floor() {
     const r = root.getBoundingClientRect();
     return { left: r.left, top: cv.getBoundingClientRect().top, right: r.right, bottom: r.bottom };
   }, []);
-  const edgeMove = useCallback((dx: number, dy: number) => { const v = viewRef.current; if (v) { v.cam.x += dx / v.cam.z; v.cam.y += dy / v.cam.z; } }, []);
+  const edgeMove = useCallback((dx: number, dy: number) => { wokeAt.current = performance.now(); const v = viewRef.current; if (v) { v.cam.x += dx / v.cam.z; v.cam.y += dy / v.cam.z; } }, []);
   /* not while the view is being dragged: one hand moves it at a time */
   const edgePaused = useCallback(() => press.current?.kind === 'pan', []);
   useEdgeScroll(rootRef, edgeRect, edgeMove, edgePaused);

@@ -69,8 +69,11 @@ export class SqliteFactoryStore implements FactoryStorePort {
     return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE ticket_id = ? ORDER BY started_at ASC').all(ticketId) as RunRow[]).map(runFromRow);
   }
 
-  async listRecentRuns(floorId: string, limit: number): Promise<FactoryRunRow[]> {
-    return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE floor_id = ? ORDER BY started_at DESC LIMIT ?').all(floorId, limit) as RunRow[]).map(runFromRow);
+  async listRecentRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    const rows = machineId
+      ? this.conn.db.prepare('SELECT * FROM factory_runs WHERE floor_id = ? AND machine_id = ? ORDER BY started_at DESC LIMIT ?').all(floorId, machineId, limit)
+      : this.conn.db.prepare('SELECT * FROM factory_runs WHERE floor_id = ? ORDER BY started_at DESC LIMIT ?').all(floorId, limit);
+    return (rows as RunRow[]).map(runFromRow);
   }
 
   async listRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {

@@ -610,6 +610,7 @@ export {
   MS_IN_MINUTE,
   MINUTES_IN_HOUR,
   HOURS_IN_DAY,
+  FACTORY_PUSH_INTERVAL_MS,
 } from './constants.js';
 
 export type { EmbeddingModelSpec } from './types/embedding-model.js';

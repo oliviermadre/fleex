@@ -107,6 +107,29 @@ export interface FactorySnapshot {
   serverTime: string;
   /** Something to tell once (the floor was started over for a new layout version). */
   notice?: string | null;
+  /** The server's live feed, and the last of its patches this snapshot already holds (see `FactoryPatch`). */
+  epoch?: string;
+  seq?: number;
+}
+/**
+ * What changed on the floor, pushed on the `factory` WS channel (`factory:patch`) to the pages watching it. Mirrors
+ * `FactoryPatch` in the server's `factory/factory-feed.ts`. Tickets come whole; `seq` follows on from the one before
+ * under the same `epoch`, or a patch was missed and the floor is read again.
+ */
+export interface FactoryPatch {
+  epoch: string;
+  seq: number;
+  tickets: FactoryTicket[];
+  removed: string[];
+  floor?: FactorySnapshot['floor'];
+  arms: FactorySnapshot['arms'];
+  armSwing?: number;
+  beltSpeed?: number;
+  fastBelt?: number;
+  runsLastHour: number;
+  running: number;
+  notice?: string | null;
+  serverTime: string;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
 export type RunExecutor = StationExec | 'exit';

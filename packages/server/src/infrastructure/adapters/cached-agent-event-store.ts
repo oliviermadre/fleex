@@ -11,6 +11,12 @@ import type { CostBasis, SdkSessionBaseline, SdkUsageTotals } from '../../applic
 export class CachedAgentEventStore implements AgentEventStorePort {
   private executions = new Map<string, AgentExecution>();
   private warmedUp = false;
+  /**
+   * The executions' ids newest first, overall and per ticket and persona. The dashboard reads them every second:
+   * they are sorted once, and again only when an execution comes in or moves (its start, ticket or persona), not
+   * at each of its events. The executions themselves are always read fresh from the map.
+   */
+  private order: { all: string[]; byTicket: Map<string, string[]>; byPersona: Map<string, string[]> } | null = null;
 
   /**
    * Fired right after an execution's cached status flips (running → terminal, or
@@ -32,10 +38,37 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   async warmUp(): Promise<void> {
     const all = await this.inner.getAllExecutions();
     this.executions.clear();
+    this.order = null;
     for (const e of all) {
-      this.executions.set(e.id, e);
+      this.put(e.id, e);
     }
     this.warmedUp = true;
+  }
+
+  private put(id: string, e: AgentExecution): void {
+    const prev = this.executions.get(id);
+    this.executions.set(id, e);
+    if (!prev || prev.startedAt !== e.startedAt || prev.ticketId !== e.ticketId || prev.personaId !== e.personaId) this.order = null;
+  }
+
+  private sorted(): NonNullable<CachedAgentEventStore['order']> {
+    if (this.order) return this.order;
+    const all = [...this.executions.values()]
+      .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0))
+      .map((e) => e.id);
+    const byTicket = new Map<string, string[]>(), byPersona = new Map<string, string[]>();
+    const add = (m: Map<string, string[]>, k: string, id: string) => { const a = m.get(k); if (a) a.push(id); else m.set(k, [id]); };
+    for (const id of all) {
+      const e = this.executions.get(id)!;
+      if (e.ticketId !== null) add(byTicket, e.ticketId, id);
+      add(byPersona, e.personaId, id);
+    }
+    this.order = { all, byTicket, byPersona };
+    return this.order;
+  }
+
+  private read(ids: string[] | undefined): AgentExecution[] {
+    return (ids ?? []).map((id) => this.executions.get(id)!);
   }
 
   private async ensureWarmed(): Promise<void> {
@@ -46,23 +79,17 @@ export class CachedAgentEventStore implements AgentEventStorePort {
 
   async getAllExecutions(): Promise<AgentExecution[]> {
     await this.ensureWarmed();
-    return [...this.executions.values()]
-      .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0));
+    return this.read(this.sorted().all);
   }
 
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
     await this.ensureWarmed();
-    return [...this.executions.values()]
-      .filter((e) => e.ticketId === ticketId)
-      .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0));
+    return this.read(this.sorted().byTicket.get(ticketId));
   }
 
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     await this.ensureWarmed();
-    return [...this.executions.values()]
-      .filter((e) => e.personaId === personaId)
-      .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0))
-      .slice(0, limit);
+    return this.read(this.sorted().byPersona.get(personaId)?.slice(0, limit));
   }
 
   // ── Write-through mutations ──
@@ -77,7 +104,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     fast?: boolean;
   }): Promise<void> {
     await this.inner.startExecution(params);
-    this.executions.set(params.executionId, {
+    this.put(params.executionId, {
       id: params.executionId,
       personaId: params.personaId,
       ticketId: params.ticketId,
@@ -114,7 +141,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     await this.inner.completeExecution(executionId, status, metrics);
     const cached = this.executions.get(executionId);
     if (cached) {
-      this.executions.set(executionId, {
+      this.put(executionId, {
         ...cached,
         status,
         completedAt: new Date().toISOString(),
@@ -143,7 +170,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     await this.inner.setExecutionOutputs(executionId, refs);
     const cached = this.executions.get(executionId);
     if (cached) {
-      this.executions.set(executionId, {
+      this.put(executionId, {
         ...cached,
         ...(refs.commentId != null && { commentId: refs.commentId }),
         ...(refs.deliverableId != null && { deliverableId: refs.deliverableId }),
@@ -155,13 +182,13 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     await this.inner.updateSessionId(executionId, sdkSessionId);
     const cached = this.executions.get(executionId);
     if (cached) {
-      this.executions.set(executionId, { ...cached, sdkSessionId });
+      this.put(executionId, { ...cached, sdkSessionId });
     }
   }
 
   async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
     await this.inner.upsertCliExecution(p);
-    this.executions.set(p.executionId, {
+    this.put(p.executionId, {
       id: p.executionId,
       personaId: 'cli',
       ticketId: p.ticketId,
@@ -190,7 +217,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     await this.inner.appendEvent(event);
     const cached = this.executions.get(event.executionId);
     if (cached) {
-      this.executions.set(event.executionId, {
+      this.put(event.executionId, {
         ...cached,
         eventCount: cached.eventCount + 1,
         lastEventAt: new Date().toISOString(),
@@ -203,7 +230,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     const now = new Date().toISOString();
     for (const [id, exec] of this.executions) {
       if (exec.status === 'running') {
-        this.executions.set(id, { ...exec, status: 'interrupted', completedAt: now });
+        this.put(id, { ...exec, status: 'interrupted', completedAt: now });
         // A restart orphans in-flight runs. Without this the cockpit keeps a
         // "Running for …" badge alive for an execution nothing will ever finish.
         this.onExecutionLifecycle?.({ executionId: id, ticketId: exec.ticketId, status: 'interrupted' });

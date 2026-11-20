@@ -81,6 +81,15 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listRecentRuns('default', 1))[0]?.id).toMatch(/r[12]/);
   });
 
+  it("lists one machine's latest runs, newest first, in SQL", async () => {
+    await store.saveRun(runRow('a1', { machineId: 'm-a', startedAt: '2026-11-15T08:00:00.000Z' }));
+    await store.saveRun(runRow('b1', { machineId: 'm-b', startedAt: '2026-11-15T09:00:00.000Z' }));
+    await store.saveRun(runRow('a2', { machineId: 'm-a', startedAt: '2026-11-15T10:00:00.000Z' }));
+    expect((await store.listRecentRuns('default', 10, 'm-a')).map((r) => r.id)).toEqual(['a2', 'a1']);
+    expect((await store.listRecentRuns('default', 1, 'm-a')).map((r) => r.id)).toEqual(['a2']);
+    expect((await store.listRecentRuns('default', 10)).map((r) => r.id)).toEqual(['a2', 'b1', 'a1']);
+  });
+
   it('lists what started or ended in a period, oldest first, for the stats', async () => {
     await store.saveRun(runRow('old', { startedAt: '2026-11-01T08:00:00.000Z', status: 'completed', finishedAt: '2026-11-01T08:05:00.000Z' }));
     await store.saveRun(runRow('recent', { startedAt: '2026-11-15T09:00:00.000Z', status: 'completed', outcome: 'ok', finishedAt: '2026-11-15T09:05:00.000Z' }));

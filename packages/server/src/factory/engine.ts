@@ -627,15 +627,18 @@ export class FactoryEngine {
     if (spec.exec === 'human_gate' || spec.exec === 'native') return;
     const inside = this.inside(m);
     let running = inside.filter((t) => t.s.phase === 'running').length;
+    /* the floor's counts are taken once, at the first ticket that waits, and kept up as runs start: not once per ticket */
+    let hour = -1, all = -1;
     for (const t of inside) {
       if (t.s.phase !== 'wait') continue;
       const s = this.floor.settings;
+      if (hour < 0) { hour = this.runsLastHour(); all = this.runningCount(); }
       const note = spec.off ? `${spec.name || 'The station'} is switched off`
         : running >= spec.cap ? `${spec.name || 'The station'} works on ${spec.cap} at once`
-        : this.runsLastHour() >= s.maxRunsPerHour ? `Limit of ${s.maxRunsPerHour} runs per hour reached: the Factory waits`
-        : this.runningCount() >= s.maxConcurrentRuns ? `${s.maxConcurrentRuns} Factory runs already in flight` : '';
+        : hour >= s.maxRunsPerHour ? `Limit of ${s.maxRunsPerHour} runs per hour reached: the Factory waits`
+        : all >= s.maxConcurrentRuns ? `${s.maxConcurrentRuns} Factory runs already in flight` : '';
       if (note) { if (t.s.note !== note) { t.s.note = note; this.dirty.add(t.ticketId); } continue; }
-      this.startRun(m, t); running++;
+      this.startRun(m, t); running++; hour++; all++;
     }
   }
 
