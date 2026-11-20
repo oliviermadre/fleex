@@ -13,9 +13,14 @@ import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
 import { complexityOf, priorityOf, TicketToken } from './FactoryTicketMeta';
 import { NEED_LABEL, needKind } from './needs';
+import { useTicketRuns } from './useTicketRuns';
+import { FactoryPeekRun, RunDot } from './FactoryPeekRun';
+import type { StationExec } from './types';
 
 const REFRESH_MS = 3000;
 const noop = () => {};
+/** The stations whose run starts an agent execution, so a log to show once its id is known. */
+const LOGGED: readonly StationExec[] = ['agent', 'skill', 'panel'];
 
 export interface PeekHandle {
   /** Where the ticket's machine (or the ticket itself) is on the floor, in the floor's own pixels: the card sits beside it. */
@@ -26,11 +31,20 @@ export interface PeekHandle {
  * A ticket's thread, beside its machine, at the first click: enough to read what an agent asks or what a gate has
  * to decide on, without opening the ticket. The whole conversation scrolls; what was last delivered is listed on top.
  * What the ticket waits for is done from here: a decision with its optional reason, an answer, another run.
+ *
+ * Once a station has run the ticket, a Thread · Run switch shows that run's log in the card too. A ticket a station
+ * is running opens on its live log: on a running ticket, that is what one clicks to see. Anything else opens on the
+ * thread, the log one click away. The tab is not remembered: each opening applies the rule again.
  */
-export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: () => void; onClose: () => void }>(function FactoryPeek({ ticketId, onOpen, onClose }, ref) {
+export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: () => void; onClose: () => void; onPopOut?: (executionId: string, title: string) => void }>(function FactoryPeek({ ticketId, onOpen, onClose, onPopOut }, ref) {
   const store = useFactoryStore();
   const ft = store.snapshot?.tickets.find((t) => t.ticketId === ticketId) ?? null;
   const machine = ft && store.layout ? store.layout.machines.find((m) => m.id === ft.machineId) ?? null : null;
+  const logged = machine?.kind === 'station' && !!machine.exec && LOGGED.includes(machine.exec);
+  const runs = useTicketRuns(ft, store.snapshot?.serverTime);
+  const [tab, setTab] = useState<'thread' | 'run'>(() => (ft?.phase === 'running' && logged ? 'run' : 'thread'));
+  /* the run on screen: set once one is shown, then changed only by a click (the picker, or following the ticket) */
+  const [pick, setPick] = useState<string | null>(null);
   const [comments, setComments] = useState<TicketComment[] | null>(null);
   const [draft, setDraft] = useState('');
   const [reason, setReason] = useState('');
@@ -56,6 +70,15 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   /* it opens on the end of the thread and follows what is added; scrolled up, it stays where it was put */
   useEffect(() => { const n = thread.current; if (n && comments && comments.length !== seen.current) { seen.current = comments.length; n.scrollTop = n.scrollHeight; } }, [comments]);
 
+  const current = runs.current;
+  const pending = ft?.phase === 'running' && logged && !!ft.runId && !(current?.id === ft.runId && current.executionId);
+  const switchable = runs.list.length > 0 || pending;
+  const view = switchable ? tab : 'thread';
+  const candidates = current && !runs.list.includes(current) ? [...runs.list, current] : runs.list;
+  const shown = (pick ? candidates.find((r) => r.id === pick) : null) ?? (pick ? null : current);
+  const next = pick && current && current.id !== pick && current.status === 'running' ? current : null;
+  useEffect(() => { if (view === 'run' && !pick && current?.executionId) setPick(current.id); }, [view, pick, current]);
+
   if (!ft) return null;
   const info = ft.info, need = needKind(ft), gate = ft.phase === 'review' && machine?.kind === 'station' ? machine : null;
   const where = `${machine ? machine.name || machine.kind : 'On the floor'}${need ? ` · ${NEED_LABEL[need]}` : ''}`;
@@ -73,15 +96,33 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
 
   return (
     <div ref={el} role="dialog" aria-label={`Ticket ${info?.displayId ?? ''}`} style={{ visibility: 'hidden' }}
-      className="absolute left-0 top-0 z-[6] flex max-h-[min(480px,calc(100%-16px))] w-[380px] max-w-[calc(100%-16px)] flex-col rounded-xl border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] shadow-2xl">
+      className={cn('absolute left-0 top-0 z-[6] flex w-[380px] max-w-[calc(100%-16px)] flex-col rounded-xl border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] shadow-2xl',
+        view === 'run' ? 'h-[min(560px,calc(100%-16px))]' : 'max-h-[min(480px,calc(100%-16px))]')}>
       <div className="flex flex-none items-center gap-2.5 border-b border-[var(--theme-border)] px-2.5 py-2">
         <TicketToken info={info ? { ...info, favorite: false } : null} size={26} />
         <div className="min-w-0 flex-1">
           <b className="block truncate text-[13px] text-[var(--theme-text-primary)]">{info?.title ?? ticketId}</b>
-          <span className="block truncate text-[11px] text-[var(--theme-text-muted)]"><span className="font-mono">#{info?.displayId ?? '?'}</span> · {where}</span>
+          {switchable ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--theme-text-muted)]">
+              <span className="min-w-0 truncate"><span className="font-mono">#{info?.displayId ?? '?'}</span> · {where}</span>
+              <PriorityIndicator priority={priorityOf(info)} /><ComplexityBadge complexity={complexityOf(info)} />
+            </span>
+          ) : <span className="block truncate text-[11px] text-[var(--theme-text-muted)]"><span className="font-mono">#{info?.displayId ?? '?'}</span> · {where}</span>}
         </div>
-        <PriorityIndicator priority={priorityOf(info)} /><ComplexityBadge complexity={complexityOf(info)} />
+        {switchable ? (
+          <div role="tablist" aria-label="Thread or run" className="flex flex-none gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
+            {(['thread', 'run'] as const).map((k) => (
+              <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setTab(k)}
+                className={cn('flex items-center gap-1.5 rounded px-2 py-0.5 text-[11.5px] font-semibold', view === k ? 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] shadow-sm' : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]')}>
+                {k === 'thread' ? <>Thread{comments && comments.length > 0 && <span className="font-normal text-[var(--theme-text-faint)]">{comments.length}</span>}</> : <><RunDot run={current} starting={pending} />Run</>}
+              </button>
+            ))}
+          </div>
+        ) : <><PriorityIndicator priority={priorityOf(info)} /><ComplexityBadge complexity={complexityOf(info)} /></>}
       </div>
+      {view === 'run' && <FactoryPeekRun runs={runs} shown={shown} next={next} onPick={setPick} onOpen={onOpen} onPopOut={onPopOut && ((id, title) => { onPopOut(id, title); onClose(); })} />}
+      {/* the thread stays mounted behind the Run tab: its scroll, its comments and a draft survive a look at the log */}
+      <div className={view === 'run' ? 'hidden' : 'contents'}>
       {latest.length > 0 && (
         <div className="flex flex-none gap-1.5 overflow-x-auto border-b border-[var(--theme-border)] px-2.5 py-1.5 [scrollbar-width:none]" aria-label="Latest deliverables">
           {latest.map((d) => (
@@ -122,6 +163,7 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
           </>
         )}
         <Button size="sm" variant={gate ? 'ghost' : 'primary'} className="ml-auto" onClick={onOpen} title="The whole ticket (also Enter, V, or a double-click)">Open</Button>
+      </div>
       </div>
     </div>
   );

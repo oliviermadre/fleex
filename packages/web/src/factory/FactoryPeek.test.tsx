@@ -7,14 +7,23 @@ import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-libra
 import * as api from '../services/api';
 import { FactoryPeek } from './FactoryPeek';
 import { useFactoryStore } from './factoryStore';
-import type { FactorySnapshot, FactoryTicket, MachineSpec, TicketPhase } from './types';
+import { factoryApi } from './factoryApi';
+import type { FactoryRun, FactorySnapshot, FactoryTicket, MachineSpec, TicketPhase } from './types';
 
 vi.mock('../services/api', async (original) => ({
   ...(await original<typeof import('../services/api')>()),
   fetchTicketComments: vi.fn(async () => []),
   postTicketComment: vi.fn(async () => ({})),
   uploadFile: vi.fn(async () => ({ originalName: 'shot.png', url: '/api/files/shot.png' })),
+  fetchExecutionsForTicket: vi.fn(async () => []),
+  cancelExecution: vi.fn(async () => ({})),
 }));
+vi.mock('./factoryApi', async (original) => {
+  const real = await original<typeof import('./factoryApi')>();
+  return { factoryApi: { ...real.factoryApi, runs: vi.fn(async () => []) } };
+});
+/* the real stream loads and subscribes through the event store: here it only says which execution it shows */
+vi.mock('../components/main-panel/AgentEventStream', () => ({ AgentEventStream: ({ executionId }: { executionId: string }) => <div data-testid="stream" data-execution-id={executionId} /> }));
 vi.mock('../components/work/panel/useTicketDeliverables', () => ({ useTicketDeliverables: () => ({ deliverables: [], loading: false, removeDeliverable: () => {} }) }));
 vi.mock('../hooks/useExecConfig', () => ({ useExecConfig: () => ({ cycleMode: () => {}, setExecutionMode: () => {} }) }));
 vi.mock('../stores/panelStore', () => ({ usePanelStore: (pick: (s: unknown) => unknown) => pick({ loadPanels: async () => {}, panels: [] }) }));
@@ -28,19 +37,20 @@ const gate: MachineSpec = { id: 'qa', kind: 'station', x: 8, y: 1, w: 5, h: 4, n
 const ticket = (machineId: string, phase: TicketPhase): FactoryTicket =>
   ({ ticketId: 't1', machineId, info: { id: 't1', displayId: 7, title: 'Ticket t1', type: 'build', priority: 'medium', status: 'doing', tags: [], boardId: 'b1', complexity: null, favorite: false, blocked: false }, x: 0, y: 0, phase, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: '2026-11-15T09:00:00.000Z', runId: null, note: '', handedAt: '' });
 
-function seed(t: FactoryTicket) {
+function seed(t: FactoryTicket, serverTime = '2026-11-15T10:00:00.000Z') {
   const layout = { version: 2, w: 30, h: 12, machines: [dev, gate] };
-  const snapshot: FactorySnapshot = { floor: { id: 'f', name: 'Floor', layout, settings: { maxRunsPerHour: 20, maxConcurrentRuns: 3 } }, tickets: [t], arms: [], runsLastHour: 0, running: 0, serverTime: '2026-11-15T10:00:00.000Z' };
+  const snapshot: FactorySnapshot = { floor: { id: 'f', name: 'Floor', layout, settings: { maxRunsPerHour: 20, maxConcurrentRuns: 3 } }, tickets: [t], arms: [], runsLastHour: 0, running: 0, serverTime };
   const resolve = vi.fn(async () => {});
   useFactoryStore.setState({ enabled: true, snapshot, layout, resolve, putBack: vi.fn(async () => {}) });
   return { resolve };
 }
 const open = () => { const on = { onOpen: vi.fn(), onClose: vi.fn() }; render(<FactoryPeek ticketId="t1" {...on} />); return on; };
+const openWithPopOut = () => { const on = { onOpen: vi.fn(), onClose: vi.fn(), onPopOut: vi.fn() }; render(<FactoryPeek ticketId="t1" {...on} />); return on; };
 const paste = (field: HTMLElement, file: File) => fireEvent.paste(field, { clipboardData: { files: [file] } });
 const shot = () => new File(['png'], 'shot.png', { type: 'image/png' });
 
 afterEach(() => { cleanup(); });
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(factoryApi.runs).mockResolvedValue([]); });
 
 describe('<FactoryPeek/> reply', () => {
   it('posts a several-line markdown answer with a pasted screenshot, then empties the field', async () => {
@@ -109,5 +119,110 @@ describe('<FactoryPeek/> at a gate', () => {
     expect(resolve).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('reject'));
     await waitFor(() => expect(resolve).toHaveBeenCalledWith('t1', 'reject', 'Not yet:\n- fix the header\n![shot.png](/api/files/shot.png)'));
+  });
+});
+
+const runRow = (id: string, executionId: string | null, status: FactoryRun['status'], machineName = 'Dev', startedAt = '2026-11-15T09:30:00.000Z'): FactoryRun =>
+  ({ id, ticketId: 't1', machineId: 'dev', machineName, executor: 'agent', status, outcome: status === 'completed' ? 'done' : null, executionId, error: null, startedAt, finishedAt: status === 'running' ? null : '2026-11-15T09:35:00.000Z' });
+const runsAre = (rows: FactoryRun[]) => vi.mocked(factoryApi.runs).mockResolvedValue(rows);
+const running = (runId: string) => ({ ...ticket('dev', 'running'), runId });
+const streamShows = async (id: string) => waitFor(() => expect(screen.getByTestId('stream').getAttribute('data-execution-id')).toBe(id));
+/* the card stays visibility:hidden until the floor places it, so the tabs have no accessible name in jsdom: match their text */
+const tab = (name: RegExp) => { const t = screen.getAllByRole('tab', { hidden: true }).find((b) => name.test(b.textContent ?? '')); if (!t) throw new Error(`no tab ${name}`); return t; };
+
+describe('<FactoryPeek/> Thread · Run', () => {
+  it('opens a ticket a station is running straight on its live log: that is what one clicks a running ticket for', async () => {
+    runsAre([runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    open();
+    await streamShows('e1');
+    expect(tab(/Run/).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('opens a ticket waiting at a gate on its thread, where the decision is made; its last run is one click away', async () => {
+    runsAre([runRow('r1', 'e1', 'completed')]);
+    seed({ ...ticket('qa', 'review'), runId: 'r1' });
+    open();
+    await waitFor(() => expect(screen.getByRole('tablist', { hidden: true })).toBeTruthy());
+    expect(tab(/Thread/).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('approve')).toBeTruthy();
+    expect(screen.queryByTestId('stream')).toBeNull();
+    fireEvent.click(tab(/Run/));
+    await streamShows('e1');
+  });
+
+  it('shows no switch at all for a ticket that never ran: the card stays as it was', async () => {
+    seed(ticket('dev', 'question'));
+    open();
+    await waitFor(() => expect(factoryApi.runs).toHaveBeenCalledWith('t1'));
+    expect(screen.queryByRole('tablist', { hidden: true })).toBeNull();
+    expect(screen.getByPlaceholderText(/station takes the ticket again/)).toBeTruthy();
+  });
+
+  it('a look at the log loses neither the draft nor the loaded thread', async () => {
+    runsAre([runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    open();
+    await streamShows('e1');
+    fireEvent.click(tab(/Thread/));
+    const field = screen.getByPlaceholderText(/Reply:/) as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'half an answer' } });
+    fireEvent.click(tab(/Run/));
+    await streamShows('e1');
+    fireEvent.click(tab(/Thread/));
+    expect((screen.getByPlaceholderText(/Reply:/) as HTMLTextAreaElement).value).toBe('half an answer');
+    expect(api.fetchTicketComments).toHaveBeenCalledTimes(1);
+  });
+
+  it('when the ticket moves on to another run, keeps the log being read and offers to follow instead', async () => {
+    runsAre([runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    open();
+    await streamShows('e1');
+
+    runsAre([runRow('r1', 'e1', 'completed'), runRow('r2', 'e2', 'running', 'Deploy', '2026-11-15T09:40:00.000Z')]);
+    act(() => { seed(running('r2'), '2026-11-15T10:00:03.000Z'); });
+    await waitFor(() => expect(screen.getByText('Follow →')).toBeTruthy());
+    expect(screen.getByTestId('stream').getAttribute('data-execution-id')).toBe('e1');
+    fireEvent.click(screen.getByText('Follow →'));
+    await streamShows('e2');
+    expect(screen.queryByText('Follow →')).toBeNull();
+  });
+
+  it('says the run is starting until the runner gives its execution id, then shows the log', async () => {
+    runsAre([runRow('r1', null, 'running')]);
+    seed(running('r1'));
+    open();
+    await waitFor(() => expect(screen.getByText('Starting…')).toBeTruthy());
+    expect(screen.queryByTestId('stream')).toBeNull();
+
+    runsAre([runRow('r1', 'e1', 'running')]);
+    act(() => { seed(running('r1'), '2026-11-15T10:00:03.000Z'); });
+    await streamShows('e1');
+  });
+
+  it('lists every run with a log in the picker; picking one shows its log', async () => {
+    runsAre([runRow('r0', 'e0', 'completed', 'Spec', '2026-11-15T09:00:00.000Z'), runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    open();
+    await streamShows('e1');
+    fireEvent.click(screen.getByText(/run 2\/2/));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Spec/, hidden: true }));
+    await streamShows('e0');
+  });
+
+  it('stops a live run in two clicks, and pops its log out into the floating panel', async () => {
+    runsAre([runRow('r1', 'e1', 'running')]);
+    seed(running('r1'));
+    const on = openWithPopOut();
+    await streamShows('e1');
+    fireEvent.click(screen.getByText('Stop'));
+    expect(api.cancelExecution).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByText('Confirm stop?')); });
+    expect(api.cancelExecution).toHaveBeenCalledWith('e1');
+
+    fireEvent.click(screen.getByText('⤢ Pop out'));
+    expect(on.onPopOut).toHaveBeenCalledWith('e1', 'Dev · execution log');
+    expect(on.onClose).toHaveBeenCalled();
   });
 });

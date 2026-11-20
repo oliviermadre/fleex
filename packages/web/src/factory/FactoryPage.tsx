@@ -31,6 +31,7 @@ import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryNeeds } from './FactoryNeeds';
 import { FactoryPeek, type PeekHandle } from './FactoryPeek';
+import { FloatingExecutionPanel } from '../components/tickets/ExecutionModal';
 import { needsOf, stepNeed } from './needs';
 import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
 import { addTo, groupOf, machineIds, machinesSel, sameSelection, ticketIds, ticketsIn, ticketsSel } from './pick';
@@ -174,6 +175,8 @@ function Floor() {
   }, [snapshot]);
   const miniRef = useRef<HTMLCanvasElement>(null);
   const [openTicket, setOpenTicket] = useState<string | null>(null);
+  /* a run's log popped out of the peek card: it outlives the card */
+  const [runLog, setRunLog] = useState<{ executionId: string; title: string } | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
@@ -709,7 +712,8 @@ function Floor() {
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
-          {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} />}
+          {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} onPopOut={(executionId, title) => setRunLog({ executionId, title })} />}
+          {runLog && <FloatingExecutionPanel key={runLog.executionId} executionId={runLog.executionId} title={runLog.title} onClose={() => setRunLog(null)} />}
           {halted && (
             <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-2xl items-center gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('red'))} role="alert">
               <span className="min-w-0 flex-1"><b>Emergency stop.</b> Nothing moves and nothing runs. The runs that were cut start again when the floor restarts. You can still move tickets and build.</span>
