@@ -202,6 +202,11 @@ export interface FactoryRunRow {
   id: string; ticketId: string; floorId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: FactoryRunStatus; outcome: string | null; executionId: string | null; error: string | null;
   startedAt: string; finishedAt: string | null;
+  /**
+   * A visit to an item (then `ticketId` is the item's id, and the row goes to `factory_item_runs`): what the station
+   * answered, since an item has no thread, and the deliverable it produced.
+   */
+  reply?: string | null; deliverableId?: string | null;
 }
 
 /**

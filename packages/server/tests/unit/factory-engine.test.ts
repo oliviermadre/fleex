@@ -8,7 +8,7 @@ import { FactoryEngine, FactoryError, normaliseLayout } from '../../src/factory/
 import type { SetOp, TicketChange } from '../../src/factory/set-ops.js';
 import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
-import type { StationRunResult } from '../../src/factory/station-runner.js';
+import type { ItemRunTarget, StationRunResult } from '../../src/factory/station-runner.js';
 import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
@@ -28,13 +28,16 @@ class MemoryStore implements FactoryStorePort {
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
   async saveRun(r: FactoryRunRow) { this.runs.set(r.id, structuredClone(r)); }
+  itemRuns = new Map<string, FactoryRunRow>();
+  async saveItemRun(r: FactoryRunRow) { this.itemRuns.set(r.id, structuredClone(r)); }
+  async listItemRuns(id: string) { return [...this.itemRuns.values()].filter((r) => r.ticketId === id).map((r) => structuredClone(r)); }
   async listRunsByTicket(id: string) { return [...this.runs.values()].filter((r) => r.ticketId === id); }
   async listRecentRuns() { return [...this.runs.values()]; }
   async listRunsSince() { return [...this.runs.values()]; }
   async countRunsSince() { return 0; }
   async interruptRunningRuns(nowIso: string) {
     const out: FactoryRunRow[] = [];
-    for (const r of this.runs.values()) if (r.status === 'running') { r.status = 'interrupted'; r.finishedAt = nowIso; out.push(r); }
+    for (const r of [...this.runs.values(), ...this.itemRuns.values()]) if (r.status === 'running') { r.status = 'interrupted'; r.finishedAt = nowIso; out.push(r); }
     return out;
   }
 }
@@ -50,7 +53,7 @@ const exit = (id: string, x: number, y: number): MachineSpec => ({ id, kind: 'ex
 let store: MemoryStore;
 let infos: Map<string, FactoryTicketInfo>;
 let statuses: [string, string][];
-let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void; started: (executionId: string) => void }[];
+let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void; started: (executionId: string) => void; item?: ItemRunTarget }[];
 let cancelled: string[];
 let decisions: [string, string, string, string][];
 let clock: number;
@@ -73,7 +76,7 @@ async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?
     store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: timing === 'real' ? undefined : timing,
     loadTicket: async (id) => infos.get(id) ?? null,
     setStatus: async (id, status) => { statuses.push([id, status]); },
-    runner: { run: (s, ticketId, _runId, _targets, started) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started }); }) },
+    runner: { run: (s, ticketId, _runId, _targets, started, item) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started, item }); }) },
     cancelExecution: async (id) => { cancelled.push(id); },
     applyChange: async (id, change) => {
       if (writes.hold) await new Promise<void>((resolve) => { writes.release.push(resolve); });
@@ -159,16 +162,40 @@ describe('FactoryEngine', () => {
       await expect(engine.archiveItem('nope')).rejects.toBeInstanceOf(FactoryError);
     });
 
-    it('a station sets an item aside, a gantry leaves it untouched, and the floor keeps it across a restart', async () => {
-      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), { id: 'g', kind: 'belt', x: 5, y: 1, w: 1, h: 1, dir: 0, set: [{ field: 'priority', value: 'high' }] } as MachineSpec, station('s', 6, 1)]);
+    it('a station runs on an item, keeps what it answered with the visit, and the item leaves by the outcome; a gantry leaves it untouched', async () => {
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), { id: 'g', kind: 'belt', x: 5, y: 1, w: 1, h: 1, dir: 0, set: [{ field: 'priority', value: 'high' }] } as MachineSpec,
+        station('s', 6, 1, { outcomes: ['junk', 'mine'] }), arm('aj', 7, 4, 1, 'outcome', ['junk']), zone('zj', 7, 5), arm('am', 9, 2, 0, 'outcome', ['mine']), zone('zm', 10, 2)]);
       const { itemId } = await engine.ingest(msg('k'));
       await run(8);
-      expect(where(itemId!)).toBe('s:failed');
-      expect(changes).toEqual([]);
-      expect(pending).toEqual([]);
+      expect(where(itemId!)).toBe('s:running');
+      expect(changes).toEqual([]);                        // the gantry wrote nothing: an item has no fields of a ticket
+      const p = pending[0]!;
+      expect(p.ticketId).toBe(itemId);
+      expect(p.item).toMatchObject({ item: { id: itemId, source: 'slack' }, earlier: [] });
+      p.started('exec-9');
+      p.resolve({ status: 'completed', outcome: 'mine', executionId: 'exec-9', error: null, reply: 'Ana asks you directly: answer her.', deliverableId: null });
+      await run(6);
+      expect(where(itemId!)).toBe('zm:zone');
+      const visits = [...store.itemRuns.values()];
+      expect(visits).toMatchObject([{ ticketId: itemId, machineId: 's', status: 'completed', outcome: 'mine', executionId: 'exec-9', reply: 'Ana asks you directly: answer her.' }]);
+      expect(store.runs.size).toBe(0);                    // nothing in the tickets' runs
+    });
+
+    it('an item a station asked about waits there; run again, the station is told what it said before; the floor keeps it across a restart', async () => {
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), station('s', 5, 1)]);
+      const { itemId } = await engine.ingest(msg('k'));
+      await run(6);
+      pending[0]!.resolve({ status: 'question', outcome: '', executionId: 'e1', error: null, reply: 'Which cart: web or app?', deliverableId: null });
+      await run(1);
+      expect(where(itemId!)).toBe('s:question');
+      expect(engine.snapshot().tickets.find((t) => t.ticketId === itemId)!.note).toContain('read it on the item');
+      await engine.retry(itemId!);
+      await run(1);
+      expect(pending[1]!.item!.earlier).toMatchObject([{ status: 'question', reply: 'Which cart: web or app?' }]);
       await engine.flush();
       const again = new FactoryEngine({ store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async () => null, setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) } });
       await again.init();
+      /* the run that was in flight is cut by the restart, as a ticket's is */
       expect(again.snapshot().tickets.find((t) => t.ticketId === itemId)).toMatchObject({ machineId: 's', phase: 'failed', item: { source: 'slack' } });
     });
 

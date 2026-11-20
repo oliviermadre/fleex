@@ -22,6 +22,11 @@ export interface RunSubject {
   documentIds?: string[];
   /** Default board for tickets the workflow creates (`ticket.create`). */
   boardId?: string;
+  /**
+   * What the run is, in the prompt's first line, when it is not a routine's: a Factory station running on an item
+   * says so ("Factory item from Slack") instead of "Routine run".
+   */
+  heading?: string;
 }
 
 /**

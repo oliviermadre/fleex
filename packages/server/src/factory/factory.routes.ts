@@ -69,6 +69,8 @@ export function factoryRoutes(factory: FactoryModule | null) {
         throw err;
       }
     });
+    /** What stations did with an item and what they answered, oldest first. */
+    app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
     /** Archive an item (soft delete): it is junk, or done with. A new message in its conversation brings it back. */
     app.post<{ Params: { itemId: string } }>('/api/factory/items/:itemId/archive', (request, reply) => guard(reply, (f) => f.engine.archiveItem(request.params.itemId)));
 

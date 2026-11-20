@@ -19,11 +19,15 @@ export interface FactoryStorePort {
   countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>>;
 
   saveRun(run: FactoryRunRow): Promise<void>;
+  /** A station's visit to an item, with what it answered (`ticketId` is the item's id). */
+  saveItemRun(run: FactoryRunRow): Promise<void>;
+  /** The visits to an item, oldest first. */
+  listItemRuns(itemId: string): Promise<FactoryRunRow[]>;
   listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]>;
   listRecentRuns(floorId: string, limit: number): Promise<FactoryRunRow[]>;
   /** Every run that started or ended since `sinceIso`, oldest first: what the stats are computed from. */
   listRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]>;
   countRunsSince(floorId: string, sinceIso: string): Promise<number>;
-  /** After a restart no run is in flight any more: flag the ones left `running`. Returns their rows. */
+  /** After a restart no run is in flight any more: flag the ones left `running`, a ticket's or an item's. Returns their rows. */
   interruptRunningRuns(nowIso: string): Promise<FactoryRunRow[]>;
 }

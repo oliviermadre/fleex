@@ -82,6 +82,20 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     if (error) this.fail('saveRun', error.message);
   }
 
+  async saveItemRun(r: FactoryRunRow): Promise<void> {
+    const { error } = await this.conn.client.from('factory_item_runs').upsert({
+      id: r.id, item_id: r.ticketId, floor_id: r.floorId, machine_id: r.machineId, machine_name: r.machineName, executor: r.executor, status: r.status,
+      outcome: r.outcome, execution_id: r.executionId, error: r.error, reply: r.reply ?? null, deliverable_id: r.deliverableId ?? null, started_at: r.startedAt, finished_at: r.finishedAt,
+    });
+    if (error) this.fail('saveItemRun', error.message);
+  }
+
+  async listItemRuns(itemId: string): Promise<FactoryRunRow[]> {
+    const { data, error } = await this.conn.client.from('factory_item_runs').select('*').eq('item_id', itemId).order('started_at', { ascending: true });
+    if (error) this.fail('listItemRuns', error.message);
+    return (data as Parameters<typeof runFromRow>[0][]).map(runFromRow);
+  }
+
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {
     const { data, error } = await this.conn.client.from('factory_runs').select('*').eq('ticket_id', ticketId).order('started_at', { ascending: true });
     if (error) this.fail('listRunsByTicket', error.message);
@@ -110,6 +124,8 @@ export class SupabaseFactoryStore implements FactoryStorePort {
   async interruptRunningRuns(nowIso: string): Promise<FactoryRunRow[]> {
     const { data, error } = await this.conn.client.from('factory_runs').update({ status: 'interrupted', finished_at: nowIso }).eq('status', 'running').select('*');
     if (error) this.fail('interruptRunningRuns', error.message);
-    return (data as RunRow[]).map(runFromRow);
+    const items = await this.conn.client.from('factory_item_runs').update({ status: 'interrupted', finished_at: nowIso }).eq('status', 'running').select('*');
+    if (items.error) this.fail('interruptRunningRuns', items.error.message);
+    return [...(data as RunRow[]), ...(items.data as RunRow[])].map(runFromRow);
   }
 }

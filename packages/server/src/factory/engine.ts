@@ -336,6 +336,8 @@ export class FactoryEngine {
     }
     for (const row of await this.deps.store.listItems(this.floor.id)) {
       const t: Ticket = { ticketId: row.id, machineId: row.machineId, s: row.state ?? this.looseState(), createdAt: row.createdAt, info: itemInfo(row), item: row };
+      /* as for a ticket: a run left in flight by the previous process is over, and the item waits for someone */
+      if (t.s.phase === 'running') { t.s.phase = 'failed'; t.s.note = interrupted.has(t.s.runId ?? '') ? 'Run interrupted by a server restart' : 'Run interrupted'; this.dirty.add(t.ticketId); }
       this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${row.sourceKey}`, row.id);
       if (startedOver) { const inbound = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound); if (inbound) { this.accept(inbound, t); t.s.outcome = ''; continue; } }
       this.attach(t);
@@ -506,14 +508,16 @@ export class FactoryEngine {
       id: randomUUID(), ticketId: t.ticketId, floorId: this.floor.id, machineId: spec.id, machineName: spec.name || 'Station', executor: spec.exec,
       status, outcome: null, executionId: null, error: null, startedAt: new Date(this.now()).toISOString(), finishedAt: null,
     };
+    /* a visit to an item keeps what the station answers: it has no thread */
+    if (t.item) { run.reply = null; run.deliverableId = null; }
     t.s.runId = run.id;
     this.saveRun(run);
     return run;
   }
 
+  /** A ticket's visit goes to `factory_runs`; an item's (it carries `reply`) to `factory_item_runs`. */
   private saveRun(run: FactoryRunRow): void {
-    /* a run row belongs to a ticket; an item's visits are not recorded */
-    if (this.tickets.get(run.ticketId)?.item) return;
+    if ('reply' in run) { void this.deps.store.saveItemRun(run).catch((err) => this.deps.logger.warn('Factory: could not save an item run', { runId: run.id, error: String(err) })); return; }
     void this.deps.store.saveRun(run).catch((err) => this.deps.logger.warn('Factory: could not save a run', { runId: run.id, error: String(err) }));
   }
 
@@ -708,7 +712,6 @@ export class FactoryEngine {
     let running = inside.filter((t) => t.s.phase === 'running').length;
     for (const t of inside) {
       if (t.s.phase !== 'wait') continue;
-      if (t.item) { t.s.phase = 'failed'; t.s.note = 'Stations do not work on items yet: move it, or archive it'; this.dirty.add(t.ticketId); continue; }
       const s = this.floor.settings;
       const note = spec.off ? `${spec.name || 'The station'} is switched off`
         : running >= spec.cap ? `${spec.name || 'The station'} works on ${spec.cap} at once`
@@ -732,14 +735,20 @@ export class FactoryEngine {
       const dest = arm ? this.leadsTo(arm.dst, (arm.spec as ArmSpec).dir) : null;
       targets[o] = dest?.spec.name || (dest ? dest.spec.kind : 'nowhere yet');
     }
-    void this.deps.runner.run(spec, t.ticketId, run.id, targets, (executionId) => { run.executionId = executionId; this.saveRun(run); })
+    const started = (executionId: string) => { run.executionId = executionId; this.saveRun(run); };
+    /* an item is its brief: what it is, and what stations said about it before */
+    const going = t.item
+      ? this.deps.store.listItemRuns(t.ticketId).catch(() => []).then((earlier) => this.deps.runner.run(spec, t.ticketId, run.id, targets, started, { item: t.item!, earlier: earlier.filter((r) => r.id !== run.id) }))
+      : this.deps.runner.run(spec, t.ticketId, run.id, targets, started);
+    void going
       .then((res) => {
         this.openRuns.delete(run.id);
         run.finishedAt = new Date(this.now()).toISOString(); run.executionId = res.executionId ?? run.executionId; run.error = res.error;
+        if ('reply' in run) { run.reply = res.reply ?? null; run.deliverableId = res.deliverableId ?? null; }
         const still = this.tickets.get(t.ticketId) === t && t.machineId === spec.id && t.s.runId === run.id;
         if (!still) { run.status = res.status === 'failed' ? 'failed' : 'interrupted'; this.saveRun(run); return; }
         if (res.status === 'completed') { run.status = 'completed'; run.outcome = res.outcome; t.s.phase = 'out'; t.s.outcome = res.outcome; t.s.since = run.finishedAt; }
-        else if (res.status === 'question') { run.status = 'question'; t.s.phase = 'question'; t.s.outcome = QUESTION_OUTCOME; t.s.note = 'The agent asked a question in the ticket thread'; }
+        else if (res.status === 'question') { run.status = 'question'; t.s.phase = 'question'; t.s.outcome = QUESTION_OUTCOME; t.s.note = t.item ? 'The agent asked a question: read it on the item, then run it again or send it on' : 'The agent asked a question in the ticket thread'; }
         else { run.status = 'failed'; t.s.phase = 'failed'; t.s.note = res.error ?? 'The run failed'; }
         this.saveRun(run); this.dirty.add(t.ticketId);
       })
@@ -1038,6 +1047,7 @@ export class FactoryEngine {
     if (t.s.runId) this.saveRun({
       id: t.s.runId, ticketId, floorId: this.floor.id, machineId: m.spec.id, machineName: m.spec.name || 'Gate', executor: 'human_gate',
       status: 'completed', outcome, executionId: null, error: null, startedAt: t.s.since, finishedAt: nowIso,
+      ...(t.item ? { reply: reason.trim() ? `${m.spec.name || 'Gate'}: ${reason.trim().slice(0, 4000)}` : null, deliverableId: null } : {}),
     });
     t.s.phase = 'out'; t.s.outcome = outcome; t.s.since = nowIso; this.dirty.add(ticketId);
     if (this.deps.recordDecision && !t.item) void this.deps.recordDecision(ticketId, m.spec.name || 'Gate', outcome, reason.trim().slice(0, 4000))

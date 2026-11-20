@@ -12,6 +12,7 @@ import { SqliteFactoryStore } from '../../src/factory/sqlite-factory-store.js';
 import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
 import factoryMigration from '../../src/infrastructure/migrations/migrations/045_factory.js';
 import itemsMigration from '../../src/infrastructure/migrations/migrations/046_factory_items.js';
+import itemRunsMigration from '../../src/infrastructure/migrations/migrations/047_factory_item_runs.js';
 import { DEFAULT_SETTINGS, type FactoryItemRow, type FactoryRunRow, type FactoryTicketRow } from '../../src/factory/types.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -119,13 +120,26 @@ describe('SqliteFactoryStore', () => {
     expect(await store.countDropped('default', '2026-11-16T00:00:00.000Z')).toEqual({});
   });
 
-  it('down() removes the four tables and nothing else', async () => {
+  it('keeps an item\'s visits apart from tickets\' runs, with what the station answered, and flags them after a restart', async () => {
+    const nowState = { x: 1, y: 2, phase: 'zone' as const, p: 0, fx: 1, fy: 0, outcome: '', released: false, since: NOW, runId: null, note: '' };
+    await store.saveItem({ id: 'i1', floorId: 'default', source: 'manual', sourceKey: 'k', title: 'hi', author: '', excerpt: '', url: null, tags: [], messages: 1, lastActivityAt: NOW, intakeId: null, machineId: null, state: nowState, archivedAt: null, archivedReason: null, createdAt: NOW, updatedAt: NOW });
+    await store.saveItemRun(runRow('v1', { ticketId: 'i1', reply: null, deliverableId: null }));
+    await store.saveItemRun(runRow('v1', { ticketId: 'i1', status: 'completed', outcome: 'mine', reply: 'Answer Ana.', deliverableId: 'd1', finishedAt: NOW }));
+    await store.saveItemRun(runRow('v2', { ticketId: 'i1', reply: null, deliverableId: null, startedAt: '2026-11-15T11:00:00.000Z' }));
+    expect(await store.listItemRuns('i1')).toMatchObject([{ id: 'v1', ticketId: 'i1', status: 'completed', outcome: 'mine', reply: 'Answer Ana.', deliverableId: 'd1' }, { id: 'v2', status: 'running' }]);
+    expect(await store.listRunsByTicket('i1')).toEqual([]);
+    expect((await store.interruptRunningRuns(NOW)).map((r) => r.id)).toEqual(['v2']);
+    expect((await store.listItemRuns('i1'))[1]).toMatchObject({ status: 'interrupted' });
+  });
+
+  it('down() removes the five tables and nothing else', async () => {
     const tables = () => (conn.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'factory_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(tables()).toEqual(['factory_floors', 'factory_items', 'factory_runs', 'factory_tickets']);
+    expect(tables()).toEqual(['factory_floors', 'factory_item_runs', 'factory_items', 'factory_runs', 'factory_tickets']);
     const before = (conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n;
+    await itemRunsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await itemsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await factoryMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     expect(tables()).toEqual([]);
-    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 4);
+    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 5);
   });
 });

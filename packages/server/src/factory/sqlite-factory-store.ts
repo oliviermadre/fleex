@@ -34,9 +34,10 @@ export function itemToRow(i: FactoryItemRow, json: (v: unknown) => unknown): Ite
   };
 }
 
-export function runFromRow(r: RunRow): FactoryRunRow {
+export function runFromRow(r: RunRow & { item_id?: string; reply?: string | null; deliverable_id?: string | null }): FactoryRunRow {
   return {
-    id: r.id, ticketId: r.ticket_id, floorId: r.floor_id, machineId: r.machine_id, machineName: r.machine_name,
+    ...(r.item_id ? { reply: r.reply ?? null, deliverableId: r.deliverable_id ?? null } : {}),
+    id: r.id, ticketId: r.item_id ?? r.ticket_id, floorId: r.floor_id, machineId: r.machine_id, machineName: r.machine_name,
     executor: r.executor as RunExecutor, status: r.status as FactoryRunStatus, outcome: r.outcome, executionId: r.execution_id,
     error: r.error, startedAt: new Date(r.started_at).toISOString(), finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
   };
@@ -114,6 +115,22 @@ export class SqliteFactoryStore implements FactoryStorePort {
     });
   }
 
+  async saveItemRun(r: FactoryRunRow): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO factory_item_runs (id, item_id, floor_id, machine_id, machine_name, executor, status, outcome, execution_id, error, reply, deliverable_id, started_at, finished_at)
+      VALUES (@id, @item_id, @floor_id, @machine_id, @machine_name, @executor, @status, @outcome, @execution_id, @error, @reply, @deliverable_id, @started_at, @finished_at)
+      ON CONFLICT(id) DO UPDATE SET status = excluded.status, outcome = excluded.outcome, execution_id = excluded.execution_id, error = excluded.error,
+        reply = excluded.reply, deliverable_id = excluded.deliverable_id, finished_at = excluded.finished_at
+    `).run({
+      id: r.id, item_id: r.ticketId, floor_id: r.floorId, machine_id: r.machineId, machine_name: r.machineName, executor: r.executor, status: r.status,
+      outcome: r.outcome, execution_id: r.executionId, error: r.error, reply: r.reply ?? null, deliverable_id: r.deliverableId ?? null, started_at: r.startedAt, finished_at: r.finishedAt,
+    });
+  }
+
+  async listItemRuns(itemId: string): Promise<FactoryRunRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_item_runs WHERE item_id = ? ORDER BY started_at ASC').all(itemId) as (RunRow & { item_id: string })[]).map(runFromRow);
+  }
+
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {
     return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE ticket_id = ? ORDER BY started_at ASC').all(ticketId) as RunRow[]).map(runFromRow);
   }
@@ -132,8 +149,14 @@ export class SqliteFactoryStore implements FactoryStorePort {
   }
 
   async interruptRunningRuns(nowIso: string): Promise<FactoryRunRow[]> {
-    const rows = this.conn.db.prepare("SELECT * FROM factory_runs WHERE status = 'running'").all() as RunRow[];
-    if (rows.length) this.conn.db.prepare("UPDATE factory_runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'").run(nowIso);
+    const rows = [
+      ...this.conn.db.prepare("SELECT * FROM factory_runs WHERE status = 'running'").all() as RunRow[],
+      ...this.conn.db.prepare("SELECT * FROM factory_item_runs WHERE status = 'running'").all() as RunRow[],
+    ];
+    if (rows.length) {
+      this.conn.db.prepare("UPDATE factory_runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'").run(nowIso);
+      this.conn.db.prepare("UPDATE factory_item_runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'").run(nowIso);
+    }
     return rows.map(runFromRow).map((r) => ({ ...r, status: 'interrupted' as const, finishedAt: nowIso }));
   }
 }
