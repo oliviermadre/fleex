@@ -1,10 +1,10 @@
-import { memo, useRef, useCallback, useState } from 'react';
+import { memo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { EXECUTION_STATES, type ExecutionState } from '@fleex/shared';
+import { EXECUTION_STATES } from '@fleex/shared';
 import { AgentEventStream } from '../main-panel/AgentEventStream';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { cancelExecution } from '../../services/api';
+import { useTerminateExecution } from '../../hooks/useTerminateExecution';
 
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
@@ -37,25 +37,7 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
     return !events.some((e) => e.eventType === 'execution_end');
   });
 
-  const [terminateState, setTerminateState] = useState<ExecutionState>(EXECUTION_STATES.IDLE);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleTerminate = useCallback(async () => {
-    if (terminateState === EXECUTION_STATES.IDLE) {
-      setTerminateState(EXECUTION_STATES.CONFIRMING);
-      timerRef.current = setTimeout(() => setTerminateState(EXECUTION_STATES.IDLE), 1500);
-    } else if (terminateState === EXECUTION_STATES.CONFIRMING) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setTerminateState(EXECUTION_STATES.TERMINATING);
-      try {
-        await cancelExecution(executionId);
-        setTerminateState(EXECUTION_STATES.DONE);
-      } catch {
-        setTerminateState(EXECUTION_STATES.ERROR);
-        setTimeout(() => setTerminateState(EXECUTION_STATES.IDLE), 2000);
-      }
-    }
-  }, [terminateState, executionId]);
+  const { state: terminateState, terminate: handleTerminate } = useTerminateExecution(executionId);
 
   const showTerminate = isRunning && terminateState !== EXECUTION_STATES.DONE;
   // --- End terminate button state ---
