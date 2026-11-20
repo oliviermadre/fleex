@@ -250,6 +250,9 @@ The platforms are a feature of their own, drawn in build mode:
 - **Its name in the product: Area.** "zone" is taken (a machine where tickets wait: Inbound, Ready). The build
   sub-menu that was called Area (zone, exit, label) is renamed **Place**, and Area is placed from it.
 - **In the flat skins** (Fleex, Neon, Pixel): a tinted slab bordered in its colour, its name on the floor.
+- **Moved by its name** (D1, picked on `docs/factory/areas.html`): a drag on the floor stays the frame that selects
+  machines. **Areas nest, never cross** (O2): one may lie wholly inside another, never across its edge; the smallest is
+  on top and is the one selected.
 
 ## Proposed order of work
 
