@@ -6,7 +6,7 @@ import { areasOf, fits } from './areas';
 /** What takes no tile: a label and an area are written or laid on the floor, machines stand on them. */
 export const decor = (m: Pick<MachineSpec, 'kind'>): boolean => m.kind === 'label' || m.kind === 'area';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'area' | 'teleporter' | 'set' | 'toll' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'area' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
 
 export const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -20,6 +20,8 @@ export function machineAt(layout: FactoryLayout, x: number, y: number): MachineS
 export const STATION_W = 5, STATION_H = 4;
 /** How many tickets a machine can be asked to work on at once: as many places as it can show. */
 export const MAX_PLACES = 6;
+/** A desk is a dock of 3 by 2 tiles, whatever it is set to. */
+export const DESK_W = 3, DESK_H = 2;
 
 export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec | null {
   const id = newId();
@@ -42,6 +44,10 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     /* a toll rejects to its right, as one goes along the belt, until its popup says otherwise */
     case 'toll': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, set: [], toll: { when: [], out: ((dir + 1) % 4) as Dir } };
     case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
+    /* a dock of three by two, its mouth on the right: where a ticket created at it waits for an arm */
+    case 'desk': return { id, kind: 'desk', x: x - 1, y, w: DESK_W, h: DESK_H, name: 'Desk' };
+    /* Slack until its popup says otherwise; a conversation must be quiet two minutes before its item leaves */
+    case 'intake': return { id, kind: 'intake', x: x - 1, y, w: DESK_W, h: DESK_H, name: '', source: 'slack', quietSec: 120, drop: [] };
     default: return null;
   }
 }

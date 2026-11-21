@@ -48,6 +48,12 @@ interface FactoryState {
   ackNotice: () => Promise<void>;
   retry: (ticketId: string) => Promise<void>;
   giveBack: (ticketId: string) => Promise<void>;
+  /** Archive an item (soft delete). */
+  archiveItem: (itemId: string) => Promise<void>;
+  /** Change what the Factory keeps of an item (title, author, link, text, tags, its source's fields). */
+  editItem: (itemId: string, patch: Parameters<typeof factoryApi.editItem>[1]) => Promise<void>;
+  /** Make an item by hand, as a source would send it: what became of it, or null when the server refused it (it said why). */
+  ingest: (item: Parameters<typeof factoryApi.ingest>[0]) => Promise<'new' | 'updated' | 'back' | 'dropped' | null>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
   star: (ticketId: string, on: boolean) => Promise<void>;
 }
@@ -135,7 +141,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
       take({
         ...s, tickets, arms: p.arms, armSwing: p.armSwing, beltSpeed: p.beltSpeed, fastBelt: p.fastBelt,
         runsLastHour: p.runsLastHour, running: p.running, serverTime: p.serverTime, epoch: p.epoch, seq: p.seq,
-        ...(p.floor ? { floor: p.floor } : {}), ...(p.notice !== undefined ? { notice: p.notice } : {}),
+        ...(p.floor ? { floor: p.floor } : {}), ...(p.notice !== undefined ? { notice: p.notice } : {}), ...(p.intakes ? { intakes: p.intakes } : {}),
       });
     },
     previewLayout: (layout) => set({ layout }),
@@ -170,6 +176,10 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     ackNotice: () => act(() => factoryApi.ackNotice()),
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
+    archiveItem: (itemId) => act(() => factoryApi.archiveItem(itemId)),
+    editItem: (itemId, patch) => act(() => factoryApi.editItem(itemId, patch)),
+    /* its answer carries the floor, applied as any action's is (a patch that crossed it is not undone) */
+    ingest: async (item) => { try { const r = await factoryApi.ingest(item); apply(r.snapshot); return r.status; } catch { return null; } },
     star: async (ticketId, on) => {
       try { await useTicketStore.getState().updateTicket(ticketId, { favorite: on }); } catch { toast.error('Could not change the favourite'); return; }
       await act(() => factoryApi.refreshTicket(ticketId));

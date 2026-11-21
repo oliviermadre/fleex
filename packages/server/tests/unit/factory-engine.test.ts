@@ -8,8 +8,8 @@ import { FactoryEngine, FactoryError, normaliseLayout } from '../../src/factory/
 import type { SetOp, TicketChange } from '../../src/factory/set-ops.js';
 import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
-import type { StationRunResult } from '../../src/factory/station-runner.js';
-import type { ArmCondition, FactoryFloorRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
+import type { ItemRunTarget, StationRunResult } from '../../src/factory/station-runner.js';
+import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
   floors = new Map<string, FactoryFloorRow>();
@@ -22,14 +22,22 @@ class MemoryStore implements FactoryStorePort {
   async saveTicket(t: FactoryTicketRow) { this.tickets.set(t.ticketId, structuredClone(t)); }
   async removeTicket(id: string) { this.tickets.delete(id); }
   async listManagedTicketIds() { return [...this.tickets.keys()]; }
+  items = new Map<string, FactoryItemRow>();
+  async listItems() { return [...this.items.values()].filter((i) => !i.archivedAt).map((i) => structuredClone(i)); }
+  async getItemByKey(source: string, key: string) { const i = [...this.items.values()].find((x) => x.source === source && x.sourceKey === key); return i ? structuredClone(i) : null; }
+  async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
+  async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
   async saveRun(r: FactoryRunRow) { this.runs.set(r.id, structuredClone(r)); }
+  itemRuns = new Map<string, FactoryRunRow>();
+  async saveItemRun(r: FactoryRunRow) { this.itemRuns.set(r.id, structuredClone(r)); }
+  async listItemRuns(id: string) { return [...this.itemRuns.values()].filter((r) => r.ticketId === id).map((r) => structuredClone(r)); }
   async listRunsByTicket(id: string) { return [...this.runs.values()].filter((r) => r.ticketId === id); }
   async listRecentRuns() { return [...this.runs.values()]; }
   async listRunsSince() { return [...this.runs.values()]; }
   async countRunsSince() { return 0; }
   async interruptRunningRuns(nowIso: string) {
     const out: FactoryRunRow[] = [];
-    for (const r of this.runs.values()) if (r.status === 'running') { r.status = 'interrupted'; r.finishedAt = nowIso; out.push(r); }
+    for (const r of [...this.runs.values(), ...this.itemRuns.values()]) if (r.status === 'running') { r.status = 'interrupted'; r.finishedAt = nowIso; out.push(r); }
     return out;
   }
 }
@@ -45,7 +53,7 @@ const exit = (id: string, x: number, y: number): MachineSpec => ({ id, kind: 'ex
 let store: MemoryStore;
 let infos: Map<string, FactoryTicketInfo>;
 let statuses: [string, string][];
-let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void; started: (executionId: string) => void }[];
+let pending: { station: string; ticketId: string; resolve: (r: StationRunResult) => void; started: (executionId: string) => void; item?: ItemRunTarget }[];
 let cancelled: string[];
 let decisions: [string, string, string, string][];
 let clock: number;
@@ -68,7 +76,7 @@ async function boot(machines: MachineSpec[], w = 30, h = 12, timing: { armSwing?
     store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: timing === 'real' ? undefined : timing,
     loadTicket: async (id) => infos.get(id) ?? null,
     setStatus: async (id, status) => { statuses.push([id, status]); },
-    runner: { run: (s, ticketId, _runId, _targets, started) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started }); }) },
+    runner: { run: (s, ticketId, _runId, _targets, started, item) => new Promise<StationRunResult>((resolve) => { pending.push({ station: s.id, ticketId, resolve, started, item }); }) },
     cancelExecution: async (id) => { cancelled.push(id); },
     applyChange: async (id, change) => {
       if (writes.hold) await new Promise<void>((resolve) => { writes.release.push(resolve); });
@@ -100,6 +108,166 @@ describe('FactoryEngine', () => {
     await engine.transfer('b', { machineId: 'b1' });
     await run(3);
     expect(statuses).toEqual([['b', 'todo']]);
+  });
+
+  describe('items and intakes', () => {
+    const intake = (id: string, x: number, y: number, over: Record<string, unknown> = {}) => ({ id, kind: 'intake', x, y, w: 3, h: 2, source: 'slack', quietSec: 60, ...over }) as unknown as MachineSpec;
+    const msg = (key: string, over: Record<string, unknown> = {}) => ({ source: 'slack' as const, key, title: `hi ${key}`, author: 'Ana', excerpt: 'can you look', url: 'https://x.slack.com/archives/C1/p1', ...over });
+
+    it('an item waits in its intake while its conversation moves, and leaves once it has been quiet', async () => {
+      await boot([intake('in', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }] }), arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+      const first = await engine.ingest(msg('k1'));
+      expect(first.status).toBe('new');
+      const id = first.itemId!;
+      expect(where(id)).toBe('in:zone');
+      await run(40);
+      expect(await engine.ingest(msg('k1', { title: 'the real ask', excerpt: 'please fix the cart' }))).toEqual({ itemId: id, status: 'updated' });
+      await run(40);
+      expect(where(id)).toBe('in:zone');                // 40 s since the last message: not quiet enough
+      await run(25);
+      await run(8);
+      expect(where(id)).toBe('z:zone');
+      const tok = engine.snapshot().tickets.find((t) => t.ticketId === id)!;
+      expect(tok.item).toMatchObject({ source: 'slack', author: 'Ana', messages: 2, excerpt: 'please fix the cart' });
+      expect(tok.info).toMatchObject({ title: 'the real ask', type: 'src:slack', tags: ['source:slack'] });
+      await engine.flush();
+      expect(store.items.get(id)).toMatchObject({ machineId: 'z', archivedAt: null });
+      /* items are not tickets: nothing written as one, nothing counted as one */
+      expect(statuses).toEqual([]);
+      expect(engine.managedIds().has(id)).toBe(false);
+    });
+
+    it('an intake drops what its rules recognise, counts it, and it never reaches the floor', async () => {
+      await boot([intake('in', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }, { field: 'channel', op: 'contains', value: 'Random' }] })]);
+      expect((await engine.ingest({ ...msg('n1'), fields: { bot: true } }))).toMatchObject({ status: 'dropped' });
+      expect((await engine.ingest({ ...msg('n2'), fields: { channel: '#random-chat' } }))).toMatchObject({ status: 'dropped' });
+      expect((await engine.ingest(msg('n3'))).status).toBe('new');
+      expect(engine.snapshot().tickets).toHaveLength(1);
+      expect(engine.snapshot().intakes).toEqual({ in: { dropped: 2 } });
+      expect([...store.items.values()].filter((i) => i.archivedReason === 'dropped')).toHaveLength(2);
+    });
+
+    it('an item reaching an exit, or archived by hand, is archived; a new message brings it back to its intake', async () => {
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), exit('x', 5, 1)]);
+      const { itemId } = await engine.ingest(msg('k'));
+      await run(5);
+      expect(where(itemId!)).toBe('gone');
+      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'exit', machineId: null });
+      expect(statuses).toEqual([]);
+      expect(await engine.ingest(msg('k'))).toEqual({ itemId, status: 'back' });
+      expect(where(itemId!)).toBe('in:zone');
+      expect(store.items.get(itemId!)).toMatchObject({ archivedAt: null, messages: 2 });
+      await engine.archiveItem(itemId!);
+      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'junk' });
+      await expect(engine.archiveItem('nope')).rejects.toBeInstanceOf(FactoryError);
+    });
+
+    it('a station runs on an item, keeps what it answered with the visit, and the item leaves by the outcome; a gantry leaves it untouched', async () => {
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), { id: 'g', kind: 'belt', x: 5, y: 1, w: 1, h: 1, dir: 0, set: [{ field: 'priority', value: 'high' }] } as MachineSpec,
+        station('s', 6, 1, { outcomes: ['junk', 'mine'] }), arm('aj', 7, 4, 1, 'outcome', ['junk']), zone('zj', 7, 5), arm('am', 9, 2, 0, 'outcome', ['mine']), zone('zm', 10, 2)]);
+      const { itemId } = await engine.ingest(msg('k'));
+      await run(8);
+      expect(where(itemId!)).toBe('s:running');
+      expect(changes).toEqual([]);                        // the gantry wrote nothing: an item has no fields of a ticket
+      const p = pending[0]!;
+      expect(p.ticketId).toBe(itemId);
+      expect(p.item).toMatchObject({ item: { id: itemId, source: 'slack' }, earlier: [] });
+      p.started('exec-9');
+      p.resolve({ status: 'completed', outcome: 'mine', executionId: 'exec-9', error: null, reply: 'Ana asks you directly: answer her.', deliverableId: null });
+      await run(6);
+      expect(where(itemId!)).toBe('zm:zone');
+      const visits = [...store.itemRuns.values()];
+      expect(visits).toMatchObject([{ ticketId: itemId, machineId: 's', status: 'completed', outcome: 'mine', executionId: 'exec-9', reply: 'Ana asks you directly: answer her.' }]);
+      expect(store.runs.size).toBe(0);                    // nothing in the tickets' runs
+    });
+
+    it('an item a station asked about waits there; run again, the station is told what it said before; the floor keeps it across a restart', async () => {
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), station('s', 5, 1)]);
+      const { itemId } = await engine.ingest(msg('k'));
+      await run(6);
+      pending[0]!.resolve({ status: 'question', outcome: '', executionId: 'e1', error: null, reply: 'Which cart: web or app?', deliverableId: null });
+      await run(1);
+      expect(where(itemId!)).toBe('s:question');
+      expect(engine.snapshot().tickets.find((t) => t.ticketId === itemId)!.note).toContain('read it on the item');
+      await engine.retry(itemId!);
+      await run(1);
+      expect(pending[1]!.item!.earlier).toMatchObject([{ status: 'question', reply: 'Which cart: web or app?' }]);
+      await engine.flush();
+      const again = new FactoryEngine({ store, now: () => clock, logger: { warn: () => {}, info: () => {} }, timing: BRISK, loadTicket: async () => null, setStatus: async () => {}, runner: { run: () => new Promise<StationRunResult>(() => {}) } });
+      await again.init();
+      /* the run that was in flight is cut by the restart, as a ticket's is */
+      expect(again.snapshot().tickets.find((t) => t.ticketId === itemId)).toMatchObject({ machineId: 's', phase: 'failed', item: { source: 'slack' } });
+    });
+
+    it('rules on a source\'s own fields only: drop what one matches, keep only what a keep rule matches; one with no value decides nothing', async () => {
+      await boot([intake('in', 1, 1, { drop: [{ field: 'author', contains: 'newsletter' }], rules: [
+        { field: 'author', op: 'contains', value: 'Ana' },        // what every item has: not filtered on
+        { field: 'channel', op: 'is', value: '', keep: true },    // being written: kept, holds for nothing
+        { field: 'bot', op: 'is', value: 'yes' },
+        { field: 'channel', op: 'is', value: '#ops, #support', keep: true },
+        { field: 'kind', op: 'is', value: 'dm', keep: true },
+        { field: 'nope', op: 'is', value: 'x' },                  // not a field of Slack: left out
+      ] })]);
+      const rules = (engine.snapshot().floor.layout.machines[0] as { rules: unknown[]; drop?: unknown }).rules;
+      expect(rules).toEqual([{ field: 'channel', op: 'is', value: '', keep: true }, { field: 'bot', op: 'is', value: 'yes' }, { field: 'channel', op: 'is', value: '#ops, #support', keep: true }, { field: 'kind', op: 'is', value: 'dm', keep: true }]);
+      expect((engine.snapshot().floor.layout.machines[0] as { drop?: unknown }).drop).toBeUndefined();
+      const go = (key: string, fields: Record<string, unknown>, over: Record<string, unknown> = {}) => engine.ingest({ ...msg(key, over), fields } as never).then((r) => r.status);
+      expect(await go('a', { channel: '#OPS', kind: 'channel' })).toBe('new');           // kept by its channel (any case)
+      expect(await go('b', { channel: '#random', kind: 'channel' })).toBe('dropped');   // no keep rule holds
+      expect(await go('c', { channel: 'Ana', kind: 'dm' })).toBe('new');                // kept as a direct message
+      expect(await go('d', { channel: '#ops', kind: 'channel', bot: true })).toBe('dropped');   // a drop rule wins over a keep rule
+      expect(await go('e', { channel: '#ops' }, { author: 'The newsletter' })).toBe('new');   // older drop rules on who it is from are let go
+      expect(engine.snapshot().intakes).toEqual({ in: { dropped: 2 } });
+      expect(engine.snapshot().tickets.find((t) => t.item)?.item?.fields).toEqual({ channel: '#OPS', kind: 'channel' });
+    });
+
+    it('an item is edited by hand: what the Factory keeps of it, never its key nor its source; a ticket is not edited here', async () => {
+      await boot([intake('in', 1, 1)]);
+      const { itemId } = await engine.ingest({ ...msg('k'), tags: ['team:shop'], fields: { channel: '#ops' } } as never);
+      await engine.editItem(itemId!, { title: '  The cart  ', author: 'Bob', url: 'not a link', excerpt: 'More lines', tags: ['urgent', 'urgent', 'source:gmail', ' '], fields: { channel: '#support', bot: false, junk: { deep: 1 } }, source: 'gmail', sourceKey: 'x' } as never);
+      const t = engine.snapshot().tickets.find((x) => x.ticketId === itemId)!;
+      expect(t.info).toMatchObject({ title: 'The cart', tags: ['urgent', 'source:slack'] });
+      expect(t.item).toMatchObject({ source: 'slack', author: 'Bob', url: null, excerpt: 'More lines', fields: { channel: '#support', bot: false } });
+      expect(store.items.get(itemId!)).toMatchObject({ sourceKey: 'k', source: 'slack', title: 'The cart', tags: ['urgent'] });
+      await expect(engine.editItem('a', {})).rejects.toBeInstanceOf(FactoryError);
+    });
+
+    it('several intakes of one source: an item goes to the first that lets it in, and is dropped only when none does', async () => {
+      await boot([intake('ops', 1, 1, { rules: [{ field: 'channel', op: 'is', value: '#ops', keep: true }] }), intake('dms', 1, 4, { rules: [{ field: 'kind', op: 'is', value: 'dm', keep: true }] })]);
+      const go = (key: string, fields: Record<string, unknown>) => engine.ingest({ ...msg(key), fields } as never);
+      const a = await go('a', { channel: '#ops', kind: 'channel' }), b = await go('b', { channel: 'Ana', kind: 'dm' }), c = await go('c', { channel: '#random', kind: 'channel' });
+      expect([where(a.itemId!), where(b.itemId!), c.status]).toEqual(['ops:zone', 'dms:zone', 'dropped']);
+      expect(engine.snapshot().intakes).toEqual({ ops: { dropped: 1 }, dms: { dropped: 0 } });
+      /* archived, it comes back to the intake it came in by */
+      await engine.archiveItem(b.itemId!);
+      expect(await go('b', { channel: 'Ana', kind: 'dm' })).toMatchObject({ status: 'back' });
+      expect(where(b.itemId!)).toBe('dms:zone');
+    });
+
+    it('refuses an item with no intake for its source, or with no key', async () => {
+      await boot([intake('in', 1, 1)]);
+      await expect(engine.ingest(msg('k', { source: 'gmail' }))).rejects.toThrow('No gmail intake on the floor');
+      await expect(engine.ingest(msg(''))).rejects.toThrow('an item needs its key');
+      await expect(engine.move('a', { machineId: 'in' })).rejects.toBeInstanceOf(FactoryError);
+    });
+  });
+
+  it('a desk holds the ticket created at it until an arm takes it out, and takes nothing from the floor', async () => {
+    const desk = { id: 'desk', kind: 'desk', x: 1, y: 1, w: 9, h: 9, name: '  Bug desk ', defaults: { boardId: 'b1', type: 'fix', priority: 7, junk: 'x' } } as unknown as MachineSpec;
+    await boot([desk, arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 2, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });
+    await engine.transfer('a', { machineId: 'desk' });
+    await engine.transfer('b', { machineId: 'desk' });     // several can be created in a row: a desk has no capacity
+    expect(where('a')).toBe('desk:zone');
+    expect(statuses).toEqual([]);                       // being born at a desk sets nothing
+    await run(8);
+    expect(where('a')).toBe('z:zone');
+    expect(where('b')).toBe('z:zone');
+    await expect(engine.move('a', { machineId: 'desk' })).rejects.toThrow('A desk only holds the tickets created at it');
+    await expect(engine.move('a', { x: 2, y: 2 })).rejects.toThrow('A desk only holds the tickets created at it');
+    await engine.transfer('c', { machineId: 'desk' });
+    await engine.giveBack('c');
+    expect(where('c')).toBe('gone');
   });
 
   it('a ticket handed over without a target lands in the Inbound zone, created if the floor has none', async () => {

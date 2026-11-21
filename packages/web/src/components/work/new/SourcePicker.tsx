@@ -9,7 +9,7 @@ import {
 import { fetchImportBrowseInbox, fetchImportBrowseRepo } from '../../../services/api';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { useTicketStore } from '../../../stores/ticketStore';
-import { useWorkStore } from '../../../stores/workStore';
+import { useNewTaskDraft } from './newTaskDraft';
 import { topReposForBoard } from '../../../lib/repoStatus';
 import { formatAge } from '../../../lib/formatAge';
 import { cn } from '../../../lib/cn';
@@ -60,7 +60,7 @@ export function SourcePicker({
   const repositories = useRepositoryStore((s) => s.repositories);
   const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
   const tickets = useTicketStore((s) => s.tickets);
-  const boardId = useWorkStore((s) => s.draft.boardId);
+  const boardId = useNewTaskDraft().draft.boardId;
   useEffect(() => {
     fetchRepositories();
   }, [fetchRepositories]);

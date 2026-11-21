@@ -23,7 +23,7 @@ import { PixelSkin, ART, PIXEL_LOOK, type PixelLook } from './pixel';
 import type { Layer, Piece } from './skin';
 
 /** How high each kind stands, in tiles. */
-export const LIFT: Partial<Record<MachineSpec['kind'], number>> = { station: 0.5, belt: 0.25, bridge: 0.25, teleporter: 0.125 };
+export const LIFT: Partial<Record<MachineSpec['kind'], number>> = { station: 0.5, belt: 0.25, bridge: 0.25, teleporter: 0.125, desk: 0.375, intake: 0.375 };
 /** How high a platform raises a line, in tiles. */
 export const PLATFORM = 0.15;
 
@@ -118,6 +118,7 @@ export class PixelTqSkin extends PixelSkin {
           up(h, () => {
             if (v.kind === 'station') { this.station(v, st, pal); if (v.run && !v.gate) this.worker(v); }
             else if (v.kind === 'status') this.statusStation(v, st, pal);
+            else if (v.kind === 'dock') this.dock(v, st, pal);
             else this.port(v, st, pal);
           })();
         });

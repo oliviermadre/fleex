@@ -28,6 +28,7 @@ import { useFactoryStore } from './factoryStore';
 import { periodLabel } from './FactoryStatsBits';
 import { money } from './format';
 import { needsHuman, RUNS, type FactoryLayout, type FactorySnapshot, type FactoryTicket, type Lens, type MachineSpec, type MachineStats, type Selection } from './types';
+import { refOf } from './items';
 
 /** The layers of the floor, in the order they are listed next to the minimap. */
 const LAYERS: [Lens, string, string, string][] = [
@@ -60,6 +61,8 @@ function machineSub(m: MachineSpec, view: FactoryView, boardName: (id: string) =
   if (m.kind === 'station') return m.exec === 'human_gate' ? `Gate · ${m.outcomes.join(' / ')}` : m.exec === 'native' ? `Sets status ${m.sets ?? ''}` : m.exec === 'script' ? `Script · ${scriptSummary(m.script)}` : `${m.exec} · ${m.ref || 'nothing chosen yet'}`;
   if (m.kind === 'zone') return m.inbound ? 'Inbound · tickets handed over land here' : `Zone${m.status ? ` · ${m.status}` : ''} · leaves ${m.release === 'auto' ? 'automatically' : 'when released'}`;
   if (m.kind === 'exit') return 'Exit · sets done and hands the ticket back to Fleex';
+  if (m.kind === 'intake') return `${m.name || 'Intake'} · ${m.source} items come in here, leave once quiet for ${m.quietSec ?? 120} s${(m.rules?.length ?? 0) + (m.drop?.length ?? 0) ? `, ${(m.rules?.length ?? 0) + (m.drop?.length ?? 0)} rule(s)` : ''}`;
+  if (m.kind === 'desk') { const d = m.defaults ?? {}, with_ = [d.type, d.priority].filter(Boolean).join(', '); return `Desk · tickets are born here${with_ ? `, ${with_}` : ''}; New ticket opens the form`; }
   if (m.kind === 'teleporter') {
     if (m.role === 'arrival') return 'Arrival · receives from its departures only, one ticket at a time; an arm takes it out';
     const to = arrivalOf(m, (id) => view.machine(id));
@@ -94,7 +97,7 @@ function Wire({ tickets, onSelect }: { tickets: FactoryTicket[]; onSelect: (s: S
   return (
     <div className="flex max-h-[58px] flex-wrap gap-[3px] overflow-hidden">
       {tickets.slice(0, 40).map((t) => (
-        <button key={t.ticketId} type="button" onClick={() => onSelect({ ticket: t.ticketId })} title={`#${t.info?.displayId ?? '?'} ${t.info?.title ?? ''} · ${PHASE[t.phase]}`}
+        <button key={t.ticketId} type="button" onClick={() => onSelect({ ticket: t.ticketId })} title={`${refOf(t.info)} ${t.info?.title ?? ''} · ${PHASE[t.phase]}`}
           aria-label={`Ticket ${t.info?.displayId ?? ''}`} className={cn('grid h-[26px] w-[26px] flex-none place-items-center rounded-md border', needsHuman(t) ? 'border-[var(--theme-warning)]' : 'border-transparent hover:border-[var(--theme-border-input)]')}>
           <TicketToken info={t.info ? { ...t.info, favorite: false } : null} size={18} />
         </button>
@@ -185,7 +188,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   const box = 'rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)]';
 
   const pickedMachines = selection && 'machines' in selection && layout ? selection.machines.map((id) => layout.machines.find((m) => m.id === id)).filter((m): m is MachineSpec => !!m) : [];
-  const ticketUnit = (t: FactoryTicket): Unit => ({ id: t.ticketId, face: <TicketToken info={t.info ? { ...t.info, favorite: false } : null} size={22} />, name: `#${t.info?.displayId ?? '?'} ${t.info?.title ?? ''}`.trim(), sub: `${view?.machine(t.machineId)?.name ?? ''} ${PHASE[t.phase]}`.trim(), mark: String(t.info?.displayId ?? ''), warn: !!needsHuman(t) });
+  const ticketUnit = (t: FactoryTicket): Unit => ({ id: t.ticketId, face: <TicketToken info={t.info ? { ...t.info, favorite: false } : null} size={22} />, name: `${refOf(t.info)} ${t.info?.title ?? ''}`.trim(), sub: `${view?.machine(t.machineId)?.name ?? ''} ${PHASE[t.phase]}`.trim(), mark: t.item ? '' : String(t.info?.displayId ?? ''), warn: !!needsHuman(t) });
   const machineUnit = (m: MachineSpec): Unit => ({ id: m.id, face: <FIcon name={machineIcon(m)} size={20} />, name: ('name' in m && m.name) || (m.kind === 'label' ? m.text : machineKind(m)), sub: machineKind(m) });
   const avatar: AvatarOf = ticket ? { kind: 'ticket', info: ticket.info } : machine ? { kind: 'machine', machine } : picked ? { kind: 'many', count: picked.length, of: 'tickets' } : many ? { kind: 'many', count: many, of: 'machines' } : building ? { kind: 'build' } : { kind: 'floor' };
 
@@ -276,12 +279,18 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
             {ticket ? (
               <>
-                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-xs font-normal text-[var(--theme-text-muted)]">#{ticket.info?.displayId ?? '?'}</span>{ticket.info?.title ?? ticket.ticketId}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]"><span className="mr-1.5 font-mono text-xs font-normal text-[var(--theme-text-muted)]">{refOf(ticket.info)}</span>{ticket.info?.title ?? ticket.ticketId}</div>
                 <div className={cn('truncate text-xs', needsHuman(ticket) ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-secondary)]')}>{view?.machine(ticket.machineId)?.name ?? ''} {PHASE[ticket.phase]}{ticket.note ? ` · ${ticket.note}` : ''}</div>
-                <TicketGlyphs info={ticket.info} words className="text-[11px] text-[var(--theme-text-secondary)]" />
+                {ticket.item ? (
+                  <div className="flex flex-wrap gap-x-3">
+                    <Stat label="from" value={ticket.item.author || '?'} />
+                    <Stat label="messages" value={ticket.item.messages} />
+                    {now && <Stat label="last one" value={`${span(since(ticket.item.lastActivityAt, now))} ago`} />}
+                  </div>
+                ) : <TicketGlyphs info={ticket.info} words className="text-[11px] text-[var(--theme-text-secondary)]" />}
                 <div className="flex flex-wrap gap-x-3">
-                  {ticket.info && <Stat label="board" value={boards.find((b) => b.id === ticket.info!.boardId)?.name ?? '?'} />}
-                  <Stat label="status" value={ticket.info?.status ?? '?'} />
+                  {ticket.info && !ticket.item && <Stat label="board" value={boards.find((b) => b.id === ticket.info!.boardId)?.name ?? '?'} />}
+                  {!ticket.item && <Stat label="status" value={ticket.info?.status ?? '?'} />}
                   {now && <Stat label="here for" value={span(since(ticket.since, now))} />}
                   {now && ticket.handedAt && <Stat label="on the floor for" value={span(since(ticket.handedAt, now))} />}
                   {ticket.outcome && <Stat label="last outcome" value={ticket.outcome} />}
@@ -290,7 +299,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
               </>
             ) : machine && view ? (
               <>
-                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machineKind(machine))}</div>
                 <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view, (id) => boards.find((b) => b.id === id)?.name ?? 'a board')}</div>
                 {(machine.kind === 'station' || machine.kind === 'zone') && (
                   <div className="flex flex-wrap gap-x-3" aria-label="Settings">

@@ -64,7 +64,80 @@ new ids.
 A ticket is handed over by hand, from the Factory page. It lands in the **Inbound** zone (one per floor, created on
 demand) and waits there: dragging it onto a belt or a machine is what starts it. There is no automatic intake.
 
-## Places, set aside, and the switch
+## Desks: where a ticket is born
+
+A **desk** (`kind: 'desk'`, Build › Area › Desk) is where a ticket is created on the floor itself, never through the
+Work view. It was picked on `docs/factory/intake.html` (I1 for its look, N3 for how it is reached): a loading dock of
+3 by 2 tiles, green, a badge with a plus, "NEW TICKET" over its name.
+
+- **New ticket** on the command card (T, at the end of the first row with nothing selected) opens the creation form
+  on the desk selected, else on the floor's first desk; with no desk on the floor the ticket is handed over without
+  a target and lands in Inbound. A desk selected has New ticket where a zone has Release. Out of build mode a
+  double-click on a desk opens the form too; its settings are Edit.
+- The form is the Work view's whole new-task flow (`NewTask`, mounted by `FactoryDeskForm.tsx`): a title, a link that
+  is recognised and imported, or a source to browse (GitHub issues and pull requests, Slack), then the composer. It
+  runs on a draft of its own (`NewTaskDraftProvider`), so the Work view's draft is left alone; `onCreated` replaces
+  opening the ticket in the Work view, and an import that already has a ticket opens that one in the workbench
+  (`onOpenTicket`). A desk's `defaults` (board, type, priority) prefill the draft; the rest is as it is.
+- Once created, the ticket is handed over to the Factory at the desk (`POST …/transfer` with the desk's id). It is
+  released at once: the first arm that wants it takes it out. Nothing else can put a ticket into a desk (a drop, a
+  move, an arm, a belt): `canTake` is false for it, and `transfer` is the only way in.
+- Being born at a desk sets nothing on the ticket: its status is the form's (`doing`), its fields what was chosen.
+
+
+## Items, and the intakes they come in by
+
+An **item** is a conversation that came in from a source (Slack, Gmail, GitHub, or made by hand) and may ask
+something of the owner. It is not a ticket: it has its own table, `factory_items` (migration 047), one row per
+conversation, keyed by its source and its key there (`source_key`), and becomes a ticket only when a machine makes it
+one (not built yet). Its content is not copied: a title, who it is from, a few lines (`excerpt`) and a link back.
+
+- **On the floor** an item travels as a ticket does (belts, arms, zones, teleporters), saved in its own row
+  (`machine_id`, `state`). Arms see it with the type `src:<source>` and the tag `source:<source>`, so a condition
+  routes it. What only a ticket has is skipped: no status is set, a gantry leaves it untouched, and **an exit archives
+  it** (soft delete,
+  `archived_reason = 'exit'`). Archive (the command card, its card on the floor) archives it as junk; Give back does
+  the same. It is never listed among the tickets the rest of Fleex leaves alone (`managedIds`).
+- **A station runs on an item** (agent, skill, panel; a gate decides on it). There is no ticket: the run is one with a
+  subject, as a routine's (`ticketId: null`), whose brief is the item in words (`item-brief.ts`, generic: source,
+  author, title, messages, link, tags, the lines it came with, then what stations said about it before), under the
+  heading "Factory item from <source>" (`RunSubject.heading`). The station's prompt and outcomes work as for a ticket:
+  the item leaves by the outcome the agent names. An item has no thread, so each visit is kept in
+  `factory_item_runs` (migration 048) with the agent's reply and the deliverable it produced (saved with no ticket, so
+  it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
+  the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
+  visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
+- **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
+  2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
+  connectors will call, and what **New item** (on the command card with the intake selected, or its popup's button)
+  calls until they exist: a popup of its own, with what every item has and its source's fields. The intake's
+  settings come in two parts. **Every source**: a name, its source, the quiet delay. **Its source only**: rules on
+  that source's own fields, which its connector fills and an item carries in `fields` (`item-sources.ts`: a Slack
+  channel, kind and bot; Gmail's To, Cc, labels, attachment; GitHub's repository, reason, draft; nothing for an item
+  made by hand). What every item has (who from, title, text) is not filtered on: it says nothing of a source. A rule is
+  a way, a field, an operator (`contains`; `is`, `is not` with values separated by commas) and a value; one with no
+  value yet decides nothing. **Drop if** drops what it matches; **Keep only if** rules let in only what one of them
+  matches. A new item goes to the first intake of its source that lets it in, in the order they were built; when none
+  does it is **dropped**: saved archived with the reason `dropped`, counted at the first, and it never reaches the
+  floor. Otherwise it waits in the intake **while its conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
+  said); an arm then takes it. A new message on a known key updates the item where it is (in its intake, it waits
+  again); an archived item comes back to its intake. Nothing on the floor can put anything into an intake.
+- **On the page** desks and intakes are one view of the scene (`DockView`, `dock` in `scene.ts`) that each skin
+  paints (`dock` in `skins/fleex.ts`, which Neon and the pixel skins inherit; seen from three quarters a dock stands
+  0.375 tile high). An item is an object in relief, as a ticket is (`ticketToken.ts`), drawn from its source's mark
+  instead of a type's icon, in its source's colour (`items.ts`); the pixel skins draw that mark as an eleven-pixel
+  icon like a type's object (a solid shape in a one-pixel outline, one pixel of light), at any zoom, where a ticket
+  would be a crate. A dock shows two of what it holds, far enough apart for those icons, then a count. The marks: four capsules in a pinwheel for Slack, an envelope
+  for Gmail, a cat's head for GitHub, a written sheet for one made by hand. These marks recall the sources; they are not their logos.
+  An intake shows its source's mark in relief on its badge, `HELD` (what waits for its conversation to be quiet,
+  drawn faded in the dock) and `DROPPED` (over 24 hours). A click on an item opens its card beside it
+  (`FactoryItemPeek.tsx`): source, author, messages, its lines, what stations said, and Open, Open in <source>,
+  Release, Archive. **Opening it** (Open, Enter, a double-click, a list) opens its popup (`FactoryItemPopup.tsx`):
+  what every item has, edited (title, from, link, tags that arms read, text; `PATCH /api/factory/items/:id`), its
+  source, messages and place read only; its source's part, its fields edited as they suit (each source will have
+  its own part there as its connector comes); the item as the Factory holds it, as JSON; what stations said.
+
+
 
 A station that runs something (an agent, a skill, a panel) works on as many tickets as it has places (`cap`). Nothing
 queues inside it: full, it takes nothing more and what feeds it backs up on the belts. What is done and not yet taken
@@ -512,8 +585,9 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in three tables created by migration `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`). No existing table is altered: a ticket is "handed over" when it
+Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
+(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`) and
+`048_factory_item_runs` (`factory_item_runs`); `049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -548,7 +622,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `049_factory_item_fields` (046, an index on `factory_runs`, among them) |
+| shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module, exposes `container.factory` |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
@@ -572,10 +647,11 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
 | web: `work/timeline/buildTimeline.ts`, `TimelineGlyph.tsx`, `useTicketTimeline.ts` | a run a station started goes by the station's name on a ticket's timeline, with the Factory's glyph, instead of "Workflow": an optional `stationRuns` source (read by `useFactoryStationRuns`, empty while the Factory is off) and a `factory` glyph |
 | web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
+| web: `work/new/newTaskDraft.ts`, `NewTask.tsx`, `NewTaskEntry.tsx`, `SourcePicker.tsx`, `NewTaskCompose.tsx` | the new-task screens read their draft and their Cancel from `useNewTaskDraft` (the Work store's, unless a `NewTaskDraftProvider` gives another), and `NewTask` takes an optional `onCreated` and `onOpenTicket`. Without a provider or those props, the Work view is unchanged; they can stay |
 
 ## Removing it
 
-1. Switch the flag off, then run the migration's `down()` (`cli-migrate.ts rollback`), or drop the three tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 049 to 045), or drop the five tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step

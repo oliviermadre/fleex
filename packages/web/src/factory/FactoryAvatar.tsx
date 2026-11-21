@@ -2,7 +2,8 @@ import { cn } from '../lib/cn';
 import { FIcon } from './icons';
 import { machineIcon, machineKind } from './FactoryMachinePopup';
 import { TicketToken, typeLabel } from './FactoryTicketMeta';
-import { KIND_LOOK, kindOf, MACHINE_ICONS } from './machineArt';
+import { DESK_COLOR, KIND_LOOK, kindOf, MACHINE_ICONS } from './machineArt';
+import { refOf, SOURCE_COLORS } from './items';
 import { armColor } from './armRules';
 import { PORT_COLOR } from './teleport';
 import { TYPE_COLORS } from './renderer';
@@ -92,6 +93,8 @@ function hueOf(m: MachineSpec): string {
   if (m.kind === 'arm') return armColor(m, { plain: '#a1a1aa', sorts: '#facc15' });
   if (m.kind === 'teleporter') return m.color ?? PORT_COLOR;
   if (m.kind === 'belt') return m.set !== undefined ? '#f472b6' : '#a1a1aa';
+  if (m.kind === 'desk') return DESK_COLOR;
+  if (m.kind === 'intake') return SOURCE_COLORS[m.source];
   return m.kind === 'zone' ? (m.inbound ? 'var(--theme-accent)' : '#60a5fa') : m.kind === 'exit' ? 'var(--theme-success)' : '#a1a1aa';
 }
 
@@ -109,7 +112,7 @@ export function FactoryAvatar({ of, className }: { of: AvatarOf; className?: str
   );
   else if (of.kind === 'build') { hue = 'var(--theme-warning)'; label = 'Build'; body = <Glyph paths={HAT} hue={hue} className="fxav-bob" />; }
   else if (of.kind === 'ticket') {
-    hue = TYPE_COLORS[of.info?.type ?? ''] ?? '#8b949e'; label = `${of.info ? `#${of.info.displayId} ` : ''}${typeLabel(of.info)}`;
+    hue = TYPE_COLORS[of.info?.type ?? ''] ?? '#8b949e'; label = of.info && of.info.type.startsWith('src:') ? typeLabel(of.info) : `${of.info ? `${refOf(of.info)} ` : ''}${typeLabel(of.info)}`;
     body = <span className="fxav-tilt"><TicketToken info={of.info ? { ...of.info, favorite: false } : null} size={72} /></span>;
   } else if (of.kind === 'machine') { hue = hueOf(of.machine); label = machineKind(of.machine); body = <Machine m={of.machine} hue={hue} />; }
   else {

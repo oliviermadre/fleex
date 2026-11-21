@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
 import { detectSource, getSource, type SourceMatch } from '@fleex/shared';
 import { fetchImportBrowseInbox } from '../../../services/api';
-import { useWorkStore } from '../../../stores/workStore';
+import { useNewTaskDraft } from './newTaskDraft';
 import { NewTaskCard } from './NewTaskCard';
 import { BrowseRow, Keys, IssueGlyph, PullRequestGlyph, SlackGlyph } from './BrowseRow';
 import { INBOX_KEY } from './SourcePicker';
@@ -30,9 +30,7 @@ export function NewTaskEntry({
   /** Frozen backdrop while an import resolves on top (avoids a blank flash). */
   disabled?: boolean;
 }) {
-  const draft = useWorkStore((s) => s.draft);
-  const updateDraft = useWorkStore((s) => s.updateDraft);
-  const setView = useWorkStore((s) => s.setView);
+  const { draft, update: updateDraft, cancel } = useNewTaskDraft();
   const [refused, setRefused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -84,7 +82,7 @@ export function NewTaskEntry({
         setRefused(true);
         return;
       }
-      setView('task');
+      cancel();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       rowRefs.current[0]?.focus();
@@ -186,7 +184,7 @@ export function NewTaskEntry({
         </span>
         <button
           type="button"
-          onClick={() => setView('task')}
+          onClick={() => cancel()}
           className="ml-auto rounded-lg border border-[var(--theme-border-input)] px-3.5 py-1.5 text-[13px] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)]"
         >
           Cancel

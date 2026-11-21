@@ -10,6 +10,7 @@ import { machineIcon, machineKind } from './FactoryMachinePopup';
 import { TicketToken, typeLabel } from './FactoryTicketMeta';
 import { machineIds, ticketIds } from './pick';
 import type { FactoryLayout, FactoryTicket, MachineSpec, Selection } from './types';
+import { refOf } from './items';
 
 /** The time it is, to the second: a floor that runs by itself is watched over hours. */
 export function Clock({ className }: { className?: string }) {
@@ -69,7 +70,7 @@ export function Units({ units, onPick }: { units: Unit[]; onPick: (id: string, s
   );
 }
 
-const ticketName = (t: FactoryTicket) => `#${t.info?.displayId ?? '?'} ${t.info?.title ?? ''}`.trim();
+const ticketName = (t: FactoryTicket) => `${refOf(t.info)} ${t.info?.title ?? ''}`.trim();
 const machineName = (m: MachineSpec) => ('name' in m && m.name) || (m.kind === 'label' ? m.text : machineKind(m));
 
 /**
@@ -99,7 +100,7 @@ export function Groups({ groups, selection, tickets, layout, onGroup }: {
                 JSON.stringify(g) === JSON.stringify(selection) ? 'border-[var(--theme-text-primary)]' : 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]')}>
               <kbd className="absolute left-[2px] top-[2px] font-mono text-[8px] font-bold leading-none text-[var(--theme-text-muted)]">{key}</kbd>
               <span className="grid flex-none place-items-center">{ts[0] ? <TicketToken info={ts[0].info ? { ...ts[0].info, favorite: false } : null} size={16} /> : ms[0] ? <FIcon name={machineIcon(ms[0])} size={15} /> : <FIcon name="stack" size={15} />}</span>
-              <b className="min-w-0 overflow-hidden whitespace-nowrap font-mono text-[9.5px] font-bold text-[var(--theme-text-primary)]">{n > 1 ? `×${n}` : ts[0] ? `${ts[0].info?.displayId ?? '?'}` : n === 0 ? '–' : ''}</b>
+              <b className="min-w-0 overflow-hidden whitespace-nowrap font-mono text-[9.5px] font-bold text-[var(--theme-text-primary)]">{n > 1 ? `×${n}` : ts[0] ? (ts[0].item ? refOf(ts[0].info) : `${ts[0].info?.displayId ?? '?'}`) : n === 0 ? '–' : ''}</b>
             </button>
           </Tooltip>
         );

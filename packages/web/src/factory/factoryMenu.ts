@@ -3,7 +3,7 @@
  *
  *   Factory ─ Build ─┬─ Move      (belt, bridge, arm, the way they face)
  *                    ├─ Station   (agent, skill, panel, gate, status)
- *                    ├─ Place     (zone, exit, label, area)
+ *                    ├─ Place     (zone, exit, label, area, desk, intake)
  *                    └─ a selection (turn, remove)
  *           └ a ticket or a machine selected on the floor (a machine: stop or start it, and Edit opens its popup)
  *
@@ -24,7 +24,7 @@ export interface MenuContext {
   tool: Tool;
   dir: Dir;
   /** The ticket selected, with the outcomes of the station it is in (empty elsewhere), and whether it can be set aside there. */
-  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean } | null;
+  ticket: { phase: TicketPhase; released: boolean; favorite: boolean | null; outcomes: string[]; canAside?: boolean; /** An item, not a ticket: it has a source to open and is archived, not given back. */ item?: { url: string | null } } | null;
   /**
    * The machine selected. `waiting` is true for a zone that holds a ticket not yet released; `power` says whether a
    * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
@@ -43,6 +43,8 @@ export interface MenuContext {
   mod: string;
   act: {
     build(): void; done(): void; intake(): void; fit(): void; plan(): void;
+    /** Open the ticket creation form: at the desk selected, else at the floor's first desk, else for Inbound. */
+    newTicket(): void;
     /** Open the list of the tickets on the floor. */
     tickets(): void;
     /** Take a tool in hand, or put it down when it already is. */
@@ -53,7 +55,11 @@ export interface MenuContext {
     back(): void;
     face(): void; undo(): void; redo(): void; copy(): void; cut(): void; paste(): void;
     turn(): void; remove(): void; deselect(): void;
-    openTicket(): void; star(): void; giveBack(): void; resolve(outcome: string): void; release(): void; retry(): void;
+    openTicket(): void; star(): void; giveBack(): void;
+    /** An item: open its conversation where it lives, and archive it. */
+    openSource(): void; archive(): void;
+    /** Make an item by hand at the intake selected. */
+    newItem(): void; resolve(outcome: string): void; release(): void; retry(): void;
     /** Take the ticket off its station's hands; and put it back as one of the station's outcomes (`retry` puts it back for another run). */
     setAside(): void; putBack(outcome: string): void;
     /** Open the popup of the machine selected: its settings, what it holds, what it did. */
@@ -99,6 +105,25 @@ export function factoryMenu(c: MenuContext): Menu {
   }
 
   // ---------- a ticket ----------
+  if (c.ticket?.item && !c.building) {
+    const t = c.ticket, url = c.ticket.item.url, first: Record<number, Command> = {};
+    if (t.phase === 'review') t.outcomes.slice(0, 4).forEach((o, i) => { first[i] = { id: `decide-${i}`, label: o, icon: i ? 'loop' : 'check', tone: i ? 'ticket' : 'go', title: `Decide: ${o}`, run: () => a.resolve(o) }; });
+    else if (t.phase === 'zone' && !t.released) first[0] = { id: 'release', label: 'Release', icon: 'play', tone: 'go', title: 'Let an arm take this item out now, without waiting for its conversation to be quiet', run: a.release };
+    else if (SET_ASIDE.includes(t.phase)) {
+      /* as a ticket: the station runs again (with what it said before), or the item leaves by an outcome */
+      first[0] = { id: 'retry', label: 'Run again', icon: 'loop', tone: 'go', title: 'The station runs on it again, told what it said before', run: a.retry };
+      t.outcomes.slice(0, 4).forEach((o, i) => { first[i + 1] = { id: `as-${i}`, label: o, icon: 'exit', tone: 'ticket', title: `Send it on as "${o}": it leaves the station by that arm`, run: () => a.putBack(o) }; });
+    }
+    return menu('Item', {
+      ...first,
+      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The item: what the Factory keeps of it, its tags, its source\'s fields, what stations said (also Enter)', run: a.openTicket },
+      6: { id: 'source', label: 'Source', icon: 'exit', tone: 'ticket', disabled: !url, title: url ? 'Open it where it lives' : 'This item has no link to its source', run: a.openSource },
+      [FIT_SLOT]: fit,
+      9: { id: 'archive', label: 'Archive', icon: 'trash', tone: 'danger', title: 'Junk, or done with: it leaves the floor. A new message in its conversation brings it back', run: a.archive },
+      [NEXT_SLOT]: next,
+      [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
+    });
+  }
   if (c.ticket && !c.building) {
     const t = c.ticket, first: Record<number, Command> = {};
     if (t.phase === 'review') t.outcomes.slice(0, 4).forEach((o, i) => { first[i] = { id: `decide-${i}`, label: o, icon: i ? 'loop' : 'check', tone: i ? 'ticket' : 'go', title: `Decide: ${o}`, run: () => a.resolve(o) }; });
@@ -128,7 +153,9 @@ export function factoryMenu(c: MenuContext): Menu {
     if (c.machine) {
       const off = c.machine.power === 'off';
       return menu('Machine', {
-        0: c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
+        0: c.machine.kind === 'intake' ? { id: 'new-item', label: 'New item', icon: 'newticket', tone: 'go', title: 'Make an item of this source by hand, as its connector would send it', run: a.newItem }
+          : c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
+          : c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
         5: c.machine.popup && edit,
@@ -142,6 +169,7 @@ export function factoryMenu(c: MenuContext): Menu {
       1: { id: 'tickets', also: 'Tab', label: 'Tickets', icon: 'list', tone: 'ticket', title: 'Every ticket on the floor, as a list to filter and to jump from', run: a.tickets },
       2: { id: 'floor', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
       3: { id: 'limits', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
+      4: { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket on the floor: at your first desk, or in Inbound when there is none (select a desk to create at that one)', run: a.newTicket },
       [FIT_SLOT]: fit,
       [NEXT_SLOT]: next,
       /* the way into build mode is where the way out of it is */
@@ -196,6 +224,8 @@ export function factoryMenu(c: MenuContext): Menu {
     1: place('exit', 'Exit', 'area', 'Sets the ticket to done and hands it back to Fleex'),
     2: place('label', 'Label', 'area', 'A name on the floor'),
     3: place('area', 'Area', 'area', 'Drag a rectangle on the floor: a part of it with a name and a colour, a line or a team. Machines stand on it; nothing runs on it'),
+    4: place('desk', 'Desk', 'area', 'Where tickets are born: New ticket opens the creation form on it, with its board, type and priority, and an arm takes the ticket out'),
+    5: place('intake', 'Intake', 'area', 'Where items of one source come in (Slack, Gmail, GitHub): they wait while the conversation moves, what its rules recognise is dropped'),
   }, previous);
 
   const inHand = c.tool !== 'select';

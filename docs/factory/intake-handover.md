@@ -7,6 +7,30 @@ session. Read this, then open `docs/factory/intake.html` in a browser (the mock-
 Nothing described here is built. Everything under "Decided" was said by the owner; everything under "Proposed" is
 the previous session's opinion and can be overturned.
 
+## Progress
+
+- **Picks (owner, 2026-11-19)**: Item: none of J1 to J3 as drawn. An item is drawn like a ticket, as an object in
+  relief from an icon, here the source's logo (Slack, Gmail, GitHub…), as tickets are from their type's icon
+  (`ticketToken.ts`). To draw on a mock-up before step 3. Intake: **I1**, a loading dock. New ticket: **N3**, a
+  Desk machine and a command on the card.
+- **Order changed**: the Desk went first (it needs no migration and no item), then items.
+- **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. The whole new-task flow is
+  mounted on it, import from a link or a source included.
+- **Done: items and intakes** (steps 1 and 3 of the plan below, and the intake of step 7 without its source). Items
+  have their own table (047) and travel the floor; an intake holds them for the quiet delay, drops by rule, counts;
+  items are drawn in relief from their source's mark. See "Items, and the intakes they come in by" in the README.
+  **The plan's step 1 changed**: `factory_tickets` and `factory_runs` were not touched; an item keeps its place in
+  its own row, and run rows stay for tickets only.
+- **Done: a station on an item** (step 5): the item in words is the run's brief, the visits and replies are kept in
+  `factory_item_runs` (048).
+- **Done: intake settings in two parts** (every source, then its source's own fields), keep-only rules, several
+  intakes per source (`fields`, 049). Stopped before the Slack connector, as asked: it will fill Slack's `fields` (channel, kind,
+  bot) and call `POST /api/factory/items`.
+- **Next**: the Slack connector, Triage (step 4), Make a ticket (6), then the sources' connectors, each calling
+  `POST /api/factory/items` (Slack first: polling `conversations.history` with the user token, or the events API).
+- **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
+  machines. Rename one of them before step 7.
+
 ## The aim
 
 The owner wants the Factory to be the one place where everything that may ask something of them arrives: a Slack

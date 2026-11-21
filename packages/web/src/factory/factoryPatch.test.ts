@@ -36,6 +36,13 @@ describe('factory live patches', () => {
     expect(reads).toBe(0);
   });
 
+  it('takes the intakes\' counts a patch carries, and keeps them when it carries none', () => {
+    store().applyPatch(patch(4, { intakes: { in: { dropped: 2 } } }));
+    expect(store().snapshot!.intakes).toEqual({ in: { dropped: 2 } });
+    store().applyPatch(patch(5));
+    expect(store().snapshot!.intakes).toEqual({ in: { dropped: 2 } });
+  });
+
   it('keeps the tickets a patch did not touch as they were, for the views that compare them', () => {
     const b = store().snapshot!.tickets[1];
     store().applyPatch(patch(4, { tickets: [ticket('a', { x: 3 })] }));

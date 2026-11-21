@@ -1,7 +1,7 @@
 import type { SupabaseConnection } from '../infrastructure/adapters/supabase/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState } from './types.js';
-import { runFromRow } from './sqlite-factory-store.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState } from './types.js';
+import { itemFromRow, itemToRow, runFromRow, type ItemDbRow } from './sqlite-factory-store.js';
 
 interface FloorRow { id: string; name: string; layout: FactoryLayout; settings: FactorySettings; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: FactoryTicketState; created_at: string; updated_at: string }
@@ -49,12 +49,51 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     return (data as { ticket_id: string }[]).map((r) => r.ticket_id);
   }
 
+  async listItems(floorId: string): Promise<FactoryItemRow[]> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('floor_id', floorId).is('archived_at', null).order('created_at', { ascending: true });
+    if (error) this.fail('listItems', error.message);
+    return (data as ItemDbRow[]).map(itemFromRow);
+  }
+
+  async getItemByKey(source: string, sourceKey: string): Promise<FactoryItemRow | null> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('source', source).eq('source_key', sourceKey).maybeSingle();
+    if (error) this.fail('getItemByKey', error.message);
+    return data ? itemFromRow(data as ItemDbRow) : null;
+  }
+
+  async saveItem(i: FactoryItemRow): Promise<void> {
+    const { error } = await this.conn.client.from('factory_items').upsert(itemToRow(i, (v) => v));
+    if (error) this.fail('saveItem', error.message);
+  }
+
+  async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
+    const { data, error } = await this.conn.client.from('factory_items').select('intake_id').eq('floor_id', floorId).eq('archived_reason', 'dropped').gte('archived_at', sinceIso).limit(20000);
+    if (error) this.fail('countDropped', error.message);
+    const out: Record<string, number> = {};
+    for (const r of data as { intake_id: string | null }[]) if (r.intake_id) out[r.intake_id] = (out[r.intake_id] ?? 0) + 1;
+    return out;
+  }
+
   async saveRun(r: FactoryRunRow): Promise<void> {
     const { error } = await this.conn.client.from('factory_runs').upsert({
       id: r.id, ticket_id: r.ticketId, floor_id: r.floorId, machine_id: r.machineId, machine_name: r.machineName, executor: r.executor, status: r.status,
       outcome: r.outcome, execution_id: r.executionId, error: r.error, started_at: r.startedAt, finished_at: r.finishedAt,
     });
     if (error) this.fail('saveRun', error.message);
+  }
+
+  async saveItemRun(r: FactoryRunRow): Promise<void> {
+    const { error } = await this.conn.client.from('factory_item_runs').upsert({
+      id: r.id, item_id: r.ticketId, floor_id: r.floorId, machine_id: r.machineId, machine_name: r.machineName, executor: r.executor, status: r.status,
+      outcome: r.outcome, execution_id: r.executionId, error: r.error, reply: r.reply ?? null, deliverable_id: r.deliverableId ?? null, started_at: r.startedAt, finished_at: r.finishedAt,
+    });
+    if (error) this.fail('saveItemRun', error.message);
+  }
+
+  async listItemRuns(itemId: string): Promise<FactoryRunRow[]> {
+    const { data, error } = await this.conn.client.from('factory_item_runs').select('*').eq('item_id', itemId).order('started_at', { ascending: true });
+    if (error) this.fail('listItemRuns', error.message);
+    return (data as Parameters<typeof runFromRow>[0][]).map(runFromRow);
   }
 
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {
@@ -87,6 +126,8 @@ export class SupabaseFactoryStore implements FactoryStorePort {
   async interruptRunningRuns(nowIso: string): Promise<FactoryRunRow[]> {
     const { data, error } = await this.conn.client.from('factory_runs').update({ status: 'interrupted', finished_at: nowIso }).eq('status', 'running').select('*');
     if (error) this.fail('interruptRunningRuns', error.message);
-    return (data as RunRow[]).map(runFromRow);
+    const items = await this.conn.client.from('factory_item_runs').update({ status: 'interrupted', finished_at: nowIso }).eq('status', 'running').select('*');
+    if (items.error) this.fail('interruptRunningRuns', items.error.message);
+    return [...(data as RunRow[]), ...(items.data as RunRow[])].map(runFromRow);
   }
 }

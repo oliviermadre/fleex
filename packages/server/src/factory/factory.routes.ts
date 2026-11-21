@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { ForbiddenError } from '../domain/errors.js';
 import type { FactoryModule } from './factory.module.js';
 import { FactoryError } from './engine.js';
-import type { FactoryLayout, FactorySettings } from './types.js';
+import type { FactoryLayout, FactorySettings, ItemInput } from './types.js';
 
 type Target = { machineId?: string; x?: number; y?: number };
 
@@ -57,6 +57,25 @@ export function factoryRoutes(factory: FactoryModule | null) {
     /** A station's switch: off, it takes tickets in but starts nothing on them. */
     app.post<{ Params: { machineId: string }; Body: { on?: boolean } }>('/api/factory/machines/:machineId/power', (request, reply) => guard(reply, (f) => f.engine.setPower(request.params.machineId, request.body?.on !== false)));
     app.delete<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId', (request, reply) => guard(reply, (f) => f.engine.giveBack(request.params.ticketId)));
+
+    /**
+     * A conversation moved in a source: a new item, or a new message on a known one (see `FactoryEngine.ingest`). What
+     * the sources' connectors will call; until they exist, how an item is made by hand. Answers what became of it.
+     */
+    app.post<{ Body: ItemInput }>('/api/factory/items', async (request, reply) => {
+      const f = await ready();
+      /* with the live feed's position, as every other answer that carries the floor */
+      try { return { ...(await f.engine.ingest(request.body)), snapshot: f.state() }; } catch (err) {
+        if (err instanceof FactoryError) return reply.code(400).send({ error: 'FACTORY_REFUSED', message: err.message });
+        throw err;
+      }
+    });
+    /** What stations did with an item and what they answered, oldest first. */
+    app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
+    /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */
+    app.patch<{ Params: { itemId: string }; Body: Record<string, unknown> }>('/api/factory/items/:itemId', (request, reply) => guard(reply, (f) => f.engine.editItem(request.params.itemId, request.body ?? {})));
+    /** Archive an item (soft delete): it is junk, or done with. A new message in its conversation brings it back. */
+    app.post<{ Params: { itemId: string } }>('/api/factory/items/:itemId/archive', (request, reply) => guard(reply, (f) => f.engine.archiveItem(request.params.itemId)));
 
     app.get<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId/runs', async (request) => {
       await ready();

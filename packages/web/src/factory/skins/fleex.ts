@@ -11,11 +11,12 @@ import { layoutNames, tie, type NamedTicket } from '../nameTags';
 import { armColor } from '../armRules';
 import type { LaneFlow } from '../bridges';
 import { fadeIn, floorLook, isLight, legible, luminance, MAJOR, mix, veil } from '../floorLook';
-import { BAR, bodyOf, CUT, KIND_LOOK, kindOf, MACHINE_ICONS, ROUND, SHOULDER, STACK, type Lamp, type Rect, type RunKind } from '../machineArt';
+import { refOf, SOURCE_COLORS, SOURCE_LABEL, SOURCE_TYPE_COLORS, sourceType } from '../items';
+import { BAR, bodyOf, CUT, DESK_COLOR, KIND_LOOK, kindOf, MACHINE_ICONS, ROUND, SHOULDER, STACK, type Lamp, type Rect, type RunKind } from '../machineArt';
 import { portColor } from '../teleport';
 import { modelTag } from '../stationModel';
 import { tokenSprite, type TokenLook } from '../ticketToken';
-import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, LabelView, PortView, Placed, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
+import type { ArmView, ArmWay, BeltView, BridgeView, DockView, ExitView, LabelView, PortView, Placed, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
 import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
@@ -25,7 +26,7 @@ import { flatPerson, flatWorker, zees } from './peoplePaint';
 import { flatProps, flatWalls, flatYard, type DecorStyle, type FlatDecorPaint } from './flatDecor';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else (see `TicketTypeBadge`). A colour with a meaning: another skin may soften it, not replace it. */
-export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa' };
+export const TYPE_COLORS: Record<string, string> = { build: '#4ade80', fix: '#f87171', review: '#facc15', ops: '#2dd4bf', lead: '#c084fc', think: '#60a5fa', ...SOURCE_TYPE_COLORS };
 export const STAR = '#facc15';
 /** A ticket with no type, and the ghost of one a filter leaves out. */
 export const NO_TYPE = '#8b949e', GHOST = '#71717a';
@@ -190,6 +191,7 @@ export class FleexSkin implements Skin {
       else if (v.kind === 'station') this.station(v, st, pal);
       else if (v.kind === 'status') this.statusStation(v, st, pal);
       else if (v.kind === 'exit') this.exit(v, pal);
+      else if (v.kind === 'dock') this.dock(v, st, pal);
       else this.port(v, st, pal);
     });
     for (const b of S.belts) for (const r of b.riders) at(4, () => this.ticket(r, st));
@@ -372,8 +374,8 @@ export class FleexSkin implements Skin {
     const found = P.found;
     if (info && !dragging) {
       /* its number, once there is room: inside a square, on a small plate under a token */
-      if (!call && !token && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
-      if (token && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + this.numberDy(B), B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
+      if (!call && !token && !t.item && s * z >= 26) this.label(String(info.displayId), px, py + s * 0.06, s * 0.36, 'rgba(0,0,0,0.78)', { align: 'center', weight: 700, mono: true });
+      if (token && !t.item && (B * z >= 34 || (st.numbers && B * z >= 13))) this.label(String(info.displayId), px, py + this.numberDy(B), B * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
       /* priority: a pip in the top-left corner for what is urgent or high */
       const pip = PRIORITY_PIP[info.priority];
       if (pip && s * z >= 7) { ctx.beginPath(); ctx.arc(px - B / 2 + B * 0.06, py - B / 2 + B * 0.06, B * 0.15, 0, 6.3); ctx.fillStyle = pip; ctx.fill(); ctx.lineWidth = 0.03; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke(); }
@@ -405,7 +407,7 @@ export class FleexSkin implements Skin {
       /* where they are seen: as high as what carries them (on a skin seen from three quarters) */
       const b = m ? this.seen(m) : null, carrier = this.machine(t.machineId), lift = carrier ? this.seen(carrier).h - carrier.h : 0;
       items.push({
-        id: t.ticketId, text: `#${t.info!.displayId} ${t.info!.title}`, x: sx(x), y: sy(y - lift),
+        id: t.ticketId, text: `${refOf(t.info)} ${t.info!.title}`, x: sx(x), y: sy(y - lift),
         box: m && b ? { id: m.id, rect: { x: sx(b.x), y: sy(b.y), w: b.w * z, h: b.h * z } } : undefined,
       });
     }
@@ -1059,6 +1061,44 @@ export class FleexSkin implements Skin {
     this.quays(v.quays, st, pal, true);
   }
 
+  /**
+   * A dock of 3 by 2 (picked on `docs/factory/intake.html`, I1). A desk, where tickets are born: green, a badge with a
+   * plus, "NEW TICKET" over its name. An intake, where items of a source come in: in its source's colour, the source's
+   * mark in relief on its badge, "INTAKE" over its name, HELD (what waits for its conversation to be quiet, drawn faded
+   * in the dock) and DROPPED (what its rules left out over 24 h). What is let out waits at the quays of its arms.
+   */
+  protected dock(v: DockView, st: ViewState, pal: Palette): void {
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, intake = m.kind === 'intake';
+    const col = m.kind === 'intake' ? SOURCE_COLORS[m.source] : DESK_COLOR;
+    rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.22); ctx.fillStyle = pal.body; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 0.05; ctx.stroke();
+    const b = 0.6, bx = x + 0.24, by = y + 0.24;
+    if (m.kind === 'intake') {
+      rr(ctx, bx, by, b, b, 0.14); ctx.fillStyle = mix(col, pal.body, 0.82); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.03; ctx.stroke();
+      /* the source's mark, as an item of it is drawn in this skin */
+      this.token('solid', sourceType(m.source), col, bx + b / 2, by + b / 2, b * 0.78, 1);
+    } else {
+      /* a green square with a plus: a ticket that is about to be */
+      rr(ctx, bx, by, b, b, 0.14); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = 'rgba(9,9,11,0.9)'; ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.beginPath();
+      ctx.moveTo(bx + b / 2, by + 0.15); ctx.lineTo(bx + b / 2, by + b - 0.15); ctx.moveTo(bx + 0.15, by + b / 2); ctx.lineTo(bx + b - 0.15, by + b / 2); ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    if (z >= 7) this.label(intake ? 'INTAKE' : 'NEW TICKET', bx + b + 0.16, by + 0.12, 0.17, col, { mono: true, weight: 700, min: 7, max: 10, fit: w - b - 0.6 });
+    this.label(m.name || (m.kind === 'intake' ? SOURCE_LABEL[m.source] : 'Desk'), bx + b + 0.16, by + 0.42, 0.28, pal.text, { weight: 650, min: 9, max: 15, fit: w - b - 0.6 });
+    if (intake && z >= 10) {
+      this.label(`HELD ${v.waiting}`, x + 0.26, y + h - 0.48, 0.16, v.waiting ? pal.warn : pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      /* on a line of its own, under the badge: the counters and what the dock holds share the bottom */
+      if (z >= 14 && v.noArm) this.label('no arm takes from it', x + 0.26, y + 1.04, 0.14, pal.danger, { mono: true });
+    } else if (!intake && z >= 14) {
+      if (v.noArm) this.label('no arm takes from it', x + w / 2, y + h - 0.28, 0.16, pal.danger, { mono: true, align: 'center', fit: w - 0.3 });
+      else this.label(st.edit ? 'double-click: settings' : 'double-click: the form', x + 0.24, y + h - 0.28, 0.16, pal.text3, { mono: true, fit: w - 0.4 });
+    }
+    for (const p of v.held) this.ticket(p, st);
+    if (v.more > 0) this.label(`+${v.more}`, x + w - 0.16, y + h - 0.6, 0.2, pal.text2, { align: 'right', mono: true, plate: 'rgba(9,9,11,0.84)' });
+    this.quays(v.quays, st, pal, false);
+  }
+
   /** A padlock, stencilled: shut and red, or open and green with two chevrons after it (what it holds leaves by itself). Laid out on a grid of 40 to the tile. */
   private padlock(x: number, y: number, open: boolean, col: string): void {
     const ctx = this.ctx, k = 1 / 40, top = y + (open ? 0.5 : 2.5) * k;
@@ -1352,7 +1392,7 @@ export class FleexSkin implements Skin {
       if (m.kind === 'label' || m.kind === 'area') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;

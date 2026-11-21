@@ -26,6 +26,8 @@ export interface FactoryPatch {
   runsLastHour: number;
   running: number;
   notice?: string | null;
+  /** What each intake dropped over the last 24 hours, by its id: every intake's, as arms are. */
+  intakes?: FactorySnapshot['intakes'];
   serverTime: string;
 }
 
@@ -49,7 +51,7 @@ export class FactoryFeed {
     }
     const removed = [...this.sent.keys()].filter((id) => !live.has(id));
     const floorKey = JSON.stringify(snap.floor);
-    const rest = { arms: snap.arms, armSwing: snap.armSwing, beltSpeed: snap.beltSpeed, fastBelt: snap.fastBelt, runsLastHour: snap.runsLastHour, running: snap.running, notice: snap.notice ?? null };
+    const rest = { arms: snap.arms, armSwing: snap.armSwing, beltSpeed: snap.beltSpeed, fastBelt: snap.fastBelt, runsLastHour: snap.runsLastHour, running: snap.running, notice: snap.notice ?? null, intakes: snap.intakes ?? {} };
     const restKey = JSON.stringify(rest);
     if (!tickets.length && !removed.length && floorKey === this.floorKey && restKey === this.restKey) return null;
 

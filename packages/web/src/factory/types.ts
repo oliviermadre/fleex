@@ -6,6 +6,7 @@
 import type { SetOp } from './setOps';
 import type { ScriptSpec } from './script';
 export type { SetOp } from './setOps';
+import type { ItemSource } from './items';
 import type { TicketStatus } from '@fleex/shared';
 
 export type Dir = 0 | 1 | 2 | 3;
@@ -56,6 +57,25 @@ export interface BridgeSpec extends MachineBase { kind: 'bridge' }
  * that arrival's id); an arrival holds one ticket, takes nothing from the floor, and an arm takes the ticket out.
  */
 export interface TeleporterSpec extends MachineBase { kind: 'teleporter'; role: 'departure' | 'arrival'; to?: string; /** One of `PALETTE`; without one, see `portColor`. */ color?: string }
+/**
+ * Where a ticket is born on the floor: the creation form opens on it, and the ticket it creates is handed over right
+ * there. Nothing on the floor puts a ticket into a desk; an arm takes what it holds out at once. `defaults` prefill the form.
+ */
+export interface DeskSpec extends MachineBase { kind: 'desk'; defaults?: DeskDefaults }
+export interface DeskDefaults { boardId?: string; type?: string; priority?: string }
+/** How floors saved before `ItemRule` wrote a rule: read as a drop rule on "contains". */
+export interface DropRule { field: 'author' | 'title' | 'text'; contains: string }
+/**
+ * A rule of an intake, on a field every item has or on one of its source's (`itemSources.ts`): a drop rule drops what
+ * it matches; keep rules (`keep`) let in only what one of them matches. `is` and `is not` take values separated by commas.
+ */
+export interface ItemRule { field: string; op: 'contains' | 'is' | 'is_not'; value: string; keep?: boolean }
+export type ItemFields = Record<string, string | string[] | boolean>;
+/**
+ * Where items of one source come in: a dock of 3 by 2. An item waits in it while its conversation moves, and leaves
+ * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
+ */
+export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[] }
 /** Where an Area's name is written: in one of its corners, or over or under it. */
 export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
 /**
@@ -64,7 +84,7 @@ export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
  * click. Seen from three quarters it is a platform that raises what stands wholly on it.
  */
 export interface AreaSpec extends MachineBase { kind: 'area'; name: string; color: string; label?: AreaLabel }
-export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | AreaSpec;
+export type MachineSpec = BeltSpec | ArmSpec | StationSpec | ZoneSpec | ExitSpec | LabelSpec | BridgeSpec | TeleporterSpec | AreaSpec | DeskSpec | IntakeSpec;
 export type MachineKind = MachineSpec['kind'];
 
 /** `version` says what the document means; the engine sets it, and starts a floor over when it cannot carry an older one across. */
@@ -92,7 +112,10 @@ export interface FactoryTicket {
   outcome: string; released: boolean; since: string; runId: string | null; note: string;
   /** When it was handed over to the Factory (ISO). */
   handedAt: string;
+  /** Set on an item, which is not a ticket: where it came from. Its `info.type` is `src:<source>`. */
+  item?: FactoryItemInfo;
 }
+export interface FactoryItemInfo { source: ItemSource; author: string; excerpt: string; url: string | null; messages: number; lastActivityAt: string; /** What its source says of it beyond that. Absent on a server older than this field. */ fields?: ItemFields }
 export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: FactoryTicket[];
@@ -107,6 +130,8 @@ export interface FactorySnapshot {
   serverTime: string;
   /** Something to tell once (the floor was started over for a new layout version). */
   notice?: string | null;
+  /** What each intake dropped over the last 24 hours, by its id. */
+  intakes?: Record<string, { dropped: number }>;
   /** The server's live feed, and the last of its patches this snapshot already holds (see `FactoryPatch`). */
   epoch?: string;
   seq?: number;
@@ -129,6 +154,8 @@ export interface FactoryPatch {
   runsLastHour: number;
   running: number;
   notice?: string | null;
+  /** What each intake dropped over the last 24 hours, by its id: every intake's, when one count changed. */
+  intakes?: Record<string, { dropped: number }>;
   serverTime: string;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
@@ -137,6 +164,8 @@ export interface FactoryRun {
   id: string; ticketId: string; machineId: string; machineName: string; executor: RunExecutor;
   status: 'running' | 'completed' | 'failed' | 'needs_review' | 'question' | 'interrupted';
   outcome: string | null; executionId: string | null; error: string | null; startedAt: string; finishedAt: string | null;
+  /** A visit to an item: what the station answered (an item has no thread), and the deliverable it produced. */
+  reply?: string | null; deliverableId?: string | null;
 }
 /** What one machine did over the period. Mirrors `MachineStats` in the server's `factory/stats.ts`. */
 export interface MachineStats {

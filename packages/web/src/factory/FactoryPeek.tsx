@@ -33,6 +33,17 @@ function Bubble({ c }: { c: TicketComment }) {
   );
 }
 
+/** Put a card beside what it is about (`r`, in the floor's pixels): to its right, else its left, clear of the list of what needs someone. */
+export function placeBeside(node: HTMLElement | null, r: { x: number; y: number; w: number; h: number }, at: { current: string }): void {
+  const host = node?.parentElement;
+  if (!node || !host) return;
+  const w = node.offsetWidth, h = node.offsetHeight, clear = 290;      // the list of what needs someone, on the left
+  const left = r.x + r.w + 12 + w <= host.clientWidth - 8 ? r.x + r.w + 12 : r.x - 12 - w >= clear ? r.x - 12 - w : Math.max(clear, host.clientWidth - w - 8);
+  const top = Math.max(8, Math.min(r.y, host.clientHeight - h - 8));
+  const next = `translate(${Math.round(Math.max(8, left))}px, ${Math.round(top)}px)`;
+  if (next !== at.current) { at.current = next; node.style.transform = next; node.style.visibility = 'visible'; }
+}
+
 export interface PeekHandle {
   /** Where the ticket's machine (or the ticket itself) is on the floor, in the floor's own pixels: the card sits beside it. */
   place(r: { x: number; y: number; w: number; h: number }): void;
@@ -69,17 +80,7 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
   const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
   const el = useRef<HTMLDivElement>(null), thread = useRef<HTMLDivElement>(null), seen = useRef(-1), at = useRef('');
 
-  useImperativeHandle(ref, () => ({
-    place: (r) => {
-      const node = el.current, host = node?.parentElement;
-      if (!node || !host) return;
-      const w = node.offsetWidth, h = node.offsetHeight, clear = 290;      // the list of what needs someone, on the left
-      const left = r.x + r.w + 12 + w <= host.clientWidth - 8 ? r.x + r.w + 12 : r.x - 12 - w >= clear ? r.x - 12 - w : Math.max(clear, host.clientWidth - w - 8);
-      const top = Math.max(8, Math.min(r.y, host.clientHeight - h - 8));
-      const next = `translate(${Math.round(Math.max(8, left))}px, ${Math.round(top)}px)`;
-      if (next !== at.current) { at.current = next; node.style.transform = next; node.style.visibility = 'visible'; }
-    },
-  }), []);
+  useImperativeHandle(ref, () => ({ place: (r) => placeBeside(el.current, r, at) }), []);
 
   const load = useCallback(async () => {
     /* the runs come with the messages, so a run card's state follows the run; without them the thread still shows */

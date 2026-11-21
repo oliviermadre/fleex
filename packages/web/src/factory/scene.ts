@@ -18,7 +18,7 @@ import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatc
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState, type PortState } from './teleport';
 import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
-import { DX, DY, humanCall, type AreaSpec, type ArmSpec, type BeltSpec, type FactoryLayout, type FactoryTicket, type HumanCall, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
+import { DX, DY, humanCall, type AreaSpec, type ArmSpec, type BeltSpec, type DeskSpec, type FactoryLayout, type IntakeSpec, type FactoryTicket, type HumanCall, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 import type { DragState, ViewState } from './renderer';
 
 /** What is left of a ticket's way after a second: when it is moved (it must not jump), and when it slides to its quay (it must be seen going). */
@@ -28,7 +28,7 @@ const FADE_S = 0.75;
 /** Seconds a ticket is drawn jumping from a departure to its arrival. The engine moves it at once; this is for the eye. */
 export const JUMP_S = 0.6;
 
-export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit');
+export const isBox = (m: MachineSpec | null | undefined): boolean => !!m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'exit' || m.kind === 'desk' || m.kind === 'intake');
 
 /** How a ticket is marked where it stands: at work, waiting for someone, failed, on its way out, held. */
 export type Mark = 'run' | 'human' | 'fail' | 'out' | 'wait' | '';
@@ -98,7 +98,13 @@ export interface PortView {
   gone: { type: string; k: number } | null;
   name: string; line: string; asked: boolean; plate: 'below' | 'above' | 'right';
 }
-export type BoxView = LabelView | ZoneView | StationView | StatusView | ExitView | PortView;
+/**
+ * A dock of 3 by 2: a desk, where a ticket is born, or an intake, where items of a source come in. What no arm has
+ * taken yet stands in it (`held`, two at most, then `more`); what is
+ * let out waits at the quays of its arms. An intake counts what waits (`waiting`) and what its rules dropped over 24 h.
+ */
+export interface DockView { kind: 'dock'; m: DeskSpec | IntakeSpec; held: Placed[]; more: number; quays: Quay[]; noArm: boolean; waiting: number; dropped: number }
+export type BoxView = LabelView | ZoneView | StationView | StatusView | ExitView | PortView | DockView;
 
 export interface ArmView {
   m: ArmSpec; bx: number; by: number; dx: number; dy: number; hx: number; hy: number;
@@ -315,6 +321,7 @@ export class FloorScene {
       else if (m.kind === 'station') boxes.push(m.exec === 'native' ? this.statusStation(m, inside.get(m.id) ?? []) : this.station(m, inside.get(m.id) ?? []));
       else if (m.kind === 'exit') boxes.push({ kind: 'exit', m, count: st.exits ? (st.exits[m.id] ?? 0) + (this.passed.get(m.id) ?? 0) : null, days: st.exitDays ?? 7 });
       else if (m.kind === 'teleporter') boxes.push(this.port(m, inside.get(m.id)?.[0] ?? null, noEntry));
+      else if (m.kind === 'desk' || m.kind === 'intake') boxes.push(this.dock(m, inside.get(m.id) ?? []));
     }
     const belts: BeltView[] = beltSpecs.map((b) => this.belt(b, onTrack.get(b.id) ?? []));
     const loose: Placed[] = [];
@@ -503,6 +510,19 @@ export class FloorScene {
     return { kind: 'zone', m, held: placed, more: held.length - n, stock, quays: this.quays(takers, D) };
   }
 
+  private dock(m: DeskSpec | IntakeSpec, tickets: FactoryTicket[]): DockView {
+    const { x, y, h } = m, intake = m.kind === 'intake', takers = this.takersOf(m), D = this.leavers(m, takers, tickets);
+    /* two at most, far enough apart for a pixel skin's icon (eleven pixels of sixteen to the tile); the rest is a count */
+    const inDock = tickets.filter((t) => !D.quay.has(t.ticketId)), x0 = x + (intake ? 1.55 : 1.15);
+    /* not faded while it waits: what stands in the dock waits by definition (what is let out goes to a quay), HELD says so, and a faded pixel icon loses its outline */
+    const held = inDock.slice(0, 2).map((t, i) => this.place(t, x0 + i * 0.72, y + h - 0.52, intake ? 0.3 : 0.34, ''));
+    for (const t of inDock.slice(2)) this.shown.set(t.ticketId, { x: x0 + 0.72, y: y + h - 0.52 });
+    return {
+      kind: 'dock', m, held, more: Math.max(0, inDock.length - 2), quays: this.quays(takers, D), noArm: !takers.length,
+      waiting: tickets.filter((t) => !t.released).length, dropped: intake ? this.st.intakes?.[m.id]?.dropped ?? 0 : 0,
+    };
+  }
+
   private port(m: TeleporterSpec, held: FactoryTicket | null, noEntry: { x: number; y: number }[]): PortView {
     const st = this.st, { x, y } = m, cx = x + 0.5, cy = y + 0.5, find = (id: string) => this.byId.get(id), dep = m.role === 'departure';
     const arrival = arrivalOf(m, find), state = portState(m, { arrival, arrivalHolds: !!arrival && !!this.inside.get(arrival.id)?.length, holds: held, takers: dep ? [] : this.takersOf(m) });
@@ -589,7 +609,7 @@ export class FloorScene {
   // ---------- build mode, and what is carried by hand ----------
   private armWay(x: number, y: number, dir: number, turn: boolean): ArmWay {
     const dx = DX[dir as 0], dy = DY[dir as 0];
-    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : 'Station'));
+    const nameOf = (m: MachineSpec | null): string => (!m ? 'the floor' : m.kind === 'belt' ? 'a belt' : m.kind === 'bridge' ? 'a bridge' : m.kind === 'arm' ? 'an arm' : m.kind === 'label' ? 'the floor' : m.kind === 'teleporter' ? portName(m) : m.name || (m.kind === 'exit' ? 'Exit' : m.kind === 'zone' ? 'Zone' : m.kind === 'desk' ? 'Desk' : m.kind === 'intake' ? 'Intake' : 'Station'));
     const src = this.at(x - dx, y - dy), dst = this.at(x + dx, y + dy);
     /* a teleporter only goes one way: nothing is taken out of a departure, nothing is put into an arrival */
     const idle = isDeparture(src), shut = isArrival(dst);
@@ -612,7 +632,7 @@ export class FloorScene {
       if (!info || st.drag?.ticketId === t.ticketId || st.dim?.has(t.ticketId)) continue;
       if (!all && !info.favorite && st.selTicket !== t.ticketId && !st.named?.has(t.ticketId)) continue;
       const m = this.machine(t.machineId), p = this.shown.get(t.ticketId) ?? { x: t.x + 0.5, y: t.y + 0.5 };
-      out.push({ t, x: p.x, y: p.y, box: m && (m.kind === 'station' || m.kind === 'zone') ? m : null });
+      out.push({ t, x: p.x, y: p.y, box: m && (m.kind === 'station' || m.kind === 'zone' || m.kind === 'desk' || m.kind === 'intake') ? m : null });
     }
     return out;
   }

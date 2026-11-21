@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { TicketStatus } from '@fleex/shared';
+import { TICKET_PRIORITIES, TICKET_TYPE_LABELS, TICKET_TYPES, type TicketStatus } from '@fleex/shared';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
@@ -27,7 +27,10 @@ import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type Dir, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
+import { COMMON_FIELDS, opsFor, SOURCE_FIELDS, type SourceField } from './itemSources';
+import { toast } from '../lib/toast';
+import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -50,6 +53,7 @@ export function machineKind(m: MachineSpec): string {
   if (m.kind === 'belt' && m.set !== undefined) return 'Set gantry';
   if (m.kind === 'station') return m.exec === 'human_gate' ? 'Gate' : m.exec === 'native' ? 'Status station' : `${m.exec[0]!.toUpperCase()}${m.exec.slice(1)} station`;
   if (m.kind === 'teleporter') return m.role === 'arrival' ? 'Arrival teleporter' : 'Departure teleporter';
+  if (m.kind === 'intake') return `${SOURCE_LABEL[m.source]} intake`;
   return m.kind === 'zone' && m.inbound ? 'Inbound zone' : `${m.kind[0]!.toUpperCase()}${m.kind.slice(1)}`;
 }
 export const machineIcon = (m: MachineSpec): string => (m.kind === 'belt' && m.toll ? 'toll' : m.kind === 'belt' && m.set !== undefined ? 'set' : m.kind === 'station' ? (m.exec === 'human_gate' ? 'gate' : m.exec) : m.kind === 'zone' && m.inbound ? 'inbound' : m.kind);
@@ -203,6 +207,116 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
   );
 }
 
+const QUIET = [0, 30, 60, 120, 300, 600, 1800, 3600];
+const quietLabel = (s: number) => (s === 0 ? 'at once' : s < 60 ? `${s} s` : s < 3600 ? `${s / 60} min` : `${s / 3600} h`);
+const OP_LABEL: Record<ItemRule['op'], string> = { contains: 'contains', is: 'is', is_not: 'is not' };
+
+/**
+ * Rules on some of an intake's fields (the common ones, or its source's): each a way (drop if, keep only if), a field,
+ * an operator that suits it and a value, a list of choices or yes and no where the field has them.
+ */
+function RuleList({ id, rules, fields, onChange }: { id: string; rules: ItemRule[]; fields: readonly SourceField[]; onChange: (rules: ItemRule[]) => void }) {
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const set = (i: number, patch: Partial<ItemRule>) => onChange(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  /* a new rule has no value yet: it decides nothing until it has one */
+  const blank = (f: SourceField): ItemRule => ({ field: f.key, op: opsFor(f.kind)[0]!, value: f.kind === 'bool' ? 'yes' : f.kind === 'choice' ? f.choices![0]! : '' });
+  return (
+    <>
+      {rules.map((r, i) => {
+        const f = byKey.get(r.field) ?? fields[0]!;
+        return (
+          <div key={i} className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,8rem)_minmax(0,6rem)_minmax(0,1fr)_auto] items-end gap-1.5">
+            <Select id={`${id}-${i}-way`} label={i === 0 ? 'Way' : ''} value={r.keep ? 'keep' : 'drop'} onChange={(e) => set(i, { keep: e.target.value === 'keep' || undefined })}
+              options={[{ value: 'drop', label: 'Drop if' }, { value: 'keep', label: 'Keep only if' }]} />
+            <Select id={`${id}-${i}-field`} label={i === 0 ? 'Field' : ''} value={f.key} onChange={(e) => set(i, blank(byKey.get(e.target.value)!))}
+              options={fields.map((x) => ({ value: x.key, label: x.label }))} />
+            <Select id={`${id}-${i}-op`} label={i === 0 ? 'Operator' : ''} value={r.op} onChange={(e) => set(i, { op: e.target.value as ItemRule['op'] })}
+              options={opsFor(f.kind).map((o) => ({ value: o, label: OP_LABEL[o] }))} />
+            {f.kind === 'bool' ? (
+              <Select id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} onChange={(e) => set(i, { value: e.target.value })} options={[{ value: 'yes', label: 'yes' }, { value: 'no', label: 'no' }]} />
+            ) : f.kind === 'choice' && !r.value.includes(',') ? (
+              <Select id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} onChange={(e) => set(i, { value: e.target.value })} options={f.choices!.map((c) => ({ value: c, label: c }))} />
+            ) : (
+              <CommitInput id={`${id}-${i}-value`} label={i === 0 ? 'Value' : ''} value={r.value} placeholder={f.hint ?? (r.op === 'contains' ? 'newsletter, noreply@…' : 'one, or several separated by commas')}
+                onCommit={(v) => set(i, { value: v })} />
+            )}
+            <Button size="sm" variant="ghost" onClick={() => onChange(rules.filter((_, j) => j !== i))} title="Remove this rule">Remove</Button>
+          </div>
+        );
+      })}
+      <div><Button size="sm" onClick={() => onChange([...rules, blank(fields[0]!)])}>Add a rule</Button></div>
+    </>
+  );
+}
+
+/**
+ * An intake, in two parts. What every intake has, whatever its source: a name, its source, how long an item must have
+ * been quiet before it leaves. Then what only its source has: rules on that source's own fields (a Slack channel,
+ * Gmail labels, a GitHub repository), which its connector fills; what every item has (who it is from, its title, its
+ * text) is too broad to filter on. A drop rule drops what it matches; keep rules let in only what one of them matches;
+ * what is dropped never reaches the floor. Making an item by hand has its popup of its own (New item).
+ */
+function IntakeSettings({ m, onPatch, takers, onSelect, onNewItem }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void; onNewItem?: (intakeId: string) => void }) {
+  const quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
+  const own = SOURCE_FIELDS[m.source], source = SOURCE_LABEL[m.source], ownKeys = new Set(own.map((f) => f.key));
+  const rules = (m.rules ?? []).filter((r) => ownKeys.has(r.field));
+  return (
+    <>
+      <Hint>Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first that lets it in. The sources are not connected yet: items come in through POST /api/factory/items, or by hand (New item).</Hint>
+      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={source} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      <div className="grid grid-cols-2 gap-2">
+        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: [], drop: undefined } as Partial<MachineSpec>)}
+          options={ITEM_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))} />
+        <Select id="f-intake-quiet" label="Leaves once quiet for" value={String(quiet)} onChange={(e) => onPatch({ quietSec: Number(e.target.value) } as Partial<MachineSpec>)}
+          options={[...new Set([...QUIET, quiet])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
+      </div>
+      <Head>{source} only</Head>
+      {own.length === 0
+        ? <Hint>An item made by hand has nothing more than what every item has: everything comes in.</Hint>
+        : <>
+            <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. No rule: everything comes in. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
+            <RuleList id="f-own" rules={rules} fields={own} onChange={(next) => onPatch({ rules: next, drop: undefined } as Partial<MachineSpec>)} />
+          </>}
+      <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
+      {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: items will pile up. Put an arm against one of its sides.</div>}
+      {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
+      {onNewItem && <div className="border-t border-[var(--theme-border)] pt-3"><Button size="sm" onClick={() => onNewItem(m.id)} title="Make an item of this source by hand, as its connector would send it">New item…</Button></div>}
+    </>
+  );
+}
+
+/**
+ * A desk: its name, and what the creation form opened on it starts with (board, type, priority). Each can be changed
+ * in the form; a "Bug desk" set to Fix and wired to a line of fixes routes what is created at it.
+ */
+function DeskSettings({ m, onPatch, takers, onSelect }: { m: DeskSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void }) {
+  const boards = useTicketStore((s) => s.boards), d = m.defaults ?? {};
+  const set = (k: 'boardId' | 'type' | 'priority', v: string) => {
+    const next = { ...d, [k]: v || undefined };
+    for (const key of Object.keys(next) as (keyof typeof next)[]) if (!next[key]) delete next[key];
+    onPatch({ defaults: Object.keys(next).length ? next : undefined } as Partial<MachineSpec>);
+  };
+  return (
+    <>
+      <Hint>Where tickets are born. New ticket on the command card (or a double-click on the desk) opens the creation form; the ticket it creates is handed over to the Factory here, and an arm takes it out at once.</Hint>
+      <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder="Desk" onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
+      <Head>The form starts with</Head>
+      <Select id="f-desk-board" label="Board" value={d.boardId ?? ''} onChange={(e) => set('boardId', e.target.value)}
+        options={[{ value: '', label: 'the first board' }, ...boards.map((b) => ({ value: b.id, label: b.name }))]} />
+      <div className="grid grid-cols-2 gap-2">
+        <Select id="f-desk-type" label="Type" value={d.type ?? ''} onChange={(e) => set('type', e.target.value)}
+          options={[{ value: '', label: 'Build (the form\'s own)' }, ...TICKET_TYPES.map((t) => ({ value: t, label: TICKET_TYPE_LABELS[t] ?? t }))]} />
+        <Select id="f-desk-priority" label="Priority" value={d.priority ?? ''} onChange={(e) => set('priority', e.target.value)}
+          options={[{ value: '', label: 'none (the form\'s own)' }, ...TICKET_PRIORITIES.filter((p) => p !== 'none').map((p) => ({ value: p, label: p }))]} />
+      </div>
+      <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
+      {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: what is created stays in the desk. Put an arm against one of its sides.</div>}
+      {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
+    </>
+  );
+}
+
 /**
  * A teleporter: its name, which of the two it is, and for a departure the arrival it leads to. An arrival has nothing
  * to point at: it lists the departures that lead to it, each of which opens. Either says what it holds.
@@ -244,14 +358,14 @@ function TeleporterSettings({ m, onPatch, onSelect }: { m: TeleporterSpec; onPat
       )}
       <ColourPicker label="Teleporter colour" value={m.color} own={portOwnColor(m, find)} ownTitle={dep ? 'The colour of its destination' : 'Cyan'}
         hint={dep ? 'Automatic: the colour of its destination, so the two read as a pair.' : 'Its departures take its colour unless they have their own.'} onChange={(color) => onPatch({ color })} />
-      <Hint>{held ? `Holds #${held.info?.displayId ?? '?'} ${held.info?.title ?? ''}` : 'Holds nothing right now.'}</Hint>
+      <Hint>{held ? `Holds ${refOf(held.info)} ${held.info?.title ?? ''}` : 'Holds nothing right now.'}</Hint>
     </>
   );
 }
 const Column = ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={cn('flex min-h-0 flex-col gap-3 overflow-y-auto p-4', className)}>{children}</div>;
 
 /** Everything that is set on a machine. The same fields whatever opens them; they save as they are left. */
-function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: FactoryView; onPatch: (patch: Partial<MachineSpec>) => void; onSelect: (machineId: string) => void }) {
+function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; view: FactoryView; onPatch: (patch: Partial<MachineSpec>) => void; onSelect: (machineId: string) => void; onNewItem?: (intakeId: string) => void }) {
   const layout = useFactoryStore((s) => s.layout)!;
   const [editing, setEditing] = useState(false);
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
@@ -323,6 +437,8 @@ function Settings({ m, view, onPatch, onSelect }: { m: MachineSpec; view: Factor
         </>
       )}
       {m.kind === 'teleporter' && <TeleporterSettings m={m} onPatch={onPatch} onSelect={onSelect} />}
+      {m.kind === 'intake' && <IntakeSettings m={m} onPatch={onPatch} takers={takers} onSelect={onSelect} onNewItem={onNewItem} />}
+      {m.kind === 'desk' && <DeskSettings m={m} onPatch={onPatch} takers={takers} onSelect={onSelect} />}
 
       {m.kind === 'station' && (
         <>
@@ -438,7 +554,7 @@ function Inside({ m, onOpenTicket }: { m: MachineSpec; onOpenTicket: (ticketId: 
             <li key={t.ticketId} className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--theme-border)] px-2 py-1.5">
               <TicketToken info={t.info} size={22} />
               <button type="button" onClick={() => onOpenTicket(t.ticketId)} className="min-w-0 flex-1 basis-48 text-left" title="Open the ticket">
-                <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">#{t.info?.displayId ?? '?'}</span>{t.info?.title ?? t.ticketId}</div>
+                <div className="truncate text-xs font-medium text-[var(--theme-text-primary)] hover:underline"><span className="mr-1.5 font-mono text-[var(--theme-text-muted)]">{refOf(t.info)}</span>{t.info?.title ?? t.ticketId}</div>
                 <div className={cn('truncate text-[11px]', why ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>
                   {t.phase === 'zone' && t.released ? 'released, waiting for an arm' : PHASE[t.phase]}{t.outcome ? ` · ${t.outcome}` : ''}{t.note ? ` · ${t.note}` : ''}
                 </div>
@@ -477,7 +593,7 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
   const titles = useMemo(() => {
     const out = new Map<string, string>();
     for (const t of known) out.set(t.id, `#${t.displayId} ${t.title}`);
-    for (const t of snapshot?.tickets ?? []) if (t.info) out.set(t.ticketId, `#${t.info.displayId} ${t.info.title}`);
+    for (const t of snapshot?.tickets ?? []) if (t.info) out.set(t.ticketId, `${refOf(t.info)} ${t.info.title}`);
     return out;
   }, [known, snapshot]);
   return (
@@ -510,9 +626,11 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
  * tickets; an arm, an exit, a label or an area, which have only settings, a small popup. Everything a machine has to be set
  * is set here: the floor has no side panel.
  */
-export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemove, onOpenTicket, onOpenMachine }: {
+export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemove, onOpenTicket, onOpenMachine, onNewItem }: {
   machineId: string; view: FactoryView; onClose: () => void; onPatch: (id: string, patch: Partial<MachineSpec>) => void; onRemove: (id: string) => void;
   onOpenTicket: (ticketId: string) => void; onOpenMachine: (machineId: string) => void;
+  /** An intake's popup opens the one that makes an item by hand. */
+  onNewItem?: (intakeId: string) => void;
 }) {
   const layout = useFactoryStore((s) => s.layout), power = useFactoryStore((s) => s.power);
   const m = layout?.machines.find((q) => q.id === machineId) ?? null;
@@ -539,7 +657,7 @@ export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemov
       <Button size="sm" variant="ghost" onClick={() => { onRemove(m.id); onClose(); }} title={m.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor'}>Remove</Button>
     </>
   );
-  const settings = <Settings m={m} view={view} onPatch={(p) => onPatch(m.id, p)} onSelect={onOpenMachine} />;
+  const settings = <Settings m={m} view={view} onPatch={(p) => onPatch(m.id, p)} onSelect={onOpenMachine} onNewItem={onNewItem} />;
   if (!box) return <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="fit" maxWidth="max-w-2xl"><Column>{settings}</Column></FactoryPopup>;
   return (
     <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="large" maxWidth={station ? 'max-w-[1400px]' : 'max-w-5xl'}>

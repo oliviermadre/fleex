@@ -41,11 +41,14 @@ import { edgeCursorCss, useEdgeScroll } from './edgeScroll';
 import { addTo, groupOf, machineIds, machinesSel, sameSelection, ticketIds, ticketsIn, ticketsSel } from './pick';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FactoryWorkbench } from './FactoryWorkbench';
+import { FactoryDeskForm } from './FactoryDeskForm';
+import { FactoryItemPeek } from './FactoryItemPeek';
+import { FactoryItemPopup, FactoryNewItem } from './FactoryItemPopup';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
+import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150;
 /** Without the WS, the floor is polled: this often while the window is in front, */
@@ -84,6 +87,8 @@ const TOOLS: [Tool, string, string, string][] = [
   ['exit', 'O', 'Exit', 'Sets the ticket to done and hands it back to Fleex'],
   ['label', 'L', 'Label', 'A name on the floor'],
   ['area', '', 'Area', 'Drag a rectangle on the floor: an area, a part of it with a name and a colour. Areas nest or keep apart, never cross'],
+  ['intake', 'I', 'Intake', 'Where items of one source come in: they wait while the conversation moves, what its rules recognise is dropped'],
+  ['desk', 'K', 'Desk', 'Where tickets are born: New ticket opens the creation form on it'],
   ['erase', 'X', 'Erase', 'Click or drag to remove machines'],
 ];
 
@@ -175,6 +180,8 @@ function Floor() {
   const [dir, setDir] = useState<Dir>(0);
   const [selection, setSelection] = useState<Selection>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  /** The creation form, open on a desk (null: no desk on the floor, the ticket lands in Inbound); undefined when closed. */
+  const [deskForm, setDeskForm] = useState<{ desk: DeskSpec | null } | undefined>(undefined);
   const [groups, setGroups] = useState<Selection[]>(() => Array.from({ length: GROUPS }, () => null));
   const [finder, setFinder] = useState<Finder>(NO_FINDER);
   const [hasClip, setHasClip] = useState(clipboard !== null);
@@ -196,7 +203,16 @@ function Floor() {
     if (saved) setGroups(Array.from({ length: GROUPS }, (_, k) => saved[k] ?? null));
   }, [snapshot]);
   const miniRef = useRef<HTMLCanvasElement>(null);
-  const [openTicket, setOpenTicket] = useState<string | null>(null);
+  const [openTicket, setOpenTicketRaw] = useState<string | null>(null);
+  /** An item opened: its popup (an item has no workbench); and the intake an item is being made at by hand. */
+  const [openItem, setOpenItem] = useState<string | null>(null);
+  const [newItemAt, setNewItemAt] = useState<string | null>(null);
+  /* opening an item opens its popup, wherever it is opened from (Enter, a double-click, a list, the card) */
+  const setOpenTicket = useCallback((id: string | null) => {
+    const item = id ? useFactoryStore.getState().snapshot?.tickets.find((t) => t.ticketId === id)?.item : undefined;
+    if (item) { setOpenItem(id); return; }
+    setOpenTicketRaw(id);
+  }, []);
   /* a run's log popped out of the peek card: it outlives the card */
   const [runLog, setRunLog] = useState<{ executionId: string; title: string } | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
@@ -279,6 +295,7 @@ function Floor() {
       dim: l.marks.dim, found: l.marks.found, named: l.marks.named,
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
       exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
+      intakes: s.snapshot.intakes ?? null,
     };
   }, [boardName, modelOf]);
 
@@ -328,6 +345,8 @@ function Floor() {
     const tx = Math.floor(wx), ty = Math.floor(wy), m = v.at(tx, ty);
     if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
     if (m.kind === 'arm' || m.kind === 'label') return { target: {}, ok: false, can: false, text: 'Not on an arm' };
+    if (m.kind === 'desk') return { target: {}, ok: false, can: false, text: 'Not on a desk: tickets are born there' };
+    if (m.kind === 'intake') return { target: {}, ok: false, can: false, text: 'Not in an intake: items come to it from their source' };
     if (m.kind === 'teleporter') {
       /* as for an arm: a departure takes one ticket, an arrival none */
       const held = !!useFactoryStore.getState().snapshot?.tickets.some((t) => t.machineId === m.id), drop = portDrop(m, held, arrivalOf(m, (id) => v.machine(id)));
@@ -531,6 +550,8 @@ function Floor() {
     if (hit && 'ticketId' in hit) { setOpenTicket(hit.ticketId); return; }
     /* a machine opens in its popup: its settings, what it holds, what it did. In build mode too, with nothing in hand */
     const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
+    /* a desk opens its form out of build mode, which is what it is for; its settings are Edit */
+    if (m?.kind === 'desk' && !live.current.building) { setDeskForm({ desk: m }); return; }
     if (m && hasPopup(m)) { setOpenMachine(m.id); return; }
     /* in build mode, an area opens where nothing stands on it */
     if (!hit && live.current.building && live.current.tool === 'select') {
@@ -638,13 +659,15 @@ function Floor() {
   }, [selMany, selMachine, layout]);
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
-    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate) } : null,
+    ticket: selTicket ? { phase: selTicket.phase, released: selTicket.released, favorite: selTicket.info ? selTicket.info.favorite : null, outcomes: gate?.kind === 'station' ? gate.outcomes : [], canAside: canSetAside(selTicket, gate), ...(selTicket.item ? { item: { url: selTicket.item.url } } : {}) } : null,
     waiting: needs.length, speed: beltSpeed, group,
     machine: selMachine ? { kind: selMachine.kind, waiting: !!zoneNext, popup: hasPopup(selMachine), power: selMachine.kind === 'station' && RUNS.includes(selMachine.exec) ? (selMachine.off ? 'off' : 'on') : null } : null,
     act: {
       build: () => { setBuilding(true); setSelection(null); },
       done: () => setBuilding(false),
       intake: () => setTransferOpen(true),
+      /* at the desk selected, else at the floor's first desk, else in Inbound */
+      newTicket: () => setDeskForm({ desk: selMachine?.kind === 'desk' ? selMachine : layout?.machines.find((m): m is DeskSpec => m.kind === 'desk') ?? null }),
       tickets: () => setListOpen(true),
       fit, plan: () => setPlanOpen(true), paste,
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
@@ -662,10 +685,14 @@ function Floor() {
       deselect: () => setSelection(null),
       openTicket: () => { if (selTicket) setOpenTicket(selTicket.ticketId); },
       star: () => {
-        if (group) { for (const t of selTickets) if (t.info && t.info.favorite === group.starred) void store.star(t.ticketId, !group.starred); }
-        else if (selTicket?.info) void store.star(selTicket.ticketId, !selTicket.info.favorite);
+        /* an item is not a ticket: it has no star */
+        if (group) { for (const t of selTickets) if (t.info && !t.item && t.info.favorite === group.starred) void store.star(t.ticketId, !group.starred); }
+        else if (selTicket?.info && !selTicket.item) void store.star(selTicket.ticketId, !selTicket.info.favorite);
       },
       /* one ticket leaves at once; several are asked about first */
+      openSource: () => { if (selTicket?.item?.url) window.open(selTicket.item.url, '_blank', 'noopener'); },
+      archive: () => { if (selTicket?.item) { void store.archiveItem(selTicket.ticketId); setSelection(null); } },
+      newItem: () => { if (selMachine?.kind === 'intake') setNewItemAt(selMachine.id); },
       giveBack: () => { if (group) setConfirmGive(true); else if (selTicket) { void store.giveBack(selTicket.ticketId); setSelection(null); } },
       resolve: (o) => { if (selTicket) void store.resolve(selTicket.ticketId, o); },
       release: () => { if (group) { for (const t of selTickets) if (t.phase === 'zone' && !t.released) void store.release(t.ticketId); } else if (selTicket) void store.release(selTicket.ticketId); },
@@ -722,7 +749,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -762,7 +789,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
@@ -798,7 +825,8 @@ function Floor() {
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
-          {peekFor.current && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} onPopOut={(executionId, title) => setRunLog({ executionId, title })} />}
+          {peekFor.current && selTicket?.item && <FactoryItemPeek ref={peekRef} key={peekFor.current} itemId={peekFor.current} onOpen={() => setOpenItem(peekFor.current)} onClose={() => setPeekOpen(false)} />}
+          {peekFor.current && !selTicket?.item && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} onPopOut={(executionId, title) => setRunLog({ executionId, title })} />}
           {runLog && <FloatingExecutionPanel key={runLog.executionId} executionId={runLog.executionId} title={runLog.title} onClose={() => setRunLog(null)} />}
           {halted && (
             <div className={cn('absolute inset-x-3 top-3 z-10 mx-auto flex max-w-2xl items-center gap-3 rounded-lg px-3 py-2 text-xs shadow-lg', tint('red'))} role="alert">
@@ -834,7 +862,7 @@ function Floor() {
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
-      {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} />}
+      {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} onNewItem={setNewItemAt} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
@@ -846,6 +874,9 @@ function Floor() {
         onCancel={() => setConfirmGive(false)}
         onConfirm={() => { setConfirmGive(false); for (const t of selTickets) void store.giveBack(t.ticketId); setSelection(null); }} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} onPick={transferTo} />
+      {openItem && <FactoryItemPopup itemId={openItem} onClose={() => setOpenItem(null)} />}
+      {newItemAt && <FactoryNewItem intakeId={newItemAt} onClose={() => setNewItemAt(null)} />}
+      {deskForm && <FactoryDeskForm desk={deskForm.desk} onClose={() => setDeskForm(undefined)} onOpenTicket={setOpenTicket} />}
     </div>
   );
 }

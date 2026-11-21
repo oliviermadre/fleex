@@ -19,6 +19,7 @@ function memoryStore(): FactoryStorePort {
     saveTicket: async (t) => { tickets.set(t.ticketId, structuredClone(t)); },
     removeTicket: async (id) => { tickets.delete(id); },
     listManagedTicketIds: async () => [...tickets.keys()],
+    listItems: async () => [], getItemByKey: async () => null, saveItem: async () => {}, countDropped: async () => ({}), saveItemRun: async () => {}, listItemRuns: async () => [],
     saveRun: async () => {},
     listRunsByTicket: async () => [], listRecentRuns: async () => [], listRunsSince: async () => [], countRunsSince: async () => 0,
     interruptRunningRuns: async () => [],

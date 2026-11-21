@@ -25,6 +25,15 @@ describe('FactoryFeed', () => {
     expect(f.seq).toBe(2);
   });
 
+  it('sends an item whole, as a ticket, and the intakes\' counts when one changes', () => {
+    const f = new FactoryFeed();
+    const item = ticket('i1', { machineId: 'in', phase: 'zone', item: { source: 'slack', author: 'Ana', excerpt: '', url: null, messages: 1, lastActivityAt: '', fields: { channel: '#ops' } } } as Partial<T>);
+    expect(f.diff(snap([item], { intakes: { in: { dropped: 0 } } }))).toMatchObject({ tickets: [{ ticketId: 'i1', item: { source: 'slack', fields: { channel: '#ops' } } }], intakes: { in: { dropped: 0 } } });
+    expect(f.diff(snap([item], { intakes: { in: { dropped: 0 } } }))).toBeNull();
+    /* an item dropped by a rule never reaches the floor: only the count says so */
+    expect(f.diff(snap([item], { intakes: { in: { dropped: 1 } } }))).toMatchObject({ tickets: [], removed: [], intakes: { in: { dropped: 1 } } });
+  });
+
   it('makes no patch when only the clock moved', () => {
     const f = new FactoryFeed();
     f.diff(snap([ticket('a')]));

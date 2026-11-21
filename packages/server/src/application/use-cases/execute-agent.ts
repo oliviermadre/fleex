@@ -2541,7 +2541,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   ): Promise<ComposedPrompt> {
     const composer = new PromptComposer((text) => this.resolveText(text));
 
-    composer.scaffold('# Routine run\n\nThis run is not attached to a ticket. Your objective is the brief below.');
+    composer.scaffold(`# ${subject?.heading?.trim() || 'Routine run'}\n\nThis run is not attached to a ticket. Your objective is the brief below.`);
     if (subject?.brief) {
       await composer.trackResolved(
         { kind: 'routine_brief', section: 'Brief', label: 'Routine brief' },

@@ -130,6 +130,11 @@ const TYPE_ICONS: Record<string, readonly string[]> = {
   ops: ['...XX.XX...', '..XooXooX..', '.XXooXooXX.', 'XowoooooooX', 'XoooXXXoooX', '.XXoX.XoXX.', 'XoooXXXoooX', 'XoooooooooX', '.XXooXooXX.', '..XooXooX..', '...XX.XX...'],
   lead: ['...........', '....XXX....', '...X...X...', 'XXXXXXXXXXX', 'XowoooooooX', 'XoooooooooX', 'XXXXXwXXXXX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
   think: ['...XXXXX...', '..XowoooX..', '.XowoooooX.', '.XoooooooX.', '.XoooooooX.', '..XoooooX..', '...XoooX...', '...XXXXX...', '...XgggX...', '...XXXXX...', '....XXX....'],
+  /* items: the mark of their source (see `../items.ts`), drawn as a type's object is, a solid shape in a one-pixel outline: Slack's four bars in a pinwheel, Gmail's envelope, GitHub's cat, a written sheet */
+  'src:slack': ['...XX......', '..XwwX.....', '..XwwXXXXX.', '..XwwXooooX', '..XwwXooooX', '.XXXX.XXXX.', 'XooooXwwX..', 'XooooXwwX..', '.XXXXXwwX..', '.....XwwX..', '......XX...'],
+  'src:gmail': ['...........', 'XXXXXXXXXXX', 'XwXoooooXoX', 'XooXoooXooX', 'XoooXoXoooX', 'XooooXooooX', 'XoooooooooX', 'XoooooooooX', 'XoooooooooX', 'XXXXXXXXXXX', '...........'],
+  'src:github': ['.X.......X.', 'XoX.....XoX', 'XooXXXXXooX', 'XowoooooooX', 'XoooooooooX', 'XooXoooXooX', 'XooXoooXooX', 'XoooooooooX', '.XoooooooX.', '..XoooooX..', '...XXXXX...'],
+  'src:manual': ['..XXXX.....', '.XwoooX....', '.XooooXX...', '.XooooXwX..', '.XoooooooX.', '.XoXXXXooX.', '.XoooooooX.', '.XoXXXXooX.', '.XoooooooX.', '.XoXXXoooX.', '..X...XXX..'],
 };
 /** A chevron pointing east, three pixels by five; three by six (it sits in the middle of a tile); four by seven, two thick. */
 const CHEVRON = ['X..', '.X.', '..X', '.X.', 'X..'];
@@ -336,7 +341,7 @@ export class PixelSkin extends FleexSkin {
     if (st.edit) return;
     const ctx = this.ctx;
     ctx.fillStyle = pal.light ? 'rgba(40,30,20,0.18)' : 'rgba(0,0,0,0.45)';
-    for (const m of st.layout.machines) if (m.kind === 'station') ctx.fillRect(m.x + 0.22, m.y + 0.3, m.w - 0.2, m.h - 0.2);
+    for (const m of st.layout.machines) if (m.kind === 'station' || m.kind === 'desk' || m.kind === 'intake') ctx.fillRect(m.x + 0.22, m.y + 0.3, m.w - 0.2, m.h - 0.2);
   }
 
   /** Flat, as pixel art is: no light from above. */
@@ -348,6 +353,8 @@ export class PixelSkin extends FleexSkin {
 
   /** A ticket is a crate: wood, a band in the colour of its type on top, a plank line, an outline. */
   protected override token(look: TokenLook, type: string, tint: string, px: number, py: number, T: number, alpha: number): boolean {
+    /* an item is its source's mark at any zoom: a crate would make it a ticket */
+    if (type.startsWith('src:') && TYPE_ICONS[type]) return this.typeIcon(TYPE_ICONS[type]!, look, tint, px, py, alpha);
     if (this.look.crisp && this.toLow) return TYPE_ICONS[type] ? this.typeIcon(TYPE_ICONS[type]!, look, tint, px, py, alpha) : this.crate(look, tint, px, py, T, alpha);
     const ctx = this.ctx, w = T * 0.86, h = T * 0.66, x = px - w / 2, y = py - h / 2, o = 1 / ART;
     ctx.globalAlpha = look === 'ghost' ? alpha * 0.8 : alpha;
@@ -882,7 +889,7 @@ export class PixelSkin extends FleexSkin {
       this.sign(i + 10.5, j + 10.5, col, call === 'failed' ? '!' : '?');
     } else if (!dragging && t.phase === 'aside') this.sign(i + 10.5, j + 10.5, pal.accent, 'pause');
     if (info && !dragging) {
-      if (T * z >= 34 || (st.numbers && T * z >= 13)) this.label(String(info.displayId), px, py + this.numberDy(T), T * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
+      if (!t.item && (T * z >= 34 || (st.numbers && T * z >= 13))) this.label(String(info.displayId), px, py + this.numberDy(T), T * 0.24, '#f4f4f5', { align: 'center', weight: 700, mono: true, plate: 'rgba(9,9,11,0.82)', min: 8 });
       const pip = PRIORITY_PIP[info.priority];
       if (pip) sprite(ctx, PIP, i - 2, j - 2, { k: this.ink, X: pip, w: mix(pip, '#ffffff', 0.5) });
       if (info.favorite) sprite(ctx, STAR_7, i + 7, j - 3, { k: this.ink, X: STAR, w: mix(STAR, '#ffffff', 0.6) });

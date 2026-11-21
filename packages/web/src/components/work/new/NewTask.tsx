@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import type { ImportPreview, SourceMatch } from '@fleex/shared';
+import type { ImportPreview, SourceMatch, Ticket } from '@fleex/shared';
 import { useWorkStore, type DraftSource, type WorkDraft } from '../../../stores/workStore';
+import { useNewTaskDraft } from './newTaskDraft';
 import { useRepositoryStore } from '../../../stores/repositoryStore';
 import { NewTaskEntry, type BrowseSource } from './NewTaskEntry';
 import { SourcePicker } from './SourcePicker';
@@ -19,11 +20,22 @@ import { NewTaskCompose } from './NewTaskCompose';
  *
  * The import never creates the ticket — it prefills the draft, and `Start`
  * (in COMPOSE) creates it by the normal path.
+ *
+ * Mounted elsewhere than the Work view (the Factory's desks): wrapped in
+ * `NewTaskDraftProvider` for a draft of its own, with `onCreated` (what to do
+ * with the new ticket) and `onOpenTicket` (an import that already has a ticket)
+ * instead of switching the Work view to the ticket.
  */
-export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) {
-  const draft = useWorkStore((s) => s.draft);
-  const updateDraft = useWorkStore((s) => s.updateDraft);
-  const resetDraft = useWorkStore((s) => s.resetDraft);
+export function NewTask({
+  enterStarts = true,
+  onCreated,
+  onOpenTicket,
+}: {
+  enterStarts?: boolean;
+  onCreated?: (ticket: Ticket) => void | Promise<void>;
+  onOpenTicket?: (ticketId: string) => void;
+} = {}) {
+  const { draft, update: updateDraft, reset: resetDraft } = useNewTaskDraft();
   const selectTicket = useWorkStore((s) => s.selectTicket);
   const pinTicket = useWorkStore((s) => s.pinTicket);
   const setView = useWorkStore((s) => s.setView);
@@ -36,12 +48,13 @@ export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) 
   const openTicket = useCallback(
     (ticketId: string) => {
       setResolving(null);
+      if (onOpenTicket) return onOpenTicket(ticketId);
       // Opened from outside the queue: pinned, whatever the queue filters.
       pinTicket(ticketId);
       selectTicket(ticketId);
       setView('task');
     },
-    [pinTicket, selectTicket, setView],
+    [pinTicket, selectTicket, setView, onOpenTicket],
   );
 
   const applyPreview = useCallback(
@@ -125,7 +138,7 @@ export function NewTask({ enterStarts = true }: { enterStarts?: boolean } = {}) 
   }
 
   if (draft.stage === 'compose') {
-    return <NewTaskCompose onStartOver={() => resetDraft()} enterStarts={enterStarts} />;
+    return <NewTaskCompose onStartOver={() => resetDraft()} enterStarts={enterStarts} onCreated={onCreated} />;
   }
 
   return screen;

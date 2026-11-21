@@ -72,6 +72,8 @@ export interface ViewState {
   halted?: boolean;
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
   exits?: Readonly<Record<string, number>> | null;
+  /** What each intake dropped over the last 24 hours, by its id (the snapshot's `intakes`). */
+  intakes?: Readonly<Record<string, { dropped: number }>> | null;
   exitDays?: number;
 }
 /** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */
