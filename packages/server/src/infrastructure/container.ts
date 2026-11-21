@@ -1,4 +1,5 @@
 import { createFactoryModule } from '../factory/factory.module.js';
+import { GogMailSource } from './google/gog-mail.source.js';
 import { hostname } from 'node:os';
 import { existsSync, realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -478,6 +479,8 @@ export async function createContainer() {
   const factory = createFactoryModule({
     store: factoryStore, config, ticketStore: ticketStore_, skillStore, personaStore: personaStore_, agentEventStore: agentEventStore_,
     executeAgent, runPanel, applyTicketMutation, submitDeliverable, postComment, eventBus, logger,
+    /* the Gmail intakes read the mailbox through gogcli, as the agenda reads the calendar */
+    mail: new GogMailSource({ logger }),
     /* script stations: the host's shell, and where a ticket's workspace and worktrees are */
     host: {
       shell: (command, options) => shellExecFn(command, { cwd: options.cwd, timeout: options.timeoutMs }),

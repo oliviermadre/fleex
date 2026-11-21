@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useTicketStore } from '../stores/ticketStore';
 import { toast } from '../lib/toast';
-import { factoryApi } from './factoryApi';
+import { factoryApi, type PullResult } from './factoryApi';
 import type { FactoryLayout, FactoryPatch, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 interface FactoryState {
@@ -53,7 +53,9 @@ interface FactoryState {
   /** Change what the Factory keeps of an item (title, author, link, text, tags, its source's fields). */
   editItem: (itemId: string, patch: Parameters<typeof factoryApi.editItem>[1]) => Promise<void>;
   /** Make an item by hand, as a source would send it: what became of it, or null when the server refused it (it said why). */
-  ingest: (item: Parameters<typeof factoryApi.ingest>[0]) => Promise<'new' | 'updated' | 'back' | 'dropped' | null>;
+  ingest: (item: Parameters<typeof factoryApi.ingest>[0]) => Promise<'new' | 'updated' | 'back' | 'dropped' | 'moved' | 'seen' | null>;
+  /** Pull a Gmail intake now; null when the request itself failed. */
+  pullIntake: (machineId: string) => Promise<PullResult | null>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
   star: (ticketId: string, on: boolean) => Promise<void>;
 }
@@ -180,6 +182,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     editItem: (itemId, patch) => act(() => factoryApi.editItem(itemId, patch)),
     /* its answer carries the floor, applied as any action's is (a patch that crossed it is not undone) */
     ingest: async (item) => { try { const r = await factoryApi.ingest(item); apply(r.snapshot); return r.status; } catch { return null; } },
+    pullIntake: async (machineId) => { try { const { snapshot, ...r } = await factoryApi.pullIntake(machineId); apply(snapshot); return r; } catch { return null; } },
     star: async (ticketId, on) => {
       try { await useTicketStore.getState().updateTicket(ticketId, { favorite: on }); } catch { toast.error('Could not change the favourite'); return; }
       await act(() => factoryApi.refreshTicket(ticketId));

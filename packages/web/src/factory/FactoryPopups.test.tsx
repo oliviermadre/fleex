@@ -15,7 +15,8 @@ import type { FactoryView } from './renderer';
 import type { FactorySnapshot, FactoryStats, FactoryTicket, MachineSpec, MachineStats, TicketPhase } from './types';
 
 vi.mock('../components/agents/ModelSelect', () => ({ ModelSelect: ({ value, ariaLabel }: { value: string; ariaLabel: string }) => <output aria-label={ariaLabel}>{value || 'own'}</output> }));
-vi.mock('./factoryApi', () => ({ factoryApi: { machineRuns: vi.fn(async () => [{ id: 'r1', ticketId: 't1', machineId: 'dev', machineName: 'Dev', executor: 'agent', status: 'failed', outcome: null, executionId: null, error: 'boom', startedAt: '2026-11-15T09:00:00.000Z', finishedAt: '2026-11-15T09:05:00.000Z' }]) } }));
+const mailStatus = vi.fn(async () => ({ provider: 'gogcli', installed: true, version: 'v0.47.1', connected: false, account: null, error: 'no token for gmail', setupUrl: 'https://gogcli.sh/quickstart.html' }));
+vi.mock('./factoryApi', () => ({ factoryApi: { mailStatus: (...a: unknown[]) => mailStatus(...(a as [])), machineRuns: vi.fn(async () => [{ id: 'r1', ticketId: 't1', machineId: 'dev', machineName: 'Dev', executor: 'agent', status: 'failed', outcome: null, executionId: null, error: 'boom', startedAt: '2026-11-15T09:00:00.000Z', finishedAt: '2026-11-15T09:05:00.000Z' }]) } }));
 
 const dev: MachineSpec = { id: 'dev', kind: 'station', x: 1, y: 1, w: 5, h: 4, name: 'Dev', exec: 'agent', ref: 'builder', mode: 'edit', model: 'some-model', outcomes: ['done', 'blocked'], cap: 2 };
 const gate: MachineSpec = { id: 'qa', kind: 'station', x: 8, y: 1, w: 5, h: 4, name: 'Check spec', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
@@ -163,6 +164,34 @@ describe('<FactoryMachinePopup/>', () => {
     expect(screen.queryByLabelText('Title')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'New item…' }));
     expect(onNewItem).toHaveBeenCalledWith('in');
+  });
+
+  it('sets up a Gmail intake: gogcli required, its search and interval instead of rules, its last pull, and the order its peers are served in', async () => {
+    const urgent: MachineSpec = { id: 'urgent', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: 'Urgent', source: 'gmail', priority: 1, query: 'label:urgent' };
+    const internal: MachineSpec = { id: 'internal', kind: 'intake', x: 20, y: 5, w: 3, h: 2, name: 'Internal', source: 'gmail', priority: 2, query: 'from:@acme.com', everySec: 900 };
+    seed([], [dev, urgent, internal]);
+    const setLayout = vi.fn(async () => {}), pullIntake = vi.fn(async () => ({ pulled: 3, new: 2, updated: 1, moved: 0, error: null }));
+    const snap = useFactoryStore.getState().snapshot!;
+    useFactoryStore.setState({ setLayout, pullIntake, snapshot: { ...snap, intakes: { internal: { dropped: 0, pulledAt: '2026-11-15T09:55:00.000Z', pullError: null } } } } as never);
+    const on = open('internal'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(await screen.findByTestId('mail-setup')).toBeTruthy();
+    expect(popup.textContent).toContain('gogcli required');
+    expect(popup.textContent).toContain('--services gmail --gmail-scope readonly');
+    expect(popup.textContent).toContain('no token for gmail');
+    /* no rules: the search is the filter */
+    expect(screen.queryByRole('button', { name: 'Add a rule' })).toBeNull();
+    expect((screen.getByLabelText('Gmail search') as HTMLInputElement).value).toBe('from:@acme.com');
+    expect((screen.getByLabelText('Pulls every') as HTMLSelectElement).value).toBe('900');
+    expect(popup.textContent).toContain('Last pull 5m ago');
+    fireEvent.change(screen.getByLabelText('Pulls every'), { target: { value: '60' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('internal', { everySec: 60 });
+    expect(popup.textContent).toContain('Served 2nd of 2 Gmail intakes');
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier' }));
+    expect(setLayout).toHaveBeenCalledTimes(1);
+    const saved = (setLayout.mock.calls[0] as unknown as [{ machines: MachineSpec[] }])[0].machines;
+    expect(saved.filter((m) => m.kind === 'intake').map((m) => [m.id, (m as { priority?: number }).priority])).toEqual([['urgent', 2], ['internal', 1]]);
+    fireEvent.click(screen.getByRole('button', { name: 'Pull now' }));
+    expect(pullIntake).toHaveBeenCalledWith('internal');
   });
 
   it('an item opens in a popup: what every item has, edited; its source\'s fields; the raw item; what stations said', () => {

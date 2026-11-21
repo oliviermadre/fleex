@@ -137,6 +137,36 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   source, messages and place read only; its source's part, its fields edited as they suit (each source will have
   its own part there as its connector comes); the item as the Factory holds it, as JSON; what stations said.
 
+### Gmail: a pulled intake
+
+Gmail is the first source with a connector. It is **pulled**: Fleex asks it, rather than it telling Fleex
+(`PULLED_SOURCES` in `item-sources.ts`). The Factory knows nothing of the tool that reads the mailbox: it asks a
+`MailSourcePort` (`mail-source.port.ts`: `status()`, `search(query, since)`), and the one adapter today is gogcli
+(`infrastructure/google/gog-mail.source.ts`), as for the agenda: installed and authorized on the server host
+(`gog auth add you@example.com --services gmail --gmail-scope readonly`), run read-only, `FLEEX_GOG_ACCOUNT` and
+`FLEEX_GOG_BIN` as for the agenda. Another tool would be another adapter; nothing else would change.
+
+- A Gmail intake has **a query** (Gmail's search syntax) and **an interval** (`everySec`, five minutes unless said,
+  one minute at least), and **no rules**: the query is the filter. Its popup says gogcli is required, with the setup
+  steps until gog can read Gmail (`GET /api/factory/mail/status`), then its version and account.
+- `IntakePuller` (`intake-puller.ts`, every 15 s) pulls each intake that is due: one `gog gmail messages search` with
+  `(<query>) after:<epoch>`, from the intake's cursor minus ten minutes (for what Gmail indexed late), every page,
+  each message's text, recipients and attachments. **The first time it sees an intake it only sets the cursor**: what
+  was in the mailbox before stays there. Each message is ingested as an item of its thread (key: the thread id),
+  naming the intake that saw it; its fields are To, Cc, labels, attachment. The cursor and the last error are kept in
+  `factory_intake_pulls` (migration 050), not in the layout: a failed pull keeps its cursor, says why on the intake
+  (`PULL FAILED` on the floor, the reason in its popup) and waits its interval. **Pull now** in the popup
+  (`POST /api/factory/intakes/:id/pull`) does not wait.
+- `ItemInput.at` is when the message came. A message no later than the last one known of its conversation is
+  nothing new: a pull sees the same message twice, and an archived item stays archived until a new one comes. Without
+  `at` (by hand, `POST /api/factory/items`), every entry is new, as before.
+- **One mail is one item**, whichever intakes see it. The intakes of a source are **served in order** (`priority`,
+  kept dense 1..n per source by the save; Earlier / Later in the popup). An item that waits on the dock of an intake
+  served later is taken over by one served earlier that sees it too: the quiet delay is when that is settled. Once an
+  arm took it out, it stays on its lane. An archived item that comes back goes to the intake it came in by, or to the
+  one that saw it when that one is served first. A judgement (is it urgent?) is not a query: one intake, then a
+  triage station whose outcomes lead to the lanes.
+
 
 
 A station that runs something (an agent, a skill, a panel) works on as many tickets as it has places (`cap`). Nothing
@@ -585,9 +615,10 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`) and
-`048_factory_item_runs` (`factory_item_runs`); `049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
+Everything lives here, in `packages/web/src/factory/`, and in six tables created by migrations `045_factory`
+(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`),
+`048_factory_item_runs` (`factory_item_runs`) and `050_factory_intake_pulls` (`factory_intake_pulls`);
+`049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -615,6 +646,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
   changed in Fleex (`ticket.updated`, `moved`, `blocked`, `favorited`, `deleted` and their opposites) is re-read at once
   by its event; the sweep is the safety net, mainly for archiving;
 - each station run: its row in `factory_runs`, start and end, beside the usual execution log;
+- each pull of a Gmail intake (at its interval, five minutes unless said): a gog call, then the items it touched and
+  one upsert in `factory_intake_pulls`;
 - the page, while open: the stats every 30 s (cached 20 s on the server: runs of the period, then the executions of
   the tickets that ran, 8 at a time), a machine popup's runs every 4 s, a ticket's thread every 3 s.
 
@@ -622,10 +655,11 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` to `049_factory_item_fields` (046, an index on `factory_runs`, among them) |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `050_factory_intake_pulls` (046, an index on `factory_runs`, among them) |
+| `infrastructure/google/gog-mail.source.ts`, `google-calendar.client.ts` | the gogcli adapter of `MailSourcePort`; the agenda's client shares its gog runner and error mapping with it (`defaultGogRunner`, `gogFailure`, `parseJson`) |
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
-| `infrastructure/container.ts` | builds the module, exposes `container.factory` |
+| `infrastructure/container.ts` | builds the module (with the gogcli mail source), exposes `container.factory` |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
@@ -651,8 +685,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 049 to 045), or drop the five tables.
-2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 050 to 045), or drop the six tables.
+2. Delete this folder, `packages/web/src/factory/`, `infrastructure/google/gog-mail.source.ts`, the migration files and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step
    execution does not; it can stay, since it changes nothing while unset.

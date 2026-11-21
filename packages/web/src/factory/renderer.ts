@@ -11,7 +11,7 @@ import { inRect, machineParts } from './machineArt';
 import { FloorScene, isBox } from './scene';
 import { FleexSkin } from './skins/fleex';
 import { order, type Piece, type Skin } from './skins/skin';
-import type { ArmSpec, FactoryLayout, FactoryTicket, MachineSpec, StationSpec } from './types';
+import type { ArmSpec, FactoryLayout, FactoryTicket, IntakeState, MachineSpec, StationSpec } from './types';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else. */
 export { TYPE_COLORS } from './skins/fleex';
@@ -73,7 +73,7 @@ export interface ViewState {
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
   exits?: Readonly<Record<string, number>> | null;
   /** What each intake dropped over the last 24 hours, by its id (the snapshot's `intakes`). */
-  intakes?: Readonly<Record<string, { dropped: number }>> | null;
+  intakes?: Readonly<Record<string, IntakeState>> | null;
   exitDays?: number;
 }
 /** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */

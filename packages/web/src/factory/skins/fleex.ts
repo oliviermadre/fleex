@@ -1087,7 +1087,8 @@ export class FleexSkin implements Skin {
     this.label(m.name || (m.kind === 'intake' ? SOURCE_LABEL[m.source] : 'Desk'), bx + b + 0.16, by + 0.42, 0.28, pal.text, { weight: 650, min: 9, max: 15, fit: w - b - 0.6 });
     if (intake && z >= 10) {
       this.label(`HELD ${v.waiting}`, x + 0.26, y + h - 0.48, 0.16, v.waiting ? pal.warn : pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
-      this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      if (v.pullFailed === null) this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      else if (v.pullFailed) this.label('PULL FAILED', x + 0.26, y + h - 0.26, 0.16, pal.danger, { mono: true, weight: 700, min: 7, max: 10 });
       /* on a line of its own, under the badge: the counters and what the dock holds share the bottom */
       if (z >= 14 && v.noArm) this.label('no arm takes from it', x + 0.26, y + 1.04, 0.14, pal.danger, { mono: true });
     } else if (!intake && z >= 14) {

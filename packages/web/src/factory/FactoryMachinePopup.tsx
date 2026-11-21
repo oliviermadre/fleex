@@ -28,7 +28,8 @@ import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
 import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
-import { COMMON_FIELDS, opsFor, SOURCE_FIELDS, type SourceField } from './itemSources';
+import { COMMON_FIELDS, opsFor, PULLED_SOURCES, SOURCE_FIELDS, type SourceField } from './itemSources';
+import { FactoryMailSetup, useMailStatus } from './FactoryMailSetup';
 import { toast } from '../lib/toast';
 import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
@@ -256,28 +257,104 @@ function RuleList({ id, rules, fields, onChange }: { id: string; rules: ItemRule
  * text) is too broad to filter on. A drop rule drops what it matches; keep rules let in only what one of them matches;
  * what is dropped never reaches the floor. Making an item by hand has its popup of its own (New item).
  */
+const EVERY = [60, 300, 900, 1800, 3600];
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
+/**
+ * The order the intakes of a source are served in, when several see the same item: this one's place, and a move one
+ * place earlier or later (the two swap, in one layout save). An item waiting on the dock of an intake served later is
+ * taken over by one served first that sees it too; once an arm took it out, it stays on its lane.
+ */
+function IntakeOrder({ m, onSelect }: { m: IntakeSpec; onSelect: (machineId: string) => void }) {
+  const layout = useFactoryStore((s) => s.layout);
+  const peers = (layout?.machines ?? []).filter((q): q is IntakeSpec => q.kind === 'intake' && q.source === m.source).sort((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  if (peers.length < 2) return null;
+  const i = peers.findIndex((q) => q.id === m.id), source = SOURCE_LABEL[m.source];
+  const swap = (j: number) => {
+    if (!layout || j < 0 || j >= peers.length) return;
+    const a = peers[i]!, b = peers[j]!, pa = a.priority ?? i + 1, pb = b.priority ?? j + 1;
+    void useFactoryStore.getState().setLayout({ ...layout, machines: layout.machines.map((q) => (q.id === a.id ? { ...q, priority: pb } : q.id === b.id ? { ...q, priority: pa } : q)) as MachineSpec[] });
+  };
+  return (
+    <>
+      <Head right={<span className="flex gap-1"><Button size="sm" variant="secondary" disabled={i === 0} onClick={() => swap(i - 1)} title="Served one place earlier">Earlier</Button><Button size="sm" variant="secondary" disabled={i === peers.length - 1} onClick={() => swap(i + 1)} title="Served one place later">Later</Button></span>}>
+        Served {ordinal(i + 1)} of {peers.length} {source} intakes
+      </Head>
+      <Hint>One {source} conversation is one item. When several intakes see it, the one served first keeps it: while it waits on the dock of one served later, one served earlier takes it over. Once an arm took it out, it stays on its lane.</Hint>
+      <ol className="flex flex-col gap-0.5 text-xs">
+        {peers.map((q, k) => (
+          <li key={q.id}>
+            <button type="button" disabled={q.id === m.id} onClick={() => onSelect(q.id)} className={cn('text-left', q.id === m.id ? 'font-semibold text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)] hover:underline')}>
+              {k + 1}. {q.name || `${source} intake`}{q.query ? <span className="font-mono text-[var(--theme-text-muted)]"> · {q.query}</span> : null}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+/** A pulled intake's own part (Gmail): gogcli, its search, how often it is run, its last pull, and a pull now. */
+function PulledSettings({ m, onPatch }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void }) {
+  const pulled = PULLED_SOURCES[m.source]!, state = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]), now = useFactoryStore((s) => s.snapshot?.serverTime);
+  const mail = useMailStatus(), [pulling, setPulling] = useState(false), every = m.everySec ?? pulled.everySec;
+  const pull = async () => {
+    setPulling(true);
+    try {
+      const r = await useFactoryStore.getState().pullIntake(m.id);
+      if (!r) return;
+      if (r.error) toast.error('The pull failed', { detail: r.error });
+      else if (!state?.pulledAt) toast.info('Pulls from now on: what was in the mailbox before stays there');
+      else toast.success(r.pulled ? `${r.pulled} message${r.pulled === 1 ? '' : 's'}: ${r.new} new, ${r.updated} updated${r.moved ? `, ${r.moved} taken over` : ''}` : 'Nothing new');
+    } finally { setPulling(false); }
+  };
+  const ago = state?.pulledAt ? span(Math.max(0, Date.parse(now ?? new Date().toISOString()) - Date.parse(state.pulledAt))) : null;
+  return (
+    <>
+      <FactoryMailSetup mail={mail} />
+      <div className="flex flex-col gap-1">
+        <CommitInput id="f-intake-query" label={pulled.query} value={m.query ?? ''} placeholder="everything that comes in" onCommit={(v) => onPatch({ query: v.trim().slice(0, 1000) } as Partial<MachineSpec>)} />
+        <Hint>{pulled.hint}. It is the filter: only what it finds comes in. Empty: every message.</Hint>
+      </div>
+      <Select id="f-intake-every" label="Pulls every" value={String(every)} onChange={(e) => onPatch({ everySec: Number(e.target.value) } as Partial<MachineSpec>)}
+        options={[...new Set([...EVERY, every])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className={state?.pullError ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-muted)]'} title={state?.pullError ?? undefined}>
+          {state?.pullError ? `Last pull failed: ${state.pullError}` : ago ? `Last pull ${ago} ago` : 'Not pulled yet: it starts from the first pull'}
+        </span>
+        <Button size="sm" disabled={pulling} onClick={() => void pull()} title="Ask the mailbox now, without waiting for the interval">{pulling ? 'Pulling…' : 'Pull now'}</Button>
+      </div>
+    </>
+  );
+}
+
 function IntakeSettings({ m, onPatch, takers, onSelect, onNewItem }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void; onNewItem?: (intakeId: string) => void }) {
   const quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
-  const own = SOURCE_FIELDS[m.source], source = SOURCE_LABEL[m.source], ownKeys = new Set(own.map((f) => f.key));
+  const own = SOURCE_FIELDS[m.source], source = SOURCE_LABEL[m.source], ownKeys = new Set(own.map((f) => f.key)), pulled = !!PULLED_SOURCES[m.source];
   const rules = (m.rules ?? []).filter((r) => ownKeys.has(r.field));
   return (
     <>
-      <Hint>Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first that lets it in. The sources are not connected yet: items come in through POST /api/factory/items, or by hand (New item).</Hint>
-      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
+      <Hint>{pulled
+        ? `Where ${source} items come in: Fleex asks ${source} for what came since its last pull, with the search below. An item waits here while its conversation moves, and leaves once it has been quiet for the delay below: an arm then takes it.`
+        : 'Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first served that lets it in. This source is not connected yet: items come in through POST /api/factory/items, or by hand (New item).'}</Hint>
+      <Head right={pulled ? undefined : <span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
       <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={source} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
       <div className="grid grid-cols-2 gap-2">
-        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: [], drop: undefined } as Partial<MachineSpec>)}
-          options={ITEM_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))} />
+        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: [], drop: undefined, query: undefined, everySec: undefined, priority: undefined } as Partial<MachineSpec>)}
+          options={ITEM_SOURCES.map((s) => ({ value: s, label: PULLED_SOURCES[s] ? `${SOURCE_LABEL[s]} (gogcli)` : SOURCE_LABEL[s] }))} />
         <Select id="f-intake-quiet" label="Leaves once quiet for" value={String(quiet)} onChange={(e) => onPatch({ quietSec: Number(e.target.value) } as Partial<MachineSpec>)}
           options={[...new Set([...QUIET, quiet])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
       </div>
+      <IntakeOrder m={m} onSelect={onSelect} />
       <Head>{source} only</Head>
-      {own.length === 0
-        ? <Hint>An item made by hand has nothing more than what every item has: everything comes in.</Hint>
-        : <>
-            <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. No rule: everything comes in. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
-            <RuleList id="f-own" rules={rules} fields={own} onChange={(next) => onPatch({ rules: next, drop: undefined } as Partial<MachineSpec>)} />
-          </>}
+      {pulled
+        ? <PulledSettings key={m.id} m={m} onPatch={onPatch} />
+        : own.length === 0
+          ? <Hint>An item made by hand has nothing more than what every item has: everything comes in.</Hint>
+          : <>
+              <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. No rule: everything comes in. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
+              <RuleList id="f-own" rules={rules} fields={own} onChange={(next) => onPatch({ rules: next, drop: undefined } as Partial<MachineSpec>)} />
+            </>}
       <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
       {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: items will pile up. Put an arm against one of its sides.</div>}
       {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
