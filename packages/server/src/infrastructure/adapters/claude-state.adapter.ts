@@ -10,6 +10,12 @@ import { encodePath } from '../../domain/services/claude-path-encoding.js';
 
 /** CWD never changes for a running PID — cache it. */
 const cwdCache = new Map<number, string>();
+/**
+ * PIDs whose CWD could not be read (a process we do not own, one that exited): not asked again before this long.
+ * The dashboard asks every second, and each ask spawns an `lsof`.
+ */
+const cwdFailedAt = new Map<number, number>();
+const CWD_RETRY_MS = 60_000;
 
 export class ClaudeStateAdapter implements ClaudeStatePort {
   constructor(
@@ -37,6 +43,11 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
         if (isNaN(pid) || isNaN(cpuPercent)) continue;
         claudePids.push({ pid, cpuPercent });
       }
+
+      /* a PID that is gone may come back as another process: forget what was learnt about it */
+      const live = new Set(claudePids.map((p) => p.pid));
+      for (const pid of cwdCache.keys()) if (!live.has(pid)) cwdCache.delete(pid);
+      for (const pid of cwdFailedAt.keys()) if (!live.has(pid)) cwdFailedAt.delete(pid);
 
       const results: ClaudeProcessInfo[] = [];
       for (const { pid, cpuPercent } of claudePids) {
@@ -206,6 +217,8 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
   private async getCwd(pid: number): Promise<string | null> {
     const cached = cwdCache.get(pid);
     if (cached) return cached;
+    const failed = cwdFailedAt.get(pid);
+    if (failed !== undefined && Date.now() - failed < CWD_RETRY_MS) return null;
 
     try {
       const { stdout } = await this.shellExecFn(`lsof -p ${pid} -Fn 2>/dev/null | grep '^n' | head -1`, {
@@ -220,6 +233,7 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
     } catch {
       // lsof may fail for processes we don't own
     }
+    cwdFailedAt.set(pid, Date.now());
     return null;
   }
 }

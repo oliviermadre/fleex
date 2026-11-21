@@ -88,7 +88,7 @@ Work view. It was picked on `docs/factory/intake.html` (I1 for its look, N3 for 
 ## Items, and the intakes they come in by
 
 An **item** is a conversation that came in from a source (Slack, Gmail, GitHub, or made by hand) and may ask
-something of the owner. It is not a ticket: it has its own table, `factory_items` (migration 046), one row per
+something of the owner. It is not a ticket: it has its own table, `factory_items` (migration 047), one row per
 conversation, keyed by its source and its key there (`source_key`), and becomes a ticket only when a machine makes it
 one (not built yet). Its content is not copied: a title, who it is from, a few lines (`excerpt`) and a link back.
 
@@ -103,7 +103,7 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   author, title, messages, link, tags, the lines it came with, then what stations said about it before), under the
   heading "Factory item from <source>" (`RunSubject.heading`). The station's prompt and outcomes work as for a ticket:
   the item leaves by the outcome the agent names. An item has no thread, so each visit is kept in
-  `factory_item_runs` (migration 047) with the agent's reply and the deliverable it produced (saved with no ticket, so
+  `factory_item_runs` (migration 048) with the agent's reply and the deliverable it produced (saved with no ticket, so
   it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
   the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
   visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
@@ -582,8 +582,8 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 ## What it touches
 
 Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`), `046_factory_items` (`factory_items`) and
-`047_factory_item_runs` (`factory_item_runs`); `048_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
+(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`) and
+`048_factory_item_runs` (`factory_item_runs`); `049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -618,7 +618,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` to `048_factory_item_fields` |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `049_factory_item_fields` (046, an index on `factory_runs`, among them) |
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module, exposes `container.factory` |
@@ -647,7 +647,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 048 to 045), or drop the five tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 049 to 045), or drop the five tables.
 2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step

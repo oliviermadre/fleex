@@ -265,12 +265,10 @@ function IntakeSettings({ m, onPatch, takers, onSelect }: { m: IntakeSpec; onPat
   const save = (rules: ItemRule[]) => onPatch({ rules, drop: undefined } as Partial<MachineSpec>);
   const [test, setTest] = useState<{ title: string; author: string; excerpt: string; fields: ItemFields }>({ title: '', author: '', excerpt: '', fields: {} });
   const make = async () => {
-    try {
-      const r = await factoryApi.ingest({ source: m.source, key: `manual-${Date.now().toString(36)}`, title: test.title, author: test.author, excerpt: test.excerpt, fields: test.fields });
-      useFactoryStore.setState({ snapshot: r.snapshot });
-      if (r.status === 'dropped') toast.info(`Dropped: no ${source} intake lets it in`); else toast.success('Item made: it waits in its intake until it has been quiet long enough');
-      setTest({ title: '', author: '', excerpt: '', fields: {} });
-    } catch { /* the API helper raised a toast */ }
+    const status = await useFactoryStore.getState().ingest({ source: m.source, key: `manual-${Date.now().toString(36)}`, title: test.title, author: test.author, excerpt: test.excerpt, fields: test.fields });
+    if (!status) return;                                  // refused: the API helper said why
+    if (status === 'dropped') toast.info(`Dropped: no ${source} intake lets it in`); else toast.success('Item made: it waits in its intake until it has been quiet long enough');
+    setTest({ title: '', author: '', excerpt: '', fields: {} });
   };
   const setField = (k: string, v: string | string[] | boolean | undefined) => setTest((t) => { const fields = { ...t.fields }; if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete fields[k]; else fields[k] = v; return { ...t, fields }; });
   return (

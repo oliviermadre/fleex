@@ -28,10 +28,10 @@ export function factoryRoutes(factory: FactoryModule | null) {
         if (err instanceof FactoryError) return reply.code(400).send({ error: 'FACTORY_REFUSED', message: err.message });
         throw err;
       }
-      return f.engine.snapshot();
+      return f.state();
     };
 
-    app.get('/api/factory/state', async () => (await ready()).engine.snapshot());
+    app.get('/api/factory/state', async () => (await ready()).state());
     /** Ids only, for the "managed by the Factory" banner on a ticket; empty rather than 403 when off. */
     app.get('/api/factory/managed', async () => {
       if (!factory.enabled()) return { ticketIds: [] };
@@ -39,7 +39,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
       return { ticketIds: [...factory.engine.managedIds()] };
     });
 
-    app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.engine.snapshot(); });
+    app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.state(); });
     app.put<{ Body: { layout: FactoryLayout } }>('/api/factory/layout', (request, reply) => guard(reply, (f) => f.engine.setLayout(request.body?.layout)));
     app.post<{ Body: { on?: boolean } }>('/api/factory/halt', (request, reply) => guard(reply, (f) => f.engine.setHalted(request.body?.on !== false)));
     app.put<{ Body: Partial<FactorySettings> }>('/api/factory/settings', (request, reply) => guard(reply, (f) => f.engine.setSettings(request.body ?? {})));
@@ -64,7 +64,8 @@ export function factoryRoutes(factory: FactoryModule | null) {
      */
     app.post<{ Body: ItemInput }>('/api/factory/items', async (request, reply) => {
       const f = await ready();
-      try { return { ...(await f.engine.ingest(request.body)), snapshot: f.engine.snapshot() }; } catch (err) {
+      /* with the live feed's position, as every other answer that carries the floor */
+      try { return { ...(await f.engine.ingest(request.body)), snapshot: f.state() }; } catch (err) {
         if (err instanceof FactoryError) return reply.code(400).send({ error: 'FACTORY_REFUSED', message: err.message });
         throw err;
       }
@@ -81,8 +82,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
     /** The latest runs of the floor, or of one machine with `machineId`. */
     app.get<{ Querystring: { limit?: string; machineId?: string } }>('/api/factory/runs', async (request) => {
       const f = await ready(), limit = Math.max(1, Math.min(200, Number(request.query.limit) || 50)), machineId = request.query.machineId;
-      const rows = await f.store.listRecentRuns(f.engine.snapshot().floor.id, machineId ? 2000 : limit);
-      return machineId ? rows.filter((r) => r.machineId === machineId).slice(0, limit) : rows;
+      return f.store.listRecentRuns(f.engine.snapshot().floor.id, limit, machineId || undefined);
     });
     /** Runs, failures, time and cost per machine over the last `days` days (7 by default, 90 at most). */
     app.get<{ Querystring: { days?: string } }>('/api/factory/stats', async (request) => (await ready()).stats(Number(request.query.days) || 7));

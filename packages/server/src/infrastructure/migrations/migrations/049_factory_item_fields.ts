@@ -6,7 +6,7 @@ import type { Migration } from '../types.js';
  * `factory/item-sources.ts`). A column added to `factory_items`, which already has its RLS policy.
  */
 const migration: Migration = {
-  name: '048_factory_item_fields',
+  name: '049_factory_item_fields',
 
   async up(ctx) {
     const json = ctx.adapter === 'sqlite' ? 'TEXT' : 'JSONB';

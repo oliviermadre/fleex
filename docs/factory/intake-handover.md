@@ -17,14 +17,14 @@ the previous session's opinion and can be overturned.
 - **Done: the Desk** (step 2). See "Desks" in `packages/server/src/factory/README.md`. The whole new-task flow is
   mounted on it, import from a link or a source included.
 - **Done: items and intakes** (steps 1 and 3 of the plan below, and the intake of step 7 without its source). Items
-  have their own table (046) and travel the floor; an intake holds them for the quiet delay, drops by rule, counts;
+  have their own table (047) and travel the floor; an intake holds them for the quiet delay, drops by rule, counts;
   items are drawn in relief from their source's mark. See "Items, and the intakes they come in by" in the README.
   **The plan's step 1 changed**: `factory_tickets` and `factory_runs` were not touched; an item keeps its place in
   its own row, and run rows stay for tickets only.
 - **Done: a station on an item** (step 5): the item in words is the run's brief, the visits and replies are kept in
-  `factory_item_runs` (047).
+  `factory_item_runs` (048).
 - **Done: intake settings in two parts** (every source, then its source's own fields), keep-only rules, several
-  intakes per source. Stopped before the Slack connector, as asked: it will fill Slack's `fields` (channel, kind,
+  intakes per source (`fields`, 049). Stopped before the Slack connector, as asked: it will fill Slack's `fields` (channel, kind,
   bot) and call `POST /api/factory/items`.
 - **Next**: the Slack connector, Triage (step 4), Make a ticket (6), then the sources' connectors, each calling
   `POST /api/factory/items` (Slack first: polling `conversations.history` with the user token, or the events API).

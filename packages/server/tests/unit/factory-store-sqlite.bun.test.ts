@@ -11,8 +11,8 @@ import { SqliteConnection } from '../../src/infrastructure/adapters/sqlite/conne
 import { SqliteFactoryStore } from '../../src/factory/sqlite-factory-store.js';
 import { runPendingMigrations } from '../../src/infrastructure/migrations/run-migrations.js';
 import factoryMigration from '../../src/infrastructure/migrations/migrations/045_factory.js';
-import itemsMigration from '../../src/infrastructure/migrations/migrations/046_factory_items.js';
-import itemRunsMigration from '../../src/infrastructure/migrations/migrations/047_factory_item_runs.js';
+import itemsMigration from '../../src/infrastructure/migrations/migrations/047_factory_items.js';
+import itemRunsMigration from '../../src/infrastructure/migrations/migrations/048_factory_item_runs.js';
 import { DEFAULT_SETTINGS, type FactoryItemRow, type FactoryRunRow, type FactoryTicketRow } from '../../src/factory/types.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -81,6 +81,15 @@ describe('SqliteFactoryStore', () => {
     const runs = await store.listRunsByTicket('t-1');
     expect(runs.map((r) => [r.id, r.status])).toEqual([['r3', 'completed'], ['r1', 'interrupted'], ['r2', 'needs_review']]);
     expect((await store.listRecentRuns('default', 1))[0]?.id).toMatch(/r[12]/);
+  });
+
+  it("lists one machine's latest runs, newest first, in SQL", async () => {
+    await store.saveRun(runRow('a1', { machineId: 'm-a', startedAt: '2026-11-15T08:00:00.000Z' }));
+    await store.saveRun(runRow('b1', { machineId: 'm-b', startedAt: '2026-11-15T09:00:00.000Z' }));
+    await store.saveRun(runRow('a2', { machineId: 'm-a', startedAt: '2026-11-15T10:00:00.000Z' }));
+    expect((await store.listRecentRuns('default', 10, 'm-a')).map((r) => r.id)).toEqual(['a2', 'a1']);
+    expect((await store.listRecentRuns('default', 1, 'm-a')).map((r) => r.id)).toEqual(['a2']);
+    expect((await store.listRecentRuns('default', 10)).map((r) => r.id)).toEqual(['a2', 'b1', 'a1']);
   });
 
   it('lists what started or ended in a period, oldest first, for the stats', async () => {

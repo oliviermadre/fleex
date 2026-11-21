@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { useTicketStore } from '../stores/ticketStore';
 import { toast } from '../lib/toast';
 import { factoryApi } from './factoryApi';
-import type { FactoryLayout, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
+import type { FactoryLayout, FactoryPatch, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 interface FactoryState {
   /** False on a storage driver without Factory tables, or before the first status call. */
@@ -22,6 +22,8 @@ interface FactoryState {
   loadStatus: () => Promise<void>;
   loadManaged: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** What the server pushed on the `factory` channel: applied on the floor held, or the whole floor read again on a gap. */
+  applyPatch: (patch: FactoryPatch) => void;
   /** Show a layout without saving it (a drag in progress). Pair with `endEdit`. */
   previewLayout: (layout: FactoryLayout) => void;
   beginEdit: () => void;
@@ -48,6 +50,8 @@ interface FactoryState {
   giveBack: (ticketId: string) => Promise<void>;
   /** Archive an item (soft delete). */
   archiveItem: (itemId: string) => Promise<void>;
+  /** Make an item by hand, as a source would send it: what became of it, or null when the server refused it (it said why). */
+  ingest: (item: Parameters<typeof factoryApi.ingest>[0]) => Promise<'new' | 'updated' | 'back' | 'dropped' | null>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
   star: (ticketId: string, on: boolean) => Promise<void>;
 }
@@ -59,14 +63,34 @@ let pendingLayoutSaves = 0;
  * as opposed to a drag in progress. It lives for the page session only: a reload starts afresh.
  */
 const HISTORY = 60;
+/**
+ * The last polled snapshot, but for the server's clock: a poll that brings the same floor back is dropped, so the page
+ * (which renders from the whole store) is not rendered again for nothing several times a second. It is still taken
+ * now and then, for the ages the page works out from the server's clock.
+ */
+let lastPolled = '';
+let lastPolledAt = 0;
+const SAME_SNAPSHOT_KEPT_MS = 10_000;
+const pollKey = (s: FactorySnapshot): string => JSON.stringify({ ...s, serverTime: null });
+/**
+ * The live feed the floor held is at (see `FactoryPatch`): which patches it already holds. A snapshot from before the
+ * last patch applied (an action's answer that crossed it) is older than what is shown, and is dropped.
+ */
+let feed: { epoch: string; seq: number } | null = null;
+let reading: Promise<void> | null = null;
 let committed: FactoryLayout | null = null;
 let past: FactoryLayout[] = [];
 let future: FactoryLayout[] = [];
 /** Test hook: forget the history. */
-export function resetFactoryHistory(): void { committed = null; past = []; future = []; pendingLayoutSaves = 0; }
+export function resetFactoryHistory(): void { feed = null; reading = null; lastPolled = ''; lastPolledAt = 0; committed = null; past = []; future = []; pendingLayoutSaves = 0; }
 
 export const useFactoryStore = create<FactoryState>((set, get) => {
-  const apply = (snapshot: FactorySnapshot) => set((s) => {
+  const apply = (snapshot: FactorySnapshot) => {
+    if (feed && snapshot.epoch === feed.epoch && (snapshot.seq ?? 0) < feed.seq) return;
+    if (snapshot.epoch !== undefined) feed = { epoch: snapshot.epoch, seq: snapshot.seq ?? 0 };
+    take(snapshot);
+  };
+  const take = (snapshot: FactorySnapshot) => set((s) => {
     if (pendingLayoutSaves === 0) committed = snapshot.floor.layout;
     return {
     snapshot, receivedAt: performance.now(), layout: pendingLayoutSaves > 0 && s.layout ? s.layout : snapshot.floor.layout,
@@ -95,8 +119,28 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
       if (!get().enabled) return;
       try { set({ managed: new Set((await factoryApi.managed()).ticketIds) }); } catch { /* keep what we had */ }
     },
-    refresh: async () => {
-      try { apply(await factoryApi.state()); } catch { /* next poll */ }
+    /* one read at a time: a burst of patches after a gap asks for the floor once */
+    refresh: () => reading ??= (async () => {
+      try {
+        const snapshot = await factoryApi.state(), key = pollKey(snapshot), now = performance.now();
+        if (key === lastPolled && pendingLayoutSaves === 0 && now - lastPolledAt < SAME_SNAPSHOT_KEPT_MS && get().snapshot) return;
+        lastPolled = key; lastPolledAt = now;
+        apply(snapshot);
+      } catch { /* next poll */ } finally { reading = null; }
+    })(),
+    applyPatch: (p) => {
+      const s = get().snapshot;
+      if (!s || !feed || p.epoch !== feed.epoch || p.seq > feed.seq + 1) { void get().refresh(); return; }
+      if (p.seq <= feed.seq) return;
+      feed = { epoch: p.epoch, seq: p.seq };
+      const changed = new Map(p.tickets.map((t) => [t.ticketId, t])), gone = new Set(p.removed);
+      const tickets = s.tickets.filter((t) => !gone.has(t.ticketId)).map((t) => { const c = changed.get(t.ticketId); if (c) changed.delete(t.ticketId); return c ?? t; });
+      tickets.push(...changed.values());
+      take({
+        ...s, tickets, arms: p.arms, armSwing: p.armSwing, beltSpeed: p.beltSpeed, fastBelt: p.fastBelt,
+        runsLastHour: p.runsLastHour, running: p.running, serverTime: p.serverTime, epoch: p.epoch, seq: p.seq,
+        ...(p.floor ? { floor: p.floor } : {}), ...(p.notice !== undefined ? { notice: p.notice } : {}), ...(p.intakes ? { intakes: p.intakes } : {}),
+      });
     },
     previewLayout: (layout) => set({ layout }),
     beginEdit: () => { pendingLayoutSaves++; },
@@ -131,6 +175,8 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
     archiveItem: (itemId) => act(() => factoryApi.archiveItem(itemId)),
+    /* its answer carries the floor, applied as any action's is (a patch that crossed it is not undone) */
+    ingest: async (item) => { try { const r = await factoryApi.ingest(item); apply(r.snapshot); return r.status; } catch { return null; } },
     star: async (ticketId, on) => {
       try { await useTicketStore.getState().updateTicket(ticketId, { favorite: on }); } catch { toast.error('Could not change the favourite'); return; }
       await act(() => factoryApi.refreshTicket(ticketId));

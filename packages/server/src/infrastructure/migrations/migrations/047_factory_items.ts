@@ -17,7 +17,7 @@ import type { Migration } from '../types.js';
  *   `url` leads back to the source.
  */
 const migration: Migration = {
-  name: '046_factory_items',
+  name: '047_factory_items',
 
   async up(ctx) {
     const ts = ctx.adapter === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ';

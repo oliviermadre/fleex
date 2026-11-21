@@ -10,7 +10,7 @@ import type { Migration } from '../types.js';
  * Deleting an item's row deletes its visits (FK cascade); items are soft deleted, so that only happens by hand.
  */
 const migration: Migration = {
-  name: '047_factory_item_runs',
+  name: '048_factory_item_runs',
 
   async up(ctx) {
     const ts = ctx.adapter === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ';

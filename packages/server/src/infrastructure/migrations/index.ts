@@ -45,9 +45,10 @@ import migration043 from './migrations/042_ticket_todos.js';
 import migration044 from './migrations/043_ticket_complexity.js';
 import migration045 from './migrations/044_deliverable_origin_standalone.js';
 import migration046 from './migrations/045_factory.js';
-import migration047 from './migrations/046_factory_items.js';
-import migration048 from './migrations/047_factory_item_runs.js';
-import migration049 from './migrations/048_factory_item_fields.js';
+import migration047 from './migrations/046_factory_runs_machine_index.js';
+import migration048 from './migrations/047_factory_items.js';
+import migration049 from './migrations/048_factory_item_runs.js';
+import migration050 from './migrations/049_factory_item_fields.js';
 
 /**
  * Ordered array of all migrations.
@@ -103,4 +104,5 @@ export const allMigrations: Migration[] = [
   migration047,
   migration048,
   migration049,
+  migration050,
 ];

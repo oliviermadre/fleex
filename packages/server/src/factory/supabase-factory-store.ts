@@ -102,8 +102,10 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     return (data as RunRow[]).map(runFromRow);
   }
 
-  async listRecentRuns(floorId: string, limit: number): Promise<FactoryRunRow[]> {
-    const { data, error } = await this.conn.client.from('factory_runs').select('*').eq('floor_id', floorId).order('started_at', { ascending: false }).limit(limit);
+  async listRecentRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    let q = this.conn.client.from('factory_runs').select('*').eq('floor_id', floorId);
+    if (machineId) q = q.eq('machine_id', machineId);
+    const { data, error } = await q.order('started_at', { ascending: false }).limit(limit);
     if (error) this.fail('listRecentRuns', error.message);
     return (data as RunRow[]).map(runFromRow);
   }
