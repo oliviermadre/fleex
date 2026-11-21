@@ -14,6 +14,8 @@ async function call<T>(path: string, init?: RequestInit, quiet = false): Promise
   }
   return res.json() as Promise<T>;
 }
+export interface MailStatus { provider: string | null; installed: boolean; version: string | null; connected: boolean; account: string | null; error: string | null; setupUrl: string | null }
+export interface PullResult { pulled: number; new: number; updated: number; moved: number; error: string | null }
 const post = <T,>(path: string, body?: unknown) => call<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 
 export const factoryApi = {
@@ -40,7 +42,11 @@ export const factoryApi = {
   machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),
   /** A conversation moved in a source (made by hand until the sources are connected): a new item, or an update. */
   ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null; tags?: string[]; fields?: ItemFields }) =>
-    post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped'; snapshot: FactorySnapshot }>('/items', item),
+    post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped' | 'moved' | 'seen'; snapshot: FactorySnapshot }>('/items', item),
+  /** Whether the mailbox the Gmail intakes read can be read: gogcli installed, Gmail authorized. */
+  mailStatus: (refresh = false) => call<MailStatus>(`/mail/status${refresh ? '?refresh=1' : ''}`, undefined, true),
+  /** Pull a Gmail intake now: how many messages it saw, and what became of them. */
+  pullIntake: (machineId: string) => post<PullResult & { snapshot: FactorySnapshot }>(`/intakes/${machineId}/pull`),
   /** What stations did with an item and what they answered, oldest first. */
   itemRuns: (itemId: string) => call<FactoryRun[]>(`/items/${itemId}/runs`, undefined, true),
   /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */

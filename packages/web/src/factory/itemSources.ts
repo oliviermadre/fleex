@@ -9,6 +9,14 @@ import type { ItemSource } from './items';
 export type FieldKind = 'text' | 'list' | 'choice' | 'bool';
 export interface SourceField { key: string; label: string; kind: FieldKind; choices?: readonly string[]; hint?: string }
 
+/**
+ * The sources whose intakes pull (as the server's `PULLED_SOURCES`): Fleex asks them at an interval, with a search of
+ * their own, which is the filter. Such an intake has no rules.
+ */
+export const PULLED_SOURCES: Partial<Record<ItemSource, { query: string; hint: string; everySec: number }>> = {
+  gmail: { query: 'Gmail search', hint: 'as in Gmail\'s search box: from:@acme.com -category:promotions has:attachment', everySec: 300 },
+};
+
 export const COMMON_FIELDS: readonly SourceField[] = [
   { key: 'author', label: 'From', kind: 'text' },
   { key: 'title', label: 'Title', kind: 'text' },

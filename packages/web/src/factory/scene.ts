@@ -18,6 +18,7 @@ import { dispatch, entryOf, QUAY_ROOM, quayRect, quaySpot, reachOf, type Dispatc
 import { arrivalOf, departuresOf, isArrival, isDeparture, isPort, portBad, portColor, portLine, portName, portState, type PortState } from './teleport';
 import { opText, plateLines } from './setOps';
 import { scriptPlate, scriptSummary } from './script';
+import { PULLED_SOURCES } from './itemSources';
 import { DX, DY, humanCall, type AreaSpec, type ArmSpec, type BeltSpec, type DeskSpec, type FactoryLayout, type IntakeSpec, type FactoryTicket, type HumanCall, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 import type { DragState, ViewState } from './renderer';
 
@@ -101,9 +102,10 @@ export interface PortView {
 /**
  * A dock of 3 by 2: a desk, where a ticket is born, or an intake, where items of a source come in. What no arm has
  * taken yet stands in it (`held`, two at most, then `more`); what is
- * let out waits at the quays of its arms. An intake counts what waits (`waiting`) and what its rules dropped over 24 h.
+ * let out waits at the quays of its arms. An intake counts what waits (`waiting`) and what its rules dropped over 24 h;
+ * a pulled one (Gmail) has no rules, and says instead when its last pull failed.
  */
-export interface DockView { kind: 'dock'; m: DeskSpec | IntakeSpec; held: Placed[]; more: number; quays: Quay[]; noArm: boolean; waiting: number; dropped: number }
+export interface DockView { kind: 'dock'; m: DeskSpec | IntakeSpec; held: Placed[]; more: number; quays: Quay[]; noArm: boolean; waiting: number; dropped: number; /** A pulled intake (Gmail): whether its last pull failed; null for one that is not pulled. */ pullFailed: boolean | null }
 export type BoxView = LabelView | ZoneView | StationView | StatusView | ExitView | PortView | DockView;
 
 export interface ArmView {
@@ -520,6 +522,7 @@ export class FloorScene {
     return {
       kind: 'dock', m, held, more: Math.max(0, inDock.length - 2), quays: this.quays(takers, D), noArm: !takers.length,
       waiting: tickets.filter((t) => !t.released).length, dropped: intake ? this.st.intakes?.[m.id]?.dropped ?? 0 : 0,
+      pullFailed: intake && PULLED_SOURCES[m.source] ? !!this.st.intakes?.[m.id]?.pullError : null,
     };
   }
 

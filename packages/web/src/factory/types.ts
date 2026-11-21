@@ -75,7 +75,15 @@ export type ItemFields = Record<string, string | string[] | boolean>;
  * Where items of one source come in: a dock of 3 by 2. An item waits in it while its conversation moves, and leaves
  * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
  */
-export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[] }
+export interface IntakeSpec extends MachineBase {
+  kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[];
+  /** Which intake of its source is served first when several see the same item (1 first, dense per source). */
+  priority?: number;
+  /** A pulled source (Gmail): its own search, run every `everySec`. */
+  query?: string; everySec?: number;
+}
+/** Where an intake stands: what it dropped over 24 hours; for a pulled one, its last pull and what went wrong with it. */
+export interface IntakeState { dropped: number; pulledAt?: string | null; pullError?: string | null }
 /** Where an Area's name is written: in one of its corners, or over or under it. */
 export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
 /**
@@ -131,7 +139,7 @@ export interface FactorySnapshot {
   /** Something to tell once (the floor was started over for a new layout version). */
   notice?: string | null;
   /** What each intake dropped over the last 24 hours, by its id. */
-  intakes?: Record<string, { dropped: number }>;
+  intakes?: Record<string, IntakeState>;
   /** The server's live feed, and the last of its patches this snapshot already holds (see `FactoryPatch`). */
   epoch?: string;
   seq?: number;
@@ -155,7 +163,7 @@ export interface FactoryPatch {
   running: number;
   notice?: string | null;
   /** What each intake dropped over the last 24 hours, by its id: every intake's, when one count changed. */
-  intakes?: Record<string, { dropped: number }>;
+  intakes?: Record<string, IntakeState>;
   serverTime: string;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
