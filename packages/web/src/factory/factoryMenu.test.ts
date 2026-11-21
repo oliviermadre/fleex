@@ -72,6 +72,12 @@ describe('the command card', () => {
     expect(at(factoryMenu(ctx({ building: true })), BACK_SLOT)).toBe('Done');
   });
 
+  it('an intake selected makes an item by hand at it', () => {
+    const c = ctx({ machine: { kind: 'intake', waiting: false, popup: true } }), m = factoryMenu(c);
+    expect(rows(m)[0]).toEqual(['New item', null, null, null, null]);
+    m.slots[0]!.run!(); expect(c.act.newItem).toHaveBeenCalled();
+  });
+
   it('a desk selected creates a ticket at it, where a zone releases and a station starts', () => {
     const c = ctx({ machine: { kind: 'desk', waiting: false, popup: true } }), desk = factoryMenu(c);
     expect(rows(desk)[0]).toEqual(['New ticket', null, null, null, null]);
@@ -82,10 +88,11 @@ describe('the command card', () => {
   it('an item selected: release it, open its source, archive it; nothing a ticket only has', () => {
     const c = ctx({ ticket: { phase: 'zone', released: false, favorite: null, outcomes: [], item: { url: 'https://x.slack.com/a' } } }), m = factoryMenu(c);
     expect(m.title).toBe('Item');
-    expect(rows(m)).toEqual([['Release', null, null, null, null], ['Source', null, null, 'Fit', 'Archive'], [null, null, null, 'Next', 'Previous']]);
-    m.slots[5]!.run!(); expect(c.act.openSource).toHaveBeenCalled();
+    expect(rows(m)).toEqual([['Release', null, null, null, null], ['Open', 'Source', null, 'Fit', 'Archive'], [null, null, null, 'Next', 'Previous']]);
+    m.slots[5]!.run!(); expect(c.act.openTicket).toHaveBeenCalled();
+    m.slots[6]!.run!(); expect(c.act.openSource).toHaveBeenCalled();
     m.slots[9]!.run!(); expect(c.act.archive).toHaveBeenCalled();
-    expect(factoryMenu(ctx({ ticket: { phase: 'belt', released: false, favorite: null, outcomes: [], item: { url: null } } })).slots[5]!.disabled).toBe(true);
+    expect(factoryMenu(ctx({ ticket: { phase: 'belt', released: false, favorite: null, outcomes: [], item: { url: null } } })).slots[6]!.disabled).toBe(true);
   });
 
   it('an item a station asked about, or failed on: run again, or send it on by an outcome; at a gate, decide', () => {

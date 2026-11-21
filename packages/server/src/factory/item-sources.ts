@@ -12,7 +12,7 @@ import type { ItemSource } from './types.js';
 export type FieldKind = 'text' | 'list' | 'choice' | 'bool';
 export interface SourceField { key: string; label: string; kind: FieldKind; choices?: readonly string[]; hint?: string }
 
-/** What every item has, whatever its source. */
+/** What every item has, whatever its source: shown and edited on every item, not filtered on by intakes (too broad). */
 export const COMMON_FIELDS: readonly SourceField[] = [
   { key: 'author', label: 'From', kind: 'text' },
   { key: 'title', label: 'Title', kind: 'text' },

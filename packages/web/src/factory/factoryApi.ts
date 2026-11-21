@@ -39,10 +39,13 @@ export const factoryApi = {
   runs: (ticketId: string) => call<FactoryRun[]>(`/tickets/${ticketId}/runs`, undefined, true),
   machineRuns: (machineId: string, limit = 60) => call<FactoryRun[]>(`/runs?machineId=${encodeURIComponent(machineId)}&limit=${limit}`, undefined, true),
   /** A conversation moved in a source (made by hand until the sources are connected): a new item, or an update. */
-  ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null; fields?: ItemFields }) =>
+  ingest: (item: { source: ItemSource; key: string; title: string; author?: string; excerpt?: string; url?: string | null; tags?: string[]; fields?: ItemFields }) =>
     post<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped'; snapshot: FactorySnapshot }>('/items', item),
   /** What stations did with an item and what they answered, oldest first. */
   itemRuns: (itemId: string) => call<FactoryRun[]>(`/items/${itemId}/runs`, undefined, true),
+  /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */
+  editItem: (itemId: string, patch: { title?: string; author?: string; url?: string | null; excerpt?: string; tags?: string[]; fields?: ItemFields }) =>
+    call<FactorySnapshot>(`/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
   archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
   stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),

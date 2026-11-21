@@ -50,6 +50,8 @@ interface FactoryState {
   giveBack: (ticketId: string) => Promise<void>;
   /** Archive an item (soft delete). */
   archiveItem: (itemId: string) => Promise<void>;
+  /** Change what the Factory keeps of an item (title, author, link, text, tags, its source's fields). */
+  editItem: (itemId: string, patch: Parameters<typeof factoryApi.editItem>[1]) => Promise<void>;
   /** Make an item by hand, as a source would send it: what became of it, or null when the server refused it (it said why). */
   ingest: (item: Parameters<typeof factoryApi.ingest>[0]) => Promise<'new' | 'updated' | 'back' | 'dropped' | null>;
   /** Make a ticket a favourite, or not: a favourite carries its name on the floor. Changes the ticket itself, as the star does everywhere in Fleex. */
@@ -175,6 +177,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => {
     retry: (ticketId) => act(() => factoryApi.retry(ticketId)),
     giveBack: (ticketId) => act(() => factoryApi.giveBack(ticketId)),
     archiveItem: (itemId) => act(() => factoryApi.archiveItem(itemId)),
+    editItem: (itemId, patch) => act(() => factoryApi.editItem(itemId, patch)),
     /* its answer carries the floor, applied as any action's is (a patch that crossed it is not undone) */
     ingest: async (item) => { try { const r = await factoryApi.ingest(item); apply(r.snapshot); return r.status; } catch { return null; } },
     star: async (ticketId, on) => {

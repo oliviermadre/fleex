@@ -1,22 +1,14 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Button } from '../components/ui/Button';
-import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
-import { useUIStore } from '../stores/uiStore';
-import * as api from '../services/api';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
-import { factoryApi } from './factoryApi';
 import { TicketToken } from './FactoryTicketMeta';
 import { placeBeside, type PeekHandle } from './FactoryPeek';
 import { SOURCE_LABEL } from './items';
 import { SOURCE_FIELDS } from './itemSources';
 import { span } from './format';
-import { SET_ASIDE, type FactoryRun } from './types';
-
-const noop = () => {};
-/** How often the card reads what stations said, while it is open. */
-const REFRESH_MS = 4000;
-const STATUS_WORD: Record<FactoryRun['status'], string> = { running: 'working on it', completed: 'done', failed: 'failed', needs_review: 'waits for you', question: 'asked a question', interrupted: 'interrupted' };
+import { SET_ASIDE } from './types';
+import { ItemVisits, useItemVisits } from './ItemVisits';
 
 /**
  * An item at the first click, beside it on the floor, as a ticket's thread is: where it came from, who it is from, how
@@ -24,17 +16,14 @@ const STATUS_WORD: Record<FactoryRun['status'], string> = { running: 'working on
  * stations it went through answered is listed here instead (its visits, `GET /api/factory/items/:id/runs`), with the
  * deliverable each produced. When a station waits on it (a question, a failed run, a gate), its actions are here too.
  */
-export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onClose: () => void }>(function FactoryItemPeek({ itemId, onClose }, ref) {
+export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onOpen: () => void; onClose: () => void }>(function FactoryItemPeek({ itemId, onOpen, onClose }, ref) {
   const store = useFactoryStore();
   const t = store.snapshot?.tickets.find((x) => x.ticketId === itemId) ?? null;
   const machine = t?.machineId ? store.layout?.machines.find((m) => m.id === t.machineId) ?? null : null;
-  const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
-  const [runs, setRuns] = useState<FactoryRun[] | null>(null);
+  const runs = useItemVisits(itemId);
   const el = useRef<HTMLDivElement>(null), at = useRef(''), list = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => ({ place: (r) => placeBeside(el.current, r, at) }), []);
 
-  const load = useCallback(async () => { try { setRuns(await factoryApi.itemRuns(itemId)); } catch { /* next time */ } }, [itemId]);
-  useEffect(() => { setRuns(null); void load(); const id = window.setInterval(() => { if (!document.hidden) void load(); }, REFRESH_MS); return () => window.clearInterval(id); }, [load]);
   /* opens on the latest answer */
   useEffect(() => { const n = list.current; if (n) n.scrollTop = n.scrollHeight; }, [runs?.length]);
 
@@ -46,7 +35,6 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onClose:
   const station = machine?.kind === 'station' ? machine : null;
   const aside = !!station && SET_ASIDE.includes(t.phase), gate = !!station && t.phase === 'review';
   const said = (runs ?? []).filter((r) => r.reply || r.deliverableId || r.status !== 'running');
-  const open = async (id: string) => { try { openDeliverable(await api.fetchDeliverable(id)); } catch { /* the API helper raised a toast */ } };
 
   return (
     <div ref={el} role="dialog" aria-label={`Item from ${source}`} style={{ visibility: 'hidden' }}
@@ -74,24 +62,15 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onClose:
           ? <p className="whitespace-pre-wrap break-words text-[var(--theme-text-primary)]">{item.excerpt}</p>
           : <p className="text-[var(--theme-text-muted)]">Nothing more came with it: open it where it lives.</p>}
         {said.length > 0 && <div className="mt-1 border-t border-[var(--theme-border)] pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">What stations said</div>}
-        {said.map((r) => (
-          <div key={r.id} className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5">
-            <div className="mb-0.5 flex items-center gap-1.5 text-[10.5px] text-[var(--theme-text-muted)]">
-              <b className="text-[var(--theme-text-secondary)]">{r.machineName}</b>
-              <span>· {r.outcome ? `left as "${r.outcome}"` : STATUS_WORD[r.status]}</span>
-            </div>
-            {r.reply && <div className="text-[var(--theme-text-primary)]"><MarkdownRenderer content={r.reply} onToggleCheckbox={noop} /></div>}
-            {r.error && !r.reply && <div className="text-[11px] text-[var(--theme-danger)]">{r.error}</div>}
-            {r.deliverableId && <button type="button" onClick={() => void open(r.deliverableId!)} className="mt-1 text-[11px] text-[var(--theme-accent)] hover:underline">Open what it delivered</button>}
-          </div>
-        ))}
+        <ItemVisits runs={runs} />
         {t.note && <p className={cn('text-[11px]', aside ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>{t.note}</p>}
       </div>
       <div className="flex flex-none flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] p-2">
         {gate && station.outcomes.map((o, i) => <Button key={o} size="sm" variant={i ? 'secondary' : 'primary'} onClick={() => void store.resolve(itemId, o)}>{o}</Button>)}
         {aside && <Button size="sm" variant="primary" onClick={() => void store.putBack(itemId)} title="The station runs on it again, told what it said before">Run again</Button>}
         {aside && station.outcomes.map((o) => <Button key={o} size="sm" onClick={() => void store.putBack(itemId, o)} title={`Send it on as "${o}"`}>{o}</Button>)}
-        {item.url && <Button size="sm" variant={aside || gate ? 'secondary' : 'primary'} onClick={() => window.open(item.url!, '_blank', 'noopener')}>Open in {source}</Button>}
+        <Button size="sm" variant={aside || gate ? 'secondary' : 'primary'} onClick={onOpen} title="The item: what the Factory keeps of it, its tags, its source's fields (also Enter)">Open</Button>
+        {item.url && <Button size="sm" variant="secondary" onClick={() => window.open(item.url!, '_blank', 'noopener')}>Open in {source}</Button>}
         {t.phase === 'zone' && !t.released && <Button size="sm" onClick={() => void store.release(itemId)} title="Let an arm take it out now, without waiting for the conversation to be quiet">Release</Button>}
         <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { void store.archiveItem(itemId); onClose(); }} title="Junk, or done with: it leaves the floor. A new message brings it back">Archive</Button>
       </div>

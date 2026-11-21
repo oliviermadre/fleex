@@ -115,7 +115,7 @@ describe('FactoryEngine', () => {
     const msg = (key: string, over: Record<string, unknown> = {}) => ({ source: 'slack' as const, key, title: `hi ${key}`, author: 'Ana', excerpt: 'can you look', url: 'https://x.slack.com/archives/C1/p1', ...over });
 
     it('an item waits in its intake while its conversation moves, and leaves once it has been quiet', async () => {
-      await boot([intake('in', 1, 1, { drop: [{ field: 'author', contains: 'newsletter' }] }), arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+      await boot([intake('in', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }] }), arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
       const first = await engine.ingest(msg('k1'));
       expect(first.status).toBe('new');
       const id = first.itemId!;
@@ -138,9 +138,9 @@ describe('FactoryEngine', () => {
     });
 
     it('an intake drops what its rules recognise, counts it, and it never reaches the floor', async () => {
-      await boot([intake('in', 1, 1, { drop: [{ field: 'author', contains: 'NewsLetter' }, { field: 'text', contains: 'unsubscribe' }] })]);
-      expect((await engine.ingest(msg('n1', { author: 'The newsletter team' }))).status).toBe('dropped');
-      expect((await engine.ingest(msg('n2', { excerpt: 'click to Unsubscribe' }))).status).toBe('dropped');
+      await boot([intake('in', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }, { field: 'channel', op: 'contains', value: 'Random' }] })]);
+      expect((await engine.ingest({ ...msg('n1'), fields: { bot: true } }))).toMatchObject({ status: 'dropped' });
+      expect((await engine.ingest({ ...msg('n2'), fields: { channel: '#random-chat' } }))).toMatchObject({ status: 'dropped' });
       expect((await engine.ingest(msg('n3'))).status).toBe('new');
       expect(engine.snapshot().tickets).toHaveLength(1);
       expect(engine.snapshot().intakes).toEqual({ in: { dropped: 2 } });
@@ -199,24 +199,37 @@ describe('FactoryEngine', () => {
       expect(again.snapshot().tickets.find((t) => t.ticketId === itemId)).toMatchObject({ machineId: 's', phase: 'failed', item: { source: 'slack' } });
     });
 
-    it('rules on a source\'s own fields: drop what one matches, keep only what a keep rule matches; older drop rules are still read', async () => {
+    it('rules on a source\'s own fields only: drop what one matches, keep only what a keep rule matches; one with no value decides nothing', async () => {
       await boot([intake('in', 1, 1, { drop: [{ field: 'author', contains: 'newsletter' }], rules: [
+        { field: 'author', op: 'contains', value: 'Ana' },        // what every item has: not filtered on
+        { field: 'channel', op: 'is', value: '', keep: true },    // being written: kept, holds for nothing
         { field: 'bot', op: 'is', value: 'yes' },
         { field: 'channel', op: 'is', value: '#ops, #support', keep: true },
         { field: 'kind', op: 'is', value: 'dm', keep: true },
         { field: 'nope', op: 'is', value: 'x' },                  // not a field of Slack: left out
       ] })]);
       const rules = (engine.snapshot().floor.layout.machines[0] as { rules: unknown[]; drop?: unknown }).rules;
-      expect(rules).toEqual([{ field: 'author', op: 'contains', value: 'newsletter' }, { field: 'bot', op: 'is', value: 'yes' }, { field: 'channel', op: 'is', value: '#ops, #support', keep: true }, { field: 'kind', op: 'is', value: 'dm', keep: true }]);
+      expect(rules).toEqual([{ field: 'channel', op: 'is', value: '', keep: true }, { field: 'bot', op: 'is', value: 'yes' }, { field: 'channel', op: 'is', value: '#ops, #support', keep: true }, { field: 'kind', op: 'is', value: 'dm', keep: true }]);
       expect((engine.snapshot().floor.layout.machines[0] as { drop?: unknown }).drop).toBeUndefined();
       const go = (key: string, fields: Record<string, unknown>, over: Record<string, unknown> = {}) => engine.ingest({ ...msg(key, over), fields } as never).then((r) => r.status);
       expect(await go('a', { channel: '#OPS', kind: 'channel' })).toBe('new');           // kept by its channel (any case)
       expect(await go('b', { channel: '#random', kind: 'channel' })).toBe('dropped');   // no keep rule holds
       expect(await go('c', { channel: 'Ana', kind: 'dm' })).toBe('new');                // kept as a direct message
       expect(await go('d', { channel: '#ops', kind: 'channel', bot: true })).toBe('dropped');   // a drop rule wins over a keep rule
-      expect(await go('e', { channel: '#ops' }, { author: 'The newsletter' })).toBe('dropped');
-      expect(engine.snapshot().intakes).toEqual({ in: { dropped: 3 } });
+      expect(await go('e', { channel: '#ops' }, { author: 'The newsletter' })).toBe('new');   // older drop rules on who it is from are let go
+      expect(engine.snapshot().intakes).toEqual({ in: { dropped: 2 } });
       expect(engine.snapshot().tickets.find((t) => t.item)?.item?.fields).toEqual({ channel: '#OPS', kind: 'channel' });
+    });
+
+    it('an item is edited by hand: what the Factory keeps of it, never its key nor its source; a ticket is not edited here', async () => {
+      await boot([intake('in', 1, 1)]);
+      const { itemId } = await engine.ingest({ ...msg('k'), tags: ['team:shop'], fields: { channel: '#ops' } } as never);
+      await engine.editItem(itemId!, { title: '  The cart  ', author: 'Bob', url: 'not a link', excerpt: 'More lines', tags: ['urgent', 'urgent', 'source:gmail', ' '], fields: { channel: '#support', bot: false, junk: { deep: 1 } }, source: 'gmail', sourceKey: 'x' } as never);
+      const t = engine.snapshot().tickets.find((x) => x.ticketId === itemId)!;
+      expect(t.info).toMatchObject({ title: 'The cart', tags: ['urgent', 'source:slack'] });
+      expect(t.item).toMatchObject({ source: 'slack', author: 'Bob', url: null, excerpt: 'More lines', fields: { channel: '#support', bot: false } });
+      expect(store.items.get(itemId!)).toMatchObject({ sourceKey: 'k', source: 'slack', title: 'The cart', tags: ['urgent'] });
+      await expect(engine.editItem('a', {})).rejects.toBeInstanceOf(FactoryError);
     });
 
     it('several intakes of one source: an item goes to the first that lets it in, and is dropped only when none does', async () => {

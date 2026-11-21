@@ -299,7 +299,7 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
               </>
             ) : machine && view ? (
               <>
-                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machine.kind)}</div>
+                <div className="flex-none truncate text-sm font-semibold text-[var(--theme-text-primary)]">{machine.name || (machine.kind === 'label' ? machine.text : machineKind(machine))}</div>
                 <div className="truncate text-xs text-[var(--theme-text-secondary)]">{machineSub(machine, view, (id) => boards.find((b) => b.id === id)?.name ?? 'a board')}</div>
                 {(machine.kind === 'station' || machine.kind === 'zone') && (
                   <div className="flex flex-wrap gap-x-3" aria-label="Settings">

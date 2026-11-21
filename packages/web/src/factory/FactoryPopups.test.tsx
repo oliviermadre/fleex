@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { FactoryItemPopup } from './FactoryItemPopup';
 import { FactoryMachinePopup, machineKind } from './FactoryMachinePopup';
 import { FactoryFloorPopup } from './FactoryFloorPopup';
 import { FactoryLimitsPopup } from './FactoryLimits';
@@ -141,26 +142,46 @@ describe('<FactoryMachinePopup/>', () => {
     expect(again.onPatch).toHaveBeenLastCalledWith('a1', { color: undefined });
   });
 
-  it('sets up an intake in two parts: what every source has, then what only its source has', () => {
-    const slack: MachineSpec = { id: 'in', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: '', source: 'slack', quietSec: 120,
-      drop: [{ field: 'author', contains: 'newsletter' }], rules: [{ field: 'channel', op: 'is', value: '#ops', keep: true }] };
+  it('sets up an intake in two parts: what every intake has, then rules on its source\'s own fields only', () => {
+    const slack: MachineSpec = { id: 'in', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: '', source: 'slack', quietSec: 120, rules: [{ field: 'channel', op: 'is', value: '#ops', keep: true }] };
     seed([], [dev, slack]);
-    const on = open('in'), popup = screen.getByRole('region', { name: 'Machine' });
+    const onNewItem = vi.fn(), on = { onClose: vi.fn(), onPatch: vi.fn(), onRemove: vi.fn(), onOpenTicket: vi.fn(), onOpenMachine: vi.fn() };
+    render(<FactoryMachinePopup machineId="in" view={view} {...on} onNewItem={onNewItem} />);
+    const popup = screen.getByRole('region', { name: 'Machine' });
     expect(popup.textContent).toContain('Every source');
     expect(popup.textContent).toContain('Slack only');
-    expect(popup.textContent).toContain('Channel, Kind, From a bot');
-    /* an older floor's drop rule reads as a rule on what every source has; Slack's rule is in Slack's part */
-    expect((screen.getByLabelText('Value', { selector: '#f-common-0-value' }) as HTMLInputElement).value).toBe('newsletter');
+    /* no rule on who it is from or what it says: only on Slack's own fields */
+    expect(screen.queryByLabelText('Way', { selector: '#f-common-0-way' })).toBeNull();
     expect((screen.getByLabelText('Way', { selector: '#f-own-0-way' }) as HTMLSelectElement).value).toBe('keep');
-    /* a Slack field of a kind has its choices: the operator is "is" or "is not", the value one of them */
+    expect([...(screen.getByLabelText('Field', { selector: '#f-own-0-field' }) as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Channel', 'Kind', 'From a bot']);
     fireEvent.change(screen.getByLabelText('Field', { selector: '#f-own-0-field' }), { target: { value: 'kind' } });
-    expect(on.onPatch).toHaveBeenLastCalledWith('in', { rules: [{ field: 'author', op: 'contains', value: 'newsletter' }, { field: 'kind', op: 'is', value: 'dm', keep: true }], drop: undefined });
-    /* the item made by hand gets Slack's fields too */
-    expect(screen.getByLabelText('Channel')).toBeTruthy();
-    cleanup();
-    seed([], [dev, { ...slack, source: 'manual', drop: undefined, rules: [] } as MachineSpec]);
-    open('in');
-    expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('An item made by hand has nothing more than what every item has');
+    expect(on.onPatch).toHaveBeenLastCalledWith('in', { rules: [{ field: 'kind', op: 'is', value: 'dm', keep: true }], drop: undefined });
+    /* a new rule on a text field starts empty, whatever field it is on */
+    fireEvent.click(screen.getByRole('button', { name: 'Add a rule' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('in', { rules: [{ field: 'channel', op: 'is', value: '#ops', keep: true }, { field: 'channel', op: 'contains', value: '' }], drop: undefined });
+    /* making an item by hand is a popup of its own */
+    expect(screen.queryByLabelText('Title')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'New item…' }));
+    expect(onNewItem).toHaveBeenCalledWith('in');
+  });
+
+  it('an item opens in a popup: what every item has, edited; its source\'s fields; the raw item; what stations said', () => {
+    const slack: MachineSpec = { id: 'in', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: '', source: 'slack' };
+    const item = ticket('i1', 'in', 'zone', { info: { id: 'i1', displayId: 0, title: 'Cart broken', type: 'src:slack', priority: 'none', status: 'todo', tags: ['team:shop', 'source:slack'], boardId: '', complexity: null, favorite: false },
+      item: { source: 'slack', author: 'Ana', excerpt: 'It forgets its items', url: 'https://x.slack.com/a', messages: 2, lastActivityAt: '2026-11-15T09:00:00.000Z', fields: { channel: '#ops', kind: 'mention' } } });
+    seed([item], [dev, slack]);
+    const editItem = vi.fn(async () => {});
+    useFactoryStore.setState({ editItem } as never);
+    render(<FactoryItemPopup itemId="i1" onClose={vi.fn()} />);
+    const popup = screen.getByRole('region', { name: 'Item' });
+    expect(popup.textContent).toContain('Slack item');
+    expect(popup.textContent).toContain('Slack only');
+    expect((screen.getByLabelText('Channel') as HTMLInputElement).value).toBe('#ops');
+    expect(popup.textContent).toContain('"channel": "#ops"');                 // the raw item
+    expect(popup.textContent).toContain('team:shop');
+    expect(popup.textContent).not.toContain('source:slack"');                // the source's own tag is not edited
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'dm' } });
+    expect(editItem).toHaveBeenLastCalledWith('i1', { fields: { channel: '#ops', kind: 'dm' } });
   });
 
   it('sets up a teleporter: its name, which of the two it is, where a departure leads, its colour', () => {

@@ -109,16 +109,17 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
 - **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
   2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
-  connectors will call, and what its popup's "Make an item by hand" calls until they exist. Its settings come in two
-  parts. **Every source**: a name, its source, the quiet delay, and rules on what every item has (From, Title, Title
-  or text). **Its source only**: rules on that source's own fields, which its connector fills and an item carries in
-  `fields` (`item-sources.ts`: a Slack channel, kind and bot; Gmail's To, Cc, labels, attachment; GitHub's repository,
-  reason, draft; nothing for an item made by hand). A rule is a way, a field, an operator (`contains`; `is`, `is not`
-  with values separated by commas) and a value. **Drop if** drops what it matches; **Keep only if** rules let in only
-  what one of them matches. A new item goes to the first intake of its source that lets it in, in the order they were
-  built; when none does it is **dropped**: saved archived with the reason `dropped`, counted at the first, and it
-  never reaches the floor. The drop rules of older floors (`drop`) are read as rules. Otherwise it waits in the intake
-  **while its conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
+  connectors will call, and what **New item** (on the command card with the intake selected, or its popup's button)
+  calls until they exist: a popup of its own, with what every item has and its source's fields. The intake's
+  settings come in two parts. **Every source**: a name, its source, the quiet delay. **Its source only**: rules on
+  that source's own fields, which its connector fills and an item carries in `fields` (`item-sources.ts`: a Slack
+  channel, kind and bot; Gmail's To, Cc, labels, attachment; GitHub's repository, reason, draft; nothing for an item
+  made by hand). What every item has (who from, title, text) is not filtered on: it says nothing of a source. A rule is
+  a way, a field, an operator (`contains`; `is`, `is not` with values separated by commas) and a value; one with no
+  value yet decides nothing. **Drop if** drops what it matches; **Keep only if** rules let in only what one of them
+  matches. A new item goes to the first intake of its source that lets it in, in the order they were built; when none
+  does it is **dropped**: saved archived with the reason `dropped`, counted at the first, and it never reaches the
+  floor. Otherwise it waits in the intake **while its conversation moves**, and is let out once it has been quiet for the intake's delay (`quietSec`, two minutes unless
   said); an arm then takes it. A new message on a known key updates the item where it is (in its intake, it waits
   again); an archived item comes back to its intake. Nothing on the floor can put anything into an intake.
 - **On the page** desks and intakes are one view of the scene (`DockView`, `dock` in `scene.ts`) that each skin
@@ -130,8 +131,11 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   for Gmail, a cat's head for GitHub, a written sheet for one made by hand. These marks recall the sources; they are not their logos.
   An intake shows its source's mark in relief on its badge, `HELD` (what waits for its conversation to be quiet,
   drawn faded in the dock) and `DROPPED` (over 24 hours). A click on an item opens its card beside it
-  (`FactoryItemPeek.tsx`): source, author, messages, its lines, and Open in <source>, Release, Archive. Opening it
-  (Enter, a double-click) opens its conversation where it lives: an item has no workbench.
+  (`FactoryItemPeek.tsx`): source, author, messages, its lines, what stations said, and Open, Open in <source>,
+  Release, Archive. **Opening it** (Open, Enter, a double-click, a list) opens its popup (`FactoryItemPopup.tsx`):
+  what every item has, edited (title, from, link, tags that arms read, text; `PATCH /api/factory/items/:id`), its
+  source, messages and place read only; its source's part, its fields edited as they suit (each source will have
+  its own part there as its connector comes); the item as the Factory holds it, as JSON; what stations said.
 
 
 

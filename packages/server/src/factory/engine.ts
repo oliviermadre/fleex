@@ -2,7 +2,7 @@ import { normaliseScript, scriptOutcomes } from './script-runner.js';
 import { applyOps, normaliseOps, type TicketChange } from './set-ops.js';
 import { randomUUID } from 'node:crypto';
 import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
-import { fieldsOf } from './item-sources.js';
+import { SOURCE_FIELDS } from './item-sources.js';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
@@ -89,7 +89,8 @@ export function ruleHolds(r: ItemRule, i: { title: string; author: string; excer
  * holds. Returns the rule that decided, if any.
  */
 export function lets(rules: readonly ItemRule[] | undefined, i: Parameters<typeof ruleHolds>[1]): { in: boolean; by: ItemRule | null } {
-  const all = rules ?? [], drop = all.find((r) => !r.keep && ruleHolds(r, i));
+  /* a rule with no value yet is being written: it decides nothing */
+  const all = (rules ?? []).filter((r) => r.value.trim()), drop = all.find((r) => !r.keep && ruleHolds(r, i));
   if (drop) return { in: false, by: drop };
   const keeps = all.filter((r) => r.keep);
   if (!keeps.length) return { in: true, by: null };
@@ -263,11 +264,14 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       if (!ITEM_SOURCES.includes(m.source)) throw new FactoryError(`unknown item source "${String(m.source)}"`);
       m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
       m.quietSec = Math.max(0, Math.min(7 * 86_400, Math.floor(Number(m.quietSec ?? DEFAULT_QUIET_SEC) || 0)));
-      /* rules on a field every item has or on one of this source's; the drop rules of older floors become rules */
-      const known = new Set(fieldsOf(m.source).map((f) => f.key));
-      const old = (Array.isArray(m.drop) ? m.drop : []).filter((r) => r && typeof r.contains === 'string').map((r): ItemRule => ({ field: r.field, op: 'contains', value: r.contains }));
-      m.rules = [...old, ...(Array.isArray(m.rules) ? m.rules : [])]
-        .filter((r) => r && known.has(r.field) && ['contains', 'is', 'is_not'].includes(r.op) && typeof r.value === 'string' && r.value.trim())
+      /*
+       * rules on this source's own fields only: what every item has (who from, title, text) is not filtered on, it is
+       * too broad to say anything of a source. A rule still being written (no value yet) is kept, and holds for nothing.
+       * The drop rules of older floors were on those common fields: they are let go.
+       */
+      const known = new Set(SOURCE_FIELDS[m.source].map((f) => f.key));
+      m.rules = (Array.isArray(m.rules) ? m.rules : [])
+        .filter((r) => r && known.has(r.field) && ['contains', 'is', 'is_not'].includes(r.op) && typeof r.value === 'string')
         .slice(0, 100).map((r) => ({ field: r.field, op: r.op, value: r.value.trim().slice(0, 300), ...(r.keep === true ? { keep: true } : {}) }));
       delete m.drop;
     }
@@ -1007,6 +1011,25 @@ export class FactoryEngine {
   }
 
   /** Archive an item by hand: it is junk, or done with. A new message in its conversation brings it back. */
+  /**
+   * Change what the Factory keeps of an item, by hand: its title, who it is from, its link, its text, its tags (which
+   * arms read), its source's fields. Its key and source do not change: they are what the source knows it by. A new
+   * entry from the source later replaces what it sends again (title, text, fields), not the tags given here.
+   */
+  async editItem(itemId: string, patch: { title?: unknown; author?: unknown; url?: unknown; excerpt?: unknown; tags?: unknown; fields?: unknown }): Promise<void> {
+    const t = this.get(itemId);
+    if (!t.item) throw new FactoryError('Only an item is edited here: a ticket is edited in Fleex');
+    const row = { ...t.item };
+    if (typeof patch.title === 'string') row.title = patch.title.trim().slice(0, 300) || row.title;
+    if (typeof patch.author === 'string') row.author = patch.author.trim().slice(0, 200);
+    if (patch.url === null || typeof patch.url === 'string') row.url = typeof patch.url === 'string' && /^https?:\/\//.test(patch.url.trim()) ? patch.url.trim().slice(0, 2000) : null;
+    if (typeof patch.excerpt === 'string') row.excerpt = patch.excerpt.trim().slice(0, 2000);
+    if (Array.isArray(patch.tags)) row.tags = [...new Set(patch.tags.map(String).map((x) => x.trim()).filter((x) => x && !x.startsWith('source:')))].slice(0, 20);
+    if (patch.fields !== undefined) row.fields = cleanFields(patch.fields);
+    t.item = row; t.info = itemInfo(row); this.dirty.add(itemId);
+    await this.flush();
+  }
+
   async archiveItem(itemId: string): Promise<void> {
     const t = this.get(itemId);
     if (!t.item) throw new FactoryError('Only an item can be archived from the floor: a ticket is given back');

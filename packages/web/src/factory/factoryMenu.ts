@@ -57,7 +57,9 @@ export interface MenuContext {
     turn(): void; remove(): void; deselect(): void;
     openTicket(): void; star(): void; giveBack(): void;
     /** An item: open its conversation where it lives, and archive it. */
-    openSource(): void; archive(): void; resolve(outcome: string): void; release(): void; retry(): void;
+    openSource(): void; archive(): void;
+    /** Make an item by hand at the intake selected. */
+    newItem(): void; resolve(outcome: string): void; release(): void; retry(): void;
     /** Take the ticket off its station's hands; and put it back as one of the station's outcomes (`retry` puts it back for another run). */
     setAside(): void; putBack(outcome: string): void;
     /** Open the popup of the machine selected: its settings, what it holds, what it did. */
@@ -114,7 +116,8 @@ export function factoryMenu(c: MenuContext): Menu {
     }
     return menu('Item', {
       ...first,
-      5: { id: 'source', label: 'Source', icon: 'open', tone: 'ticket', disabled: !url, title: url ? 'Open the conversation where it lives (also Enter)' : 'This item has no link to its source', run: a.openSource },
+      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The item: what the Factory keeps of it, its tags, its source\'s fields, what stations said (also Enter)', run: a.openTicket },
+      6: { id: 'source', label: 'Source', icon: 'exit', tone: 'ticket', disabled: !url, title: url ? 'Open it where it lives' : 'This item has no link to its source', run: a.openSource },
       [FIT_SLOT]: fit,
       9: { id: 'archive', label: 'Archive', icon: 'trash', tone: 'danger', title: 'Junk, or done with: it leaves the floor. A new message in its conversation brings it back', run: a.archive },
       [NEXT_SLOT]: next,
@@ -150,7 +153,8 @@ export function factoryMenu(c: MenuContext): Menu {
     if (c.machine) {
       const off = c.machine.power === 'off';
       return menu('Machine', {
-        0: c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
+        0: c.machine.kind === 'intake' ? { id: 'new-item', label: 'New item', icon: 'newticket', tone: 'go', title: 'Make an item of this source by hand, as its connector would send it', run: a.newItem }
+          : c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
           : c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
