@@ -182,6 +182,10 @@ describe('<FactoryMachinePopup/>', () => {
     expect(popup.textContent).not.toContain('source:slack"');                // the source's own tag is not edited
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'dm' } });
     expect(editItem).toHaveBeenLastCalledWith('i1', { fields: { channel: '#ops', kind: 'dm' } });
+    /* the raw item never shrinks under four lines, and Expand reads it in a popup of its own */
+    expect(popup.querySelector('pre')!.className).toContain('flex-none');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    expect(screen.getByRole('region', { name: 'Item as the Factory holds it' }).textContent).toContain('"excerpt": "It forgets its items"');
   });
 
   it('sets up a teleporter: its name, which of the two it is, where a departure leads, its colour', () => {

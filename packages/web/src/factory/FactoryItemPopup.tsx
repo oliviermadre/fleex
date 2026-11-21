@@ -14,6 +14,8 @@ import { span } from './format';
 import { toast } from '../lib/toast';
 import type { ItemFields } from './types';
 
+/** The raw item: 11 px on 16 px lines, four lines and its padding at least, sixteen at most; it never shrinks in its column. */
+const RAW_CLASS = 'min-h-[82px] max-h-[274px] flex-none overflow-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2 font-mono text-[11px] leading-[16px] text-[var(--theme-text-secondary)]';
 const Head = ({ children }: { children: React.ReactNode }) => <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">{children}</div>;
 const Read = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex flex-col gap-0.5"><span className="text-xs font-medium text-[var(--theme-text-secondary)]">{label}</span><span className="text-sm text-[var(--theme-text-primary)]">{children}</span></div>
@@ -47,14 +49,16 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
   const machine = t?.machineId ? store.layout?.machines.find((m) => m.id === t.machineId) ?? null : null;
   const runs = useItemVisits(itemId);
   const [text, setText] = useState<string | null>(null);
+  const [rawOpen, setRawOpen] = useState(false);
   if (!t?.item || !t.info) return null;
   const item = t.item, info = t.info, source = SOURCE_LABEL[item.source], own = SOURCE_FIELDS[item.source], fields = item.fields ?? {};
   const now = store.snapshot?.serverTime ?? new Date().toISOString();
   const tags = info.tags.filter((x) => !x.startsWith('source:'));
   const edit = (patch: Parameters<typeof store.editItem>[1]) => void store.editItem(itemId, patch);
   const setField = (k: string, v: ItemFields[string] | undefined) => { const next = { ...fields }; if (v === undefined || (Array.isArray(v) && !v.length)) delete next[k]; else next[k] = v; edit({ fields: next }); };
-  const raw = { id: item ? itemId : '', source: item.source, title: info.title, author: item.author, url: item.url, tags, messages: item.messages, lastActivityAt: item.lastActivityAt, excerpt: item.excerpt, fields, where: machine ? machine.name || machineKind(machine) : null, phase: t.phase };
+  const raw: Record<string, unknown> = { id: item ? itemId : '', source: item.source, title: info.title, author: item.author, url: item.url, tags, messages: item.messages, lastActivityAt: item.lastActivityAt, excerpt: item.excerpt, fields, where: machine ? machine.name || machineKind(machine) : null, phase: t.phase };
 
+  const json = JSON.stringify(raw, null, 2);
   const bar = (
     <>
       <TicketToken info={info} size={22} />
@@ -90,8 +94,12 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
             ? <p className="text-xs text-[var(--theme-text-muted)]">An item made by hand has nothing more than what every item has.</p>
             : <div className="grid grid-cols-2 gap-2">{own.map((f) => <FieldInput key={f.key} id={`i-f-${f.key}`} f={f} value={fields[f.key]} onChange={(v) => setField(f.key, v)} />)}</div>}
 
-          <Head>As the Factory holds it</Head>
-          <pre className="max-h-64 overflow-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2 font-mono text-[11px] text-[var(--theme-text-secondary)]">{JSON.stringify(raw, null, 2)}</pre>
+          <div className="mt-1 flex items-center justify-between">
+            <Head>As the Factory holds it</Head>
+            <Button size="sm" variant="ghost" onClick={() => setRawOpen(true)} title="Read it in a popup of its own">Expand</Button>
+          </div>
+          {/* never squeezed by the column when it scrolls: four lines at least, sixteen at most, then it scrolls */}
+          <pre className={RAW_CLASS}>{json}</pre>
         </div>
         <div className="flex flex-col gap-2 p-4 lg:overflow-y-auto">
           <Head>What stations said</Head>
@@ -99,6 +107,12 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
           {t.note && <p className="text-[11px] text-[var(--theme-warning)]">{t.note}</p>}
         </div>
       </div>
+      {rawOpen && (
+        <FactoryPopup label="Item as the Factory holds it" onClose={() => setRawOpen(false)} size="full" maxWidth="max-w-4xl"
+          bar={<span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--theme-text-primary)]">{info.title} <span className="font-normal text-[var(--theme-text-muted)]">· as the Factory holds it</span></span>}>
+          <pre className="m-4 min-h-0 flex-1 overflow-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-3 font-mono text-[12px] leading-[18px] text-[var(--theme-text-primary)]">{json}</pre>
+        </FactoryPopup>
+      )}
     </FactoryPopup>
   );
 }
