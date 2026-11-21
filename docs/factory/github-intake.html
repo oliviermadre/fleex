@@ -1,0 +1,393 @@
+<title>Factory, l'intake GitHub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<style>
+  .tokn { display: inline-flex; align-items: center; gap: 6px; background: #a78bfa; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; }
+  .cmt { border-left: 2px solid #3f3f46; padding: 2px 0 2px 8px; display: flex; flex-direction: column; gap: 1px; }
+  .cmt b { font-size: 0.78rem; } .cmt span { color: #8b8b94; font-size: 0.72rem; font-family: var(--mono); }
+  .thread { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .opt { border: 1px dashed #3f3f46; border-radius: 8px; padding: 8px; }
+  .steps { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .chk { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>GitHub entre par l'usine</h1>
+    <p class="lede">Chaque notification GitHub qui te concerne (<b>participating</b>) devient un <b>item</b>. L'intake ne fait que <b>dédoublonner</b> : il agrège une rafale sur un même sujet (issue, PR), commente le ticket Fleex lié s'il existe, et relie un nouvel item à celui qui l'a précédé. Ce qui en devient un ticket, c'est le plancher qui le décide : un bras, puis une station agent avec le persona Fleex. Lecture seule sur GitHub : Fleex ne marque rien comme lu.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">Les quatre cas</h2>
+    <p class="brief">Choisis un cas, puis avance pas à pas. Le panneau de droite est la carte de l'item (ou le fil du ticket lié) à ce moment-là.</p>
+    <div class="app">
+      <div class="row" id="plays"><h4>Case</h4></div>
+      <div class="scene wide" id="scene"></div>
+      <div class="steps"><button type="button" id="prev">Previous</button><button type="button" class="go" id="next">Next step</button><span class="hint" id="stepn"></span></div>
+      <div class="two">
+        <div><p class="now" id="now"><b>NOW</b><span id="say"></span></p></div>
+        <div class="app inner" id="panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-p1">
+    <h2 id="h-p1">Choix 1 · l'item précédent quand une suite arrive</h2>
+    <p class="brief">L'item précédent ne bouge pas : il est seulement marqué. Comment le voit-on sur le plancher ? (Le choix change le cas 3 ci-dessus.)</p>
+    <div class="grid small" id="g-p1"></div>
+  </section>
+
+  <section aria-labelledby="h-p2">
+    <h2 id="h-p2">Choix 2 · le commentaire posté sur le ticket lié</h2>
+    <p class="brief">Un seul commentaire par rafale, à la sortie du quai, sans mention (il ne réveille aucun agent). Que dit-il ? (Le choix change le cas 2.)</p>
+    <div class="grid small" id="g-p2"></div>
+  </section>
+
+  <section aria-labelledby="h-intake">
+    <h2 id="h-intake">Le panneau de l'intake GitHub</h2>
+    <p class="brief">Comme Gmail en deux parties, mais avec des règles : l'API des notifications n'a pas de langage de requête. Les champs des règles sont ceux que l'intake pose aussi en tags sur l'item, pour que les bras routent dessus.</p>
+    <div class="two">
+      <div class="app">
+        <div class="row" style="justify-content:space-between"><b>GitHub intake</b><span class="hint mono">Esc</span></div>
+        <h4>Every source</h4>
+        <div class="row"><label class="hint" style="width:9em">Name</label><input value="GitHub" style="flex:1"></div>
+        <div class="row"><label class="hint" style="width:9em">Source</label><select style="flex:1"><option>GitHub (gh)</option></select></div>
+        <div class="row"><label class="hint" style="width:9em">Leaves once quiet for</label><select style="flex:1"><option>2 min</option></select></div>
+        <h4>GitHub only</h4>
+        <p class="hint"><span class="ok">●</span> Read through gh 2.63 · @you, read-only (scope <span class="mono">notifications</span>)</p>
+        <label class="chk"><input type="checkbox" checked> Only what involves me <span class="hint">(participating)</span></label>
+        <p class="hint">Mentions, review requests, assignments, what you opened or commented on. Unticked: also every issue, PR and comment of the repositories you watch (tagged <span class="mono">reason:subscribed</span>).</p>
+        <div class="row"><label class="hint" style="width:9em">Pulls every</label><select style="flex:1"><option>1 min</option><option>5 min</option></select></div>
+        <p class="hint">Rules: drop what matches, or keep only what matches.</p>
+        <div class="scroll"><table>
+          <tr><th>Way</th><th>Field</th><th>Op</th><th>Value</th></tr>
+          <tr><td>Drop if</td><td>From a bot</td><td>is</td><td>yes</td></tr>
+          <tr><td>Drop if</td><td>Repository</td><td>is</td><td>evaneos/legacy-*</td></tr>
+          <tr><td>Drop if</td><td>Why</td><td>is</td><td>ci_activity</td></tr>
+        </table></div>
+        <p class="hint">Fields: Repository, Why (review_requested, assign, mention, team_mention, comment, author, ci_activity, state_change, security_alert, invitation, approval_requested, subscribed), Kind (issue, pr, release, discussion, alert), State (open, merged, closed), A draft, From a bot.</p>
+        <div class="row" style="justify-content:space-between"><span class="hint">Last pull 40s ago · 3 notifications</span><button type="button">Pull now</button></div>
+      </div>
+      <div class="rec">
+        <p><b>Ce que l'intake pose sur chaque item</b>, en tags (lus par les bras) et en champs :</p>
+        <p class="mono" style="margin-top:6px">reason:review_requested · repo:evaneos/shop · kind:pr · state:open · draft:no · bot:no</p>
+        <p style="margin-top:6px">Et selon le cas : <span class="mono">linked:yes</span> + le ticket (<span class="mono">#812</span>), <span class="mono">follow-up:yes</span> + l'item qu'il suit.</p>
+        <p style="margin-top:10px"><b>La clé</b> d'un item GitHub est le sujet plus le début de la rafale (<span class="mono">evaneos/shop#355@10:02</span>) : une même PR peut donner plusieurs items dans le temps, reliés. Le sujet seul sert à trouver le ticket lié et l'item précédent.</p>
+        <p style="margin-top:10px"><b>Sa rafale</b> : l'item contient les commentaires arrivés pendant qu'il attendait sur le quai (auteur, heure, texte), lus par un appel par sujet mis à jour.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-rules">
+    <h2 id="h-rules">Ce qui est décidé</h2>
+    <div class="rules">
+      <ol>
+        <li><b>Toute notification participating devient un item.</b> Le watching est une option de l'intake, décochée.</li>
+        <li><b>Rafale sur le quai</b> : tant qu'un item du même sujet attend sur le quai, une nouvelle notification s'y ajoute et relance le délai de calme.</li>
+        <li><b>Ticket lié</b> (lien github_issue ou github_pr) : un commentaire sur le ticket à la sortie du quai, et l'item sort quand même, avec <span class="mono">linked:yes</span>.</li>
+        <li><b>Item précédent déjà sorti</b> (sur le plancher ou archivé) : un nouvel item <span class="mono">follow-up:yes</span>, relié ; l'ancien ne bouge pas, il est marqué « new activity ». Le brief de la suite dit où en est l'ancien et ce que les stations en ont dit.</li>
+      </ol>
+      <ol start="5">
+        <li><b>Devenir un ticket</b> : un bras sur <span class="mono">reason:review_requested</span> ou <span class="mono">reason:assign</span> mène à une station agent, persona Fleex, qui crée ou retrouve le ticket par la CLI (<span class="mono">fleex import &lt;url&gt;</span>). Pas de station native tant que le concept n'est pas validé.</li>
+        <li><b>Lecture seule</b> sur GitHub. Les mails de GitHub : à exclure dans la query de l'intake Gmail, à ta main.</li>
+        <li><b>Gmail ne change pas</b> : un mail reste une conversation qui revient. Le modèle par rafale est celui de GitHub.</li>
+        <li><b>Encore à prévoir</b> : un ticket créé par l'agent n'arrive pas seul sur le plancher (la CLI n'a pas de commande factory) : il atterrit dans Inbound, ou on ajoute une commande pour le poser sur une machine.</li>
+      </ol>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.12)', body: '#26262b', edge: '#3f3f46', belt: '#27272a', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', gh: '#a78bfa', warn: '#facc15', ok: '#22c55e', danger: '#ef4444', ticket: '#60a5fa' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"", SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const text = (x, y, s, o = {}) => `<text x="${x}" y="${y}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''}>${esc(s)}</text>`;
+  const KEY = 'factory-github-intake-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  picks.p1 = picks.p1 || 'badge'; picks.p2 = picks.p2 || 'mix';
+
+  /* where things stand on the floor */
+  const SPOT = {
+    dock: [[64, 128], [104, 128], [144, 128]], triage: [[492, 108], [536, 108]], reply: [[748, 58]], exit: [[748, 148]], make: [[748, 252]],
+  };
+  const ITEMS = {
+    I1: { title: 'Fix cart rounding', ref: 'evaneos/shop#355', tags: ['reason:comment', 'repo:evaneos/shop', 'kind:pr', 'state:open'] },
+    I3: { title: 'Agent: retry on 502 from the proxy', ref: 'evaneos/fleex#360', tags: ['reason:author', 'repo:evaneos/fleex', 'kind:pr', 'linked:yes'], linked: '#812' },
+    I4: { title: 'Fix cart rounding', ref: 'evaneos/shop#355', tags: ['reason:comment', 'repo:evaneos/shop', 'kind:pr'] },
+    I5: { title: 'Fix cart rounding', ref: 'evaneos/shop#355', tags: ['reason:mention', 'repo:evaneos/shop', 'kind:pr', 'follow-up:yes'], follows: 'I4' },
+    I6: { title: 'Checkout: split payment', ref: 'evaneos/shop#371', tags: ['reason:review_requested', 'repo:evaneos/shop', 'kind:pr', 'draft:no'] },
+  };
+  const c = (who, at, said) => ({ who, at, said });
+  const CASES = [
+    { id: 'burst', label: '1 · Rafale sur une PR inconnue', steps: [
+      { at: { I1: 'dock' }, cm: { I1: [c('alice', '10:02', 'The rounding is off by one cent on 3-item carts.')] }, show: 'I1',
+        say: 'alice commente evaneos/shop#355, une PR qu\'aucun ticket Fleex ne connaît. Une notification : un item, qui attend sur le quai (calme : 2 min).' },
+      { at: { I1: 'dock' }, cm: { I1: [c('alice', '10:02', 'The rounding is off by one cent on 3-item carts.'), c('bob', '10:02:40', '@you can you confirm it is the tax step?')] }, show: 'I1',
+        say: '40 s plus tard, bob répond sur la même PR et te mentionne. Même sujet, l\'item attend encore : la notification s\'y ajoute, le délai repart. Un seul item, deux commentaires.' },
+      { at: { I1: 'triage' }, show: 'I1', say: 'Deux minutes de calme : l\'item sort, un bras l\'emmène au triage (agent, ton prompt), les deux commentaires dans son brief.' },
+      { at: { I1: 'reply' }, show: 'I1', say: 'Le triage conclut « reply » : l\'item part vers la lane où tu réponds.' },
+    ] },
+    { id: 'linked', label: '2 · PR liée au ticket #812', steps: [
+      { at: { I3: 'dock' }, cm: { I3: [c('carol', '11:15', 'Looks good, one nit on the backoff constant.')] }, show: 'I3',
+        say: 'carol commente evaneos/fleex#360. Cette PR est liée au ticket Fleex #812 (un agent l\'a ouverte). L\'item attend sur le quai, comme toujours, et sait déjà qu\'un ticket existe.' },
+      { at: { I3: 'dock' }, cm: { I3: [c('carol', '11:15', 'Looks good, one nit on the backoff constant.'), c('dan', '11:16', 'Agreed, 2s is too aggressive. Approve once fixed.')] }, show: 'I3',
+        say: 'dan ajoute un commentaire : il s\'agrège au même item.' },
+      { at: { I3: 'triage' }, show: 'ticket', posted: true,
+        say: 'Calme : l\'intake poste un seul commentaire sur #812 pour toute la rafale (sans mention, il ne réveille aucun agent), et l\'item sort quand même, avec linked:yes.' },
+      { at: { I3: 'exit' }, show: 'I3', say: 'Ici, un bras envoie les linked:yes à l\'exit : la conversation appartient au ticket. Tu pourrais aussi les envoyer au triage, ou ailleurs.' },
+    ] },
+    { id: 'follow', label: '3 · Suite d\'un item déjà au triage', steps: [
+      { at: { I4: 'triage' }, cm: { I4: [c('alice', '10:02', 'The rounding is off by one cent on 3-item carts.'), c('bob', '10:02:40', '@you can you confirm it is the tax step?')] }, run: ['I4'], show: 'I4',
+        say: 'L\'item de evaneos/shop#355 (cas 1) est au triage : un agent travaille dessus.' },
+      { at: { I4: 'triage', I5: 'dock' }, cm: { I5: [c('alice', '10:09', '@you nevermind, found it: the discount is applied twice.')] }, run: ['I4'], hot: ['I4'], show: 'I5',
+        say: 'alice répond encore sur #355. L\'item précédent est déjà sorti du quai : un nouvel item naît, relié (follow-up:yes). L\'ancien ne bouge pas et son run continue ; il est seulement marqué « new activity ».' },
+      { at: { I4: 'triage', I5: 'triage' }, run: ['I4'], hot: ['I4'], show: 'I5',
+        say: 'Calme : la suite sort et rejoint le triage. Son brief dit qu\'elle fait suite à l\'item au triage, et ce que les stations en ont dit. Le triage décide : compléter, ignorer, te le signaler.' },
+    ] },
+    { id: 'review', label: '4 · Review demandée, PR inconnue', steps: [
+      { at: { I6: 'dock' }, cm: { I6: [c('erin', '14:30', 'requested your review')] }, show: 'I6',
+        say: 'On te demande une review sur evaneos/shop#371. Une notification : un item sur le quai.' },
+      { at: { I6: 'make' }, run: ['I6'], show: 'I6',
+        say: 'Calme : le bras du bas prend les reason:review_requested (ou reason:assign) et l\'emmène à « Make a ticket », une station agent avec le persona Fleex. Aucun triage, aucun coût de plus que ce run.' },
+      { at: { T813: 'made' }, show: 'made',
+        say: 'L\'agent lance fleex import https://github.com/evaneos/shop/pull/371 : le ticket #813 est créé avec le lien de la PR (ou retrouvé s\'il existait). L\'item sort par « ticketed » et est archivé. Le ticket atterrit dans Inbound, ou sur une machine si on ajoute la commande.' },
+    ] },
+  ];
+  let ci = 0, si = 0;
+  const comments = (caseIdx, stepIdx, id) => { for (let k = stepIdx; k >= 0; k--) { const cm = CASES[caseIdx].steps[k].cm; if (cm && cm[id]) return cm[id]; } return []; };
+
+  function token(id, x, y, o = {}) {
+    let s = `<g><rect x="${x - 15}" y="${y - 15}" width="30" height="30" rx="6" fill="${o.ticket ? C.ticket : C.gh}" stroke="#18181b" stroke-width="2"/>`;
+    s += o.ticket ? text(x, y + 4, '#813', { mono: true, size: 9, weight: 700, fill: '#18181b', anchor: 'middle' })
+      : `<path d="M${x - 6} ${y - 7}v14M${x + 6} ${y + 7}v-6a4 4 0 0 0-4-4h-2" stroke="#18181b" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="${x - 6}" cy="${y - 8}" r="2.4" fill="#18181b"/><circle cx="${x - 6}" cy="${y + 8}" r="2.4" fill="#18181b"/><circle cx="${x + 6}" cy="${y + 8}" r="2.4" fill="#18181b"/>`;
+    if (o.run) s += `<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="${C.ok}" stroke-width="2" stroke-dasharray="4 4"/>`;
+    if (o.hot && picks.p1 === 'badge') s += `<circle cx="${x + 14}" cy="${y - 14}" r="7" fill="${C.warn}" stroke="#18181b" stroke-width="2"/>${text(x + 14, y - 10.5, '!', { size: 10, weight: 800, fill: '#18181b', anchor: 'middle' })}`;
+    s += text(x, y + 30, o.ticket ? 'ticket' : id, { mono: true, size: 10, fill: C.ink2, anchor: 'middle' });
+    return s + '</g>';
+  }
+  function box(x, y, w, h, title, sub, o = {}) {
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${C.body}" stroke="${o.color ?? C.edge}" stroke-width="2"/>` + text(x + 10, y + 17, title, { size: 11, weight: 650 }) + (sub ? text(x + 10, y + 31, sub, { mono: true, size: 9, fill: C.ink3 }) : '');
+  }
+  function draw() {
+    const st = CASES[ci].steps[si];
+    let s = `<svg viewBox="0 0 980 310" role="img" aria-label="The floor at this step"><rect width="980" height="310" fill="${C.floor}"/>`;
+    for (let y = 20; y < 310; y += 40) for (let x = 20; x < 980; x += 40) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    /* the dock */
+    const inDock = Object.entries(st.at).filter(([, p]) => p === 'dock').map(([k]) => k);
+    s += `<rect x="20" y="40" width="180" height="120" rx="10" fill="${C.body}" stroke="${C.gh}" stroke-width="2.5"/>`;
+    s += `<rect x="32" y="52" width="26" height="26" rx="6" fill="${C.gh}"/>` + text(66, 62, 'INTAKE', { mono: true, size: 9, weight: 700, fill: C.gh }) + text(66, 76, 'GitHub', { size: 13, weight: 650 });
+    s += text(32, 98, `HELD ${inDock.length}`, { mono: true, size: 9, weight: 700, fill: inDock.length ? C.warn : C.ink3 });
+    /* arm and belt to triage, triage, outcome arms */
+    s += `<rect x="210" y="96" width="30" height="24" rx="4" fill="#3f3f46"/>` + text(225, 135, 'arm', { mono: true, size: 9, fill: C.ink3, anchor: 'middle' });
+    s += `<rect x="244" y="98" width="196" height="20" rx="4" fill="${C.belt}"/>`;
+    for (let x = 252; x < 432; x += 18) s += `<path d="M${x} 103l5 5-5 5" stroke="#52525b" stroke-width="2" fill="none"/>`;
+    s += box(450, 40, 140, 120, 'Triage', 'agent · your prompt', { color: '#71717a' });
+    s += `<path d="M590 70 L720 58 M590 110 L720 148 M590 140 L700 240" stroke="#52525b" stroke-width="2" stroke-dasharray="5 4" fill="none"/>`;
+    s += text(650, 52, 'reply', { mono: true, size: 9, fill: C.ink3 }) + text(640, 118, 'ignore', { mono: true, size: 9, fill: C.ink3 }) + text(612, 196, 'make a ticket', { mono: true, size: 9, fill: C.ink3 });
+    s += box(720, 20, 220, 76, 'Reply', 'a lane where you answer');
+    s += box(720, 112, 220, 76, 'Exit', 'archives the item');
+    s += box(720, 206, 220, 90, 'Make a ticket', 'agent · persona Fleex', { color: C.ticket });
+    /* the deterministic arm: from the dock straight to Make a ticket */
+    s += `<path d="M110 160 V250 H714" stroke="${C.ticket}" stroke-width="3" fill="none" stroke-dasharray="1 0" opacity="0.55"/>`;
+    s += text(124, 244, 'arm · reason:review_requested OR reason:assign', { mono: true, size: 9, fill: C.ticket });
+    /* the things themselves */
+    const pos = {}, used = {};
+    for (const [id, place] of Object.entries(st.at)) {
+      if (place === 'made') { pos[id] = [880, 252]; continue; }
+      const k = used[place] = (used[place] ?? -1) + 1, spots = SPOT[place];
+      pos[id] = spots[Math.min(k, spots.length - 1)];
+    }
+    if (picks.p1 === 'line' && (st.hot ?? []).length) for (const id of st.hot) { const f = Object.keys(st.at).find((k) => ITEMS[k]?.follows === id); if (f && pos[f] && pos[id]) s += `<path d="M${pos[f][0]} ${pos[f][1]} Q ${(pos[f][0] + pos[id][0]) / 2} ${Math.min(pos[f][1], pos[id][1]) - 70} ${pos[id][0]} ${pos[id][1]}" stroke="${C.warn}" stroke-width="2" stroke-dasharray="4 4" fill="none"/>`; }
+    for (const [id, [x, y]] of Object.entries(pos)) s += token(id, x, y, { run: (st.run ?? []).includes(id), hot: (st.hot ?? []).includes(id), ticket: id === 'T813' });
+    if (st.show === 'made') s += text(748, 290, 'I6 archived', { mono: true, size: 9, fill: C.ink3, anchor: 'middle' });
+    $('scene').innerHTML = s + '</svg>';
+  }
+  const tags = (list) => list.map((t) => { const [k, v] = t.split(':'); return `<span class="tag kv"><b>${esc(k)}</b>:${esc(v)}</span>`; }).join(' ');
+  const cmts = (list) => list.map((m) => `<div class="cmt"><b>${esc(m.who)} <span>${esc(m.at)}</span></b><div>${esc(m.said)}</div></div>`).join('');
+  function panel() {
+    const st = CASES[ci].steps[si], p = $('panel');
+    if (st.show === 'ticket') {
+      const list = comments(ci, si, 'I3');
+      const body = picks.p2 === 'short'
+        ? `<div>${list.length} new comments on <span class="mono">evaneos/fleex#360</span> (${list.map((m) => esc(m.who)).join(', ')}) · <u>open on GitHub</u></div>`
+        : picks.p2 === 'full'
+          ? `<div>${list.length} new comments on <span class="mono">evaneos/fleex#360</span>:</div>${cmts(list)}`
+          : `<div>${list.length} new comments on <span class="mono">evaneos/fleex#360</span> (${list.map((m) => esc(m.who)).join(', ')}) · <u>open on GitHub</u></div><div class="cmt"><b>last, ${esc(list[list.length - 1].who)}</b><div>${esc(list[list.length - 1].said)}</div></div>`;
+      p.innerHTML = `<h4>Ticket #812 · its thread</h4><div class="thread"><div class="hint">… earlier: the agent opened the PR</div><div class="cmt" style="border-color:${C.gh}"><b>GitHub <span>via the Factory · 11:18</span></b>${body}</div></div><p class="hint">And the item leaves the dock anyway, tagged linked:yes, carrying #812.</p>`;
+      return;
+    }
+    if (st.show === 'made') {
+      p.innerHTML = `<h4>Ticket #813</h4><div class="thread"><b>Review: Checkout: split payment</b><div class="hint mono">link · github_pr evaneos/shop#371 · repo evaneos/shop</div><div class="hint">Created by the Factory's "Make a ticket" station (fleex import). Lands in Inbound.</div></div><h4>Item I6</h4><p class="hint">Archived · left by "ticketed" · carries #813</p>`;
+      return;
+    }
+    const id = st.show, it = ITEMS[id], list = comments(ci, si, id), where = st.at[id];
+    const notes = [];
+    if (it.linked) notes.push(`<div class="opt">Linked to ticket <b>${it.linked}</b>: the intake comments there once per burst.</div>`);
+    if (it.follows) notes.push(`<div class="opt">Follows <b>${it.follows}</b>, at <b>Triage</b> (running) · what stations said of it is in this item's brief.</div>`);
+    if ((st.hot ?? []).includes(id)) notes.push(`<div class="opt" style="border-color:${C.warn}">New activity: <b>${Object.keys(ITEMS).find((k) => ITEMS[k].follows === id)}</b> follows it.</div>`);
+    p.innerHTML = `<div class="row"><span class="tokn">${id}</span><b>${esc(it.title)}</b></div>
+      <div class="hint mono">${esc(it.ref)} · GitHub · ${where === 'dock' ? 'waits on the dock while it moves' : where}</div>
+      <div class="row">${tags(it.tags)}</div>${notes.join('')}
+      <h4>${list.length} comment${list.length === 1 ? '' : 's'} in this burst</h4>${cmts(list)}`;
+    if ((st.hot ?? []).includes(id) && picks.p1 === 'card') p.innerHTML += '<p class="hint">(choice C: only here, nothing on the floor)</p>';
+  }
+  function render() {
+    const n = CASES[ci].steps.length;
+    $('say').textContent = CASES[ci].steps[si].say;
+    $('stepn').textContent = `step ${si + 1} of ${n}`;
+    $('prev').disabled = si === 0; $('next').disabled = si === n - 1;
+    draw(); panel();
+    [...$('plays').querySelectorAll('button')].forEach((b, k) => b.setAttribute('aria-pressed', String(k === ci)));
+  }
+  for (const [k, cs] of CASES.entries()) { const b = document.createElement('button'); b.type = 'button'; b.textContent = cs.label; b.addEventListener('click', () => { ci = k; si = 0; render(); }); $('plays').appendChild(b); }
+  $('prev').addEventListener('click', () => { si = Math.max(0, si - 1); render(); });
+  $('next').addEventListener('click', () => { si = Math.min(CASES[ci].steps.length - 1, si + 1); render(); });
+
+  /* the picks */
+  const P1 = [
+    ['badge', 'A', 'Une pastille', 'Un « ! » jaune sur le jeton de l\'item précédent, où qu\'il soit. Discret, se voit de loin.'],
+    ['line', 'B', 'Un fil entre les deux', 'Une ligne pointillée relie la suite à l\'item précédent tant que les deux sont sur le plancher. Montre le lien, mais charge le dessin.'],
+    ['card', 'C', 'Rien sur le plancher', 'Seule la carte de l\'item le dit. Le plancher reste propre, mais on ne le voit qu\'en ouvrant l\'item.'],
+  ];
+  const P2 = [
+    ['short', 'A', 'Un résumé', '« 2 new comments on evaneos/fleex#360 (carol, dan) · open on GitHub ». Court ; il faut aller sur GitHub pour lire.'],
+    ['full', 'B', 'Les commentaires en entier', 'Chaque commentaire cité, auteur et heure. Tout est dans le fil du ticket, que l\'agent du ticket lit aussi ; mais ça peut être long.'],
+    ['mix', 'C', 'Résumé + le dernier', 'Le résumé, puis le dernier commentaire cité. Un compromis.'],
+  ];
+  function cards(el, list, key) {
+    $(el).innerHTML = list.map(([v, L, title, desc]) => `<div class="card ${picks[key] === v ? 'picked' : ''}"><div class="card-head"><span class="letter">${L}</span><h3>${esc(title)}</h3>${picks[key] === v ? '<span class="mine">Mon choix</span>' : ''}</div><p>${esc(desc)}</p><button type="button" data-k="${key}" data-v="${v}" aria-pressed="${picks[key] === v}">${picks[key] === v ? 'Choisi' : 'Choisir'}</button></div>`).join('');
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    cards('g-p1', P1, 'p1'); cards('g-p2', P2, 'p2');
+    const L1 = P1.find((x) => x[0] === picks.p1)[1], L2 = P2.find((x) => x[0] === picks.p2)[1];
+    $('picks').innerHTML = `Suite : <b>${L1}</b> · Commentaire sur le ticket : <b>${L2}</b>`;
+    render();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; picks[b.dataset.k] = b.dataset.v; save(); });
+  $('copy').addEventListener('click', () => {
+    const line = `GitHub intake : suite = ${P1.find((x) => x[0] === picks.p1)[1]}, commentaire sur le ticket = ${P2.find((x) => x[0] === picks.p2)[1]}`;
+    navigator.clipboard?.writeText(line).then(() => { $('said').textContent = 'Copié'; }, () => { $('said').textContent = line; });
+  });
+  save();
+})();
+</script>
