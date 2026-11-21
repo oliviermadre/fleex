@@ -18,6 +18,8 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import { FactoryEngine, type FactorySnapshot } from './engine.js';
 import { FactoryFeed, type FactoryPatch } from './factory-feed.js';
 import { StationRunner } from './station-runner.js';
+import { IntakePuller } from './intake-puller.js';
+import type { MailSourcePort } from './mail-source.port.js';
 import { runScript, normaliseScript, type ScriptContext, type Shell } from './script-runner.js';
 import { buildTicketWorkspaceId } from '@fleex/shared';
 import { basename } from 'node:path';
@@ -54,6 +56,8 @@ export interface FactoryModuleDeps {
   /** What a script station needs of the machine: a shell, and where a ticket's workspace and worktrees are. Without it script stations cannot run. */
   host?: { shell: Shell; exists(path: string): Promise<boolean>; workspacePath(workspaceId: string): string; workspaceRepoPath(workspaceId: string, repoName: string): string };
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
+  /** What reads the mailbox for the Gmail intakes (gogcli today). Without it they say they cannot be pulled. */
+  mail?: MailSourcePort | null;
 }
 
 /**
@@ -68,6 +72,8 @@ export class FactoryModule {
   private loaded = false;
   private retryAt = 0;
   private readonly feed = new FactoryFeed();
+  readonly puller: IntakePuller;
+  readonly mail: MailSourcePort | null;
 
   /**
    * A script station on a ticket: where the ticket's workspace and worktrees are, what each of its repositories
@@ -138,6 +144,8 @@ export class FactoryModule {
         deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'user', authorName, createdMentions: [], occurredAt: new Date() });
       },
     });
+    this.mail = deps.mail ?? null;
+    this.puller = new IntakePuller({ engine: this.engine, mail: this.mail, logger: deps.logger });
     this.listen();
   }
 
@@ -229,9 +237,10 @@ export class FactoryModule {
       }
       return true;
     });
+    this.puller.start(() => this.enabled() && this.loaded);
   }
 
-  stop(): Promise<void> { return this.engine.stop(); }
+  stop(): Promise<void> { this.puller.stop(); return this.engine.stop(); }
 }
 
 export function createFactoryModule(deps: FactoryModuleDeps): FactoryModule | null {

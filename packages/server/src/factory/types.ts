@@ -131,6 +131,15 @@ export interface IntakeSpec extends MachineBase {
   kind: 'intake'; source: ItemSource;
   /** Seconds a conversation must have been quiet before its item leaves. 0: at once. */
   quietSec?: number;
+  /**
+   * Which intake of its source is served first when several want the same item (1 first). Kept dense, 1 to n per
+   * source, by the save. An item that waits on the dock of an intake served later is taken over by one served first
+   * that sees it too: once an arm took it out, it stays on its lane.
+   */
+  priority?: number;
+  /** A source that is pulled (Gmail): its own search, run every `everySec`, for what came since the last pull. */
+  query?: string;
+  everySec?: number;
   rules?: ItemRule[];
   /** Floors saved before `rules`: read, and rewritten as drop rules. */
   drop?: DropRule[];
@@ -248,7 +257,14 @@ export interface ItemInput {
   messages?: number;
   /** What its source says of it beyond that: the fields of `item-sources.ts` for that source. */
   fields?: ItemFields;
+  /**
+   * When the message came, as its source says (never later than now). Without it, now. A message no later than the
+   * last one known of its conversation is nothing new: a pulled source sees the same message more than once.
+   */
+  at?: string;
 }
+/** Where a pulled intake stands: its last pull, and what went wrong with it if anything did. */
+export interface IntakePullRow { intakeId: string; floorId: string; lastPulledAt: string | null; error: string | null; updatedAt: string }
 
 /** What the engine needs to know about a ticket to route it and to show it. */
 export interface FactoryTicketInfo {

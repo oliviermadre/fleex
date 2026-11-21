@@ -40,3 +40,11 @@ export const SOURCE_FIELDS: Record<ItemSource, readonly SourceField[]> = {
 };
 
 export const fieldsOf = (source: ItemSource): readonly SourceField[] => [...COMMON_FIELDS, ...SOURCE_FIELDS[source]];
+
+/**
+ * The sources whose intakes pull: Fleex asks them, at an interval, for what came since the last pull, with a search of
+ * their own. That search is the filter: an intake of such a source has no rules. `hint` is what the page shows under it.
+ */
+export const PULLED_SOURCES: Partial<Record<ItemSource, { query: string; hint: string; everySec: number }>> = {
+  gmail: { query: 'Gmail search', hint: 'as in Gmail\'s search box: from:@acme.com -category:promotions has:attachment', everySec: 300 },
+};

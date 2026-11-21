@@ -70,6 +70,17 @@ export function factoryRoutes(factory: FactoryModule | null) {
         throw err;
       }
     });
+    /** Whether the mailbox the Gmail intakes read can be read (gogcli installed, Gmail authorized). */
+    app.get<{ Querystring: { refresh?: string } }>('/api/factory/mail/status', async (request) => {
+      const f = await ready();
+      if (!f.mail) return { provider: null, installed: false, version: null, connected: false, account: null, error: 'No mail reader on this Fleex server', setupUrl: null };
+      return f.mail.status(request.query.refresh === '1' || request.query.refresh === 'true');
+    });
+    /** Pull a Gmail intake now, without waiting for its interval: how many messages it saw, and what became of them. */
+    app.post<{ Params: { machineId: string } }>('/api/factory/intakes/:machineId/pull', async (request) => {
+      const f = await ready();
+      return { ...(await f.puller.pull(request.params.machineId)), snapshot: f.state() };
+    });
     /** What stations did with an item and what they answered, oldest first. */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
     /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */

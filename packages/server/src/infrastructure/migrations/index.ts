@@ -49,6 +49,7 @@ import migration047 from './migrations/046_factory_runs_machine_index.js';
 import migration048 from './migrations/047_factory_items.js';
 import migration049 from './migrations/048_factory_item_runs.js';
 import migration050 from './migrations/049_factory_item_fields.js';
+import migration051 from './migrations/050_factory_intake_pulls.js';
 
 /**
  * Ordered array of all migrations.
@@ -105,4 +106,5 @@ export const allMigrations: Migration[] = [
   migration048,
   migration049,
   migration050,
+  migration051,
 ];

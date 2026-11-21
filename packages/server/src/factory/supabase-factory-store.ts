@@ -1,7 +1,7 @@
 import type { SupabaseConnection } from '../infrastructure/adapters/supabase/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState } from './types.js';
-import { itemFromRow, itemToRow, runFromRow, type ItemDbRow } from './sqlite-factory-store.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState, IntakePullRow } from './types.js';
+import { itemFromRow, itemToRow, pullFromRow, pullToRow, runFromRow, type IntakePullDbRow, type ItemDbRow } from './sqlite-factory-store.js';
 
 interface FloorRow { id: string; name: string; layout: FactoryLayout; settings: FactorySettings; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: FactoryTicketState; created_at: string; updated_at: string }
@@ -72,6 +72,17 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     const out: Record<string, number> = {};
     for (const r of data as { intake_id: string | null }[]) if (r.intake_id) out[r.intake_id] = (out[r.intake_id] ?? 0) + 1;
     return out;
+  }
+
+  async listIntakePulls(floorId: string): Promise<IntakePullRow[]> {
+    const { data, error } = await this.conn.client.from('factory_intake_pulls').select('*').eq('floor_id', floorId);
+    if (error) this.fail('listIntakePulls', error.message);
+    return (data as IntakePullDbRow[]).map(pullFromRow);
+  }
+
+  async saveIntakePull(r: IntakePullRow): Promise<void> {
+    const { error } = await this.conn.client.from('factory_intake_pulls').upsert(pullToRow(r), { onConflict: 'intake_id' });
+    if (error) this.fail('saveIntakePull', error.message);
   }
 
   async saveRun(r: FactoryRunRow): Promise<void> {

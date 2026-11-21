@@ -1,4 +1,4 @@
-import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, IntakePullRow } from './types.js';
 
 export interface FactoryStorePort {
   getFloor(id: string): Promise<FactoryFloorRow | null>;
@@ -17,6 +17,10 @@ export interface FactoryStorePort {
   saveItem(row: FactoryItemRow): Promise<void>;
   /** How many items each intake dropped since then, by intake id. */
   countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>>;
+
+  /** Where each pulled intake of a floor stands: its last pull, its last error. */
+  listIntakePulls(floorId: string): Promise<IntakePullRow[]>;
+  saveIntakePull(row: IntakePullRow): Promise<void>;
 
   saveRun(run: FactoryRunRow): Promise<void>;
   /** A station's visit to an item, with what it answered (`ticketId` is the item's id). */

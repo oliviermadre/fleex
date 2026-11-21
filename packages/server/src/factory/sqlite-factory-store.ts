@@ -1,6 +1,6 @@
 import type { SqliteConnection } from '../infrastructure/adapters/sqlite/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus, IntakePullRow } from './types.js';
 
 interface FloorRow { id: string; name: string; layout: string; settings: string; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: string; created_at: string; updated_at: string }
@@ -33,6 +33,10 @@ export function itemToRow(i: FactoryItemRow, json: (v: unknown) => unknown): Ite
     state: i.state == null ? null : json(i.state), archived_at: i.archivedAt, archived_reason: i.archivedReason, created_at: i.createdAt, updated_at: i.updatedAt,
   };
 }
+
+export interface IntakePullDbRow { intake_id: string; floor_id: string; last_pulled_at: string | null; error: string | null; updated_at: string }
+export const pullFromRow = (r: IntakePullDbRow): IntakePullRow => ({ intakeId: r.intake_id, floorId: r.floor_id, lastPulledAt: iso(r.last_pulled_at), error: r.error, updatedAt: iso(r.updated_at)! });
+export const pullToRow = (r: IntakePullRow): IntakePullDbRow => ({ intake_id: r.intakeId, floor_id: r.floorId, last_pulled_at: r.lastPulledAt, error: r.error, updated_at: r.updatedAt });
 
 export function runFromRow(r: RunRow & { item_id?: string; reply?: string | null; deliverable_id?: string | null }): FactoryRunRow {
   return {
@@ -102,6 +106,18 @@ export class SqliteFactoryStore implements FactoryStorePort {
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
     const rows = this.conn.db.prepare("SELECT intake_id, COUNT(*) AS n FROM factory_items WHERE floor_id = ? AND archived_reason = 'dropped' AND archived_at >= ? GROUP BY intake_id").all(floorId, sinceIso) as { intake_id: string | null; n: number }[];
     return Object.fromEntries(rows.filter((r) => r.intake_id).map((r) => [r.intake_id!, r.n]));
+  }
+
+  async listIntakePulls(floorId: string): Promise<IntakePullRow[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM factory_intake_pulls WHERE floor_id = ?').all(floorId) as IntakePullDbRow[];
+    return rows.map(pullFromRow);
+  }
+
+  async saveIntakePull(r: IntakePullRow): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO factory_intake_pulls (intake_id, floor_id, last_pulled_at, error, updated_at) VALUES (@intake_id, @floor_id, @last_pulled_at, @error, @updated_at)
+      ON CONFLICT(intake_id) DO UPDATE SET floor_id = excluded.floor_id, last_pulled_at = excluded.last_pulled_at, error = excluded.error, updated_at = excluded.updated_at
+    `).run(pullToRow(r) as unknown as Record<string, unknown>);
   }
 
   async saveRun(r: FactoryRunRow): Promise<void> {

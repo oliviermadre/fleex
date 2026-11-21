@@ -2,7 +2,7 @@ import { normaliseScript, scriptOutcomes } from './script-runner.js';
 import { applyOps, normaliseOps, type TicketChange } from './set-ops.js';
 import { randomUUID } from 'node:crypto';
 import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
-import { SOURCE_FIELDS } from './item-sources.js';
+import { PULLED_SOURCES, SOURCE_FIELDS } from './item-sources.js';
 import type { TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
@@ -10,7 +10,7 @@ import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseC
 import {
   AREA_LABELS, DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
   type AreaLabel, type ArmSpec, type BeltSpec, type ItemFields, type ItemRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
-  type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
+  type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type IntakePullRow, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
 /** Tiles per second on a belt. */
@@ -114,7 +114,7 @@ export interface FactorySnapshot {
   floor: { id: string; name: string; layout: FactoryLayout; settings: FactorySettings };
   tickets: (FactoryTicketState & { ticketId: string; machineId: string | null; info: FactoryTicketInfo | null; /** When it was handed over to the Factory (ISO). */ handedAt: string; /** Set on an item, which is not a ticket. */ item?: FactoryItemInfo })[];
   /** What each intake dropped over the last 24 hours, by its id. */
-  intakes?: Record<string, { dropped: number }>;
+  intakes?: Record<string, { dropped: number; /** A pulled intake (Gmail): its last pull, and what went wrong with it. */ pulledAt?: string | null; pullError?: string | null }>;
   /** `p` is how far each arm has swung (0 at its source, 1 at its destination) and `state` which way it is going, so the page can carry the motion on between two snapshots. */
   arms: { id: string; p: number; state: 'rest' | 'carry' | 'back'; carrying: string | null }[];
   /** Seconds an arm takes to swing one way. */
@@ -269,8 +269,13 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
        * too broad to say anything of a source. A rule still being written (no value yet) is kept, and holds for nothing.
        * The drop rules of older floors were on those common fields: they are let go.
        */
-      const known = new Set(SOURCE_FIELDS[m.source].map((f) => f.key));
-      m.rules = (Array.isArray(m.rules) ? m.rules : [])
+      const known = new Set(SOURCE_FIELDS[m.source].map((f) => f.key)), pulled = PULLED_SOURCES[m.source];
+      /* a pulled source is filtered by its own search: its intake has no rules, and asks at an interval */
+      if (pulled) {
+        m.query = typeof m.query === 'string' ? m.query.trim().slice(0, 1000) : '';
+        m.everySec = Math.max(60, Math.min(86_400, Math.floor(Number(m.everySec ?? pulled.everySec) || pulled.everySec)));
+      } else { delete m.query; delete m.everySec; }
+      m.rules = pulled ? [] : (Array.isArray(m.rules) ? m.rules : [])
         .filter((r) => r && known.has(r.field) && ['contains', 'is', 'is_not'].includes(r.op) && typeof r.value === 'string')
         .slice(0, 100).map((r) => ({ field: r.field, op: r.op, value: r.value.trim().slice(0, 300), ...(r.keep === true ? { keep: true } : {}) }));
       delete m.drop;
@@ -293,6 +298,13 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     }
     x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h);
     machines.push(m);
+  }
+  /* the intakes of a source are served in order: 1 first, kept dense; those without one come after, as they were built */
+  const bySource = new Map<string, IntakeSpec[]>();
+  for (const m of machines) if (m.kind === 'intake') bySource.set(m.source, [...(bySource.get(m.source) ?? []), m]);
+  for (const list of bySource.values()) {
+    const rank = (m: IntakeSpec) => (Number.isFinite(Number(m.priority)) && Number(m.priority) > 0 ? Number(m.priority) : 1e9);
+    list.map((m, i) => ({ m, i })).sort((a, b) => rank(a.m) - rank(b.m) || a.i - b.i).forEach(({ m }, i) => { m.priority = i + 1; });
   }
   /* a departure leads to an arrival of this floor, or nowhere: it then keeps what it is given, and the page says so */
   const arrivals = new Set(machines.filter((m) => m.kind === 'teleporter' && m.role === 'arrival').map((m) => m.id));
@@ -329,6 +341,8 @@ export class FactoryEngine {
   private itemKeys = new Map<string, string>();
   /** What each intake dropped since the window began, by its id. */
   private dropped = new Map<string, number>();
+  /** Where each pulled intake stands (`IntakePuller`), by its id. */
+  private pulls = new Map<string, IntakePullRow>();
   private readonly now: () => number;
   private readonly armSwing: number;
   private readonly restMs: number;
@@ -379,6 +393,7 @@ export class FactoryEngine {
       if (startedOver) { const inbound = this.machines.find((m) => m.spec.kind === 'zone' && m.spec.inbound); if (inbound) { this.accept(inbound, t); t.s.outcome = ''; continue; } }
       this.attach(t);
     }
+    this.pulls = new Map((await this.deps.store.listIntakePulls(this.floor.id)).map((r) => [r.intakeId, r]));
     this.dropped = new Map(Object.entries(await this.deps.store.countDropped(this.floor.id, new Date(this.now() - DROPPED_WINDOW_MS).toISOString())));
     const sinceIso = new Date(this.now() - HOUR_MS).toISOString();
     const n = await this.deps.store.countRunsSince(this.floor.id, sinceIso);
@@ -1037,19 +1052,39 @@ export class FactoryEngine {
     await this.flush();
   }
 
+  /** The intakes of a source, in the order they are served (`priority`, 1 first). */
+  private intakesOf(source: string): Machine[] {
+    return this.machines.filter((m) => m.spec.kind === 'intake' && m.spec.source === source)
+      .sort((a, b) => ((a.spec as IntakeSpec).priority ?? 1e9) - ((b.spec as IntakeSpec).priority ?? 1e9));
+  }
+
   /**
-   * A source says something moved: a new item, or a new entry under a key already known. A new one goes to the first
-   * intake of its source whose rules let it in (in the order they were built), and is dropped when none does: it never
-   * reaches the floor, and the first of them counts it. A new entry updates the item where it is; in its intake, the
-   * item waits to be quiet again. An archived item comes back to the intake it came in by (or the first of its source).
+   * A source says something moved: a new item, or a new message under a key already known. Without `intakeId` (an
+   * item made by hand, a source that pushes), a new item goes to the first intake of its source, in the order they are
+   * served, whose rules let it in, and is dropped when none does: it never reaches the floor, and the first of them
+   * counts it. With `intakeId`, that intake saw it (a pulled source, whose own search is the filter): it is the one it
+   * goes to.
+   *
+   * One conversation is one item, whichever intakes see it. A new message updates it where it is; in an intake, it waits
+   * to be quiet again. A message no later than the last one known (`at`) is nothing new. An item still on the dock of
+   * an intake is taken over by an intake served before it that sees it too: the quiet delay is when that is settled.
+   * Once an arm took it out, it stays on its lane. An archived item comes back with a new message, to the intake it
+   * came in by (or the one that saw it, when that one is served first).
    */
-  async ingest(input: ItemInput): Promise<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped' }> {
+  async ingest(input: ItemInput, opts: { intakeId?: string } = {}): Promise<{ itemId: string | null; status: 'new' | 'updated' | 'back' | 'dropped' | 'moved' | 'seen' }> {
     if (!input || !ITEM_SOURCES.includes(input.source)) throw new FactoryError(`unknown item source "${String(input?.source)}"`);
     const key = String(input.key ?? '').trim().slice(0, 500);
     if (!key) throw new FactoryError('an item needs its key in its source');
-    const intakes = this.machines.filter((m) => m.spec.kind === 'intake' && m.spec.source === input.source);
+    const intakes = this.intakesOf(input.source);
     if (!intakes.length) throw new FactoryError(`No ${input.source} intake on the floor: put one there first (Build › Place › Intake)`);
-    const nowIso = new Date(this.now()).toISOString();
+    const seer = opts.intakeId ? intakes.find((m) => m.spec.id === opts.intakeId) ?? null : null;
+    if (opts.intakeId && !seer) throw new FactoryError(`No ${input.source} intake ${opts.intakeId} on the floor`);
+    const rank = (m: Machine | null | undefined) => (m ? intakes.indexOf(m) : Infinity);
+    const now = this.now(), nowIso = new Date(now).toISOString();
+    const said = typeof input.at === 'string' ? Date.parse(input.at) : NaN;
+    const at = Number.isFinite(said) ? new Date(Math.min(said, now)).toISOString() : nowIso;
+    /* only a source that says when its message came can see it twice: without `at`, every entry is a new message */
+    const newer = (last: string) => !Number.isFinite(said) || at > last;
     const url = typeof input.url === 'string' && /^https?:\/\//.test(input.url) ? input.url.slice(0, 2000) : null;
     const fields = {
       title: String(input.title ?? '').trim().slice(0, 300) || '(no subject)',
@@ -1062,24 +1097,34 @@ export class FactoryEngine {
 
     const onFloor = this.itemKeys.get(`${input.source}\u0000${key}`), known = onFloor ? this.tickets.get(onFloor) : undefined;
     if (known?.item) {
-      known.item = { ...known.item, ...fields, url: url ?? known.item.url, messages: count(known.item.messages), lastActivityAt: nowIso };
-      known.info = itemInfo(known.item);
-      /* still in its intake: the conversation moves, so it waits for it to be quiet again */
-      if (known.machineId && this.byId.get(known.machineId)?.spec.kind === 'intake') known.s.released = false;
+      const where = known.machineId ? this.byId.get(known.machineId) : undefined, docked = where?.spec.kind === 'intake';
+      const fresh = newer(known.item.lastActivityAt), better = !!seer && docked && rank(seer) < rank(where);
+      if (!fresh && !better) return { itemId: known.ticketId, status: 'seen' };
+      if (fresh) {
+        known.item = { ...known.item, ...fields, url: url ?? known.item.url, messages: count(known.item.messages), lastActivityAt: at };
+        known.info = itemInfo(known.item);
+      }
+      if (better) { this.detach(known); known.item = { ...known.item, intakeId: seer!.spec.id }; this.accept(seer!, known); }
+      /* still in an intake: the conversation moves, so it waits for it to be quiet again (`updateIntake` lets it out) */
+      else if (docked) known.s.released = false;
       this.dirty.add(known.ticketId);
       await this.flush();
-      return { itemId: known.ticketId, status: 'updated' };
+      return { itemId: known.ticketId, status: better ? 'moved' : 'updated' };
     }
 
     const stored = await this.deps.store.getItemByKey(input.source, key);
+    /* archived, and nothing came since: it stays where it is (a pulled source sees the same message again) */
+    if (stored && !newer(stored.lastActivityAt)) return { itemId: null, status: 'seen' };
     const row: FactoryItemRow = {
       id: stored?.id ?? randomUUID(), floorId: this.floor.id, source: input.source, sourceKey: key, ...fields, url: url ?? stored?.url ?? null,
-      messages: stored ? count(stored.messages) : Math.max(1, Math.floor(Number(input.messages) || 1)), lastActivityAt: nowIso,
+      messages: stored ? count(stored.messages) : Math.max(1, Math.floor(Number(input.messages) || 1)), lastActivityAt: at,
       intakeId: intakes[0]!.spec.id, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: stored?.createdAt ?? nowIso, updatedAt: nowIso,
     };
     /* what was archived by hand or at an exit comes back; what was dropped, and anything new, goes through the rules */
     const back = !!stored && stored.archivedReason !== 'dropped';
-    const intake = back ? intakes.find((m) => m.spec.id === stored!.intakeId) ?? intakes[0]! : intakes.find((m) => lets((m.spec as IntakeSpec).rules, row).in);
+    const was = back ? intakes.find((m) => m.spec.id === stored!.intakeId) : undefined;
+    const intake = back ? ([was, seer].filter(Boolean) as Machine[]).sort((a, b) => rank(a) - rank(b))[0] ?? intakes[0]!
+      : seer ?? intakes.find((m) => lets((m.spec as IntakeSpec).rules, row).in);
     if (!intake) {
       const first = intakes[0]!;
       await this.deps.store.saveItem({ ...row, archivedAt: nowIso, archivedReason: 'dropped' });
@@ -1092,6 +1137,19 @@ export class FactoryEngine {
     this.accept(intake, t);
     await this.flush();
     return { itemId: row.id, status: back ? 'back' : 'new' };
+  }
+
+  /** The intakes on the floor whose source is pulled, and where each stands. */
+  pulledIntakes(): { spec: IntakeSpec; pull: IntakePullRow | null }[] {
+    if (!this.ready) return [];
+    return this.machines.filter((m) => m.spec.kind === 'intake' && !!PULLED_SOURCES[m.spec.source]).map((m) => ({ spec: m.spec as IntakeSpec, pull: this.pulls.get(m.spec.id) ?? null }));
+  }
+
+  /** A pulled intake was asked: what it covered up to, and what went wrong if anything did (`lastPulledAt` stays as it was then). */
+  async recordPull(intakeId: string, lastPulledAt: string | null, error: string | null): Promise<void> {
+    const row: IntakePullRow = { intakeId, floorId: this.floor.id, lastPulledAt, error: error ? error.slice(0, 500) : null, updatedAt: new Date(this.now()).toISOString() };
+    this.pulls.set(intakeId, row);
+    await this.deps.store.saveIntakePull(row);
   }
 
   async release(ticketId: string): Promise<void> {
@@ -1232,7 +1290,10 @@ export class FactoryEngine {
       notice: this.notice,
       floor: { id: this.floor.id, name: this.floor.name, layout: this.floor.layout, settings: this.floor.settings },
       tickets: [...this.tickets.values()].map((t) => ({ ticketId: t.ticketId, machineId: t.machineId, info: t.info, handedAt: t.createdAt, ...t.s, ...(t.item ? { item: itemOf(t.item) } : {}) })),
-      intakes: Object.fromEntries(this.machines.filter((m) => m.spec.kind === 'intake').map((m) => [m.spec.id, { dropped: this.dropped.get(m.spec.id) ?? 0 }])),
+      intakes: Object.fromEntries(this.machines.filter((m) => m.spec.kind === 'intake').map((m) => {
+        const pull = PULLED_SOURCES[(m.spec as IntakeSpec).source] ? this.pulls.get(m.spec.id) : undefined;
+        return [m.spec.id, { dropped: this.dropped.get(m.spec.id) ?? 0, ...(PULLED_SOURCES[(m.spec as IntakeSpec).source] ? { pulledAt: pull?.lastPulledAt ?? null, pullError: pull?.error ?? null } : {}) }];
+      })),
       /* arms, and the arms of tolls, which go by their belt's id */
       arms: this.machines.filter((m) => m.spec.kind === 'arm' || (m.spec.kind === 'belt' && !!m.spec.toll)).map((m) => ({ id: m.spec.id, p: m.armP, state: m.armState, carrying: (m.spec.kind === 'arm' ? m.item : m.item2)?.ticketId ?? null })),
       armSwing: this.armSwing, beltSpeed: BELT_SPEED, fastBelt: FAST_BELT,

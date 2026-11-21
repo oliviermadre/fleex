@@ -9,7 +9,7 @@ import type { SetOp, TicketChange } from '../../src/factory/set-ops.js';
 import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
 import type { ItemRunTarget, StationRunResult } from '../../src/factory/station-runner.js';
-import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
+import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, IntakePullRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
   floors = new Map<string, FactoryFloorRow>();
@@ -27,6 +27,9 @@ class MemoryStore implements FactoryStorePort {
   async getItemByKey(source: string, key: string) { const i = [...this.items.values()].find((x) => x.source === source && x.sourceKey === key); return i ? structuredClone(i) : null; }
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
+  pulls = new Map<string, IntakePullRow>();
+  async listIntakePulls() { return [...this.pulls.values()].map((r) => structuredClone(r)); }
+  async saveIntakePull(r: IntakePullRow) { this.pulls.set(r.intakeId, structuredClone(r)); }
   async saveRun(r: FactoryRunRow) { this.runs.set(r.id, structuredClone(r)); }
   itemRuns = new Map<string, FactoryRunRow>();
   async saveItemRun(r: FactoryRunRow) { this.itemRuns.set(r.id, structuredClone(r)); }
@@ -242,6 +245,66 @@ describe('FactoryEngine', () => {
       await engine.archiveItem(b.itemId!);
       expect(await go('b', { channel: 'Ana', kind: 'dm' })).toMatchObject({ status: 'back' });
       expect(where(b.itemId!)).toBe('dms:zone');
+    });
+
+    describe('pulled intakes (Gmail)', () => {
+      const gmail = (id: string, x: number, y: number, over: Record<string, unknown> = {}) => intake(id, x, y, { source: 'gmail', ...over });
+      const mail = (key: string, at: string, over: Record<string, unknown> = {}) => ({ source: 'gmail' as const, key, title: `re ${key}`, author: 'ana@acme.com', at, ...over });
+      const iso = (msAgo: number) => new Date(clock - msAgo).toISOString(), NOW = '2026-11-15T10:00:00.000Z';
+
+      it('keeps a query and an interval, no rules, and numbers the intakes of a source in the order they are served', async () => {
+        await boot([gmail('late', 1, 1, { query: '  from:@acme.com ', rules: [{ field: 'to', op: 'is', value: 'x' }], everySec: 5 }), gmail('urgent', 1, 4, { priority: 1 }), intake('ops', 1, 7, { priority: 4, query: 'x' })]);
+        const ms = engine.snapshot().floor.layout.machines as unknown as Record<string, unknown>[];
+        expect(ms[0]).toMatchObject({ id: 'late', query: 'from:@acme.com', rules: [], everySec: 60, priority: 2 });
+        expect(ms[1]).toMatchObject({ id: 'urgent', query: '', everySec: 300, priority: 1 });
+        expect(ms[2]).toMatchObject({ id: 'ops', priority: 1 });
+        expect(ms[2]).not.toHaveProperty('query');
+        expect(engine.snapshot().intakes).toEqual({ late: { dropped: 0, pulledAt: null, pullError: null }, urgent: { dropped: 0, pulledAt: null, pullError: null }, ops: { dropped: 0 } });
+        await engine.recordPull('late', NOW, 'quota');
+        expect(engine.snapshot().intakes!['late']).toEqual({ dropped: 0, pulledAt: NOW, pullError: 'quota' });
+        expect(store.pulls.get('late')).toMatchObject({ lastPulledAt: NOW, error: 'quota' });
+        expect(engine.pulledIntakes().map((x) => x.spec.id)).toEqual(['late', 'urgent']);
+      });
+
+      it('goes to the intake that saw it, and a message seen again is nothing new', async () => {
+        await boot([gmail('a', 1, 1), gmail('b', 1, 4)]);
+        const first = await engine.ingest(mail('t1', iso(5_000)), { intakeId: 'b' });
+        expect(first.status).toBe('new');
+        expect(where(first.itemId!)).toBe('b:zone');
+        expect(await engine.ingest(mail('t1', iso(5_000)), { intakeId: 'b' })).toEqual({ itemId: first.itemId, status: 'seen' });
+        expect(await engine.ingest(mail('t1', iso(1_000), { title: 'and more' }), { intakeId: 'b' })).toEqual({ itemId: first.itemId, status: 'updated' });
+        expect(engine.snapshot().tickets.find((t) => t.ticketId === first.itemId)!.item).toMatchObject({ messages: 2 });
+        await expect(engine.ingest(mail('t2', iso(0)), { intakeId: 'nope' })).rejects.toThrow('No gmail intake nope');
+      });
+
+      it('one mail is one item: an intake served first takes it over while it waits on a dock, not once it is on a lane', async () => {
+        await boot([gmail('internal', 1, 1, { priority: 2, quietSec: 60 }), gmail('urgent', 1, 4, { priority: 1, quietSec: 60 }), arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+        const t = await engine.ingest(mail('t1', iso(0)), { intakeId: 'internal' });
+        expect(await engine.ingest(mail('t1', iso(0)), { intakeId: 'urgent' })).toEqual({ itemId: t.itemId, status: 'moved' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+        expect(store.items.size).toBe(1);
+        /* served later: it stays where it is */
+        expect(await engine.ingest(mail('t1', iso(0)), { intakeId: 'internal' })).toEqual({ itemId: t.itemId, status: 'seen' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+
+        const sent = iso(0), u = await engine.ingest(mail('t2', sent), { intakeId: 'internal' });
+        await run(70);
+        expect(where(u.itemId!)).toBe('z:zone');
+        expect(await engine.ingest(mail('t2', sent), { intakeId: 'urgent' })).toMatchObject({ status: 'seen' });
+        expect(where(u.itemId!)).toBe('z:zone');
+      });
+
+      it('an archived mail stays archived until a new message comes, then comes back where it came in, or to a better intake that saw it', async () => {
+        await boot([gmail('internal', 1, 1, { priority: 2 }), gmail('urgent', 1, 4, { priority: 1 })]);
+        const t = await engine.ingest(mail('t1', iso(60_000)), { intakeId: 'internal' });
+        await engine.archiveItem(t.itemId!);
+        expect(await engine.ingest(mail('t1', iso(60_000)), { intakeId: 'internal' })).toEqual({ itemId: null, status: 'seen' });
+        expect(await engine.ingest(mail('t1', iso(30_000)), { intakeId: 'internal' })).toMatchObject({ status: 'back' });
+        expect(where(t.itemId!)).toBe('internal:zone');
+        await engine.archiveItem(t.itemId!);
+        expect(await engine.ingest(mail('t1', iso(10_000)), { intakeId: 'urgent' })).toMatchObject({ status: 'back' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+      });
     });
 
     it('refuses an item with no intake for its source, or with no key', async () => {

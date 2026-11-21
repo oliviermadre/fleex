@@ -13,6 +13,7 @@ import { runPendingMigrations } from '../../src/infrastructure/migrations/run-mi
 import factoryMigration from '../../src/infrastructure/migrations/migrations/045_factory.js';
 import itemsMigration from '../../src/infrastructure/migrations/migrations/047_factory_items.js';
 import itemRunsMigration from '../../src/infrastructure/migrations/migrations/048_factory_item_runs.js';
+import pullsMigration from '../../src/infrastructure/migrations/migrations/050_factory_intake_pulls.js';
 import { DEFAULT_SETTINGS, type FactoryItemRow, type FactoryRunRow, type FactoryTicketRow } from '../../src/factory/types.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -141,14 +142,23 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listItemRuns('i1'))[1]).toMatchObject({ status: 'interrupted' });
   });
 
-  it('down() removes the five tables and nothing else', async () => {
+  it('keeps where each pulled intake stands, by floor', async () => {
+    await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: null, updatedAt: NOW });
+    await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: 'rate limited', updatedAt: '2026-11-15T13:00:00.000Z' });
+    await store.saveIntakePull({ intakeId: 'in2', floorId: 'other', lastPulledAt: null, error: null, updatedAt: NOW });
+    expect(await store.listIntakePulls('default')).toEqual([{ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: 'rate limited', updatedAt: '2026-11-15T13:00:00.000Z' }]);
+    expect(await store.listIntakePulls('other')).toEqual([{ intakeId: 'in2', floorId: 'other', lastPulledAt: null, error: null, updatedAt: NOW }]);
+  });
+
+  it('down() removes the six tables and nothing else', async () => {
     const tables = () => (conn.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'factory_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(tables()).toEqual(['factory_floors', 'factory_item_runs', 'factory_items', 'factory_runs', 'factory_tickets']);
+    expect(tables()).toEqual(['factory_floors', 'factory_intake_pulls', 'factory_item_runs', 'factory_items', 'factory_runs', 'factory_tickets']);
     const before = (conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n;
+    await pullsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await itemRunsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await itemsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await factoryMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     expect(tables()).toEqual([]);
-    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 5);
+    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 6);
   });
 });
