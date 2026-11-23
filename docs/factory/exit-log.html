@@ -1,0 +1,239 @@
+<title>Factory, ce qui est sorti</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<style>
+  .modal { background: #1f1f23; border: 1px solid #3f3f46; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; color: #fafafa; font-size: 0.8rem; color-scheme: dark; }
+  .modal .head { display: flex; align-items: flex-start; gap: 12px; }
+  .modal .head b { font-size: 1rem; } .modal .muted { color: #8b8b94; font-size: 0.75rem; }
+  .modal button { color: #fafafa; border-color: #3f3f46; font-size: 0.76rem; padding: 4px 9px; }
+  .modal select, .modal input { font: inherit; font-size: 0.76rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 4px 7px; }
+  .grid6 { display: grid; grid-template-columns: 26px minmax(0, 2.4fr) 80px 80px minmax(0, 1fr) 90px 96px minmax(0, 1fr) 112px; gap: 0 12px; align-items: center; }
+  .rowh { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8b94; padding: 6px 10px; border-bottom: 1px solid #2f2f35; }
+  .rowt { padding: 7px 10px; border-bottom: 1px solid #2f2f35; }
+  .rowt:hover { background: #26262b; }
+  .tk { width: 22px; height: 22px; border-radius: 5px; display: inline-block; }
+  .ref { font-family: var(--mono); color: #8b8b94; margin-right: 6px; }
+  .pill2 { font-family: var(--mono); font-size: 0.7rem; color: #c4c4cc; }
+  .frame { border: 1px solid #2f2f35; border-radius: 8px; overflow: auto; }
+  .frame > div { min-width: 900px; }
+  .tabs2 { display: flex; gap: 4px; }
+  .tabs2 button[aria-pressed="true"] { background: #fafafa; color: #18181b; }
+  .mini { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tile { border: 1px solid #3f3f46; border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; } .tile b { font-size: 1rem; font-family: var(--mono); } .tile span { color: #8b8b94; font-size: 0.7rem; }
+  .setbox { border: 1px dashed #3f3f46; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Ce qui est sorti par une exit</h1>
+    <p class="lede">Un double-clic sur une exit montre les tickets qui y sont passés sur la période des stats (7 jours par défaut, comme le compteur « 0 · 7 d » de l'exit), dans une liste du même genre que celle de <b>Tab</b>. Les données existent déjà : chaque sortie est une ligne des runs du Factory, avec l'heure de prise en charge et l'heure de sortie.</p>
+  </header>
+
+  <section aria-labelledby="h-v">
+    <h2 id="h-v">La popup</h2>
+    <p class="brief">Les choix ci-dessous changent ce dessin.</p>
+    <div class="modal" id="modal"></div>
+  </section>
+
+  <section aria-labelledby="h-p1">
+    <h2 id="h-p1">Choix 1 · ce que fait le double-clic</h2>
+    <div class="grid small" id="g-p1"></div>
+  </section>
+  <section aria-labelledby="h-p2">
+    <h2 id="h-p2">Choix 2 · la période</h2>
+    <div class="grid small" id="g-p2"></div>
+  </section>
+  <section aria-labelledby="h-p3">
+    <h2 id="h-p3">Choix 3 · les items sortis par l'exit</h2>
+    <p class="brief">Un item (un mail, une notification) qui arrive à une exit est archivé, pas « livré ». Il n'a pas de ligne de run : il faudrait les lire dans la table des items.</p>
+    <div class="grid small" id="g-p3"></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const KEY = 'factory-exit-log-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  picks.p1 = picks.p1 || 'list'; picks.p2 = picks.p2 || 'stats'; picks.p3 = picks.p3 || 'mixed';
+  const TYPE = { build: ['#8b5cf6', 'Build'], fix: ['#ef4444', 'Fix'], review: ['#f59e0b', 'Review'], src: ['#a78bfa', 'Gmail'] };
+  const ROWS = [
+    { ref: '#812', title: 'Agent: retry on 502 from the proxy', type: 'fix', prio: 'High', board: 'Fleex', lead: '2d 4h', when: 'today 11:42', now: 'done' },
+    { ref: '#806', title: 'Factory: exits list what they shipped', type: 'build', prio: 'Medium', board: 'Fleex', lead: '5h 12m', when: 'today 09:03', now: 'done' },
+    { item: true, ref: 'Gmail', title: 'Re: invoice October', type: 'src', prio: '', board: '', lead: '1h 40m', when: 'yesterday 17:20', now: 'archived' },
+    { ref: '#799', title: 'Checkout: split payment', type: 'review', prio: 'Medium', board: 'Shop', lead: '1d 2h', when: 'Mon 16:05', now: 'reopened · doing' },
+    { ref: '#790', title: 'Cart rounding on 3-item carts', type: 'fix', prio: 'Urgent', board: 'Shop', lead: '3h 08m', when: 'Sun 10:44', now: 'done' },
+  ];
+  function rows() {
+    const list = ROWS.filter((r) => picks.p3 === 'mixed' ? true : !r.item);
+    return list.map((r) => `<div class="grid6 rowt">
+      <span class="tk" style="background:${TYPE[r.type][0]}"></span>
+      <span style="min-width:0"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="ref">${esc(r.ref)}</span>${esc(r.title)}</span></span>
+      <span>${esc(TYPE[r.type][1])}</span><span>${esc(r.prio || '–')}</span><span style="color:#8b8b94">${esc(r.board || '–')}</span>
+      <span class="pill2" title="From hand-over to the exit">${esc(r.lead)}</span><span class="pill2">${esc(r.when)}</span>
+      <span style="color:${r.now.startsWith('reopened') ? '#facc15' : '#8b8b94'}">${esc(r.now)}</span>
+      <span style="display:flex;gap:4px;justify-content:flex-end"><button type="button">Detail</button></span></div>`).join('');
+  }
+  function modal() {
+    const n = ROWS.filter((r) => picks.p3 === 'mixed' ? true : !r.item).length;
+    const period = picks.p2 === 'stats' ? '<select><option>Last 7 days</option><option>Last 24 hours</option><option>Last 30 days</option></select><span class="muted">the stats period: the exit\'s counter follows it</span>' : '<span class="muted">last 7 days</span>';
+    const tabs = picks.p3 === 'tab' ? '<div class="tabs2"><button aria-pressed="true">Tickets · 4</button><button aria-pressed="false">Items · 1</button></div>' : '';
+    const list = `<div class="frame"><div><div class="grid6 rowh"><span></span><span>Ticket</span><span>Type</span><span>Priority</span><span>Board</span><span>Lead time</span><span>Shipped</span><span>Now</span><span></span></div>${rows()}</div></div>`;
+    const tiles = `<div class="mini"><div class="tile"><b>${n}</b><span>shipped</span></div><div class="tile"><b>1d 1h</b><span>median lead time</span></div><div class="tile"><b>1</b><span>reopened since</span></div></div>`;
+    const head = `<div class="head"><div style="flex:1;min-width:0"><b>Exit · Done</b><div class="muted">${n} shipped over the period · Esc closes</div></div>${picks.p1 === 'list' ? '<button type="button">Settings</button>' : ''}<button type="button">Close</button></div>`;
+    const filters = `<div class="row" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input placeholder="Title or number" style="width:14em"> ${period} ${tabs}</div>`;
+    if (picks.p1 === 'section') {
+      $('modal').innerHTML = head + `<div class="setbox"><span class="muted" style="text-transform:uppercase;letter-spacing:.08em;font-size:.65rem">Settings</span><div style="display:flex;gap:8px"><input value="Done" style="flex:1"><input value="3" style="width:4em"><input value="3" style="width:4em"></div><span class="muted">A ticket that arrives here is set to done and handed back to plain Fleex.</span></div>` + `<span class="muted" style="text-transform:uppercase;letter-spacing:.08em;font-size:.65rem">What left by it</span>` + tiles + filters + list;
+    } else {
+      $('modal').innerHTML = head + tiles + filters + list + `<span class="muted">Settings (name, size) stay a click away: the Settings button, or Edit on the command card.</span>`;
+    }
+  }
+  const P1 = [
+    ['list', 'A', 'La liste, en grand', 'Le double-clic ouvre la liste (grande popup façon Tab). Les réglages de l\'exit (nom, taille), rarement touchés, passent par un bouton Settings.'],
+    ['section', 'B', 'La popup actuelle, avec la liste dessous', 'La popup de la machine garde ses réglages en haut, et la liste vient en dessous, comme « What it did » pour une station.'],
+  ];
+  const P2 = [
+    ['stats', 'A', 'La période des stats', '24 h, 7 j ou 30 j, le même réglage que les stats : le compteur de l\'exit sur le plancher et la liste disent la même chose.'],
+    ['fixed', 'B', '7 jours, fixe', 'Toujours les 7 derniers jours, quel que soit le réglage des stats.'],
+  ];
+  const P3 = [
+    ['mixed', 'A', 'Dans la même liste', 'Tickets et items mêlés, dans l\'ordre de sortie ; un item a l\'icône de sa source et « archived ».'],
+    ['tab', 'B', 'Un onglet à part', 'Tickets et Items dans deux onglets.'],
+    ['none', 'C', 'Pas les items', 'Seulement les tickets livrés. Les items archivés se retrouvent ailleurs (plus tard).'],
+  ];
+  function cards(el, list, key) {
+    $(el).innerHTML = list.map(([v, L, title, desc]) => `<div class="card ${picks[key] === v ? 'picked' : ''}"><div class="card-head"><span class="letter">${L}</span><h3>${esc(title)}</h3>${picks[key] === v ? '<span class="mine">Mon choix</span>' : ''}</div><p>${esc(desc)}</p><button type="button" data-k="${key}" data-v="${v}" aria-pressed="${picks[key] === v}">${picks[key] === v ? 'Choisi' : 'Choisir'}</button></div>`).join('');
+  }
+  const L = (list, key) => list.find((x) => x[0] === picks[key])[1];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept */ }
+    cards('g-p1', P1, 'p1'); cards('g-p2', P2, 'p2'); cards('g-p3', P3, 'p3');
+    $('picks').innerHTML = `Double-clic : <b>${L(P1, 'p1')}</b> · Période : <b>${L(P2, 'p2')}</b> · Items : <b>${L(P3, 'p3')}</b>`;
+    modal();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; picks[b.dataset.k] = b.dataset.v; save(); });
+  $('copy').addEventListener('click', () => {
+    const line = `Exit : double-clic ${L(P1, 'p1')}, période ${L(P2, 'p2')}, items ${L(P3, 'p3')}`;
+    navigator.clipboard?.writeText(line).then(() => { $('said').textContent = 'Copié'; }, () => { $('said').textContent = line; });
+  });
+  save();
+})();
+</script>
