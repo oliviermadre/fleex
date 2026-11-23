@@ -24,7 +24,7 @@ import { runScript, normaliseScript, type ScriptContext, type Shell } from './sc
 import { buildTicketWorkspaceId } from '@fleex/shared';
 import { basename } from 'node:path';
 import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
-import type { FactoryTicketInfo, StationSpec } from './types.js';
+import type { ExitLog, FactoryTicketInfo, StationSpec } from './types.js';
 import type { StationRunResult } from './station-runner.js';
 import type { CommentPostedEvent } from '../domain/events.js';
 
@@ -227,6 +227,32 @@ export class FactoryModule {
       for (const list of batch) for (const e of list) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
     }
     return computeStats({ runs, executions, layout: floor.layout, since, until, days });
+  }
+
+  /**
+   * What left by one exit over the last `days` days: its shipments (the `exit` runs), each with the ticket as it is now
+   * (a ticket deleted since keeps its number only), and the items archived there.
+   */
+  async exitLog(machineId: string, days: number): Promise<ExitLog> {
+    const span = Math.max(1, Math.min(90, Math.floor(days) || 7)), since = new Date(Date.now() - span * DAY_MS).toISOString();
+    const floorId = this.engine.snapshot().floor.id;
+    const runs = (await this.store.listRecentRuns(floorId, 2000, machineId)).filter((r) => r.executor === 'exit' && r.finishedAt && r.finishedAt >= since);
+    const tickets: ExitLog['tickets'] = [];
+    for (let i = 0; i < runs.length; i += 8) {
+      const batch = await Promise.all(runs.slice(i, i + 8).map(async (r) => {
+        const t = (await this.deps.ticketStore.getTicketById(r.ticketId).catch(() => null))?.toDTO() ?? null;
+        return {
+          ticketId: r.ticketId, displayId: t?.displayId ?? null, title: t?.title ?? 'A ticket deleted since', type: t?.type ?? '', priority: t?.priority ?? '', boardId: t?.boardId ?? null,
+          status: t?.status ?? null, archived: !!t?.archivedAt, tags: t?.tags ?? [], handedAt: r.startedAt, shippedAt: r.finishedAt!,
+        };
+      }));
+      tickets.push(...batch);
+    }
+    const items = (await this.store.listExitItems(floorId, machineId, since)).map((i) => ({
+      itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, handedAt: i.createdAt, shippedAt: i.archivedAt!,
+    }));
+    tickets.sort((a, b) => b.shippedAt.localeCompare(a.shippedAt));
+    return { machineId, days: span, since, tickets, items };
   }
 
   start(): void {

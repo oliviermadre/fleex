@@ -272,3 +272,13 @@ export interface FactoryTicketInfo {
   /** What the page needs to tell tickets apart and to filter them; the engine routes on none of it. */
   boardId: string; complexity: string | null; favorite: boolean; blocked: boolean;
 }
+
+/**
+ * What left the floor by one exit over a period: the tickets it shipped (from their `exit` runs: handed over at
+ * `handedAt`, out at `shippedAt`, with what the ticket is now), and the items archived there. The latest first.
+ */
+export interface ExitLog {
+  machineId: string; days: number; since: string;
+  tickets: { ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  items: { itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
+}

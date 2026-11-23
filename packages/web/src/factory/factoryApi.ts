@@ -2,7 +2,7 @@ import { API_URL } from '../lib/constants';
 import { toast } from '../lib/toast';
 import type { ItemSource } from './items';
 import type { ItemFields } from './types';
-import type { FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
+import type { ExitLog, FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
   const res = await fetch(`${API_URL}/factory${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json' } : undefined });
@@ -54,5 +54,7 @@ export const factoryApi = {
     call<FactorySnapshot>(`/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
   archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
+  /** What left by an exit over the last `days` days. */
+  exitLog: (machineId: string, days: number) => call<ExitLog>(`/exits/${encodeURIComponent(machineId)}/log?days=${days}`, undefined, true),
   stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),
 };

@@ -142,6 +142,16 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listItemRuns('i1'))[1]).toMatchObject({ status: 'interrupted' });
   });
 
+  it('lists the items archived at an exit since a time', async () => {
+    const base = { floorId: 'default', source: 'gmail' as const, title: 't', author: '', excerpt: '', url: null, tags: [], fields: {}, messages: 1, lastActivityAt: NOW, intakeId: null, state: null, createdAt: NOW, updatedAt: NOW };
+    await store.saveItem({ ...base, id: 'e1', sourceKey: 'k1', machineId: 'out', archivedAt: '2026-11-15T12:00:00.000Z', archivedReason: 'exit' });
+    await store.saveItem({ ...base, id: 'e2', sourceKey: 'k2', machineId: 'out', archivedAt: '2026-11-14T12:00:00.000Z', archivedReason: 'exit' });
+    await store.saveItem({ ...base, id: 'j1', sourceKey: 'k3', machineId: null, archivedAt: '2026-11-15T12:00:00.000Z', archivedReason: 'junk' });
+    await store.saveItem({ ...base, id: 'o1', sourceKey: 'k4', machineId: 'other', archivedAt: '2026-11-15T12:00:00.000Z', archivedReason: 'exit' });
+    expect((await store.listExitItems('default', 'out', '2026-11-13T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1', 'e2']);
+    expect((await store.listExitItems('default', 'out', '2026-11-15T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1']);
+  });
+
   it('keeps where each pulled intake stands, by floor', async () => {
     await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: null, updatedAt: NOW });
     await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: 'rate limited', updatedAt: '2026-11-15T13:00:00.000Z' });

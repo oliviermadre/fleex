@@ -81,6 +81,8 @@ export function factoryRoutes(factory: FactoryModule | null) {
       const f = await ready();
       return { ...(await f.puller.pull(request.params.machineId)), snapshot: f.state() };
     });
+    /** What left by an exit over the last `days` days (7 by default): the tickets it shipped and the items archived there. */
+    app.get<{ Params: { machineId: string }; Querystring: { days?: string } }>('/api/factory/exits/:machineId/log', async (request) => (await ready()).exitLog(request.params.machineId, Number(request.query.days) || 7));
     /** What stations did with an item and what they answered, oldest first. */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
     /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */

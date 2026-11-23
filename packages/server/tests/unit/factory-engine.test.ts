@@ -27,6 +27,7 @@ class MemoryStore implements FactoryStorePort {
   async getItemByKey(source: string, key: string) { const i = [...this.items.values()].find((x) => x.source === source && x.sourceKey === key); return i ? structuredClone(i) : null; }
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
+  async listExitItems(_f: string, machineId: string, since: string) { return [...this.items.values()].filter((i) => i.archivedReason === 'exit' && i.machineId === machineId && (i.archivedAt ?? '') >= since); }
   pulls = new Map<string, IntakePullRow>();
   async listIntakePulls() { return [...this.pulls.values()].map((r) => structuredClone(r)); }
   async saveIntakePull(r: IntakePullRow) { this.pulls.set(r.intakeId, structuredClone(r)); }
@@ -155,7 +156,7 @@ describe('FactoryEngine', () => {
       const { itemId } = await engine.ingest(msg('k'));
       await run(5);
       expect(where(itemId!)).toBe('gone');
-      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'exit', machineId: null });
+      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'exit', machineId: 'x' });          // the exit it left by
       expect(statuses).toEqual([]);
       expect(await engine.ingest(msg('k'))).toEqual({ itemId, status: 'back' });
       expect(where(itemId!)).toBe('in:zone');

@@ -1019,9 +1019,10 @@ export class FactoryEngine {
 
   /** Take an item off the floor and archive it (soft delete): by hand as junk, or at an exit. */
   private archive(t: Ticket, reason: 'junk' | 'exit'): void {
-    const row = t.item!, nowIso = new Date(this.now()).toISOString();
+    const row = t.item!, nowIso = new Date(this.now()).toISOString(), at = t.machineId;
     this.detach(t); this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId); this.itemKeys.delete(`${row.source}\u0000${row.sourceKey}`);
-    const archived: FactoryItemRow = { ...row, machineId: null, state: null, archivedAt: nowIso, archivedReason: reason, updatedAt: nowIso };
+    /* archived at an exit, it keeps which one: the exit lists what left by it (`listExitItems`) */
+    const archived: FactoryItemRow = { ...row, machineId: reason === 'exit' ? at : null, state: null, archivedAt: nowIso, archivedReason: reason, updatedAt: nowIso };
     void this.deps.store.saveItem(archived).catch((err) => this.deps.logger.warn('Factory: could not archive an item', { itemId: row.id, error: String(err) }));
   }
 
