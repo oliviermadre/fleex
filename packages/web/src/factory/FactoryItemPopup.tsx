@@ -7,7 +7,8 @@ import { useFactoryStore } from './factoryStore';
 import { FactoryPopup } from './FactoryPopup';
 import { TicketToken } from './FactoryTicketMeta';
 import { CommitInput, machineKind } from './FactoryMachinePopup';
-import { ItemVisits, useItemVisits } from './ItemVisits';
+import { ItemVisits, useItemDeliverables, useItemVisits } from './ItemVisits';
+import { DeliveredBand, ItemContent } from './FactoryItemContent';
 import { SOURCE_LABEL } from './items';
 import { SOURCE_FIELDS, type SourceField } from './itemSources';
 import { span } from './format';
@@ -36,8 +37,9 @@ export function FieldInput({ f, value, onChange, id }: { f: SourceField; value: 
 /**
  * An item, opened (Enter, a double-click, Open): what the Factory keeps of it, and what was done with it.
  *
- * - What every item has, whatever its source, and edited here: its title, who it is from, its link, its text, its
- *   tags (which arms read, as a ticket's). Its source, its key there, its messages and where it stands are read only.
+ * - What it delivered, first: a band under the bar, each deliverable a card to open.
+ * - What every item has, whatever its source, and edited here: its title, who it is from, its link, its tags (which
+ *   arms read, as a ticket's); its content, in two tabs for a mail (its text, its HTML as sent: `ItemContent`). Its source, its key there, its messages and where it stands are read only.
  * - Its source's part: the fields only that source has (a Slack channel, Gmail labels), edited as they suit. Each
  *   source will have its own part here as its connector comes.
  * - The item as the Factory holds it, raw, as JSON.
@@ -47,8 +49,7 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
   const store = useFactoryStore();
   const t = store.snapshot?.tickets.find((x) => x.ticketId === itemId) ?? null;
   const machine = t?.machineId ? store.layout?.machines.find((m) => m.id === t.machineId) ?? null : null;
-  const runs = useItemVisits(itemId);
-  const [text, setText] = useState<string | null>(null);
+  const runs = useItemVisits(itemId), delivered = useItemDeliverables(runs);
   const [rawOpen, setRawOpen] = useState(false);
   if (!t?.item || !t.info) return null;
   const item = t.item, info = t.info, source = SOURCE_LABEL[item.source], own = SOURCE_FIELDS[item.source], fields = item.fields ?? {};
@@ -69,6 +70,7 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
   );
   return (
     <FactoryPopup label="Item" onClose={onClose} bar={bar} size="large" maxWidth="max-w-5xl">
+      <DeliveredBand delivered={delivered} />
       <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-[var(--theme-border)] overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:divide-x lg:divide-y-0 lg:overflow-hidden">
         <div className="flex flex-col gap-3 p-4 lg:overflow-y-auto">
           <Head>Every item</Head>
@@ -78,11 +80,8 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
             <CommitInput id="i-url" label="Link" value={item.url ?? ''} placeholder="https://…" onCommit={(v) => edit({ url: v.trim() || null })} />
           </div>
           <TagInput label="Tags" tags={tags} onChange={(next) => edit({ tags: next })} placeholder="a tag, or key:value" helperText={`Arms read them, as a ticket's; source:${item.source} is always there.`} />
-          <div className="flex flex-col gap-1">
-            <label htmlFor="i-text" className="text-xs font-medium text-[var(--theme-text-secondary)]">Text</label>
-            <textarea id="i-text" value={text ?? item.excerpt} onChange={(e) => setText(e.target.value)} onBlur={() => { if (text !== null && text !== item.excerpt) edit({ excerpt: text }); setText(null); }} rows={5}
-              className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none" />
-          </div>
+          <Head>Content</Head>
+          <ItemContent itemId={itemId} excerpt={item.excerpt} version={item.lastActivityAt} onEdit={(excerpt) => edit({ excerpt })} />
           <div className="grid grid-cols-3 gap-2">
             <Read label="Source">{source}</Read>
             <Read label="Messages">{item.messages}, the last {span(Math.max(0, Date.parse(now) - Date.parse(item.lastActivityAt)))} ago</Read>
@@ -103,7 +102,7 @@ export function FactoryItemPopup({ itemId, onClose }: { itemId: string; onClose:
         </div>
         <div className="flex flex-col gap-2 p-4 lg:overflow-y-auto">
           <Head>What stations said</Head>
-          <ItemVisits runs={runs} empty="No station has worked on it yet." />
+          <ItemVisits runs={runs} links={false} empty="No station has worked on it yet." />
           {t.note && <p className="text-[11px] text-[var(--theme-warning)]">{t.note}</p>}
         </div>
       </div>

@@ -9,7 +9,7 @@ import { SOURCE_LABEL } from './items';
 import { SOURCE_FIELDS } from './itemSources';
 import { span } from './format';
 import { SET_ASIDE } from './types';
-import { ItemVisits, useItemVisits } from './ItemVisits';
+import { ItemVisits, useItemDeliverables, useItemVisits, useOpenDeliverable } from './ItemVisits';
 
 /**
  * An item at the first click, beside it on the floor, as a ticket's thread is: where it came from, who it is from, how
@@ -21,7 +21,7 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onOpen: 
   const store = useFactoryStore();
   const t = store.snapshot?.tickets.find((x) => x.ticketId === itemId) ?? null;
   const machine = t?.machineId ? store.layout?.machines.find((m) => m.id === t.machineId) ?? null : null;
-  const runs = useItemVisits(itemId);
+  const runs = useItemVisits(itemId), delivered = useItemDeliverables(runs), openDeliverable = useOpenDeliverable();
   const el = useRef<HTMLDivElement>(null), at = useRef(''), list = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => ({ place: (r) => placeBeside(el.current, r, at) }), []);
 
@@ -66,14 +66,18 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onOpen: 
           ? <p className="line-clamp-[14] whitespace-pre-wrap break-words text-[var(--theme-text-primary)]">{lines}</p>
           : <p className="text-[var(--theme-text-muted)]">Nothing more came with it: open it where it lives.</p>}
         {said.length > 0 && <div className="mt-1 border-t border-[var(--theme-border)] pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">What stations said</div>}
-        <ItemVisits runs={runs} />
+        <ItemVisits runs={runs} links={false} />
         {t.note && <p className={cn('text-[11px]', aside ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-text-muted)]')}>{t.note}</p>}
       </div>
       <div className="flex flex-none flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] p-2">
         {gate && station.outcomes.map((o, i) => <Button key={o} size="sm" variant={i ? 'secondary' : 'primary'} onClick={() => void store.resolve(itemId, o)}>{o}</Button>)}
         {aside && <Button size="sm" variant="primary" onClick={() => void store.putBack(itemId)} title="The station runs on it again, told what it said before">Run again</Button>}
         {aside && station.outcomes.map((o) => <Button key={o} size="sm" onClick={() => void store.putBack(itemId, o)} title={`Send it on as "${o}"`}>{o}</Button>)}
-        <Button size="sm" variant={aside || gate ? 'secondary' : 'primary'} onClick={onOpen} title="The item: what the Factory keeps of it, its tags, its source's fields (also Enter)">Open</Button>
+        {/* what it delivered, first: the latest deliverable (picked on docs/factory/item-content.html, card: A) */}
+        {delivered[0] && <Button size="sm" variant="primary" className="max-w-full" onClick={() => openDeliverable(delivered[0]!)} title={delivered.length > 1 ? `The latest of ${delivered.length} deliverables; the others are in the item (Open)` : 'Open what a station delivered on it'}>
+          <span className="truncate">Open delivered: {delivered[0].deliverable?.title ?? 'deliverable'}</span>
+        </Button>}
+        <Button size="sm" variant={aside || gate || delivered.length ? 'secondary' : 'primary'} onClick={onOpen} title="The item: what the Factory keeps of it, its tags, its source's fields (also Enter)">Open</Button>
         {item.url && <Button size="sm" variant="secondary" onClick={() => window.open(item.url!, '_blank', 'noopener')}>Open in {source}</Button>}
         {t.phase === 'zone' && !t.released && <Button size="sm" onClick={() => void store.release(itemId)} title="Let an arm take it out now, without waiting for the conversation to be quiet">Release</Button>}
         <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { void store.archiveItem(itemId); onClose(); }} title="Junk, or done with: it leaves the floor. A new message brings it back">Archive</Button>

@@ -137,6 +137,24 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   source, messages and place read only; its source's part, its fields edited as they suit (each source will have
   its own part there as its connector comes); the item as the Factory holds it, as JSON; what stations said.
 
+### An item's content, and what it delivered
+
+Picked on `docs/factory/item-content.html` (A, A, A). gog gives a mail's HTML part as its text when the mail has no
+text part: the Gmail adapter reads each pull twice (text, then `--body-format html`), keeps the text part (or the HTML
+part read as text, `htmlToText` in shared) and the HTML part as sent. The whole of an item's latest message is kept
+apart, in `factory_item_bodies` (migration 051), written when the message comes and not each time the item moves;
+`GET /api/factory/items/:id/body` gives it (`kept: false` for an item made by hand, or kept before: its first lines,
+read as text when they are HTML). A station running on an item is briefed with the whole message (20,000 characters at
+most).
+
+- **Its card** shows text, never HTML. When a station delivered something on it, the card's first button opens the
+  latest deliverable ("Open delivered: …").
+- **Its popup**: a band under the bar lists what it delivered, each deliverable a card to open (`DeliveredBand`).
+  Content has two tabs for a mail (`ItemContent`): Text, its whole message, read only (an item made by hand keeps its
+  text editable); Email, its HTML as sent, in a frame that runs nothing (`sandbox` without scripts, a CSP that fetches
+  nothing) and opens links in a new tab. Images from the internet stay unloaded until Load images: loading them tells
+  the sender the mail was opened.
+
 ### Gmail: a pulled intake
 
 Gmail is the first source with a connector. It is **pulled**: Fleex asks it, rather than it telling Fleex
@@ -629,9 +647,10 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in six tables created by migrations `045_factory`
+Everything lives here, in `packages/web/src/factory/`, and in seven tables created by migrations `045_factory`
 (`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`),
-`048_factory_item_runs` (`factory_item_runs`) and `050_factory_intake_pulls` (`factory_intake_pulls`);
+`048_factory_item_runs` (`factory_item_runs`), `050_factory_intake_pulls` (`factory_intake_pulls`) and
+`051_factory_item_bodies` (`factory_item_bodies`);
 `049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
@@ -669,7 +688,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` to `050_factory_intake_pulls` (046, an index on `factory_runs`, among them) |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `051_factory_item_bodies` (046, an index on `factory_runs`, among them) |
 | `infrastructure/google/gog-mail.source.ts`, `google-calendar.client.ts` | the gogcli adapter of `MailSourcePort`; the agenda's client shares its gog runner and error mapping with it (`defaultGogRunner`, `gogFailure`, `parseJson`) |
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
@@ -699,7 +718,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 050 to 045), or drop the six tables.
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 051 to 045), or drop the seven tables.
 2. Delete this folder, `packages/web/src/factory/`, `infrastructure/google/gog-mail.source.ts`, the migration files and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step
