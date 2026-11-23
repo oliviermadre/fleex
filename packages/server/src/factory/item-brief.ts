@@ -1,9 +1,12 @@
-import type { FactoryItemRow, FactoryRunRow } from './types.js';
+import { htmlToText, looksLikeHtml } from '@fleex/shared';
+import type { FactoryItemRow, FactoryRunRow, ItemBody } from './types.js';
 import { SOURCE_FIELDS } from './item-sources.js';
 
 const SOURCE: Record<string, string> = { slack: 'Slack', gmail: 'Gmail', github: 'GitHub', manual: 'made by hand' };
 /** How many earlier visits a brief recalls, and how much of each answer. */
 const EARLIER = 3, REPLY_MAX = 4000;
+/** How much of the whole message a brief gives. */
+const BODY_MAX = 20_000;
 
 /**
  * An item in words: what a station that runs on it is given as its brief, in place of a ticket. Generic: it says what
@@ -14,7 +17,10 @@ const EARLIER = 3, REPLY_MAX = 4000;
  * What stations already said about it comes last: an item has no thread, so a station that runs on it again (after
  * a question, or a second station down the line) learns what was said before from here.
  */
-export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[] = []): string {
+export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[] = [], body: ItemBody | null = null): string {
+  /* the whole message when it was kept (its text; its HTML part's, for a mail that had no text), else its first lines */
+  const whole = body?.text?.trim() || (body?.html ? htmlToText(body.html) : '');
+  const shown = whole || (looksLikeHtml(item.excerpt) ? htmlToText(item.excerpt) : item.excerpt);
   const lines = [
     `An item that came in to the Factory${item.source === 'manual' ? ', made by hand' : ` from ${SOURCE[item.source] ?? item.source}`}. It is not a ticket.`,
     '',
@@ -27,9 +33,9 @@ export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[
     '',
     '## What came with it',
     '',
-    item.excerpt || '_Nothing but its title._',
+    shown ? (shown.length > BODY_MAX ? `${shown.slice(0, BODY_MAX)}…` : shown) : '_Nothing but its title._',
     '',
-    '_This is all the Factory keeps of it: the rest is in its source._',
+    whole ? '_This is its latest message, whole; the earlier ones of the conversation are in its source._' : '_This is all the Factory keeps of it: the rest is in its source._',
   ].filter((l): l is string => l !== null);
   const said = earlier.filter((r) => r.reply || r.outcome).slice(-EARLIER);
   if (said.length) {

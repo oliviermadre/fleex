@@ -4,7 +4,7 @@ import type { SubmitDeliverableUseCase } from '../application/use-cases/submit-d
 import type { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import type { AgentEventStorePort } from '../application/ports/agent-event-store.port.js';
 import type { EventBus } from '../application/event-bus.js';
-import type { FactoryItemRow, FactoryRunRow, StationSpec } from './types.js';
+import type { FactoryItemRow, FactoryRunRow, ItemBody, StationSpec } from './types.js';
 import { itemBrief, itemHeading } from './item-brief.js';
 
 export interface StationRunResult {
@@ -17,7 +17,7 @@ export interface StationRunResult {
   deliverableId?: string | null;
 }
 /** An item a station runs on, and what stations said about it before. */
-export interface ItemRunTarget { item: FactoryItemRow; earlier: FactoryRunRow[] }
+export interface ItemRunTarget { item: FactoryItemRow; earlier: FactoryRunRow[]; /** The whole of its latest message, when one was kept. */ body?: ItemBody | null }
 
 export interface StationRunnerPort {
   /** On an item, `ticketId` is the item's id and `item` says what it is: the run has no ticket, the item is its brief. */
@@ -69,7 +69,7 @@ export class StationRunner implements StationRunnerPort {
     };
     const input: StepExecutionInput = {
       ticketId: item ? null : ticketId, routineId: null,
-      subject: item ? { repos: [], brief: itemBrief(item.item, item.earlier), heading: itemHeading(item.item) } : null,
+      subject: item ? { repos: [], brief: itemBrief(item.item, item.earlier, item.body ?? null), heading: itemHeading(item.item) } : null,
       workflowRunId: runId, stepRunId: runId, step,
       modelOverride: station.exec === 'agent' || station.exec === 'skill' ? station.model || null : null,
       workflowContext: {

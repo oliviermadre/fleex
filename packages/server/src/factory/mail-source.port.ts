@@ -13,8 +13,10 @@ export interface MailMessage {
   at: string;
   from: string; to: string; cc: string;
   subject: string;
-  /** Its text, decoded; may be long. */
+  /** Its text, decoded; may be long. A mail with no text part has its HTML part's text here. */
   body: string;
+  /** Its HTML part, as sent, when it has one: what a person sees in their mail client. */
+  html: string | null;
   /** Label names, as the mailbox says them (INBOX, IMPORTANT, a label of yours). */
   labels: string[];
   attachments: number;

@@ -8,7 +8,7 @@
  * A pull is one `gog gmail messages search`, with the intake's query and `after:<epoch seconds>` (Gmail's own syntax),
  * every page of it, with each message's text, recipients and attachments.
  */
-import { GOGCLI_SETUP_URL } from '@fleex/shared';
+import { GOGCLI_SETUP_URL, htmlToText, looksLikeHtml } from '@fleex/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import { MailSourceError, type MailMessage, type MailSourcePort, type MailSourceStatus } from '../../factory/mail-source.port.js';
 import { GoogleApiError, GoogleNotConnectedError, defaultGogRunner, gogFailure, parseJson, type GogRunner } from './google-calendar.client.js';
@@ -38,14 +38,18 @@ export function pullQuery(query: string, since: Date): string {
   return query.trim() ? `(${query.trim()}) ${after}` : after;
 }
 
-export function mapGogMessage(m: GogMessage, account: string | null): MailMessage | null {
+/** A body as text: gog gives a mail's HTML part as its text when it has no text part. */
+const asText = (body: string) => (looksLikeHtml(body) ? htmlToText(body) : body);
+
+export function mapGogMessage(m: GogMessage, account: string | null, html: string | null = null): MailMessage | null {
   if (!m.id || !m.threadId) return null;
   const when = Date.parse(m.internalDateIso ?? m.date ?? '');
   if (!Number.isFinite(when)) return null;
   return {
     id: m.id, threadId: m.threadId, at: new Date(when).toISOString(),
     from: m.from ?? '', to: m.to ?? '', cc: m.cc ?? '', subject: m.subject ?? '',
-    body: (m.body ?? '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
+    body: asText(m.body ?? '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
+    html: html ?? (looksLikeHtml(m.body) ? m.body ?? null : null),
     labels: Array.isArray(m.labels) ? m.labels.filter((l) => typeof l === 'string') : [],
     attachments: Array.isArray(m.attachments) ? m.attachments.length : 0,
     url: gmailThreadUrl(m.threadId, account),
@@ -110,11 +114,12 @@ export class GogMailSource implements MailSourcePort {
   }
 
   async search(query: string, since: Date): Promise<MailMessage[]> {
+    const q = pullQuery(query, since);
     let body: Record<string, unknown> | null = null;
     for (let tries = 0; !body; tries++) {
       const extra = OPTIONAL_FLAGS.filter((f) => !this.unknown.has(f));
       try {
-        body = await this.gog(['gmail', 'messages', 'search', '--all', '--max', '100', '--include-body', ...extra, '--', pullQuery(query, since)]);
+        body = await this.gog(['gmail', 'messages', 'search', '--all', '--max', '100', '--include-body', ...extra, '--', q]);
       } catch (err) {
         const flag = err instanceof Error ? /unknown flag (--[\w-]+)/i.exec(err.message)?.[1] : undefined;
         if (!flag || !extra.includes(flag) || tries >= OPTIONAL_FLAGS.length) throw err;
@@ -122,7 +127,16 @@ export class GogMailSource implements MailSourcePort {
       }
     }
     const list = Array.isArray(body['messages']) ? (body['messages'] as GogMessage[]) : [];
+    /* the same search for each message's HTML part: what a person sees; a pull still works without it */
+    const html = new Map<string, string>();
+    if (list.length) {
+      try {
+        const again = await this.gog(['gmail', 'messages', 'search', '--all', '--max', '100', '--include-body', '--body-format', 'html', '--', q]);
+        for (const m of Array.isArray(again['messages']) ? (again['messages'] as GogMessage[]) : []) if (m.id && looksLikeHtml(m.body)) html.set(m.id, m.body!);
+      } catch { /* the text is enough */ }
+    }
     /* Gmail's `after:` is to the second; what the cursor already covered is let through, and the Factory knows it (`ItemInput.at`) */
-    return list.map((m) => mapGogMessage(m, this.account)).filter((m): m is MailMessage => !!m).sort((a, b) => a.at.localeCompare(b.at));
+    return list.map((m) => mapGogMessage(m, this.account, (m.id && html.get(m.id)) ?? null)).filter((m): m is MailMessage => !!m).sort((a, b) => a.at.localeCompare(b.at));
   }
+
 }

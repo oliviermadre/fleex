@@ -47,6 +47,8 @@ export const factoryApi = {
   mailStatus: (refresh = false) => call<MailStatus>(`/mail/status${refresh ? '?refresh=1' : ''}`, undefined, true),
   /** Pull a Gmail intake now: how many messages it saw, and what became of them. */
   pullIntake: (machineId: string) => post<PullResult & { snapshot: FactorySnapshot }>(`/intakes/${machineId}/pull`),
+  /** The whole of an item's latest message: its text, and its HTML part for a mail. */
+  itemBody: (itemId: string) => call<{ text: string; html: string | null }>(`/items/${itemId}/body`, undefined, true),
   /** What stations did with an item and what they answered, oldest first. */
   itemRuns: (itemId: string) => call<FactoryRun[]>(`/items/${itemId}/runs`, undefined, true),
   /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */

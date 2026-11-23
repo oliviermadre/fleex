@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { htmlToText, looksLikeHtml } from '@fleex/shared';
 import { Button } from '../components/ui/Button';
 import { cn } from '../lib/cn';
 import { useFactoryStore } from './factoryStore';
@@ -24,6 +25,9 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onOpen: 
   const el = useRef<HTMLDivElement>(null), at = useRef(''), list = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => ({ place: (r) => placeBeside(el.current, r, at) }), []);
 
+  /* its first lines as text: an item kept before mails had their text apart came with HTML there */
+  const excerpt = t?.item?.excerpt ?? '';
+  const lines = useMemo(() => (looksLikeHtml(excerpt) ? htmlToText(excerpt) : excerpt), [excerpt]);
   /* opens on the latest answer */
   useEffect(() => { const n = list.current; if (n) n.scrollTop = n.scrollHeight; }, [runs?.length]);
 
@@ -58,8 +62,8 @@ export const FactoryItemPeek = forwardRef<PeekHandle, { itemId: string; onOpen: 
             ))}
           </div>
         )}
-        {item.excerpt
-          ? <p className="whitespace-pre-wrap break-words text-[var(--theme-text-primary)]">{item.excerpt}</p>
+        {lines
+          ? <p className="line-clamp-[14] whitespace-pre-wrap break-words text-[var(--theme-text-primary)]">{lines}</p>
           : <p className="text-[var(--theme-text-muted)]">Nothing more came with it: open it where it lives.</p>}
         {said.length > 0 && <div className="mt-1 border-t border-[var(--theme-border)] pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">What stations said</div>}
         <ItemVisits runs={runs} />

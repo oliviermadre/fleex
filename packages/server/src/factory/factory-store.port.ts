@@ -1,4 +1,4 @@
-import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, IntakePullRow } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, IntakePullRow, ItemBody } from './types.js';
 
 export interface FactoryStorePort {
   getFloor(id: string): Promise<FactoryFloorRow | null>;
@@ -15,6 +15,9 @@ export interface FactoryStorePort {
   /** The item of a conversation, archived or not. */
   getItemByKey(source: string, sourceKey: string): Promise<FactoryItemRow | null>;
   saveItem(row: FactoryItemRow): Promise<void>;
+  /** The whole of an item's latest message, written when it comes in; null when none was kept. */
+  saveItemBody(itemId: string, body: ItemBody): Promise<void>;
+  getItemBody(itemId: string): Promise<ItemBody | null>;
   /** The items archived at this exit (at any exit, with null) since then, the latest first. */
   listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]>;
   /** How many items each intake dropped since then, by intake id. */

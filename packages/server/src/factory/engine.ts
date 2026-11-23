@@ -33,6 +33,8 @@ const HOUR_MS = 3_600_000;
 const DROPPED_WINDOW_MS = 24 * HOUR_MS;
 /** How long an intake keeps a conversation that moves, unless it says otherwise. */
 const DEFAULT_QUIET_SEC = 120;
+/** How much of a message's body an item keeps: its text, and its HTML part. */
+const BODY_TEXT_MAX = 100_000, BODY_HTML_MAX = 500_000;
 
 interface Machine {
   spec: MachineSpec;
@@ -793,7 +795,8 @@ export class FactoryEngine {
     const started = (executionId: string) => { run.executionId = executionId; this.saveRun(run); };
     /* an item is its brief: what it is, and what stations said about it before */
     const going = t.item
-      ? this.deps.store.listItemRuns(t.ticketId).catch(() => []).then((earlier) => this.deps.runner.run(spec, t.ticketId, run.id, targets, started, { item: t.item!, earlier: earlier.filter((r) => r.id !== run.id) }))
+      ? Promise.all([this.deps.store.listItemRuns(t.ticketId).catch(() => []), this.deps.store.getItemBody(t.ticketId).catch(() => null)])
+        .then(([earlier, body]) => this.deps.runner.run(spec, t.ticketId, run.id, targets, started, { item: t.item!, earlier: earlier.filter((r) => r.id !== run.id), body }))
       : this.deps.runner.run(spec, t.ticketId, run.id, targets, started);
     void going
       .then((res) => {
@@ -1053,6 +1056,17 @@ export class FactoryEngine {
     await this.flush();
   }
 
+  /**
+   * The whole of a message that came, kept apart from the item's row (which is written each time it moves): its text,
+   * and its HTML part when it came with one. Nothing kept for an entry that brings no body.
+   */
+  private async keepBody(itemId: string, input: ItemInput): Promise<void> {
+    const b = input.body;
+    if (!b || (!b.text && !b.html)) return;
+    await this.deps.store.saveItemBody(itemId, { text: String(b.text ?? '').slice(0, BODY_TEXT_MAX), html: b.html ? String(b.html).slice(0, BODY_HTML_MAX) : null })
+      .catch((err) => this.deps.logger.warn('Factory: could not keep an item\'s body', { itemId, error: String(err) }));
+  }
+
   /** The intakes of a source, in the order they are served (`priority`, 1 first). */
   private intakesOf(source: string): Machine[] {
     return this.machines.filter((m) => m.spec.kind === 'intake' && m.spec.source === source)
@@ -1110,6 +1124,7 @@ export class FactoryEngine {
       else if (docked) known.s.released = false;
       this.dirty.add(known.ticketId);
       await this.flush();
+      if (fresh) await this.keepBody(known.ticketId, input);
       return { itemId: known.ticketId, status: better ? 'moved' : 'updated' };
     }
 
@@ -1137,6 +1152,7 @@ export class FactoryEngine {
     this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${key}`, row.id);
     this.accept(intake, t);
     await this.flush();
+    await this.keepBody(row.id, input);
     return { itemId: row.id, status: back ? 'back' : 'new' };
   }
 

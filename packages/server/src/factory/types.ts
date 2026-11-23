@@ -257,12 +257,16 @@ export interface ItemInput {
   messages?: number;
   /** What its source says of it beyond that: the fields of `item-sources.ts` for that source. */
   fields?: ItemFields;
+  /** The whole of the message, beyond `excerpt` (its first lines): its text, and its HTML part for a mail. */
+  body?: { text?: string; html?: string | null };
   /**
    * When the message came, as its source says (never later than now). Without it, now. A message no later than the
    * last one known of its conversation is nothing new: a pulled source sees the same message more than once.
    */
   at?: string;
 }
+/** The whole of an item's latest message: its text, and its HTML part when it came with one (a mail). */
+export interface ItemBody { text: string; html: string | null }
 /** Where a pulled intake stands: its last pull, and what went wrong with it if anything did. */
 export interface IntakePullRow { intakeId: string; floorId: string; lastPulledAt: string | null; error: string | null; updatedAt: string }
 

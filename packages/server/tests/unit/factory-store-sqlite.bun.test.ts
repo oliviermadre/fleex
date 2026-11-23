@@ -14,6 +14,7 @@ import factoryMigration from '../../src/infrastructure/migrations/migrations/045
 import itemsMigration from '../../src/infrastructure/migrations/migrations/047_factory_items.js';
 import itemRunsMigration from '../../src/infrastructure/migrations/migrations/048_factory_item_runs.js';
 import pullsMigration from '../../src/infrastructure/migrations/migrations/050_factory_intake_pulls.js';
+import bodiesMigration from '../../src/infrastructure/migrations/migrations/051_factory_item_bodies.js';
 import { DEFAULT_SETTINGS, type FactoryItemRow, type FactoryRunRow, type FactoryTicketRow } from '../../src/factory/types.js';
 
 const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -153,6 +154,15 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listExitItems('default', null, '2026-11-13T00:00:00.000Z')).map((i) => i.id).sort()).toEqual(['e1', 'e2', 'o1']);
   });
 
+  it('keeps the whole of an item\'s latest message apart, over the one before', async () => {
+    const base = { floorId: 'default', source: 'gmail' as const, sourceKey: 'b1', title: 't', author: '', excerpt: '', url: null, tags: [], fields: {}, messages: 1, lastActivityAt: NOW, intakeId: null, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: NOW, updatedAt: NOW };
+    await store.saveItem({ ...base, id: 'b1' });
+    expect(await store.getItemBody('b1')).toBeNull();
+    await store.saveItemBody('b1', { text: 'first', html: '<p>first</p>' });
+    await store.saveItemBody('b1', { text: 'second', html: null });
+    expect(await store.getItemBody('b1')).toEqual({ text: 'second', html: null });
+  });
+
   it('keeps where each pulled intake stands, by floor', async () => {
     await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: null, updatedAt: NOW });
     await store.saveIntakePull({ intakeId: 'in1', floorId: 'default', lastPulledAt: NOW, error: 'rate limited', updatedAt: '2026-11-15T13:00:00.000Z' });
@@ -161,15 +171,16 @@ describe('SqliteFactoryStore', () => {
     expect(await store.listIntakePulls('other')).toEqual([{ intakeId: 'in2', floorId: 'other', lastPulledAt: null, error: null, updatedAt: NOW }]);
   });
 
-  it('down() removes the six tables and nothing else', async () => {
+  it('down() removes the seven tables and nothing else', async () => {
     const tables = () => (conn.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'factory_%' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(tables()).toEqual(['factory_floors', 'factory_intake_pulls', 'factory_item_runs', 'factory_items', 'factory_runs', 'factory_tickets']);
+    expect(tables()).toEqual(['factory_floors', 'factory_intake_pulls', 'factory_item_bodies', 'factory_item_runs', 'factory_items', 'factory_runs', 'factory_tickets']);
     const before = (conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n;
+    await bodiesMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await pullsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await itemRunsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await itemsMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     await factoryMigration.down({ adapter: 'sqlite', exec: async (sql: string) => { conn.db.exec(sql); }, query: async () => [], dialect: (d: { sqlite: unknown }) => d.sqlite } as never);
     expect(tables()).toEqual([]);
-    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 6);
+    expect((conn.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'").get() as { n: number }).n).toBe(before - 7);
   });
 });

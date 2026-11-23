@@ -20,7 +20,7 @@ export interface PullResult { pulled: number; new: number; updated: number; move
 
 export function mailToItem(m: MailMessage): ItemInput {
   return {
-    source: 'gmail', key: m.threadId, title: m.subject, author: m.from, excerpt: m.body, url: m.url, at: m.at,
+    source: 'gmail', key: m.threadId, title: m.subject, author: m.from, excerpt: m.body, url: m.url, at: m.at, body: { text: m.body, html: m.html },
     fields: { ...(m.to ? { to: m.to } : {}), ...(m.cc ? { cc: m.cc } : {}), labels: m.labels, attachment: m.attachments > 0 },
   };
 }

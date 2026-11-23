@@ -1,6 +1,6 @@
 import type { SupabaseConnection } from '../infrastructure/adapters/supabase/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState, IntakePullRow } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState, IntakePullRow, ItemBody } from './types.js';
 import { itemFromRow, itemToRow, pullFromRow, pullToRow, runFromRow, type IntakePullDbRow, type ItemDbRow } from './sqlite-factory-store.js';
 
 interface FloorRow { id: string; name: string; layout: FactoryLayout; settings: FactorySettings; created_at: string; updated_at: string }
@@ -71,6 +71,17 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     const { data, error } = await (machineId ? base.eq('machine_id', machineId) : base.not('machine_id', 'is', null)).eq('archived_reason', 'exit').gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(1000);
     if (error) this.fail('listExitItems', error.message);
     return (data as ItemDbRow[]).map(itemFromRow);
+  }
+
+  async saveItemBody(itemId: string, b: ItemBody): Promise<void> {
+    const { error } = await this.conn.client.from('factory_item_bodies').upsert({ item_id: itemId, text: b.text, html: b.html, updated_at: new Date().toISOString() }, { onConflict: 'item_id' });
+    if (error) this.fail('saveItemBody', error.message);
+  }
+
+  async getItemBody(itemId: string): Promise<ItemBody | null> {
+    const { data, error } = await this.conn.client.from('factory_item_bodies').select('text, html').eq('item_id', itemId).maybeSingle();
+    if (error) this.fail('getItemBody', error.message);
+    return data ? { text: (data as ItemBody).text, html: (data as ItemBody).html } : null;
   }
 
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {

@@ -28,6 +28,9 @@ class MemoryStore implements FactoryStorePort {
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
   async listExitItems(_f: string, machineId: string, since: string) { return [...this.items.values()].filter((i) => i.archivedReason === 'exit' && i.machineId === machineId && (i.archivedAt ?? '') >= since); }
+  bodies = new Map<string, { text: string; html: string | null }>();
+  async saveItemBody(id: string, b: { text: string; html: string | null }) { this.bodies.set(id, structuredClone(b)); }
+  async getItemBody(id: string) { return this.bodies.get(id) ?? null; }
   pulls = new Map<string, IntakePullRow>();
   async listIntakePulls() { return [...this.pulls.values()].map((r) => structuredClone(r)); }
   async saveIntakePull(r: IntakePullRow) { this.pulls.set(r.intakeId, structuredClone(r)); }
@@ -265,6 +268,18 @@ describe('FactoryEngine', () => {
         expect(engine.snapshot().intakes!['late']).toEqual({ dropped: 0, pulledAt: NOW, pullError: 'quota' });
         expect(store.pulls.get('late')).toMatchObject({ lastPulledAt: NOW, error: 'quota' });
         expect(engine.pulledIntakes().map((x) => x.spec.id)).toEqual(['late', 'urgent']);
+      });
+
+      it('keeps the whole of a message apart, when it brings one, and its next one over it', async () => {
+        await boot([gmail('a', 1, 1)]);
+        const t = await engine.ingest({ ...mail('t1', iso(5_000)), excerpt: 'Hi', body: { text: 'Hi Ana, the whole text', html: '<p>Hi Ana</p>' } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'Hi Ana, the whole text', html: '<p>Hi Ana</p>' });
+        await engine.ingest({ ...mail('t1', iso(5_000)), body: { text: 'seen again' } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)!.text).toBe('Hi Ana, the whole text');      // nothing new
+        await engine.ingest({ ...mail('t1', iso(1_000)), body: { text: 'a reply', html: null } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'a reply', html: null });
+        const bare = await engine.ingest(mail('t2', iso(0)), { intakeId: 'a' });
+        expect(store.bodies.has(bare.itemId!)).toBe(false);
       });
 
       it('goes to the intake that saw it, and a message seen again is nothing new', async () => {

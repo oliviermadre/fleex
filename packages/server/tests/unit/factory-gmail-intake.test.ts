@@ -37,7 +37,7 @@ describe('GogMailSource', () => {
     expect(out.map((m) => m.id)).toEqual(['m1', 'm2']);
     expect(out[1]).toEqual({
       id: 'm2', threadId: 't1', at: '2026-11-20T08:30:00.000Z', from: 'Ana <ana@acme.com>', to: 'me@x.com', cc: '', subject: 'Re: cart',
-      body: 'second\n\nline', labels: ['INBOX', 'IMPORTANT'], attachments: 1, url: 'https://mail.google.com/mail/?authuser=me%40x.com#all/t1',
+      body: 'second\n\nline', html: null, labels: ['INBOX', 'IMPORTANT'], attachments: 1, url: 'https://mail.google.com/mail/?authuser=me%40x.com#all/t1',
     });
   });
 
@@ -75,11 +75,29 @@ describe('GogMailSource', () => {
     const src = new GogMailSource({ run: gog.run, account: null });
     expect((await src.search('', new Date(NOW))).map((m) => m.id)).toEqual(['m1']);
     expect((await src.search('', new Date(NOW))).map((m) => m.id)).toEqual(['m1']);
-    expect(gog.calls.map((a) => a.includes('--include-recipients'))).toEqual([true, false, false]);
+    expect(gog.calls.filter((a) => !a.includes('--body-format')).map((a) => a.includes('--include-recipients'))).toEqual([true, false, false]);
     expect(gog.calls[1]).toContain('--include-attachments');
     /* any other refusal is the pull's failure */
     const broken = new GogMailSource({ run: async () => ({ code: 2, stdout: '', stderr: 'unknown flag --include-body' }) });
     await expect(broken.search('', new Date(NOW))).rejects.toMatchObject({ kind: 'failed' });
+  });
+
+  it('keeps a mail\'s text and its HTML part apart: an HTML-only mail is read as text, and the HTML comes from a second search', async () => {
+    const HTML = '<html><head><style>p{color:red}</style></head><body><div>Hello&nbsp;Ana,</div><p>Your <a href="https://x.com/i/42">invoice</a> is ready.</p><ul><li>one</li><li>two</li></ul></body></html>';
+    const gog = fakeGog((args) => ok({ messages: args.includes('--body-format')
+      ? [{ id: 'm1', threadId: 't1', internalDateIso: '2026-11-20T08:00:00Z', body: HTML }, { id: 'm2', threadId: 't2', internalDateIso: '2026-11-20T08:00:00Z', body: '<div><b>Hi</b></div><p>both parts</p><br>' }]
+      : [{ id: 'm1', threadId: 't1', internalDateIso: '2026-11-20T08:00:00Z', body: HTML }, { id: 'm2', threadId: 't2', internalDateIso: '2026-11-20T08:00:00Z', body: 'Hi\nboth parts' }] }));
+    const [a, b] = await new GogMailSource({ run: gog.run, account: null }).search('', new Date(NOW));
+    expect(a!.body).toBe('Hello Ana,\n\nYour invoice (https://x.com/i/42) is ready.\n\n- one\n- two');
+    expect(a!.html).toBe(HTML);
+    expect(b!.body).toBe('Hi\nboth parts');                  // the text part, as sent
+    expect(b!.html).toContain('<b>Hi</b>');
+    expect(gog.calls[1]).toContain('html');
+    /* the HTML search failing leaves the text */
+    let n = 0;
+    const flaky = new GogMailSource({ run: async (args) => (args.includes('--body-format') ? { code: 1, stdout: '', stderr: 'boom' } : (n++, ok({ messages: [{ id: 'm2', threadId: 't2', internalDateIso: '2026-11-20T08:00:00Z', body: 'plain' }] }))) });
+    expect((await flaky.search('', new Date(NOW)))[0]).toMatchObject({ body: 'plain', html: null });
+    expect(n).toBe(1);
   });
 
   it('builds the search and the link a person opens', () => {
@@ -143,9 +161,32 @@ describe('IntakePuller', () => {
   });
 
   it('turns a message into an item of its thread, with the fields of a Gmail item', () => {
-    expect(mailToItem({ id: 'm', threadId: 't', at: '2026-11-20T09:00:00.000Z', from: 'Ana', to: 'me', cc: '', subject: 'Hi', body: 'text', labels: ['INBOX'], attachments: 2, url: 'https://mail.google.com/x' })).toEqual({
-      source: 'gmail', key: 't', title: 'Hi', author: 'Ana', excerpt: 'text', url: 'https://mail.google.com/x', at: '2026-11-20T09:00:00.000Z',
+    expect(mailToItem({ id: 'm', threadId: 't', at: '2026-11-20T09:00:00.000Z', from: 'Ana', to: 'me', cc: '', subject: 'Hi', body: 'text', html: '<p>text</p>', labels: ['INBOX'], attachments: 2, url: 'https://mail.google.com/x' })).toEqual({
+      source: 'gmail', key: 't', title: 'Hi', author: 'Ana', excerpt: 'text', url: 'https://mail.google.com/x', at: '2026-11-20T09:00:00.000Z', body: { text: 'text', html: '<p>text</p>' },
       fields: { to: 'me', labels: ['INBOX'], attachment: true },
     });
+  });
+});
+
+describe('an HTML body as text', () => {
+  it('tells HTML from text, and reads it as lines, links and bullets', async () => {
+    const { htmlToText, looksLikeHtml } = await import('@fleex/shared');
+    expect(looksLikeHtml('Hi <b>you</b>, 3 < 4')).toBe(false);
+    expect(looksLikeHtml('<!DOCTYPE html><html>')).toBe(true);
+    expect(looksLikeHtml('<div>a</div><div>b</div><br>')).toBe(true);
+    expect(htmlToText('<table><tr><td>Total</td><td>&euro;12&#44;50</td></tr></table><p>See <a href="https://a.b">https://a.b</a></p><!-- x --><script>alert(1)</script>')).toBe('Total €12,50\n\nSee https://a.b');
+  });
+});
+
+describe('the brief of a station that runs on a mail', () => {
+  it('gives the whole of the message when it was kept, its HTML part read as text when that is all, else the first lines', async () => {
+    const { itemBrief } = await import('../../src/factory/item-brief.js');
+    const item = { id: 'i', floorId: 'default', source: 'gmail', sourceKey: 't', title: 'Invoice', author: 'Ana', excerpt: '<div>Hello</div><p>old</p><br>', url: null, tags: [], fields: {}, messages: 1, lastActivityAt: '2026-11-20T08:00:00.000Z', intakeId: null, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: '', updatedAt: '' } as never;
+    expect(itemBrief(item, [], { text: 'The whole text, line 2', html: null })).toContain('The whole text, line 2');
+    expect(itemBrief(item, [], { text: 'The whole text', html: null })).toContain('its latest message, whole');
+    expect(itemBrief(item, [], { text: '', html: '<p>From <b>HTML</b></p>' })).toContain('From HTML');
+    const old = itemBrief(item);
+    expect(old).toContain('Hello\n\nold');
+    expect(old).not.toContain('<div>');
   });
 });

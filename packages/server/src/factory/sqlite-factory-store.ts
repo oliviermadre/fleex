@@ -1,6 +1,6 @@
 import type { SqliteConnection } from '../infrastructure/adapters/sqlite/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus, IntakePullRow } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus, IntakePullRow, ItemBody } from './types.js';
 
 interface FloorRow { id: string; name: string; layout: string; settings: string; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: string; created_at: string; updated_at: string }
@@ -108,6 +108,18 @@ export class SqliteFactoryStore implements FactoryStorePort {
       ? this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id = ? AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, machineId, sinceIso)
       : this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id IS NOT NULL AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, sinceIso);
     return (rows as ItemDbRow[]).map(itemFromRow);
+  }
+
+  async saveItemBody(itemId: string, b: ItemBody): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO factory_item_bodies (item_id, text, html, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(item_id) DO UPDATE SET text = excluded.text, html = excluded.html, updated_at = excluded.updated_at
+    `).run(itemId, b.text, b.html, new Date().toISOString());
+  }
+
+  async getItemBody(itemId: string): Promise<ItemBody | null> {
+    const r = this.conn.db.prepare('SELECT text, html FROM factory_item_bodies WHERE item_id = ?').get(itemId) as { text: string; html: string | null } | undefined;
+    return r ? { text: r.text, html: r.html } : null;
   }
 
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
