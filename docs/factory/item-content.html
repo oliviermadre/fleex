@@ -1,0 +1,256 @@
+<title>Contenu d'un item</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<style>
+  .pop { background: #1f1f23; border: 1px solid #3f3f46; border-radius: 14px; color: #fafafa; font-size: 0.8rem; color-scheme: dark; overflow: hidden; }
+  .pop .bar2 { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #2f2f35; }
+  .pop .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); }
+  @media (max-width: 860px) { .pop .cols { grid-template-columns: minmax(0, 1fr); } }
+  .pop .col { padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .pop .col + .col { border-left: 1px solid #2f2f35; }
+  .pop h5 { margin: 0; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .pop button { color: #fafafa; border-color: #3f3f46; font-size: 0.74rem; padding: 4px 9px; }
+  .pop button.primary { background: #a78bfa; border-color: #a78bfa; color: #18181b; font-weight: 600; }
+  .fieldx { border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px; background: #131316; color: #e4e4e7; }
+  .lab { color: #a1a1aa; font-size: 0.7rem; margin-bottom: 2px; }
+  .tabsx { display: flex; gap: 2px; border-bottom: 1px solid #2f2f35; }
+  .tabsx button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 5px 10px; color: #a1a1aa; }
+  .tabsx button[aria-pressed="true"] { color: #fafafa; border-bottom-color: #a78bfa; background: transparent; }
+  .textbody { white-space: pre-wrap; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 10px; line-height: 1.5; max-height: 260px; overflow: auto; }
+  .mail { background: #ffffff; color: #1f2937; border-radius: 6px; padding: 18px; font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; max-height: 260px; overflow: auto; color-scheme: light; }
+  .mail .logo { font-weight: 800; color: #0f766e; font-size: 16px; margin-bottom: 10px; }
+  .mail .btnm { display: inline-block; background: #0f766e; color: #fff; border-radius: 4px; padding: 6px 12px; margin: 8px 0; font-weight: 700; }
+  .mail .img { height: 70px; border-radius: 4px; background: repeating-linear-gradient(45deg, #e5e7eb 0 10px, #f3f4f6 10px 20px); display: grid; place-items: center; color: #6b7280; font-size: 11px; }
+  .blocked { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: #a1a1aa; }
+  .deliv { border: 1px solid #a78bfa; background: rgba(167,139,250,0.10); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+  .deliv .ic { width: 34px; height: 40px; border-radius: 5px; background: #a78bfa; display: grid; place-items: center; color: #18181b; font-weight: 800; font-family: var(--mono); font-size: 0.66rem; flex: none; }
+  .deliv b { display: block; font-size: 0.82rem; } .deliv span { color: #a1a1aa; font-size: 0.7rem; }
+  .visit { border: 1px solid #3f3f46; border-radius: 8px; padding: 7px 9px; display: flex; flex-direction: column; gap: 3px; }
+  .visit small { color: #a1a1aa; font-size: 0.68rem; }
+  .peek { width: 360px; max-width: 100%; background: #1f1f23; border: 1px solid #3f3f46; border-radius: 12px; color: #fafafa; font-size: 0.78rem; overflow: hidden; color-scheme: dark; }
+  .peek .ph { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #2f2f35; }
+  .peek .pb { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .peek .pf { padding: 8px; border-top: 1px solid #2f2f35; display: flex; gap: 6px; flex-wrap: wrap; }
+  .peek button { color: #fafafa; border-color: #3f3f46; font-size: 0.72rem; padding: 3px 8px; }
+  .peek button.primary { background: #a78bfa; border-color: #a78bfa; color: #18181b; font-weight: 600; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #a78bfa; border-radius: 999px; padding: 2px 9px; color: #ddd6fe; font-size: 0.72rem; }
+  .tok { width: 24px; height: 24px; border-radius: 6px; background: #f87171; flex: none; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>Le contenu d'un item, et ce qu'il a produit</h1>
+    <p class="lede">Un mail arrive avec deux versions : son texte, et son HTML tel qu'on le voit dans Gmail. La petite carte montre le texte ; la grande popup montre les deux, dans des onglets. Et ce qu'une station a livré sur l'item (un livrable) passe d'un petit lien dans la colonne de droite à une place qui se voit.</p>
+  </header>
+
+  <section aria-labelledby="h-pop">
+    <h2 id="h-pop">La grande popup (double-clic)</h2>
+    <p class="brief">Les onglets se cliquent. Les choix plus bas changent ce dessin.</p>
+    <div class="pop" id="pop"></div>
+  </section>
+
+  <section aria-labelledby="h-peek">
+    <h2 id="h-peek">La petite carte (au clic)</h2>
+    <p class="brief">Le texte du mail, jamais son HTML ; et le livrable, s'il y en a un.</p>
+    <div id="peek"></div>
+  </section>
+
+  <section aria-labelledby="h-p1">
+    <h2 id="h-p1">Choix 1 · les images du mail</h2>
+    <p class="brief">Un mail charge souvent des images depuis Internet, dont des pixels de suivi : les afficher dit à l'expéditeur que le mail a été ouvert, et quand.</p>
+    <div class="grid small" id="g-p1"></div>
+  </section>
+  <section aria-labelledby="h-p2">
+    <h2 id="h-p2">Choix 2 · où se voient les livrables, dans la popup</h2>
+    <div class="grid small" id="g-p2"></div>
+  </section>
+  <section aria-labelledby="h-p3">
+    <h2 id="h-p3">Choix 3 · le livrable, sur la petite carte</h2>
+    <div class="grid small" id="g-p3"></div>
+  </section>
+  <section aria-labelledby="h-r">
+    <h2 id="h-r">Ce qui ne demande pas de choix</h2>
+    <div class="rules"><ul>
+      <li><b>Déjà corrigé</b> (poussé) : un mail sans partie texte n'affiche plus son HTML brut ; la petite carte montre du texte, y compris pour les items déjà arrivés.</li>
+      <li><b>Texte</b> : le mail entier, en lecture. Un item fait à la main (sans corps gardé) garde son texte modifiable, comme aujourd'hui.</li>
+      <li><b>Email</b> : le HTML rendu dans un cadre isolé : aucun script ne s'y exécute, les liens s'ouvrent dans un nouvel onglet. L'onglet n'apparaît que si le mail a une partie HTML.</li>
+      <li><b>Les agents</b> reçoivent déjà le mail entier en texte (jusqu'à 20 000 caractères), plus seulement ses premières lignes.</li>
+    </ul></div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const KEY = 'factory-item-content-picks';
+  let picks = {}, tab = 'text', imgs = false;
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  picks.p1 = picks.p1 || 'block'; picks.p2 = picks.p2 || 'top'; picks.p3 = picks.p3 || 'button';
+  const TEXT = 'Bonjour Olivier,\n\nVotre facture d\'octobre (F-2026-1042) est disponible : 1 240,00 € TTC, échéance le 30 novembre.\n\nVoir la facture (https://billing.acme.com/i/1042)\n\nSi vous avez des questions, répondez simplement à ce mail.\n\n- Acme Billing';
+  const DELIVS = [{ t: 'Draft reply: invoice October', k: 'Reply', st: 'Answer mail', when: 'today 09:14' }, { t: 'Invoice check: amounts match the PO', k: 'Note', st: 'Check invoice', when: 'today 09:02' }];
+  const delivCard = (d, big) => `<div class="deliv"><div class="ic">${esc(d.k.slice(0, 3).toUpperCase())}</div><div style="flex:1;min-width:0"><b>${esc(d.t)}</b><span>${esc(d.k)} · by ${esc(d.st)} · ${esc(d.when)}</span></div><button type="button" class="${big ? 'primary' : ''}">Open</button></div>`;
+  function content() {
+    const tabs = [['text', 'Text'], ['mail', 'Email'], ...(picks.p2 === 'tab' ? [['deliv', `Delivered · ${DELIVS.length}`]] : [])];
+    const head = `<div class="tabsx" role="tablist">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${tab === k}">${esc(l)}</button>`).join('')}</div>`;
+    let body = '';
+    if (tab === 'text') body = `<div class="textbody">${esc(TEXT)}</div>`;
+    else if (tab === 'mail') {
+      const show = picks.p1 === 'load' || imgs;
+      body = (show ? '' : `<div class="blocked">Images from the internet are not loaded: showing them tells the sender you opened it. <button type="button" id="loadimg">Load images</button></div>`)
+        + `<div class="mail"><div class="logo">ACME Billing</div>${show ? '<div class="img">banner.png</div>' : ''}<p>Bonjour Olivier,</p><p>Votre facture d'octobre <b>F-2026-1042</b> est disponible : <b>1 240,00 € TTC</b>, échéance le 30 novembre.</p><span class="btnm">Voir la facture</span><p style="color:#6b7280;font-size:11px">Si vous avez des questions, répondez simplement à ce mail.</p></div>`;
+    } else body = DELIVS.map((d) => delivCard(d, true)).join('');
+    return `<h5>Content</h5>${head}${body}`;
+  }
+  function pop() {
+    const top = picks.p2 === 'top' ? `<div style="padding:12px 14px;border-bottom:1px solid #2f2f35;display:flex;flex-direction:column;gap:8px"><h5>Delivered · ${DELIVS.length}</h5>${DELIVS.map((d) => delivCard(d, true)).join('')}</div>` : '';
+    const right = (picks.p2 === 'right' ? `<h5>Delivered · ${DELIVS.length}</h5>${DELIVS.map((d) => delivCard(d, true)).join('')}` : '')
+      + `<h5>What stations said</h5><div class="visit"><small><b style="color:#e4e4e7">Check invoice</b> · left as "ok"</small>Amounts match PO-881.${picks.p2 === 'top' || picks.p2 === 'right' ? '' : ' <span style="color:#a78bfa;text-decoration:underline">Open what it delivered</span>'}</div><div class="visit"><small><b style="color:#e4e4e7">Answer mail</b> · left as "drafted"</small>A reply is drafted, to send from Gmail.</div>`;
+    $('pop').innerHTML = `<div class="bar2"><span class="tok" style="background:#a78bfa"></span><b style="flex:1">Votre facture d'octobre</b><span style="color:#a1a1aa;font-size:.72rem">Gmail item</span><button type="button">Open in Gmail</button><button type="button">Archive</button></div>${top}
+      <div class="cols"><div class="col"><h5>Every item</h5><div><div class="lab">Title</div><div class="fieldx">Votre facture d'octobre</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><div class="lab">From</div><div class="fieldx">Acme Billing &lt;billing@acme.com&gt;</div></div><div><div class="lab">Tags</div><div class="fieldx">source:gmail · finance</div></div></div>${content()}</div><div class="col">${right}</div></div>`;
+    $('pop').querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; imgs = false; pop(); }));
+    $('loadimg')?.addEventListener('click', () => { imgs = true; pop(); });
+  }
+  function peek() {
+    const foot = picks.p3 === 'button' ? '<button type="button" class="primary">Open delivered: Draft reply</button><button type="button">Open</button><button type="button">Open in Gmail</button>' : '<button type="button" class="primary">Open</button><button type="button">Open in Gmail</button>';
+    const chip = picks.p3 === 'chip' ? `<div><span class="chip">▤ Delivered: Draft reply · Invoice check</span></div>` : '';
+    $('peek').innerHTML = `<div class="peek"><div class="ph"><span class="tok" style="background:#a78bfa"></span><div style="min-width:0"><b>Votre facture d'octobre</b><div style="color:#a1a1aa;font-size:.68rem">Gmail · Acme Billing · Answer mail</div></div></div><div class="pb">${chip}<div style="color:#a1a1aa;font-size:.68rem">1 message · last one 12m ago</div><div style="white-space:pre-wrap">${esc(TEXT.split('\n\n').slice(0, 3).join('\n\n'))}</div></div><div class="pf">${foot}<button type="button" style="margin-left:auto">Archive</button></div></div>`;
+  }
+  const P1 = [['block', 'A', 'Bloquées, un bouton pour les charger', 'Le mail s\'affiche sans ses images distantes ; « Load images » les charge pour ce mail-là. Comme Gmail le fait pour un expéditeur inconnu.'], ['load', 'B', 'Toujours chargées', 'Le mail tel qu\'il est, tout de suite. L\'expéditeur peut savoir qu\'il a été ouvert.']];
+  const P2 = [['top', 'A', 'Un bandeau en haut', 'Sous la barre, sur toute la largeur : chaque livrable en carte, avec Open. Le premier regard tombe dessus.'], ['tab', 'B', 'Un troisième onglet', 'À côté de Text et Email : « Delivered · 2 ». Moins visible, mais la popup reste la même sans livrable.'], ['right', 'C', 'En tête de la colonne de droite', 'Au-dessus de « What stations said », en cartes : les livrables à côté de ce que les stations ont dit.']];
+  const P3 = [['button', 'A', 'Un bouton principal', 'Dans le pied de la carte, en premier : « Open delivered: … » (le dernier livrable).'], ['chip', 'B', 'Une pastille sous le titre', 'Les livrables nommés en haut de la carte, cliquables.']];
+  function cards(el, list, key) {
+    $(el).innerHTML = list.map(([v, L, title, desc]) => `<div class="card ${picks[key] === v ? 'picked' : ''}"><div class="card-head"><span class="letter">${L}</span><h3>${esc(title)}</h3>${picks[key] === v ? '<span class="mine">Mon choix</span>' : ''}</div><p>${esc(desc)}</p><button type="button" data-k="${key}" data-v="${v}" aria-pressed="${picks[key] === v}">${picks[key] === v ? 'Choisi' : 'Choisir'}</button></div>`).join('');
+  }
+  const L = (list, key) => list.find((x) => x[0] === picks[key])[1];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept */ }
+    if (tab === 'deliv' && picks.p2 !== 'tab') tab = 'text';
+    cards('g-p1', P1, 'p1'); cards('g-p2', P2, 'p2'); cards('g-p3', P3, 'p3');
+    $('picks').innerHTML = `Images : <b>${L(P1, 'p1')}</b> · Livrables : <b>${L(P2, 'p2')}</b> · Carte : <b>${L(P3, 'p3')}</b>`;
+    pop(); peek();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; picks[b.dataset.k] = b.dataset.v; save(); });
+  $('copy').addEventListener('click', () => {
+    const line = `Item : images ${L(P1, 'p1')}, livrables ${L(P2, 'p2')}, carte ${L(P3, 'p3')}`;
+    navigator.clipboard?.writeText(line).then(() => { $('said').textContent = 'Copié'; }, () => { $('said').textContent = line; });
+  });
+  save();
+})();
+</script>
