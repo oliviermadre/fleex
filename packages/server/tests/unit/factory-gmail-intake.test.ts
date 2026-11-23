@@ -53,7 +53,7 @@ describe('GogMailSource', () => {
 
   it('tells its status: the version, and whether Gmail answers; kept a minute', async () => {
     let authorized = false;
-    const gog = fakeGog((args) => (args[0] === '--version' ? { code: 0, stdout: 'v0.47.1 (abc)\n', stderr: '' } : authorized ? ok({ messages: [] }) : { code: 4, stdout: '', stderr: 'auth required' }));
+    const gog = fakeGog((args) => (args[0] === '--version' ? { code: 0, stdout: 'v0.47.1 (abc)\n', stderr: '' } : args.includes('--ids-only') ? { code: 2, stdout: '', stderr: 'unknown flag --ids-only' } : authorized ? ok({ messages: [] }) : { code: 4, stdout: '', stderr: 'auth required' }));
     let now = NOW;
     const src = new GogMailSource({ run: gog.run, account: null, now: () => now });
     expect(await src.status()).toMatchObject({ provider: 'gogcli', installed: true, version: 'v0.47.1', connected: false, error: expect.stringContaining('auth required'), setupUrl: expect.stringContaining('gogcli') });
@@ -62,9 +62,24 @@ describe('GogMailSource', () => {
     expect((await src.status(true)).connected).toBe(true);       // asked again
     now += 61_000;
     expect((await src.status()).connected).toBe(true);
-    expect(gog.calls.find((a) => a.includes('--ids-only'))).toContain('--readonly');
+    /* the smallest read every release knows: no --ids-only, which came in gogcli 0.48 */
+    expect(gog.calls.find((a) => a.includes('messages'))).toEqual(['--json', '--no-input', '--readonly', '--color=never', 'gmail', 'messages', 'search', '--max', '1', '--', 'newer_than:1d']);
     const none = new GogMailSource({ run: async () => ({ code: 127, stdout: '', stderr: '', notFound: true }) });
     expect(await none.status()).toMatchObject({ installed: false, connected: false, version: null });
+  });
+
+  it('runs again without a flag an older gogcli does not know, and does not ask for it again', async () => {
+    const gog = fakeGog((args) => (args.includes('--include-recipients')
+      ? { code: 2, stdout: '', stderr: 'gog: error: unknown flag --include-recipients, did you mean "--include-body"?' }
+      : ok({ messages: [{ id: 'm1', threadId: 't1', internalDateIso: '2026-11-20T08:00:00Z', subject: 'hi' }] })));
+    const src = new GogMailSource({ run: gog.run, account: null });
+    expect((await src.search('', new Date(NOW))).map((m) => m.id)).toEqual(['m1']);
+    expect((await src.search('', new Date(NOW))).map((m) => m.id)).toEqual(['m1']);
+    expect(gog.calls.map((a) => a.includes('--include-recipients'))).toEqual([true, false, false]);
+    expect(gog.calls[1]).toContain('--include-attachments');
+    /* any other refusal is the pull's failure */
+    const broken = new GogMailSource({ run: async () => ({ code: 2, stdout: '', stderr: 'unknown flag --include-body' }) });
+    await expect(broken.search('', new Date(NOW))).rejects.toMatchObject({ kind: 'failed' });
   });
 
   it('builds the search and the link a person opens', () => {

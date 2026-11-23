@@ -14,6 +14,11 @@ import { MailSourceError, type MailMessage, type MailSourcePort, type MailSource
 import { GoogleApiError, GoogleNotConnectedError, defaultGogRunner, gogFailure, parseJson, type GogRunner } from './google-calendar.client.js';
 
 const STATUS_TTL_MS = 60_000;
+/**
+ * Flags a pull asks for that older gogcli releases do not know (`--include-recipients` came in 0.44, `--include-attachments`
+ * in 0.40): when gog refuses one as unknown, the search is run again without it, and it is not asked for again.
+ */
+const OPTIONAL_FLAGS = ['--include-recipients', '--include-attachments'];
 
 /** A message as `gog gmail messages search --json` writes it (gogcli's `messageItem`). */
 interface GogMessage {
@@ -62,6 +67,8 @@ export class GogMailSource implements MailSourcePort {
   private readonly run: GogRunner;
   private readonly now: () => number;
   private statusCache: { at: number; value: MailSourceStatus } | null = null;
+  /** Optional flags this gog refused as unknown. */
+  private readonly unknown = new Set<string>();
 
   constructor(deps: GogMailSourceDeps = {}) {
     this.bin = deps.bin ?? (process.env['FLEEX_GOG_BIN'] || 'gog');
@@ -91,7 +98,8 @@ export class GogMailSource implements MailSourcePort {
       value.installed = true;
       value.version = v.stdout.trim().split(/\s+/)[0] || null;
       try {
-        await this.gog(['gmail', 'messages', 'search', '--ids-only', '--max', '1', '--', 'newer_than:1d']);
+        /* the smallest read every gogcli release knows (no --ids-only: it came in 0.48) */
+        await this.gog(['gmail', 'messages', 'search', '--max', '1', '--', 'newer_than:1d']);
         value.connected = true;
       } catch (err) {
         value.error = err instanceof Error ? err.message : String(err);
@@ -102,10 +110,17 @@ export class GogMailSource implements MailSourcePort {
   }
 
   async search(query: string, since: Date): Promise<MailMessage[]> {
-    const body = await this.gog([
-      'gmail', 'messages', 'search', '--all', '--max', '100', '--include-body', '--include-recipients', '--include-attachments',
-      '--', pullQuery(query, since),
-    ]);
+    let body: Record<string, unknown> | null = null;
+    for (let tries = 0; !body; tries++) {
+      const extra = OPTIONAL_FLAGS.filter((f) => !this.unknown.has(f));
+      try {
+        body = await this.gog(['gmail', 'messages', 'search', '--all', '--max', '100', '--include-body', ...extra, '--', pullQuery(query, since)]);
+      } catch (err) {
+        const flag = err instanceof Error ? /unknown flag (--[\w-]+)/i.exec(err.message)?.[1] : undefined;
+        if (!flag || !extra.includes(flag) || tries >= OPTIONAL_FLAGS.length) throw err;
+        this.unknown.add(flag);
+      }
+    }
     const list = Array.isArray(body['messages']) ? (body['messages'] as GogMessage[]) : [];
     /* Gmail's `after:` is to the second; what the cursor already covered is let through, and the Factory knows it (`ItemInput.at`) */
     return list.map((m) => mapGogMessage(m, this.account)).filter((m): m is MailMessage => !!m).sort((a, b) => a.at.localeCompare(b.at));

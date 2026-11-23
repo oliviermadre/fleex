@@ -151,7 +151,8 @@ Gmail is the first source with a connector. It is **pulled**: Fleex asks it, rat
   steps until gog can read Gmail (`GET /api/factory/mail/status`), then its version and account.
 - `IntakePuller` (`intake-puller.ts`, every 15 s) pulls each intake that is due: one `gog gmail messages search` with
   `(<query>) after:<epoch>`, from the intake's cursor minus ten minutes (for what Gmail indexed late), every page,
-  each message's text, recipients and attachments. **The first time it sees an intake it only sets the cursor**: what
+  each message's text, recipients and attachments (a flag an older gogcli does not know, `--include-recipients` before 0.44 or
+  `--include-attachments` before 0.40, is dropped and the search run again). **The first time it sees an intake it only sets the cursor**: what
   was in the mailbox before stays there. Each message is ingested as an item of its thread (key: the thread id),
   naming the intake that saw it; its fields are To, Cc, labels, attachment. The cursor and the last error are kept in
   `factory_intake_pulls` (migration 050), not in the layout: a failed pull keeps its cursor, says why on the intake
