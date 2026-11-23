@@ -278,7 +278,9 @@ export interface FactoryTicketInfo {
  * `handedAt`, out at `shippedAt`, with what the ticket is now), and the items archived there. The latest first.
  */
 export interface ExitLog {
-  machineId: string; days: number; since: string;
-  tickets: { ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
-  items: { itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
+  /** The exit asked for, or null for every exit of the floor; `exits` names each one that appears (one removed since keeps the name it had). */
+  machineId: string | null; days: number; since: string;
+  exits: { machineId: string; name: string; onFloor: boolean }[];
+  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
 }

@@ -150,6 +150,7 @@ describe('SqliteFactoryStore', () => {
     await store.saveItem({ ...base, id: 'o1', sourceKey: 'k4', machineId: 'other', archivedAt: '2026-11-15T12:00:00.000Z', archivedReason: 'exit' });
     expect((await store.listExitItems('default', 'out', '2026-11-13T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1', 'e2']);
     expect((await store.listExitItems('default', 'out', '2026-11-15T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1']);
+    expect((await store.listExitItems('default', null, '2026-11-13T00:00:00.000Z')).map((i) => i.id).sort()).toEqual(['e1', 'e2', 'o1']);
   });
 
   it('keeps where each pulled intake stands, by floor', async () => {

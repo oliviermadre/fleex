@@ -54,7 +54,7 @@ export const factoryApi = {
     call<FactorySnapshot>(`/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
   archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
-  /** What left by an exit over the last `days` days. */
-  exitLog: (machineId: string, days: number) => call<ExitLog>(`/exits/${encodeURIComponent(machineId)}/log?days=${days}`, undefined, true),
+  /** What left by an exit (by every exit of the floor, with null) over the last `days` days. */
+  exitLog: (machineId: string | null, days: number) => call<ExitLog>(`/exits/${machineId ? `${encodeURIComponent(machineId)}/` : ''}log?days=${days}`, undefined, true),
   stats: (days: number) => call<FactoryStats>(`/stats?days=${days}`, undefined, true),
 };

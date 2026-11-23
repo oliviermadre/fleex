@@ -246,7 +246,9 @@ export const isGantry = (m: MachineSpec | null | undefined): m is BeltSpec & { s
 
 /** What left the floor by one exit over a period (`GET /api/factory/exits/:id/log`): the tickets it shipped, as they are now, and the items archived there. */
 export interface ExitLog {
-  machineId: string; days: number; since: string;
-  tickets: { ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
-  items: { itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
+  /** The exit asked for, or null for every exit of the floor; `exits` names each one that appears. */
+  machineId: string | null; days: number; since: string;
+  exits: { machineId: string; name: string; onFloor: boolean }[];
+  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
 }

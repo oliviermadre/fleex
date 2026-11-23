@@ -59,10 +59,20 @@ describe('the command card', () => {
     for (const [name, m] of everyMenu()) expect([name, at(m, FIT_SLOT)]).toEqual([name, 'Fit']);
   });
 
+  it('an exit selected: View (what left by it) first, Edit under E', () => {
+    const c = ctx({ machine: { kind: 'exit', waiting: false, popup: true } }), m = factoryMenu(c);
+    expect(rows(m)[0]).toEqual(['View', null, 'Edit', null, null]);
+    expect(rows(m)[1]).toEqual([null, null, null, 'Fit', null]);
+    m.slots[0]!.run!(); expect(c.act.viewExit).toHaveBeenCalled();
+    m.slots[2]!.run!(); expect(c.act.openMachine).toHaveBeenCalled();
+  });
+
   it('with nothing selected: what the floor offers on the first row, and Build where Done will be', () => {
     const c = ctx(), root = factoryMenu(c);
-    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, null, null, 'Fit', null], [null, null, null, 'Next', 'Build']]);
+    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, null, 'Exits', 'Fit', null], [null, null, null, 'Next', 'Build']]);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
+    /* under Stats: what left by every exit */
+    root.slots[7]!.run!(); expect(c.act.exits).toHaveBeenCalled();
     root.slots[2]!.run!(); expect(c.act.floor).toHaveBeenCalled();
     root.slots[3]!.run!(); expect(c.act.limits).toHaveBeenCalled();
     /* T on any keyboard: a ticket is created from the floor itself, never through the Work view */

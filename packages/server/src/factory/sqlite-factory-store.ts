@@ -103,8 +103,11 @@ export class SqliteFactoryStore implements FactoryStorePort {
     `).run(itemToRow(i, (v) => JSON.stringify(v)) as unknown as Record<string, unknown>);
   }
 
-  async listExitItems(floorId: string, machineId: string, sinceIso: string): Promise<FactoryItemRow[]> {
-    return (this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id = ? AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, machineId, sinceIso) as ItemDbRow[]).map(itemFromRow);
+  async listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]> {
+    const rows = machineId
+      ? this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id = ? AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, machineId, sinceIso)
+      : this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id IS NOT NULL AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, sinceIso);
+    return (rows as ItemDbRow[]).map(itemFromRow);
   }
 
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {

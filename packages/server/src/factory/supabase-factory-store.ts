@@ -66,8 +66,9 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     if (error) this.fail('saveItem', error.message);
   }
 
-  async listExitItems(floorId: string, machineId: string, sinceIso: string): Promise<FactoryItemRow[]> {
-    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('floor_id', floorId).eq('machine_id', machineId).eq('archived_reason', 'exit').gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(1000);
+  async listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]> {
+    const base = this.conn.client.from('factory_items').select('*').eq('floor_id', floorId);
+    const { data, error } = await (machineId ? base.eq('machine_id', machineId) : base.not('machine_id', 'is', null)).eq('archived_reason', 'exit').gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(1000);
     if (error) this.fail('listExitItems', error.message);
     return (data as ItemDbRow[]).map(itemFromRow);
   }

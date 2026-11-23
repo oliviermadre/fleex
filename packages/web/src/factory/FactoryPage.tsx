@@ -217,8 +217,8 @@ function Floor() {
   /* a run's log popped out of the peek card: it outlives the card */
   const [runLog, setRunLog] = useState<{ executionId: string; title: string } | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
-  /* an exit opened on what left by it (`FactoryExitLog`): its double-click out of build mode */
-  const [exitLog, setExitLog] = useState<string | null>(null);
+  /* what left by an exit (`FactoryExitLog`): one exit (its double-click out of build mode, View), or every one (Exits, `machineId: null`) */
+  const [exitLog, setExitLog] = useState<{ machineId: string | null } | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   /* the console put away, to give the floor the whole page: kept in the browser like the toggles */
@@ -556,7 +556,7 @@ function Floor() {
     /* a desk opens its form out of build mode, which is what it is for; its settings are Edit */
     if (m?.kind === 'desk' && !live.current.building) { setDeskForm({ desk: m }); return; }
     /* an exit opens on what left by it; its settings are a button away there, and in build mode */
-    if (m?.kind === 'exit' && !live.current.building) { setExitLog(m.id); return; }
+    if (m?.kind === 'exit' && !live.current.building) { setExitLog({ machineId: m.id }); return; }
     if (m && hasPopup(m)) { setOpenMachine(m.id); return; }
     /* in build mode, an area opens where nothing stands on it */
     if (!hit && live.current.building && live.current.tool === 'select') {
@@ -711,6 +711,8 @@ function Floor() {
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
       limits: () => setLimitsOpen(true),
+      viewExit: () => { if (selMachine?.kind === 'exit') setExitLog({ machineId: selMachine.id }); },
+      exits: () => setExitLog({ machineId: null }),
       next: () => stepWaiting(1),
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
@@ -777,7 +779,7 @@ function Floor() {
       if (e.code === 'KeyU') { e.preventDefault(); flipHud(); return; }
       if (e.code === 'KeyN' && !live.current.building) { e.preventDefault(); stepWaiting(e.shiftKey ? -1 : 1); return; }
       if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
-      if (e.key === 'Enter' && selMachine?.kind === 'exit' && !building) { e.preventDefault(); setExitLog(selMachine.id); return; }
+      if (e.key === 'Enter' && selMachine?.kind === 'exit' && !building) { e.preventDefault(); setExitLog({ machineId: selMachine.id }); return; }
       if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -869,7 +871,8 @@ function Floor() {
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} onNewItem={setNewItemAt} />}
-      {exitLog && !openTicket && <FactoryExitLog machineId={exitLog} onClose={() => setExitLog(null)} onOpenTicket={setOpenTicket} onSettings={() => { const id = exitLog; setExitLog(null); setOpenMachine(id); }} />}
+      {exitLog && !openTicket && <FactoryExitLog machineId={exitLog.machineId} onClose={() => setExitLog(null)} onOpenTicket={setOpenTicket}
+        onSettings={exitLog.machineId ? () => { const id = exitLog.machineId!; setExitLog(null); setOpenMachine(id); } : undefined} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}

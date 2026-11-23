@@ -70,6 +70,8 @@ export interface MenuContext {
     floor(): void;
     /** The floor's run limits, in a popup of their own. */
     limits(): void;
+    /** What left by the exit selected (`exits`: by every exit of the floor). */
+    viewExit(): void; exits(): void;
     /** Go to the next ticket that waits for someone. */
     next(): void;
     /** Make the belts selected fast, or plain again. */
@@ -147,6 +149,8 @@ export function factoryMenu(c: MenuContext): Menu {
 
   /* at the place where a ticket has Open: the popup of what is selected */
   const edit: Command = { id: 'edit', label: 'Edit', icon: 'edit', tone: 'station', title: 'Its settings, the tickets it holds and what it did, in a popup over the floor (also Enter, or a double-click)', run: a.openMachine };
+  /* an exit's double-click is what left by it; its settings are Edit */
+  const exitEdit: Command = { ...edit, title: 'Its name and size, in a popup over the floor' };
 
   // ---------- the floor, out of build mode ----------
   if (!c.building) {
@@ -156,9 +160,12 @@ export function factoryMenu(c: MenuContext): Menu {
         0: c.machine.kind === 'intake' ? { id: 'new-item', label: 'New item', icon: 'newticket', tone: 'go', title: 'Make an item of this source by hand, as its connector would send it', run: a.newItem }
           : c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
           : c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
+          : c.machine.kind === 'exit' ? { id: 'view-exit', label: 'View', icon: 'list', tone: 'ticket', title: 'What left by this exit over the period: the tickets it shipped, the items archived there, the throughput (also Enter, or a double-click)', run: a.viewExit }
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
-        5: c.machine.popup && edit,
+        /* an exit's Edit is under E, beside View; everywhere else it is where a ticket has Open */
+        2: c.machine.kind === 'exit' && c.machine.popup && exitEdit,
+        5: c.machine.kind !== 'exit' && c.machine.popup && edit,
         [FIT_SLOT]: fit,
         [NEXT_SLOT]: next,
         [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
@@ -170,6 +177,8 @@ export function factoryMenu(c: MenuContext): Menu {
       2: { id: 'floor', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
       3: { id: 'limits', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
       4: { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket on the floor: at your first desk, or in Inbound when there is none (select a desk to create at that one)', run: a.newTicket },
+      /* under Stats */
+      7: { id: 'exits', label: 'Exits', icon: 'exit', tone: 'plain', title: 'What left by every exit of the floor over the period, exit by exit: the tickets shipped, the throughput', run: a.exits },
       [FIT_SLOT]: fit,
       [NEXT_SLOT]: next,
       /* the way into build mode is where the way out of it is */

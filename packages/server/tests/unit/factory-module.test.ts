@@ -154,11 +154,28 @@ describe('FactoryModule: what left by an exit', () => {
     const runs = [run('a', ago(2 * day)), run('gone', ago(day)), run('a', ago(10 * day)), run('a', ago(day), 'dev', 'agent')];
     const store = factory.store as unknown as Record<string, unknown>;
     store['listRecentRuns'] = async (_f: string, _n: number, machineId: string) => runs.filter((r) => r.machineId === machineId);
-    store['listExitItems'] = async (_f: string, machineId: string, since: string) => (machineId === 'out' && since < ago(day) ? [{ id: 'i1', source: 'gmail', title: 'Invoice', author: 'Ana', url: null, tags: [], createdAt: ago(2 * day), archivedAt: ago(day / 2) }] : []);
+    store['listExitItems'] = async (_f: string, machineId: string, since: string) => (machineId === 'out' && since < ago(day) ? [{ id: 'i1', machineId: 'out', source: 'gmail', title: 'Invoice', author: 'Ana', url: null, tags: [], createdAt: ago(2 * day), archivedAt: ago(day / 2) }] : []);
     const log = await factory.exitLog('out', 7);
     expect(log.days).toBe(7);
     expect(log.tickets.map((t) => [t.ticketId, t.displayId, t.title, t.status])).toEqual([['gone', null, 'A ticket deleted since', null], ['a', 1, 'A', 'todo']]);
     expect(log.items).toMatchObject([{ itemId: 'i1', source: 'gmail', title: 'Invoice' }]);
     expect((await factory.exitLog('out', 1)).tickets).toEqual([]);
+    expect(log.exits).toEqual([{ machineId: 'out', name: 'Out', onFloor: false }]);
+    expect(log.tickets[0]!.machineId).toBe('out');
+  });
+
+  it('gathers every exit of the floor, each named, with those the runs only remember', async () => {
+    const day = 86_400_000, ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    const run = (ticketId: string, machineId: string, machineName: string) => ({ id: `r-${ticketId}-${machineId}`, ticketId, floorId: 'default', machineId, machineName, executor: 'exit', status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: ago(3 * day), finishedAt: ago(day) });
+    const store = factory.store as unknown as Record<string, unknown>;
+    let asked: unknown = 'not asked';
+    store['listRunsSince'] = async () => [run('a', 'x1', 'Delivery'), run('a', 'old', 'Old exit'), { ...run('a', 'dev', 'Dev'), executor: 'agent' }];
+    store['listExitItems'] = async (_f: string, machineId: string | null) => { asked = machineId; return []; };
+    await factory.engine.setLayout({ version: 2, w: 0, h: 0, machines: [{ id: 'x1', kind: 'exit', x: 0, y: 0, w: 3, h: 3, name: 'Delivery' }, { id: 'x2', kind: 'exit', x: 5, y: 0, w: 3, h: 3, name: '' }] } as never);
+    const log = await factory.exitLog(null, 7);
+    expect(asked).toBeNull();
+    expect(log.machineId).toBeNull();
+    expect(log.exits).toEqual([{ machineId: 'x1', name: 'Delivery', onFloor: true }, { machineId: 'x2', name: 'Exit', onFloor: true }, { machineId: 'old', name: 'Old exit', onFloor: false }]);
+    expect(log.tickets.map((t) => t.machineId)).toEqual(['x1', 'old']);
   });
 });

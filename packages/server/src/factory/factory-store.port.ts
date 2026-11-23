@@ -15,8 +15,8 @@ export interface FactoryStorePort {
   /** The item of a conversation, archived or not. */
   getItemByKey(source: string, sourceKey: string): Promise<FactoryItemRow | null>;
   saveItem(row: FactoryItemRow): Promise<void>;
-  /** The items archived at this exit since then, the latest first. */
-  listExitItems(floorId: string, machineId: string, sinceIso: string): Promise<FactoryItemRow[]>;
+  /** The items archived at this exit (at any exit, with null) since then, the latest first. */
+  listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]>;
   /** How many items each intake dropped since then, by intake id. */
   countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>>;
 

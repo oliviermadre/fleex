@@ -373,13 +373,18 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
   ON"), and that R turns it.
 - **What left by an exit** (`FactoryExitLog.tsx`, picked on `docs/factory/exit-log.html`: A, A, A). A double-click on
-  an exit out of build mode (or Enter with it selected) opens a list like Tab's: the tickets it shipped over the
-  stats' period (the period its counter on the floor shows), each with its lead time (hand-over to exit), when it
-  left and what it is now (one set back to work since is flagged "reopened"), and the items archived there, in the
-  same list, the latest first. Figures on top: shipped, median lead time, reopened since, items archived. Detail
-  opens a ticket; Settings opens the exit's own popup (its name and size), as a double-click in build mode does.
-  `GET /api/factory/exits/:id/log?days=` reads the exit's `exit` runs (with each ticket as it is now) and the items
+  an exit out of build mode, Enter with it selected, or **View** on its card (Edit, its name and size, is under E)
+  opens a list like Tab's: the tickets it shipped over the stats' period (the period its counter on the floor shows),
+  each with its lead time (hand-over to exit), when it left and what it is now (one set back to work since is flagged
+  "reopened"), and the items archived there, in the same list, the latest first. **Exits** on the floor's card (under
+  Stats) opens the same list for every exit of the floor, grouped by exit (one removed since keeps the name its runs
+  remember). Filters as Tab's: a title, number or tag, exits, boards, types (an item's is its source), priorities,
+  what it is now. Figures over what the filters keep: shipped, throughput (shipped per day of the period), median
+  lead time, reopened since, items archived; and the tickets shipped each day as bars. Detail opens a ticket;
+  Settings opens the exit's own popup. `GET /api/factory/exits/:id/log?days=` (one exit) and
+  `GET /api/factory/exits/log?days=` (every exit) read the `exit` runs, with each ticket as it is now, and the items
   archived there: an item archived at an exit keeps that exit in `machine_id` (only those archived since).
+  An exit's name on the floor stops short of its counter rather than running under it.
 - **A zone** is paint on the floor, in the colour of the status it sets (the accent for the intake): a faint fill, a
   dashed line, three corners. What it says is stencilled: its name, a padlock (shut and red: nothing leaves without you; open
   and green, with chevrons: it lets tickets out by itself), and how many tickets it holds as a large figure on the ground, under

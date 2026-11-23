@@ -230,29 +230,36 @@ export class FactoryModule {
   }
 
   /**
-   * What left by one exit over the last `days` days: its shipments (the `exit` runs), each with the ticket as it is now
-   * (a ticket deleted since keeps its number only), and the items archived there.
+   * What left by one exit (by every exit of the floor, with null) over the last `days` days: its shipments (the `exit`
+   * runs), each with the ticket as it is now (a ticket deleted since keeps its number only), and the items archived
+   * there. Each exit that appears is named: as it is on the floor, or as its runs remember it once removed.
    */
-  async exitLog(machineId: string, days: number): Promise<ExitLog> {
+  async exitLog(machineId: string | null, days: number): Promise<ExitLog> {
     const span = Math.max(1, Math.min(90, Math.floor(days) || 7)), since = new Date(Date.now() - span * DAY_MS).toISOString();
-    const floorId = this.engine.snapshot().floor.id;
-    const runs = (await this.store.listRecentRuns(floorId, 2000, machineId)).filter((r) => r.executor === 'exit' && r.finishedAt && r.finishedAt >= since);
+    const floor = this.engine.snapshot().floor, floorId = floor.id;
+    const all = machineId ? await this.store.listRecentRuns(floorId, 2000, machineId) : await this.store.listRunsSince(floorId, since);
+    const runs = all.filter((r) => r.executor === 'exit' && r.finishedAt && r.finishedAt >= since);
     const tickets: ExitLog['tickets'] = [];
     for (let i = 0; i < runs.length; i += 8) {
       const batch = await Promise.all(runs.slice(i, i + 8).map(async (r) => {
         const t = (await this.deps.ticketStore.getTicketById(r.ticketId).catch(() => null))?.toDTO() ?? null;
         return {
-          ticketId: r.ticketId, displayId: t?.displayId ?? null, title: t?.title ?? 'A ticket deleted since', type: t?.type ?? '', priority: t?.priority ?? '', boardId: t?.boardId ?? null,
+          machineId: r.machineId, ticketId: r.ticketId, displayId: t?.displayId ?? null, title: t?.title ?? 'A ticket deleted since', type: t?.type ?? '', priority: t?.priority ?? '', boardId: t?.boardId ?? null,
           status: t?.status ?? null, archived: !!t?.archivedAt, tags: t?.tags ?? [], handedAt: r.startedAt, shippedAt: r.finishedAt!,
         };
       }));
       tickets.push(...batch);
     }
-    const items = (await this.store.listExitItems(floorId, machineId, since)).map((i) => ({
-      itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, handedAt: i.createdAt, shippedAt: i.archivedAt!,
-    }));
     tickets.sort((a, b) => b.shippedAt.localeCompare(a.shippedAt));
-    return { machineId, days: span, since, tickets, items };
+    const items = (await this.store.listExitItems(floorId, machineId, since)).map((i) => ({
+      machineId: i.machineId!, itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, handedAt: i.createdAt, shippedAt: i.archivedAt!,
+    }));
+    /* every exit on the floor, then those only the runs remember */
+    const exits = new Map<string, ExitLog['exits'][number]>();
+    for (const m of floor.layout.machines) if (m.kind === 'exit' && (!machineId || m.id === machineId)) exits.set(m.id, { machineId: m.id, name: m.name || 'Exit', onFloor: true });
+    for (const r of runs) if (!exits.has(r.machineId)) exits.set(r.machineId, { machineId: r.machineId, name: r.machineName || 'Exit', onFloor: false });
+    for (const i of items) if (!exits.has(i.machineId)) exits.set(i.machineId, { machineId: i.machineId, name: 'Exit', onFloor: false });
+    return { machineId, days: span, since, exits: [...exits.values()], tickets, items };
   }
 
   start(): void {
