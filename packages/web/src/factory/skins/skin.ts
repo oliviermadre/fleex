@@ -56,6 +56,22 @@ export interface Piece {
  * The order pieces are painted in: by layer, then by depth, then in the order they came in; each carried piece just
  * after its carrier (after what that one carries in turn). A piece whose carrier is not among them stands on its own.
  */
+/**
+ * Paint the pieces in their order. A piece that fails is left out, and the canvas is put back as it was before it
+ * (where it draws, its opacity, its dashes): the rest of the floor is painted all the same. Before this, one piece that
+ * threw (a person of the decor, say) took every piece after it with it, the arms among them. What failed is told once
+ * per message (`report`), for it to be found.
+ */
+export function paintPieces(pieces: readonly Piece[], ctx: Pick<CanvasRenderingContext2D, 'getTransform' | 'setTransform' | 'setLineDash'> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; lineCap: CanvasLineCap; lineJoin: CanvasLineJoin; shadowBlur: number }, report: (err: unknown, p: Piece) => void): void {
+  const at = ctx.getTransform();
+  for (const p of order(pieces)) {
+    try { p.draw(); } catch (err) {
+      ctx.setTransform(at); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.setLineDash([]); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.shadowBlur = 0;
+      report(err, p);
+    }
+  }
+}
+
 export function order(pieces: readonly Piece[]): Piece[] {
   const all = new Set(pieces), riders = new Map<Piece, Piece[]>(), free: Piece[] = [];
   for (const p of pieces) {

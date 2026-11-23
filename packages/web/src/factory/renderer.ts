@@ -10,7 +10,7 @@ import type { LensLayer } from './lens';
 import { inRect, machineParts } from './machineArt';
 import { FloorScene, isBox } from './scene';
 import { FleexSkin } from './skins/fleex';
-import { order, type Piece, type Skin } from './skins/skin';
+import { paintPieces, type Piece, type Skin } from './skins/skin';
 import type { ArmSpec, FactoryLayout, FactoryTicket, IntakeState, MachineSpec, StationSpec } from './types';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else. */
@@ -265,6 +265,15 @@ export class FactoryView {
     return p ? { x: sx(p.x - 0.7), y: sy(p.y - 0.7), w: 1.4 * z, h: 1.4 * z } : null;
   }
 
+  /** What failed to be painted, told once per message: the floor is painted without it (`paintPieces`). */
+  private readonly told = new Set<string>();
+  private readonly failed = (err: unknown, p: Piece): void => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (this.told.has(msg)) return;
+    this.told.add(msg);
+    console.error(`Factory: a piece of the floor could not be painted (layer ${p.layer}, depth ${p.depth}); the rest is painted without it.`, err);
+  };
+
   draw(st: ViewState, dtReal: number): void {
     this.resize();
     const S = this.scene.build(st, dtReal);
@@ -274,7 +283,7 @@ export class FactoryView {
     this.skin.ground(this, S, st);
     const pieces: Piece[] = [];
     this.skin.pieces(S, st, pieces);
-    for (const p of order(pieces)) p.draw();
+    paintPieces(pieces, this.ctx, this.failed);
     this.skin.top(S, st);
   }
 
