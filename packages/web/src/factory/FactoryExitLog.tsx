@@ -15,6 +15,7 @@ import { priorityOf, TicketToken, typeLabel, typeOf } from './FactoryTicketMeta'
 import { span } from './format';
 import { ITEM_SOURCES, refOf, SOURCE_LABEL, sourceType } from './items';
 import type { ExitLog, FactoryTicketInfo } from './types';
+import { KindChoice, showsKind, useKinds } from './KindChoice';
 
 /** What a line is now: a ticket still done, set back to work since it left, archived, deleted since; an item (archived). */
 export type ExitNow = 'done' | 'reopened' | 'archived' | 'deleted';
@@ -131,7 +132,9 @@ export function FactoryExitLog({ machineId, onSettings, onOpenTicket, onClose }:
   }, [machineId, days]);
 
   const rows = useMemo(() => (log ? exitRows(log) : []), [log]);
-  const shown = useMemo(() => filterExitRows(rows, f), [rows, f]);
+  /* tickets, items or both (it opens on both: an exit's items are part of what left) */
+  const [kinds, setKinds] = useKinds('exits', 'both');
+  const shown = useMemo(() => filterExitRows(rows, f).filter((r) => showsKind(kinds, !!r.source)), [rows, f, kinds]);
   const exits = log?.exits ?? [], exitName = (id: string) => exits.find((e) => e.machineId === id)?.name ?? 'Exit';
   const name = machineId ? exitName(machineId) : 'Exits';
   const set = (patch: Partial<ExitFilter>) => setF((cur) => ({ ...cur, ...patch }));
@@ -199,6 +202,7 @@ export function FactoryExitLog({ machineId, onSettings, onOpenTicket, onClose }:
           {guard(<MultiSelect label="Priorities" allLabel="All priorities" values={f.priorities} options={priorityOptions} onChange={(v) => set({ priorities: v })} searchable={false} />)}
           {guard(<MultiSelect label="Now" allLabel="Any state now" values={f.states} options={stateOptions} onChange={(v) => set({ states: v as ExitNow[] })} searchable={false} />)}
           {active(f) && <Button size="sm" variant="ghost" onClick={() => setF(NO_EXIT_FILTER)} title="Show everything again">Clear</Button>}
+          <span className="ml-auto"><KindChoice value={kinds} onChange={setKinds} tickets={rows.filter((r) => !r.source).length} items={rows.filter((r) => r.source).length} /></span>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-[var(--theme-border)]">

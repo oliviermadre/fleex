@@ -163,6 +163,12 @@ and the brief says so). Without its source (gog cannot read Gmail), the latest m
   nothing) and opens links in a new tab. Images from the internet stay unloaded until Load images: loading them tells
   the sender the mail was opened.
 
+### Tickets, items or both
+
+The lists that hold both (Tab's list of the floor, what left by the exits) have a choice, **Tickets · Items · Both**,
+each with its count (`KindChoice.tsx`). It narrows the list only: nothing is faded on the floor, unlike Tab's filters.
+It is kept per list in the viewer's browser; Tab opens on the tickets, the exits' list on both.
+
 ### Archived items
 
 Picked on `docs/factory/archived-items.html` (A, A, A). **Archived** on the floor's card (every intake) and on an

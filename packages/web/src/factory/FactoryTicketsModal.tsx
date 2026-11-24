@@ -16,6 +16,7 @@ import { complexityOf, priorityOf, Star, TicketToken, typeLabel, typeOf } from '
 import { since, span } from './format';
 import { humanCall, needsHuman, type FactoryTicket, type MachineSpec } from './types';
 import { refOf } from './items';
+import { KindChoice, showsKind, useKinds } from './KindChoice';
 
 type Sort = 'human' | 'here' | 'number' | 'priority' | 'where';
 const SORTS: { value: Sort; label: string }[] = [
@@ -51,7 +52,11 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  const tickets = useMemo(() => snapshot?.tickets ?? [], [snapshot]), now = snapshot?.serverTime ?? '';
+  /* tickets, items or both: what the list shows (the floor is not faded by it); it opens on the tickets */
+  const [kinds, setKinds] = useKinds('tab', 'tickets');
+  const everything = useMemo(() => snapshot?.tickets ?? [], [snapshot]), now = snapshot?.serverTime ?? '';
+  const tickets = useMemo(() => everything.filter((t) => showsKind(kinds, !!t.item)), [everything, kinds]);
+  const itemCount = everything.filter((t) => t.item).length;
   const machines = useMemo(() => new Map((layout?.machines ?? []).map((m) => [m.id, m])), [layout]);
   const set = (patch: Partial<Finder>) => onFinder({ ...finder, ...patch });
   const waits = (t: FactoryTicket) => humanCall(t) !== null;
@@ -130,6 +135,7 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
           <Toggle value={finder.favorite} flip={() => set({ favorite: !finder.favorite })} title="Only your favourites"><Star on={finder.favorite} size={11} />Favourites</Toggle>
           <Toggle value={finder.waiting} flip={() => set({ waiting: !finder.waiting })} title="Only tickets that wait for you">Waiting for me</Toggle>
           <Toggle value={finder.blocked} flip={() => set({ blocked: !finder.blocked })} title="Only tickets marked as blocked">Blocked</Toggle>
+          <span className="ml-auto"><KindChoice value={kinds} onChange={setKinds} tickets={everything.length - itemCount} items={itemCount} /></span>
           {finderActive(finder) && <Button size="sm" variant="ghost" onClick={() => onFinder(NO_FINDER)} title="Show every ticket again">Clear</Button>}
         </div>
 
@@ -138,7 +144,7 @@ export function FactoryTicketsModal({ finder, onFinder, onGoTo, onDetail, onClos
             <span /><span>Ticket</span><span>Type</span><span>Priority</span><span title="Complexity">Cx</span><span>Where</span><span>State</span><span>For</span><span>Board</span><span />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto" role="table" aria-label="Tickets on the floor">
-            {rows.length === 0 && <div className="py-12 text-center text-xs text-[var(--theme-text-muted)]">{tickets.length ? 'No ticket matches these filters.' : 'No ticket on the floor yet.'}</div>}
+            {rows.length === 0 && <div className="py-12 text-center text-xs text-[var(--theme-text-muted)]">{tickets.length ? 'No ticket matches these filters.' : everything.length ? `Nothing here: ${kinds === 'items' ? 'no item' : 'no ticket'} on the floor. See ${kinds === 'items' ? 'Tickets' : 'Items'}.` : 'No ticket on the floor yet.'}</div>}
             {rows.map((t) => {
               const info = t.info, why = needsHuman(t), m = machines.get(t.machineId ?? '') ?? null, state = stateOf(t);
               return (

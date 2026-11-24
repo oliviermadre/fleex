@@ -18,7 +18,7 @@ const LOG: ExitLog = {
 const exitLog = vi.fn(async () => LOG);
 vi.mock('./factoryApi', () => ({ factoryApi: { exitLog: (...a: unknown[]) => exitLog(...(a as [])) } }));
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); try { localStorage.clear(); } catch { /* none */ } });
 
 describe('what left by the exits', () => {
   it('puts tickets and items in one list, the latest out first, and says what each is now', () => {
@@ -76,6 +76,19 @@ describe('what left by the exits', () => {
     expect(region.textContent).toContain('1 of 3 shown');
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(on.onSettings).toHaveBeenCalled();
+  });
+
+  it('opens on tickets and items both, and shows one or the other on demand', async () => {
+    try { localStorage.clear(); } catch { /* none */ }
+    useFactoryStore.setState({ statsDays: 7 } as never);
+    render(<FactoryExitLog machineId={null} onClose={vi.fn()} onOpenTicket={vi.fn()} />);
+    expect(await screen.findByText('Re: invoice')).toBeTruthy();
+    expect(screen.getByText('Retry on 502')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /Tickets/ }));
+    expect(screen.queryByText('Re: invoice')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Items/ }));
+    expect(screen.queryByText('Retry on 502')).toBeNull();
+    expect(screen.getByText('Re: invoice')).toBeTruthy();
   });
 
   it('every exit: grouped by exit, one removed since named as it was, and no settings', async () => {
