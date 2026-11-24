@@ -226,6 +226,8 @@ export interface FactoryRunRow {
    * answered, since an item has no thread, and the deliverable it produced.
    */
   reply?: string | null; deliverableId?: string | null;
+  /** On a visit to an item, as a station's latest runs list it: which item, by its title and source. */
+  item?: { title: string; source: ItemSource } | null;
 }
 
 /**

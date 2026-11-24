@@ -174,6 +174,8 @@ export interface FactoryRun {
   outcome: string | null; executionId: string | null; error: string | null; startedAt: string; finishedAt: string | null;
   /** A visit to an item: what the station answered (an item has no thread), and the deliverable it produced. */
   reply?: string | null; deliverableId?: string | null;
+  /** On a visit to an item, in a station's latest runs: which item, by its title and source. */
+  item?: { title: string; source: ItemSource } | null;
 }
 /** What one machine did over the period. Mirrors `MachineStats` in the server's `factory/stats.ts`. */
 export interface MachineStats {

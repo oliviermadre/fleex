@@ -166,6 +166,17 @@ export class SqliteFactoryStore implements FactoryStorePort {
     return (this.conn.db.prepare('SELECT * FROM factory_item_runs WHERE item_id = ? ORDER BY started_at ASC').all(itemId) as (RunRow & { item_id: string })[]).map(runFromRow);
   }
 
+  async listRecentItemRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    const sql = `SELECT r.*, i.title AS item_title, i.source AS item_source FROM factory_item_runs r LEFT JOIN factory_items i ON i.id = r.item_id
+      WHERE r.floor_id = ?${machineId ? ' AND r.machine_id = ?' : ''} ORDER BY r.started_at DESC LIMIT ?`;
+    const rows = (machineId ? this.conn.db.prepare(sql).all(floorId, machineId, limit) : this.conn.db.prepare(sql).all(floorId, limit)) as (RunRow & { item_id: string; item_title: string | null; item_source: string | null })[];
+    return rows.map((r) => ({ ...runFromRow(r), item: r.item_title !== null ? { title: r.item_title, source: r.item_source as ItemSource } : null }));
+  }
+
+  async listItemRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_item_runs WHERE floor_id = ? AND (started_at >= ? OR finished_at >= ?) ORDER BY started_at ASC LIMIT 10000').all(floorId, sinceIso, sinceIso) as (RunRow & { item_id: string })[]).map(runFromRow);
+  }
+
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {
     return (this.conn.db.prepare('SELECT * FROM factory_runs WHERE ticket_id = ? ORDER BY started_at ASC').all(ticketId) as RunRow[]).map(runFromRow);
   }

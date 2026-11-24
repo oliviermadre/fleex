@@ -106,7 +106,10 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   `factory_item_runs` (migration 048) with the agent's reply and the deliverable it produced (saved with no ticket, so
   it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
   the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
-  visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
+  visits count with the tickets' runs: in a station's latest runs (`GET /api/factory/runs` reads both tables, an item
+  by its title and source) and in the floor's figures and the cost layer (`computeStats`: an item's run has no ticket,
+  so its cost is read by execution, `AgentEventStorePort.getExecutionsByIds`). An exit's counter counts the items
+  archived there with the tickets it shipped.
 - **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
   2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
   connectors will call, and what **New item** (on the command card with the intake selected, or its popup's button)
@@ -698,6 +701,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
 | `infrastructure/container.ts` | builds the module (with the gogcli mail source), exposes `container.factory` |
+| `application/ports/agent-event-store.port.ts` and its four adapters | an optional `getExecutionsByIds`: what a run with no ticket (an item's) cost. It can stay |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |

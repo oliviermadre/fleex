@@ -211,6 +211,18 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return (data as ExecutionRow[]).map(rowToExecution);
   }
 
+  async getExecutionsByIds(ids: readonly string[]): Promise<AgentExecution[]> {
+    const out: AgentExecution[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      if (!chunk.length) continue;
+      const { data, error } = await this.conn.client.from('agent_event_executions').select('*').in('id', chunk);
+      if (error) throw new Error(`SupabaseAgentEventStore.getExecutionsByIds failed: ${error.message}`);
+      out.push(...(data as ExecutionRow[]).map(rowToExecution));
+    }
+    return out;
+  }
+
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')

@@ -99,6 +99,8 @@ export interface AgentEventStorePort {
   getEventsByExecution(executionId: string): Promise<AgentEventEntity[]>;
 
   getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]>;
+  /** The executions of these ids (those that exist): what a run with no ticket (a Factory item's) cost. */
+  getExecutionsByIds?(ids: readonly string[]): Promise<AgentExecution[]>;
 
   getExecutionsByPersona(personaId: string, limit?: number): Promise<AgentExecution[]>;
 

@@ -32,6 +32,10 @@ export interface FactoryStorePort {
   saveItemRun(run: FactoryRunRow): Promise<void>;
   /** The visits to an item, oldest first. */
   listItemRuns(itemId: string): Promise<FactoryRunRow[]>;
+  /** The floor's latest visits to items, newest first (one machine's with `machineId`), each with its item's title and source. */
+  listRecentItemRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]>;
+  /** Every visit to an item that started or ended since `sinceIso`: counted in the stats with the tickets' runs. */
+  listItemRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]>;
   listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]>;
   /** The floor's latest runs, newest first; only one machine's with `machineId`. */
   listRecentRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]>;

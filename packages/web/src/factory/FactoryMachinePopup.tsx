@@ -684,7 +684,7 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
             <li key={r.id} className="border-t border-[var(--theme-border)] py-1.5 first:border-t-0">
               <button type="button" onClick={() => onOpenTicket(r.ticketId)} className="flex w-full items-baseline gap-2 text-left text-xs">
                 <span className={cn('h-2 w-2 flex-none rounded-full', r.status === 'failed' || r.status === 'interrupted' ? 'bg-[var(--theme-danger)]' : r.status === 'running' ? 'bg-[var(--theme-success)]' : r.status === 'completed' ? 'bg-[var(--theme-text-muted)]' : 'bg-[var(--theme-warning)]')} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)] hover:underline">{titles.get(r.ticketId) ?? r.ticketId.slice(0, 8)}</span>
+                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)] hover:underline">{titles.get(r.ticketId) ?? (r.item ? `${SOURCE_LABEL[r.item.source] ?? r.item.source} · ${r.item.title}` : r.ticketId.slice(0, 8))}</span>
                 <span className="flex-none font-mono text-[var(--theme-text-secondary)]">{r.outcome ?? (r.status === 'needs_review' ? 'waiting' : r.status)}</span>
                 <span className="flex-none font-mono text-[var(--theme-text-muted)]">{span(since(r.startedAt, r.finishedAt ?? now))}</span>
               </button>

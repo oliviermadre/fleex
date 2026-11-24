@@ -125,6 +125,22 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     return (data as Parameters<typeof runFromRow>[0][]).map(runFromRow);
   }
 
+  async listRecentItemRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    let q = this.conn.client.from('factory_item_runs').select('*, factory_items(title, source)').eq('floor_id', floorId);
+    if (machineId) q = q.eq('machine_id', machineId);
+    const { data, error } = await q.order('started_at', { ascending: false }).limit(limit);
+    if (error) this.fail('listRecentItemRuns', error.message);
+    return (data as (RunRow & { item_id: string; factory_items: { title: string; source: string } | null })[]).map((r) => ({
+      ...runFromRow(r), item: r.factory_items ? { title: r.factory_items.title, source: r.factory_items.source as FactoryItemRow['source'] } : null,
+    }));
+  }
+
+  async listItemRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {
+    const { data, error } = await this.conn.client.from('factory_item_runs').select('*').eq('floor_id', floorId).or(`started_at.gte.${sinceIso},finished_at.gte.${sinceIso}`).order('started_at', { ascending: true }).limit(10000);
+    if (error) this.fail('listItemRunsSince', error.message);
+    return (data as (RunRow & { item_id: string })[]).map(runFromRow);
+  }
+
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {
     const { data, error } = await this.conn.client.from('factory_runs').select('*').eq('ticket_id', ticketId).order('started_at', { ascending: true });
     if (error) this.fail('listRunsByTicket', error.message);

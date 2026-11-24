@@ -139,6 +139,12 @@ describe('SqliteFactoryStore', () => {
     await store.saveItemRun(runRow('v2', { ticketId: 'i1', reply: null, deliverableId: null, startedAt: '2026-11-15T11:00:00.000Z' }));
     expect(await store.listItemRuns('i1')).toMatchObject([{ id: 'v1', ticketId: 'i1', status: 'completed', outcome: 'mine', reply: 'Answer Ana.', deliverableId: 'd1' }, { id: 'v2', status: 'running' }]);
     expect(await store.listRunsByTicket('i1')).toEqual([]);
+    /* a station's latest runs list them with their item's title; the stats read them by time */
+    expect((await store.listRecentItemRuns('default', 10)).map((r) => [r.id, r.item?.title])).toEqual([['v2', 'hi'], ['v1', 'hi']]);
+    expect(await store.listRecentItemRuns('default', 10, 'other')).toEqual([]);
+    expect((await store.listItemRunsSince('default', '2026-11-15T09:00:00.000Z')).map((r) => r.id)).toEqual(['v1', 'v2']);
+    expect((await store.listItemRunsSince('default', '2026-11-15T10:30:00.000Z')).map((r) => r.id)).toEqual(['v2']);
+    expect((await store.listItemRunsSince('default', '2026-11-16T00:00:00.000Z'))).toEqual([]);
     expect((await store.interruptRunningRuns(NOW)).map((r) => r.id)).toEqual(['v2']);
     expect((await store.listItemRuns('i1'))[1]).toMatchObject({ status: 'interrupted' });
   });

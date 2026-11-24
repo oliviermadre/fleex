@@ -226,15 +226,22 @@ export class FactoryModule {
   private async computeStats(days: number): Promise<FactoryStats> {
     const now = Date.now(), since = new Date(now - days * DAY_MS).toISOString(), until = new Date(now).toISOString();
     const floor = this.engine.snapshot().floor;
-    const runs = await this.store.listRunsSince(floor.id, since);
-    const ticketIds = [...new Set(runs.filter((r) => r.executionId || r.executor === 'panel').map((r) => r.ticketId))];
+    /* a station's visits to items count as its runs; they have no ticket, so what they cost is read by execution */
+    const [ticketRuns, itemRuns, exitItems] = await Promise.all([this.store.listRunsSince(floor.id, since), this.store.listItemRunsSince(floor.id, since), this.store.listExitItems(floor.id, null, since)]);
+    const runs = [...ticketRuns, ...itemRuns];
+    const ticketIds = [...new Set(ticketRuns.filter((r) => r.executionId || r.executor === 'panel').map((r) => r.ticketId))];
     const executions: ExecutionCost[] = [];
     for (let i = 0; i < ticketIds.length; i += 8) {
       const batch = await Promise.all(ticketIds.slice(i, i + 8).map((id) => this.deps.agentEventStore.getExecutionsByTicket(id).catch(() => [])));
       for (const list of batch) for (const e of list) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
     }
-    return computeStats({ runs, executions, layout: floor.layout, since, until, days });
+    const itemExecutions = [...new Set(itemRuns.map((r) => r.executionId).filter((id): id is string => !!id))];
+    if (itemExecutions.length && this.deps.agentEventStore.getExecutionsByIds) {
+      for (const e of await this.deps.agentEventStore.getExecutionsByIds(itemExecutions).catch(() => [])) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
+    }
+    return computeStats({ runs, executions, layout: floor.layout, since, until, days, exitItems });
   }
+
 
   /**
    * What left by one exit (by every exit of the floor, with null) over the last `days` days: its shipments (the `exit`

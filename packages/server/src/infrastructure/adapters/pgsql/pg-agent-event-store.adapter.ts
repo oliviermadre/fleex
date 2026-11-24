@@ -153,6 +153,12 @@ export class PgAgentEventStore implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getExecutionsByIds(ids: readonly string[]): Promise<AgentExecution[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.db.query('SELECT * FROM agent_event_executions WHERE id = ANY($1)', [ids]);
+    return rows.map(rowToExecution);
+  }
+
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     const { rows } = await this.db.query(
       'SELECT * FROM agent_event_executions WHERE persona_id = $1 ORDER BY started_at DESC LIMIT $2',

@@ -106,7 +106,10 @@ export function factoryRoutes(factory: FactoryModule | null) {
     /** The latest runs of the floor, or of one machine with `machineId`. */
     app.get<{ Querystring: { limit?: string; machineId?: string } }>('/api/factory/runs', async (request) => {
       const f = await ready(), limit = Math.max(1, Math.min(200, Number(request.query.limit) || 50)), machineId = request.query.machineId;
-      return f.store.listRecentRuns(f.engine.snapshot().floor.id, limit, machineId || undefined);
+      /* the tickets' runs and the visits to items, together, the latest first */
+      const floorId = f.engine.snapshot().floor.id;
+      const [tickets, items] = await Promise.all([f.store.listRecentRuns(floorId, limit, machineId || undefined), f.store.listRecentItemRuns(floorId, limit, machineId || undefined)]);
+      return [...tickets, ...items].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, limit);
     });
     /** Runs, failures, time and cost per machine over the last `days` days (7 by default, 90 at most). */
     app.get<{ Querystring: { days?: string } }>('/api/factory/stats', async (request) => (await ready()).stats(Number(request.query.days) || 7));
