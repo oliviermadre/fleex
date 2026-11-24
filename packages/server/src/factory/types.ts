@@ -267,6 +267,10 @@ export interface ItemInput {
 }
 /** The whole of an item's latest message: its text, and its HTML part when it came with one (a mail). */
 export interface ItemBody { text: string; html: string | null }
+/** One message of an item's conversation, as a station is told it. */
+export interface ConversationEntry { from: string; at: string; text: string }
+/** What an item's source says of it when asked again: its latest message whole, and the whole conversation. */
+export interface ItemReading { body: ItemBody; conversation: ConversationEntry[] }
 /** Where a pulled intake stands: its last pull, and what went wrong with it if anything did. */
 export interface IntakePullRow { intakeId: string; floorId: string; lastPulledAt: string | null; error: string | null; updatedAt: string }
 

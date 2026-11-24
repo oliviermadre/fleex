@@ -144,8 +144,13 @@ text part: the Gmail adapter reads each pull twice (text, then `--body-format ht
 part read as text, `htmlToText` in shared) and the HTML part as sent. The whole of an item's latest message is kept
 apart, in `factory_item_bodies` (migration 051), written when the message comes and not each time the item moves;
 `GET /api/factory/items/:id/body` gives it (`kept: false` for an item made by hand, or kept before: its first lines,
-read as text when they are HTML). A station running on an item is briefed with the whole message (20,000 characters at
-most).
+read as text when they are HTML). Before that, only the first 2,000 characters of a mail were kept: such an item is
+asked again from its source when it is opened or a station runs on it (`readItem`, `FactoryEngine.itemBody`; a mail:
+`gog gmail thread get`, the Gmail API's thread, its parts decoded by the adapter), and its message is kept whole then.
+
+A station running on a mail is told **its whole conversation**, asked again from Gmail at the start of the run: every
+message, oldest first, each whole (20,000 characters at most each, 60,000 in all: past that the oldest are left out,
+and the brief says so). Without its source (gog cannot read Gmail), the latest message as kept.
 
 - **Its card** shows text, never HTML. When a station delivered something on it, the card's first button opens the
   latest deliverable ("Open delivered: …").

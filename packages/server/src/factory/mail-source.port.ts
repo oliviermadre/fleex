@@ -55,4 +55,6 @@ export interface MailSourcePort {
    * search syntax (Gmail's), empty for everything. Throws `MailSourceError`.
    */
   search(query: string, since: Date): Promise<MailMessage[]>;
+  /** Every message of a conversation, whole, oldest first. Throws `MailSourceError`. */
+  thread(threadId: string): Promise<MailMessage[]>;
 }

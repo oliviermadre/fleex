@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { htmlToText, looksLikeHtml } from '@fleex/shared';
 import { ForbiddenError } from '../domain/errors.js';
 import type { FactoryModule } from './factory.module.js';
 import { FactoryError } from './engine.js';
@@ -86,17 +85,12 @@ export function factoryRoutes(factory: FactoryModule | null) {
     app.get<{ Querystring: { days?: string } }>('/api/factory/exits/log', async (request) => (await ready()).exitLog(null, Number(request.query.days) || 7));
     app.get<{ Params: { machineId: string }; Querystring: { days?: string } }>('/api/factory/exits/:machineId/log', async (request) => (await ready()).exitLog(request.params.machineId, Number(request.query.days) || 7));
     /**
-     * The whole of an item's latest message: its text and, for a mail, its HTML part (`kept`). An item kept before bodies
-     * were (or made by hand) has its first lines as text; first lines that are HTML (an older Gmail item) are read as such.
+     * The whole of an item's latest message: its text and, for a mail, its HTML part. One kept before messages were kept
+     * whole is asked again from its source (`FactoryEngine.itemBody`).
      */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/body', async (request, reply) => {
-      const f = await ready();
-      const kept = await f.store.getItemBody(request.params.itemId);
-      if (kept) return { ...kept, kept: true };
-      const t = f.engine.snapshot().tickets.find((x) => x.ticketId === request.params.itemId);
-      if (!t?.item) return reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item on the floor' });
-      const excerpt = t.item.excerpt;
-      return looksLikeHtml(excerpt) ? { text: htmlToText(excerpt), html: excerpt, kept: false } : { text: excerpt, html: null, kept: false };
+      const body = await (await ready()).engine.itemBody(request.params.itemId);
+      return body ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item on the floor' });
     });
     /** What stations did with an item and what they answered, oldest first. */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });

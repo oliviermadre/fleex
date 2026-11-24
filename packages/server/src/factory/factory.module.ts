@@ -135,6 +135,13 @@ export class FactoryModule {
         });
       },
       cancelExecution: (executionId) => deps.executeAgent.cancelExecution(executionId),
+      /* a mail is asked again for its whole thread: what a station is told, and what an older item is filled from */
+      readItem: async (item) => {
+        if (item.source !== 'gmail' || !deps.mail) return null;
+        const messages = await deps.mail.thread(item.sourceKey), last = messages[messages.length - 1];
+        if (!last) return null;
+        return { body: { text: last.body, html: last.html }, conversation: messages.map((m) => ({ from: m.from, at: m.at, text: m.body })) };
+      },
       /* in the human's name, as a comment of theirs would be; it starts no agent (no mention is created from it) */
       recordDecision: async (ticketId, gate, outcome, reason) => {
         const { humanDisplayName, humanMentionName } = deps.config.get();

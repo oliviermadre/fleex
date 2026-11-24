@@ -190,3 +190,45 @@ describe('the brief of a station that runs on a mail', () => {
     expect(old).not.toContain('<div>');
   });
 });
+
+describe('a mail thread, whole', () => {
+  const b64 = (s: string, enc: BufferEncoding = 'utf8') => Buffer.from(s, enc).toString('base64url');
+  const msg = (id: string, at: number, payload: unknown) => ({ id, threadId: 't9', internalDate: String(at), labelIds: ['INBOX'], payload });
+
+  it('reads every message of a thread from the API\'s parts: the text part, the HTML part, a charset, attachments', async () => {
+    const long = 'x'.repeat(30_000);
+    const thread = { messages: [
+      msg('m2', Date.parse('2026-11-20T10:00:00Z'), { mimeType: 'multipart/mixed', headers: [{ name: 'From', value: 'Bob' }, { name: 'Subject', value: 'Re: devis' }], parts: [
+        { mimeType: 'multipart/alternative', parts: [
+          { mimeType: 'text/plain', headers: [{ name: 'Content-Type', value: 'text/plain; charset="UTF-8"' }], body: { data: b64(`Réponse complète ${long}`) } },
+          { mimeType: 'text/html', body: { data: b64(`<div>Réponse <b>complète</b></div><p>${long}</p>`) } },
+        ] },
+        { mimeType: 'application/pdf', filename: 'devis.pdf', body: { attachmentId: 'a1', size: 100 } },
+      ] }),
+      msg('m1', Date.parse('2026-11-19T09:00:00Z'), { mimeType: 'text/html', headers: [{ name: 'From', value: 'Ana' }, { name: 'Content-Type', value: 'text/html; charset=ISO-8859-1' }], body: { data: b64('<div>Début</div><p>du fil</p><br>', 'latin1') } }),
+    ] };
+    const gog = fakeGog(() => ok({ thread, downloaded: [] }));
+    const all = await new GogMailSource({ run: gog.run, account: null }).thread('t9');
+    expect(gog.calls[0]).toEqual(['--json', '--no-input', '--readonly', '--color=never', 'gmail', 'thread', 'get', 't9']);
+    expect(all.map((m) => m.id)).toEqual(['m1', 'm2']);
+    expect(all[0]).toMatchObject({ from: 'Ana', body: 'Début\n\ndu fil', html: '<div>Début</div><p>du fil</p><br>' });
+    expect(all[1]!.body.length).toBeGreaterThan(30_000);                              // whole, nothing cut
+    expect(all[1]).toMatchObject({ from: 'Bob', subject: 'Re: devis', attachments: 1 });
+    expect(all[1]!.html).toContain('<b>complète</b>');
+  });
+});
+
+describe('the brief of a station that runs on a conversation', () => {
+  it('gives every message, oldest first, and leaves the oldest out past its length', async () => {
+    const { itemBrief } = await import('../../src/factory/item-brief.js');
+    const item = { id: 'i', floorId: 'default', source: 'gmail', sourceKey: 't', title: 'Devis', author: 'Ana', excerpt: 'cut', url: null, tags: [], fields: {}, messages: 3, lastActivityAt: '', intakeId: null, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: '', updatedAt: '' } as never;
+    const brief = itemBrief(item, [], null, [{ from: 'Ana', at: '2026-11-19', text: 'Can you quote?' }, { from: 'Me', at: '2026-11-20', text: 'Sure, 1200 €' }, { from: 'Ana', at: '2026-11-21', text: 'Rouge, enfin aubergine' }]);
+    expect(brief).toContain('## The conversation');
+    expect(brief.indexOf('Can you quote?')).toBeLessThan(brief.indexOf('Rouge, enfin aubergine'));
+    expect(brief).not.toContain('cut');
+    const big = itemBrief(item, [], null, Array.from({ length: 6 }, (_, i) => ({ from: `p${i}`, at: `d${i}`, text: `${i}`.repeat(15_000) })));
+    expect(big).toContain('The 2 oldest are left out');
+    expect(big).toContain('5'.repeat(15_000));
+    expect(big).not.toContain('0'.repeat(15_000));
+  });
+});

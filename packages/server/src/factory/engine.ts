@@ -3,14 +3,14 @@ import { applyOps, normaliseOps, type TicketChange } from './set-ops.js';
 import { randomUUID } from 'node:crypto';
 import { LAYOUT_VERSION, upgradeLayout } from './layout-versions.js';
 import { PULLED_SOURCES, SOURCE_FIELDS } from './item-sources.js';
-import type { TicketStatus } from '@fleex/shared';
+import { htmlToText, looksLikeHtml, type TicketStatus } from '@fleex/shared';
 import type { FactoryStorePort } from './factory-store.port.js';
 import type { StationRunnerPort } from './station-runner.js';
 import { acceptsOutcome, holds, isConditional, matches as armMatches, normaliseConditions, normaliseList, QUESTION_OUTCOME, takesQuestions } from './conditions.js';
 import {
   AREA_LABELS, DEFAULT_FLOOR_ID, DEFAULT_SETTINGS, DX, DY, GROUP_SLOTS, ITEM_SOURCES, RUNS, SET_ASIDE,
   type AreaLabel, type ArmSpec, type BeltSpec, type ItemFields, type ItemRule, type FactoryFloorRow, type FactoryGroup, type FactoryItemInfo, type FactoryItemRow, type FactoryLayout, type FactoryRunRow, type FactorySettings,
-  type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type IntakePullRow, type ItemInput, type MachineSpec, type StationSpec, type ZoneSpec,
+  type FactoryTicketInfo, type FactoryTicketState, type IntakeSpec, type IntakePullRow, type ItemBody, type ItemInput, type ItemReading, type MachineSpec, type StationSpec, type ZoneSpec,
 } from './types.js';
 
 /** Tiles per second on a belt. */
@@ -147,6 +147,11 @@ export interface FactoryEngineDeps {
   recordDecision?(ticketId: string, gate: string, outcome: string, reason: string): Promise<void>;
   /** Paces of the floor, for tests that do not want to wait for them. */
   timing?: { armSwing?: number; stationRestMs?: number; teleportRestMs?: number };
+  /**
+   * Ask an item's source for it again (a mail's whole thread): what a station running on it is told, and what an item
+   * kept before its message was kept whole is filled from. Null when its source cannot be asked.
+   */
+  readItem?(item: FactoryItemRow): Promise<ItemReading | null>;
 }
 
 export class FactoryError extends Error {}
@@ -795,8 +800,10 @@ export class FactoryEngine {
     const started = (executionId: string) => { run.executionId = executionId; this.saveRun(run); };
     /* an item is its brief: what it is, and what stations said about it before */
     const going = t.item
-      ? Promise.all([this.deps.store.listItemRuns(t.ticketId).catch(() => []), this.deps.store.getItemBody(t.ticketId).catch(() => null)])
-        .then(([earlier, body]) => this.deps.runner.run(spec, t.ticketId, run.id, targets, started, { item: t.item!, earlier: earlier.filter((r) => r.id !== run.id), body }))
+      ? Promise.all([this.deps.store.listItemRuns(t.ticketId).catch(() => []), this.deps.store.getItemBody(t.ticketId).catch(() => null), this.read(t.item!)])
+        .then(([earlier, kept, reading]) => this.deps.runner.run(spec, t.ticketId, run.id, targets, started, {
+          item: t.item!, earlier: earlier.filter((r) => r.id !== run.id), body: reading?.body ?? kept, conversation: reading?.conversation ?? [],
+        }))
       : this.deps.runner.run(spec, t.ticketId, run.id, targets, started);
     void going
       .then((res) => {
@@ -1065,6 +1072,28 @@ export class FactoryEngine {
     if (!b || (!b.text && !b.html)) return;
     await this.deps.store.saveItemBody(itemId, { text: String(b.text ?? '').slice(0, BODY_TEXT_MAX), html: b.html ? String(b.html).slice(0, BODY_HTML_MAX) : null })
       .catch((err) => this.deps.logger.warn('Factory: could not keep an item\'s body', { itemId, error: String(err) }));
+  }
+
+  /** Ask the item's source for it again; what it says of its latest message is kept. Null when it cannot be asked. */
+  private async read(item: FactoryItemRow): Promise<ItemReading | null> {
+    if (!this.deps.readItem) return null;
+    const reading = await this.deps.readItem(item).catch((err) => { this.deps.logger.warn('Factory: could not read an item again from its source', { itemId: item.id, error: String(err) }); return null; });
+    if (reading) await this.keepBody(item.id, { body: reading.body } as ItemInput);
+    return reading;
+  }
+
+  /**
+   * The whole of an item's latest message: as kept when it came; else asked again from its source (an item kept before
+   * messages were kept whole), and kept then; else its first lines (`kept: false`), read as text when they are HTML.
+   */
+  async itemBody(itemId: string): Promise<(ItemBody & { kept: boolean }) | null> {
+    const kept = await this.deps.store.getItemBody(itemId);
+    if (kept) return { ...kept, kept: true };
+    const t = this.tickets.get(itemId), item = t?.item ?? null;
+    if (!item) return null;
+    const reading = await this.read(item);
+    if (reading) return { ...reading.body, kept: true };
+    return looksLikeHtml(item.excerpt) ? { text: htmlToText(item.excerpt), html: item.excerpt, kept: false } : { text: item.excerpt, html: null, kept: false };
   }
 
   /** The intakes of a source, in the order they are served (`priority`, 1 first). */

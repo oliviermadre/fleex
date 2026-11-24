@@ -56,6 +56,42 @@ export function mapGogMessage(m: GogMessage, account: string | null, html: strin
   };
 }
 
+/** A part of a message as the Gmail API gives it (`gog gmail thread get --json` passes the thread through). */
+interface ApiPart { mimeType?: string; filename?: string; headers?: { name?: string; value?: string }[]; body?: { data?: string; size?: number; attachmentId?: string }; parts?: ApiPart[] }
+interface ApiMessage { id?: string; threadId?: string; internalDate?: string; labelIds?: string[]; payload?: ApiPart }
+
+/** A part's content: base64url in the API, in the charset its Content-Type names (UTF-8 unless said). */
+function partText(p: ApiPart): string {
+  const data = p.body?.data;
+  if (!data) return '';
+  const bytes = Buffer.from(data, 'base64url');
+  const charset = /charset="?([\w-]+)"?/i.exec(p.headers?.find((h) => h.name?.toLowerCase() === 'content-type')?.value ?? '')?.[1] ?? 'utf-8';
+  try { return new TextDecoder(charset.toLowerCase()).decode(bytes); } catch { return bytes.toString('utf8'); }
+}
+/** The first part of a type, depth first, that is not an attachment. */
+function findPart(p: ApiPart | undefined, type: string): ApiPart | null {
+  if (!p) return null;
+  if (p.mimeType?.toLowerCase() === type && !p.filename && p.body?.data) return p;
+  for (const c of p.parts ?? []) { const f = findPart(c, type); if (f) return f; }
+  return null;
+}
+const countAttachments = (p: ApiPart | undefined): number => (p ? (p.filename ? 1 : 0) + (p.parts ?? []).reduce((n, c) => n + countAttachments(c), 0) : 0);
+
+/** A message of a thread, whole: its text part (or its HTML part read as text), and its HTML part as sent. */
+export function mapApiMessage(m: ApiMessage, account: string | null): MailMessage | null {
+  if (!m.id || !m.threadId) return null;
+  const when = Number(m.internalDate);
+  if (!Number.isFinite(when)) return null;
+  const header = (n: string) => m.payload?.headers?.find((h) => h.name?.toLowerCase() === n)?.value ?? '';
+  const plain = findPart(m.payload, 'text/plain'), rich = findPart(m.payload, 'text/html');
+  const html = rich ? partText(rich) : null, text = plain ? partText(plain) : html ? htmlToText(html) : '';
+  return {
+    id: m.id, threadId: m.threadId, at: new Date(when).toISOString(), from: header('from'), to: header('to'), cc: header('cc'), subject: header('subject'),
+    body: asText(text).replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(), html: html && looksLikeHtml(html) ? html : null,
+    labels: Array.isArray(m.labelIds) ? m.labelIds : [], attachments: countAttachments(m.payload), url: gmailThreadUrl(m.threadId, account),
+  };
+}
+
 export interface GogMailSourceDeps {
   bin?: string;
   account?: string | null;
@@ -111,6 +147,13 @@ export class GogMailSource implements MailSourcePort {
     }
     this.statusCache = { at: this.now(), value };
     return value;
+  }
+
+  /** Every message of a conversation, whole (`gog gmail thread get`: the Gmail API's thread, its parts decoded here), oldest first. */
+  async thread(threadId: string): Promise<MailMessage[]> {
+    const body = await this.gog(['gmail', 'thread', 'get', threadId]);
+    const thread = body['thread'] && typeof body['thread'] === 'object' ? (body['thread'] as { messages?: ApiMessage[] }) : null;
+    return (thread?.messages ?? []).map((m) => mapApiMessage(m, this.account)).filter((m): m is MailMessage => !!m).sort((a, b) => a.at.localeCompare(b.at));
   }
 
   async search(query: string, since: Date): Promise<MailMessage[]> {

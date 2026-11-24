@@ -282,6 +282,20 @@ describe('FactoryEngine', () => {
         expect(store.bodies.has(bare.itemId!)).toBe(false);
       });
 
+      it('an item kept before its message was kept whole is asked again from its source, and kept then', async () => {
+        await boot([gmail('a', 1, 1)]);
+        const t = await engine.ingest({ ...mail('t1', iso(5_000)), excerpt: '<div>cut</div><p>at</p><br>' }, { intakeId: 'a' });
+        /* no source to ask: the first lines, read as text */
+        expect(await engine.itemBody(t.itemId!)).toEqual({ text: 'cut\n\nat', html: '<div>cut</div><p>at</p><br>', kept: false });
+        const asked: string[] = [];
+        (engine as unknown as { deps: { readItem: unknown } }).deps.readItem = async (item: { sourceKey: string }) => { asked.push(item.sourceKey); return { body: { text: 'the whole mail', html: '<p>the whole mail</p>' }, conversation: [] }; };
+        expect(await engine.itemBody(t.itemId!)).toEqual({ text: 'the whole mail', html: '<p>the whole mail</p>', kept: true });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'the whole mail', html: '<p>the whole mail</p>' });
+        expect(await engine.itemBody(t.itemId!)).toMatchObject({ kept: true });
+        expect(asked).toEqual(['t1']);                                                     // kept: not asked again
+        expect(await engine.itemBody('nope')).toBeNull();
+      });
+
       it('goes to the intake that saw it, and a message seen again is nothing new', async () => {
         await boot([gmail('a', 1, 1), gmail('b', 1, 4)]);
         const first = await engine.ingest(mail('t1', iso(5_000)), { intakeId: 'b' });
