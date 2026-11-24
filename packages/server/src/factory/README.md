@@ -605,6 +605,30 @@ They are placed from Build › Move › Teleporter, as a departure; the popup se
 (among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
 with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
 
+## A station that is not set up
+
+A station that runs something and has nothing to run yet takes tickets in and starts nothing on them, as if switched
+off: an agent, skill or panel station with no persona, skill or panel chosen, a script station with no line and no
+named action (`setupGap` in `engine.ts`). Its tickets wait with "X is not set up (no persona): it starts nothing until
+it is", and start as soon as it is set. On the floor it has a dashed amber outline and a "!" in every skin (painted by
+the renderer over the skin, `unsetMarks`), and it is listed with what needs you. The page also marks one that names a
+persona, skill or panel this instance does not have (`setupGap` in `floorFile.ts`); the engine does not know those
+lists, and such a station still runs (and fails).
+
+## Exporting and importing a floor
+
+In build mode, **Export** downloads the floor as `fleex-floor-<date>.json` (with machines selected, only them), and
+**Import** reads one back (`floorFile.ts`, picked on `docs/factory/floor-import.html`). The file holds the machines and
+their settings: no tickets, items, runs, nor an intake's last pull. What a machine names is matched by name on import:
+a persona, a skill (its command), a panel, a model, a board (the file carries the name of each board it uses; a
+board's id is the instance's own). What this instance does not have is taken off the machine, never the machine
+itself, and listed in a report with a way to each: a station left without its persona is then not set up (above).
+An arm or a toll whose "board is" condition is left with no board keeps the board it named, which no ticket is on
+here: it takes nothing rather than everything. A model is kept when the list of models is only the fallback one.
+Imported machines get new ids (teleporters stay paired). On an empty floor the import replaces it; otherwise it asks:
+replace the floor (Undo brings it back, the tickets of the machines gone lie on the floor), or take it in hand like a
+paste (the report shows once it is put down). A file of another layout version is refused.
+
 ## What waits for someone
 
 Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,

@@ -598,7 +598,7 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
                 <Select id="f-ref" label={m.exec === 'agent' ? 'Persona' : m.exec === 'skill' ? 'Skill' : 'Panel'} value={m.ref ?? ''} onChange={(e) => onPatch({ ref: e.target.value } as Partial<StationSpec>)}
                   options={[{ value: '', label: 'choose' }, ...refs(m.exec, m.ref ?? '').map((r) => ({ value: r, label: r }))]} />
               </div>
-              {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: without it, every run fails.</div>}
+              {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: until then it takes tickets in and starts nothing.</div>}
               {(m.exec === 'agent' || m.exec === 'skill') && (
                 <div className="grid grid-cols-2 gap-2">
                   {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}

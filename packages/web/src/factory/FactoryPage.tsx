@@ -45,6 +45,9 @@ import { FactoryDeskForm } from './FactoryDeskForm';
 import { FactoryItemPeek } from './FactoryItemPeek';
 import { FactoryItemPopup, FactoryNewItem } from './FactoryItemPopup';
 import { FactoryPlanModal } from './FactoryPlanModal';
+import { FloorImportChoice, FloorImportReport } from './FactoryFloorImport';
+import { exportFloor as floorToFile, floorFileName, readFloor, setupGap, type Dropped, type Known, type ReadFloor } from './floorFile';
+import { loadModels } from '../hooks/useModels';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { FactoryExitLog } from './FactoryExitLog';
 import { FactoryArchivedItemPopup, FactoryArchivedItems } from './FactoryArchivedItems';
@@ -229,6 +232,12 @@ function Floor() {
   const [hudHidden, setHudHidden] = useState(loadConsoleHidden);
   const flipHud = useCallback(() => setHudHidden((h) => { saveConsoleHidden(!h); return !h; }), []);
   const [planOpen, setPlanOpen] = useState(false);
+  /* a floor read from a file, while it is asked where it goes; then what was taken off its machines */
+  const [importing, setImporting] = useState<{ name: string; read: Extract<ReadFloor, { ok: true }> } | null>(null);
+  const [importReport, setImportReport] = useState<{ total: number; dropped: Dropped[]; unset: number } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  /** An import taken in hand: its report waits until it is put down (the machines get their ids then). */
+  const pendingReport = useRef<{ order: string[]; total: number; dropped: Dropped[]; unset: number } | null>(null);
   const [listOpen, setListOpen] = useState(false);
   /* what the floor shows on top of the machines: kept in the browser from one visit to the next */
   const [show, setShow] = useState<Show>(loadShow);
@@ -244,7 +253,7 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ turned: false, shownDir: 0 as Dir, building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
+  const live = useRef({ turned: false, shownDir: 0 as Dir, building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show, unset: null as ReadonlySet<string> | null });
   if (live.current.tool !== tool) live.current.turned = false;
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
@@ -304,6 +313,7 @@ function Floor() {
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
       exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
       intakes: s.snapshot.intakes ?? null,
+      unset: l.unset,
     };
   }, [boardName, modelOf]);
 
@@ -526,7 +536,14 @@ function Floor() {
     } else if (pr?.kind === 'place') {
       if (click && live.current.tool === 'paste') {
         const done = clipboard ? pasteAt(st.layout, clipboard, tx, ty) : null;
-        if (done) { commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null; }
+        if (done) {
+          commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null;
+          const r = pendingReport.current; pendingReport.current = null;
+          if (r) {
+            const to = new Map(r.order.map((id, i) => [id, done.ids[i] ?? id]));
+            afterImport(r.total, r.dropped.map((d) => ({ ...d, machineId: to.get(d.machineId) ?? d.machineId })), r.unset);
+          }
+        }
         else toast.warning('No room to paste here');
       } else if (click && (live.current.tool === 'set' || live.current.tool === 'toll')) {
         /* on the belt that is there, or with a belt of its own */
@@ -619,6 +636,13 @@ function Floor() {
   /* what waits for someone: listed top-left, and walked with the left and right arrows */
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
+  /* the stations that cannot run yet (no persona, skill or panel, or one this instance does not have; a script with nothing to run) */
+  const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
+  const unset = useMemo(() => {
+    const known = { personas: personas.map((p) => p.name), skills: skills.map((k) => k.commandName), panels: panels.map((p) => p.name) };
+    return (layout?.machines ?? []).flatMap((m) => { const gap = setupGap(m, known); return gap ? [{ id: m.id, name: ('name' in m && m.name) || 'Station', gap }] : []; });
+  }, [layout, personas, skills, panels]);
+  live.current.unset = unset.length ? new Set(unset.map((u) => u.id)) : null;
   /* to the next ticket that waits for someone, or the one before, round and round */
   const stepWaiting = useCallback((dir: 1 | -1) => {
     const sel = live.current.selection, next = stepNeed(needs, sel && 'ticket' in sel ? sel.ticket : null, dir);
@@ -654,7 +678,7 @@ function Floor() {
     const ids = sel && 'machines' in sel ? sel.machines : sel && 'machine' in sel ? [sel.machine] : [];
     const clip = l && ids.length ? copyOf(l, new Set(ids)) : null;
     if (!l || !clip) { toast.info('Select one or several machines first'); return; }
-    clipboard = clip; setHasClip(true);
+    clipboard = clip; setHasClip(true); pendingReport.current = null;
     if (cut) { commit(eraseMany(l, new Set(ids))); setSelection(null); }
     toast.info(`${clip.machines.length} machine${clip.machines.length === 1 ? '' : 's'} ${cut ? 'cut' : 'copied'}: ${MOD}V, then click where to put ${clip.machines.length === 1 ? 'it' : 'them'}`);
   }, [commit]);
@@ -664,13 +688,68 @@ function Floor() {
   }, []);
 
   /** A plan is put down like anything copied: it follows the pointer until a click says where. */
-  const placePlan = useCallback((clip: Clip, name: string) => {
-    clipboard = clip; setHasClip(true); setPlanOpen(false); setSelection(null); setTool('paste');
+  const placePlan = useCallback((clip: Clip, name: string, say?: string) => {
+    clipboard = clip; setHasClip(true); pendingReport.current = null; setPlanOpen(false); setSelection(null); setTool('paste');
     /* a plan is often wider than what is on screen: step back until it can be seen whole while it is carried */
     const v = viewRef.current;
     if (v) v.cam.z = Math.max(5, Math.min(v.cam.z, 0.7 * Math.min(v.w / clip.w, v.h / clip.h)));
-    toast.info(`Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
+    toast.info(say ?? `Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
   }, []);
+
+  // ---------- export and import (build mode) ----------
+  const downloadFloor = useCallback(() => {
+    const l = useFactoryStore.getState().layout; if (!l) return;
+    const sel = live.current.selection, ids = sel && 'machines' in sel ? sel.machines : sel && 'machine' in sel ? [sel.machine] : [];
+    const file = floorToFile(l, useTicketStore.getState().boards, ids.length ? new Set(ids) : null);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = floorFileName(); a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const n = file.layout.machines.length;
+    toast.success(`${n} machine${n === 1 ? '' : 's'} exported`);
+  }, []);
+  /** What this instance has, by name: loaded first when it is not yet, since what is missing is taken off the machines. */
+  const knownHere = useCallback(async (): Promise<Known | null> => {
+    const P = useAgentPersonaStore.getState(), S = useSkillStore.getState(), Q = usePanelStore.getState();
+    await Promise.all([P.loaded || P.loadPersonas(), S.loaded || S.loadSkills(), Q.loaded || Q.loadPanels()]);
+    if (!useAgentPersonaStore.getState().loaded || !useSkillStore.getState().loaded || !usePanelStore.getState().loaded) return null;
+    const models = await loadModels();
+    return {
+      personas: useAgentPersonaStore.getState().personas.map((p) => p.name), skills: useSkillStore.getState().skills.map((k) => k.commandName),
+      panels: usePanelStore.getState().panels.map((p) => p.name), models: models.fallback ? null : models.models.map((m) => m.id),
+      boards: useTicketStore.getState().boards.map((b) => ({ id: b.id, name: b.name })),
+    };
+  }, []);
+  const afterImport = useCallback((total: number, dropped: Dropped[], unsetCount: number) => {
+    if (dropped.length || unsetCount) setImportReport({ total, dropped, unset: unsetCount });
+    else toast.success(`Floor imported: ${total} machine${total === 1 ? '' : 's'}`);
+  }, []);
+  const importReplace = useCallback((read: Extract<ReadFloor, { ok: true }>) => {
+    const l = useFactoryStore.getState().layout; if (!l) return;
+    setImporting(null); setSelection(null); setTool('select');
+    commit({ ...l, machines: read.machines });
+    window.setTimeout(fit, 0);
+    afterImport(read.machines.length, read.dropped, read.machines.filter((m) => setupGap(m)).length);
+  }, [commit, fit, afterImport]);
+  const importInHand = useCallback((read: Extract<ReadFloor, { ok: true }>) => {
+    setImporting(null);
+    const ms = read.machines, x0 = Math.min(...ms.map((m) => m.x)), y0 = Math.min(...ms.map((m) => m.y));
+    const clip: Clip = { w: Math.max(...ms.map((m) => m.x + m.w)) - x0, h: Math.max(...ms.map((m) => m.y + m.h)) - y0, machines: ms.map((m) => ({ ...m, x: m.x - x0, y: m.y - y0 }) as MachineSpec) };
+    placePlan(clip, 'imported', `${ms.length} machine${ms.length === 1 ? '' : 's'} imported: click on the floor where they should go. Escape puts them down; ${MOD}V picks them up again.`);
+    pendingReport.current = { order: ms.map((m) => m.id), total: ms.length, dropped: read.dropped, unset: ms.filter((m) => setupGap(m)).length };
+  }, [placePlan]);
+  const onImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const l = useFactoryStore.getState().layout;
+    if (!f || !l) return;
+    const known = await knownHere().catch(() => null);
+    if (!known) { toast.error('Could not read the personas, skills and panels of this instance: nothing was imported'); return; }
+    const read = readFloor(await f.text(), l.version ?? 1, known);
+    if (!read.ok) { toast.error(read.error); return; }
+    if (!read.machines.length) { toast.info('This floor has no machines'); return; }
+    /* an empty floor (its Inbound zone at most) is replaced without asking */
+    if (l.machines.every((m) => m.kind === 'zone' && m.inbound)) importReplace(read);
+    else setImporting({ name: f.name, read });
+  }, [knownHere, importReplace]);
 
   // The command card: the menu that fits what is selected and the mode, and the sub-menus opened in it.
   const [path, setPath] = useState<string[]>([]);
@@ -695,6 +774,7 @@ function Floor() {
       newTicket: () => setDeskForm({ desk: selMachine?.kind === 'desk' ? selMachine : layout?.machines.find((m): m is DeskSpec => m.kind === 'desk') ?? null }),
       tickets: () => setListOpen(true),
       fit, plan: () => setPlanOpen(true), paste,
+      exportFloor: downloadFloor, importFloor: () => fileRef.current?.click(),
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
       select: () => setTool('select'),
       back: () => { setPath((p) => p.slice(0, -1)); setTool('select'); },
@@ -739,7 +819,7 @@ function Floor() {
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
-  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed, group, selTickets, layout]);
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed, group, selTickets, layout, downloadFloor]);
   const card = useMemo(() => menuAt(root, path), [root, path]);
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';
@@ -854,7 +934,7 @@ function Floor() {
           {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
-          {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
+          {!building && needs.length + unset.length > 0 && <FactoryNeeds needs={needs} unset={unset} selected={selTicket?.ticketId ?? selMachine?.id ?? null} onPick={pickNeed} onOpen={setOpenTicket} onPickMachine={(id) => (selMachine?.id === id ? setOpenMachine(id) : showMachine(id))} />}
           {peekFor.current && selTicket?.item && <FactoryItemPeek ref={peekRef} key={peekFor.current} itemId={peekFor.current} onOpen={() => setOpenItem(peekFor.current)} onClose={() => setPeekOpen(false)} />}
           {peekFor.current && !selTicket?.item && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} onPopOut={(executionId, title) => setRunLog({ executionId, title })} />}
           {runLog && <FloatingExecutionPanel key={runLog.executionId} executionId={runLog.executionId} title={runLog.title} onClose={() => setRunLog(null)} />}
@@ -901,6 +981,10 @@ function Floor() {
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
+      <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Floor file to import" onChange={(e) => void onImportFile(e)} />
+      {importing && <FloorImportChoice name={importing.name} incoming={importing.read.machines.length} here={layout?.machines.length ?? 0}
+        onReplace={() => importReplace(importing.read)} onHand={() => importInHand(importing.read)} onClose={() => setImporting(null)} />}
+      {importReport && <FloorImportReport {...importReport} onGo={(id) => { setImportReport(null); showMachine(id); }} onClose={() => setImportReport(null)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}
         onGoTo={(id) => { setListOpen(false); setBuilding(false); goTo(id); }} onDetail={(id) => { setListOpen(false); setOpenTicket(id); }} />}
       <ConfirmModal open={confirmGive} title={`Give ${selTickets.length} tickets back?`} confirmLabel="Give back" danger={false}

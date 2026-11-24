@@ -1120,6 +1120,20 @@ describe('a station has a switch', () => {
     expect((store.floor!.layout.machines[0] as StationSpec).off).toBeUndefined();
   });
 
+  it('not set up (no persona, or a script with nothing to run), it takes tickets in and starts nothing until it is', async () => {
+    await boot([station('s', 1, 1, { ref: '' }), station('k', 6, 1, { exec: 'script', ref: undefined, script: { lines: [], missing: 'ignore', onFail: 'all' } })]);
+    await engine.transfer('a', { machineId: 's' });
+    await engine.transfer('b', { machineId: 'k' });
+    await run(1);
+    expect(where('a')).toBe('s:wait');
+    expect(note('a')).toBe('s is not set up (no persona): it starts nothing until it is');
+    expect(note('b')).toContain('not set up (nothing to run)');
+    expect(pending).toHaveLength(0);
+    await engine.setLayout({ ...store.floor!.layout, machines: store.floor!.layout.machines.map((m) => (m.id === 's' ? { ...m, ref: 'builder' } : m)) });
+    await run(0.3);
+    expect(where('a')).toBe('s:running');
+  });
+
   it('lets what already runs finish', async () => {
     await boot([station('s', 1, 1)]);
     await engine.transfer('a', { machineId: 's' });

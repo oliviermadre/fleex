@@ -116,12 +116,21 @@ describe('the command card', () => {
 
   it('build sorts what can be placed into Move, Station and Place', () => {
     const build = factoryMenu(ctx({ building: true }));
-    expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
+    expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, 'Export', 'Import', 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
     expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
     expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], [null, null, null, 'Fit', null]]);
     expect(rows(menuAt(build, ['place']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Area', 'Desk'], ['Intake', null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
+  });
+
+  it('exports the floor and imports one from the build card; with machines selected, Export takes only them', () => {
+    const c = ctx({ building: true }), build = factoryMenu(c);
+    build.slots[6]!.run!(); build.slots[7]!.run!();
+    expect(c.act.exportFloor).toHaveBeenCalledTimes(1); expect(c.act.importFloor).toHaveBeenCalledTimes(1);
+    const sel = factoryMenu(ctx({ building: true, many: 3 }));
+    expect(sel.slots[6]).toMatchObject({ id: 'export', title: expect.stringContaining('3 machines selected') });
+    expect(sel.slots[7]).toBeFalsy();
   });
 
   it('keeps Undo, Redo and the way back at the same place in every build menu, and leaves copy, cut and paste to the keyboard', () => {

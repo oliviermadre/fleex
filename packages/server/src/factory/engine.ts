@@ -154,6 +154,16 @@ export interface FactoryEngineDeps {
   readItem?(item: FactoryItemRow): Promise<ItemReading | null>;
 }
 
+/**
+ * What a station lacks to run anything, in a few words; null when it has it. A station placed and not yet set, or one
+ * imported from a floor whose persona this instance does not have: it takes tickets in and starts nothing on them.
+ */
+export function setupGap(spec: StationSpec): string | null {
+  if (spec.exec === 'agent' || spec.exec === 'skill' || spec.exec === 'panel') return spec.ref ? null : `no ${spec.exec === 'agent' ? 'persona' : spec.exec}`;
+  if (spec.exec === 'script') return spec.script && (spec.script.lines.some((l) => l.value.trim()) || spec.script.action) ? null : 'nothing to run';
+  return null;
+}
+
 export class FactoryError extends Error {}
 
 /** The zone a handed-over ticket lands in: it sets no status and keeps tickets until they are moved or released. */
@@ -450,7 +460,7 @@ export class FactoryEngine {
   /** Put a loaded ticket back on the machine it was saved on; if that machine is gone, it lies on the floor. */
   private attach(t: Ticket): void {
     const m = t.machineId ? this.byId.get(t.machineId) ?? null : null;
-    if (!m) { if (t.machineId || t.s.phase !== 'loose') { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } return; }
+    if (!m) { if (t.machineId || t.s.phase !== 'loose') { t.machineId = null; t.s.phase = 'loose'; t.s.note = ''; this.dirty.add(t.ticketId); } return; }
     /* what a toll's arm was carrying goes back under the toll: it was rejected, and will be again */
     if (m.spec.kind === 'belt' && t.s.phase === 'arm') { t.s.phase = 'belt'; t.s.p = 0.5; this.dirty.add(t.ticketId); }
     if (m.spec.kind === 'belt' || m.spec.kind === 'teleporter') { if (m.item) { t.machineId = null; t.s.phase = 'loose'; this.dirty.add(t.ticketId); } else m.item = t; }
@@ -775,7 +785,9 @@ export class FactoryEngine {
       if (t.s.phase !== 'wait') continue;
       const s = this.floor.settings;
       if (hour < 0) { hour = this.runsLastHour(); all = this.runningCount(); }
-      const note = spec.off ? `${spec.name || 'The station'} is switched off`
+      const gap = setupGap(spec);
+      const note = gap ? `${spec.name || 'The station'} is not set up (${gap}): it starts nothing until it is`
+        : spec.off ? `${spec.name || 'The station'} is switched off`
         : running >= spec.cap ? `${spec.name || 'The station'} works on ${spec.cap} at once`
         : hour >= s.maxRunsPerHour ? `Limit of ${s.maxRunsPerHour} runs per hour reached: the Factory waits`
         : all >= s.maxConcurrentRuns ? `${s.maxConcurrentRuns} Factory runs already in flight` : '';

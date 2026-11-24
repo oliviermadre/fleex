@@ -78,6 +78,8 @@ export interface MenuContext {
     next(): void;
     /** Make the belts selected fast, or plain again. */
     speed(): void;
+    /** Download the floor as a file (what is selected only, when machines are); read one back. */
+    exportFloor(): void; importFloor(): void;
   };
 }
 
@@ -212,6 +214,7 @@ export function factoryMenu(c: MenuContext): Menu {
       1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts selected fast: they carry tickets twice as fast' : 'Make the belts selected plain belts again', run: a.speed },
       4: { id: 'remove', also: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : c.machine?.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor', run: a.remove },
       5: c.many <= 1 && !!c.machine?.popup && edit,
+      6: { id: 'export', label: 'Export', icon: 'give', tone: 'plain', title: c.many > 1 ? `Download the ${c.many} machines selected as a JSON file, to import elsewhere` : 'Download this machine as a JSON file, to import elsewhere', run: a.exportFloor },
     }, back('Previous', 'Back to the build menu', a.deselect));
   }
 
@@ -250,5 +253,7 @@ export function factoryMenu(c: MenuContext): Menu {
     2: { id: 'place', label: 'Place', icon: 'zone', tone: 'area', title: 'Where tickets wait or leave, names on the floor, and areas', menu: where },
     3: { id: 'plan', label: 'Plan', icon: 'plan', tone: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: a.plan },
     4: { ...place('erase', 'Erase', 'danger', 'Click or drag to remove machines') },
+    6: { id: 'export', label: 'Export', icon: 'give', tone: 'plain', title: 'Download the floor as a JSON file: its machines and their settings, not the tickets. To share it, or keep a copy', run: a.exportFloor },
+    7: { id: 'import', label: 'Import', icon: 'inbound', tone: 'plain', title: 'Read a floor from a JSON file: in place of this one, or in hand. What this instance does not have (a persona, a skill, a board) is taken off the machines, and they show it', run: a.importFloor },
   }, inHand ? back('Cancel', 'Put down what is in hand', a.select) : back('Done', 'Leave build mode', a.done));
 }

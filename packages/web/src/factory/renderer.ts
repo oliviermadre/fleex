@@ -75,12 +75,16 @@ export interface ViewState {
   /** What each intake dropped over the last 24 hours, by its id (the snapshot's `intakes`). */
   intakes?: Readonly<Record<string, IntakeState>> | null;
   exitDays?: number;
+  /** Stations that are not set up (no persona, skill or panel, a script with nothing to run): outlined, with a "!". */
+  unset?: ReadonlySet<string> | null;
 }
 /** What is under the pointer: a ticket, a machine, or the light of a machine (its switch). */
 export type Hit = { ticketId: string } | { machineId: string } | { lamp: string } | null;
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 /** Empty tiles kept around what is built, so there is always room to extend it. */
+/** The amber of a station that is not set up. */
+const UNSET_INK = '#facc15';
 export const FLOOR_MARGIN = 8;
 /** The smallest floor, in tiles: a new factory starts on it, its Inbound in the middle. */
 export const FLOOR_MIN_W = 300, FLOOR_MIN_H = 150;
@@ -285,6 +289,31 @@ export class FactoryView {
     this.skin.pieces(S, st, pieces);
     paintPieces(pieces, this.ctx, this.failed);
     this.skin.top(S, st);
+    this.unsetMarks(st);
+  }
+
+  /**
+   * A station that is not set up, whatever the skin: a dashed amber outline round it (its front face too, on a skin
+   * seen from three quarters) and a "!" on its corner. Painted last, in the page's pixels, so no skin hides it.
+   */
+  private unsetMarks(st: ViewState): void {
+    if (!st.unset?.size) return;
+    const c = this.ctx, z = this.cam.z;
+    c.save();
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    for (const m of st.layout.machines) {
+      if (!st.unset.has(m.id)) continue;
+      const lift = this.raised(m), x = (m.x - this.cam.x) * z + this.w / 2, y = (m.y - lift - this.cam.y) * z + this.h / 2, w = m.w * z, h = (m.h + lift) * z;
+      if (x > this.w || y > this.h || x + w < 0 || y + h < 0) continue;
+      c.setLineDash([Math.max(3, z * 0.35), Math.max(2, z * 0.25)]); c.lineWidth = Math.max(1.5, z * 0.08); c.strokeStyle = UNSET_INK;
+      c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      c.setLineDash([]);
+      const r = Math.max(7, Math.min(16, z * 0.45)), cx = x + w - r * 0.4, cy = y + r * 0.4;
+      c.fillStyle = UNSET_INK; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#18181b'; c.font = `700 ${Math.round(r * 1.3)}px Inter, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('!', cx, cy + r * 0.06);
+    }
+    c.restore();
   }
 
   // ---------- minimap ----------

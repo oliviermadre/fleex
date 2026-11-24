@@ -10,7 +10,7 @@ let cachedModels: ModelOption[] | null = null;
 let cachedFallback = false;
 let inflight: Promise<{ models: ModelOption[]; fallback: boolean }> | null = null;
 
-async function loadModels(): Promise<{ models: ModelOption[]; fallback: boolean }> {
+export async function loadModels(): Promise<{ models: ModelOption[]; fallback: boolean }> {
   if (cachedModels) return { models: cachedModels, fallback: cachedFallback };
   if (!inflight) {
     inflight = fetchModels()
