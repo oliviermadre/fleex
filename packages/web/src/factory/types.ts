@@ -254,3 +254,12 @@ export interface ExitLog {
   tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
   items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
 }
+
+/** How an archived item left: by hand (Archive, Give back), by an exit, or dropped by a rule of its intake. */
+export type ArchivedReason = 'junk' | 'exit' | 'dropped';
+/** An archived item, as the list of them gives it (`GET /api/factory/items/archived`). */
+export interface ArchivedItem {
+  itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[];
+  intakeId: string | null; reason: ArchivedReason | null; /** The exit it left by, when that was kept. */ exitId: string | null;
+  archivedAt: string; createdAt: string; messages: number; lastActivityAt: string; excerpt: string; fields: ItemFields;
+}

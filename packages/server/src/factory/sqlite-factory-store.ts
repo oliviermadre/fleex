@@ -122,6 +122,15 @@ export class SqliteFactoryStore implements FactoryStorePort {
     return r ? { text: r.text, html: r.html } : null;
   }
 
+  async getItem(id: string): Promise<FactoryItemRow | null> {
+    const r = this.conn.db.prepare('SELECT * FROM factory_items WHERE id = ?').get(id) as ItemDbRow | undefined;
+    return r ? itemFromRow(r) : null;
+  }
+
+  async listArchivedItems(floorId: string, sinceIso: string): Promise<FactoryItemRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_items WHERE floor_id = ? AND archived_at IS NOT NULL AND archived_at >= ? ORDER BY archived_at DESC LIMIT 2000').all(floorId, sinceIso) as ItemDbRow[]).map(itemFromRow);
+  }
+
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
     const rows = this.conn.db.prepare("SELECT intake_id, COUNT(*) AS n FROM factory_items WHERE floor_id = ? AND archived_reason = 'dropped' AND archived_at >= ? GROUP BY intake_id").all(floorId, sinceIso) as { intake_id: string | null; n: number }[];
     return Object.fromEntries(rows.filter((r) => r.intake_id).map((r) => [r.intake_id!, r.n]));

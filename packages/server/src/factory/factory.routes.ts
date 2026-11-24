@@ -92,6 +92,25 @@ export function factoryRoutes(factory: FactoryModule | null) {
       const body = await (await ready()).engine.itemBody(request.params.itemId);
       return body ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item on the floor' });
     });
+    /**
+     * The items archived over the last `days` days (7 by default): by hand, at an exit (which one, when it was kept),
+     * dropped by a rule; the latest first.
+     */
+    app.get<{ Querystring: { days?: string } }>('/api/factory/items/archived', async (request) => {
+      const f = await ready(), days = Math.max(1, Math.min(90, Math.floor(Number(request.query.days)) || 7)), since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const items = await f.store.listArchivedItems(f.engine.snapshot().floor.id, since);
+      return {
+        days, since,
+        items: items.map((i) => ({ itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, intakeId: i.intakeId, reason: i.archivedReason, exitId: i.archivedReason === 'exit' ? i.machineId : null, archivedAt: i.archivedAt, createdAt: i.createdAt, messages: i.messages, lastActivityAt: i.lastActivityAt, excerpt: i.excerpt, fields: i.fields })),
+      };
+    });
+    /** An item, on the floor or archived (an archived one opens read only). */
+    app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId', async (request, reply) => {
+      const item = await (await ready()).engine.findItem(request.params.itemId);
+      return item ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item' });
+    });
+    /** Bring an archived item back to the intake it came in by. */
+    app.post<{ Params: { itemId: string } }>('/api/factory/items/:itemId/bring-back', (request, reply) => guard(reply, (f) => f.engine.bringBack(request.params.itemId)));
     /** What stations did with an item and what they answered, oldest first. */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
     /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */

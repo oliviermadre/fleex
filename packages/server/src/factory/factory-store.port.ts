@@ -15,6 +15,10 @@ export interface FactoryStorePort {
   /** The item of a conversation, archived or not. */
   getItemByKey(source: string, sourceKey: string): Promise<FactoryItemRow | null>;
   saveItem(row: FactoryItemRow): Promise<void>;
+  /** An item by its id, archived or not. */
+  getItem(id: string): Promise<FactoryItemRow | null>;
+  /** The items of a floor archived since then (by hand, at an exit, dropped by a rule), the latest first. */
+  listArchivedItems(floorId: string, sinceIso: string): Promise<FactoryItemRow[]>;
   /** The whole of an item's latest message, written when it comes in; null when none was kept. */
   saveItemBody(itemId: string, body: ItemBody): Promise<void>;
   getItemBody(itemId: string): Promise<ItemBody | null>;

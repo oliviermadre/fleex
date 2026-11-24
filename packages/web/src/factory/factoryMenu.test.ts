@@ -69,10 +69,11 @@ describe('the command card', () => {
 
   it('with nothing selected: what the floor offers on the first row, and Build where Done will be', () => {
     const c = ctx(), root = factoryMenu(c);
-    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, null, 'Exits', 'Fit', null], [null, null, null, 'Next', 'Build']]);
+    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, 'Archived', 'Exits', 'Fit', null], [null, null, null, 'Next', 'Build']]);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
     /* under Stats: what left by every exit */
     root.slots[7]!.run!(); expect(c.act.exits).toHaveBeenCalled();
+    root.slots[6]!.run!(); expect(c.act.archived).toHaveBeenCalled();
     root.slots[2]!.run!(); expect(c.act.floor).toHaveBeenCalled();
     root.slots[3]!.run!(); expect(c.act.limits).toHaveBeenCalled();
     /* T on any keyboard: a ticket is created from the floor itself, never through the Work view */
@@ -84,7 +85,7 @@ describe('the command card', () => {
 
   it('an intake selected makes an item by hand at it', () => {
     const c = ctx({ machine: { kind: 'intake', waiting: false, popup: true } }), m = factoryMenu(c);
-    expect(rows(m)[0]).toEqual(['New item', null, null, null, null]);
+    expect(rows(m)[0]).toEqual(['New item', 'Archived', null, null, null]);
     m.slots[0]!.run!(); expect(c.act.newItem).toHaveBeenCalled();
   });
 

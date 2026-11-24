@@ -72,6 +72,8 @@ export interface MenuContext {
     limits(): void;
     /** What left by the exit selected (`exits`: by every exit of the floor). */
     viewExit(): void; exits(): void;
+    /** The items archived over the period (`archivedHere`: those the intake selected let in). */
+    archived(): void; archivedHere(): void;
     /** Go to the next ticket that waits for someone. */
     next(): void;
     /** Make the belts selected fast, or plain again. */
@@ -164,6 +166,8 @@ export function factoryMenu(c: MenuContext): Menu {
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
         /* an exit's Edit is under E, beside View; everywhere else it is where a ticket has Open */
+        /* an intake: what it let in that was archived since */
+        1: c.machine.kind === 'intake' ? { id: 'archived-here', label: 'Archived', icon: 'list', tone: 'plain', title: 'The items this intake let in that were archived over the period: by hand, by an exit; open one, or bring it back', run: a.archivedHere } : null,
         2: c.machine.kind === 'exit' && c.machine.popup && exitEdit,
         5: c.machine.kind !== 'exit' && c.machine.popup && edit,
         [FIT_SLOT]: fit,
@@ -177,6 +181,8 @@ export function factoryMenu(c: MenuContext): Menu {
       2: { id: 'floor', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
       3: { id: 'limits', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
       4: { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket on the floor: at your first desk, or in Inbound when there is none (select a desk to create at that one)', run: a.newTicket },
+      /* beside Exits */
+      6: { id: 'archived', label: 'Archived', icon: 'list', tone: 'plain', title: 'The items archived over the period: by hand, by an exit; open one, or bring it back', run: a.archived },
       /* under Stats */
       7: { id: 'exits', label: 'Exits', icon: 'exit', tone: 'plain', title: 'What left by every exit of the floor over the period, exit by exit: the tickets shipped, the throughput', run: a.exits },
       [FIT_SLOT]: fit,

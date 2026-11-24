@@ -158,6 +158,11 @@ describe('SqliteFactoryStore', () => {
     expect((await store.listExitItems('default', 'out', '2026-11-13T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1', 'e2']);
     expect((await store.listExitItems('default', 'out', '2026-11-15T00:00:00.000Z')).map((i) => i.id)).toEqual(['e1']);
     expect((await store.listExitItems('default', null, '2026-11-13T00:00:00.000Z')).map((i) => i.id).sort()).toEqual(['e1', 'e2', 'o1']);
+    const archived = (await store.listArchivedItems('default', '2026-11-13T00:00:00.000Z')).map((i) => i.id);
+    expect([...archived].sort()).toEqual(['e1', 'e2', 'j1', 'o1']);
+    expect(archived.at(-1)).toBe('e2');                                                  // the latest first
+    expect((await store.getItem('j1'))).toMatchObject({ archivedReason: 'junk' });
+    expect(await store.getItem('nope')).toBeNull();
   });
 
   it('keeps the whole of an item\'s latest message apart, over the one before', async () => {

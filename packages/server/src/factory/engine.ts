@@ -1056,6 +1056,31 @@ export class FactoryEngine {
     await this.flush();
   }
 
+  /**
+   * Bring an archived item back to the floor: to the intake it came in by (the first of its source served, if that one
+   * is gone), with everything it had (what stations said of it is in its own table). An item dropped by a rule comes
+   * back past the rules: a person asked for it. It waits there as any item does, for its conversation to be quiet.
+   */
+  async bringBack(itemId: string): Promise<void> {
+    if (this.tickets.has(itemId)) throw new FactoryError('This item is already on the floor');
+    const stored = await this.deps.store.getItem(itemId);
+    if (!stored || !stored.archivedAt) throw new FactoryError('No archived item with this id');
+    if (this.itemKeys.has(`${stored.source}\u0000${stored.sourceKey}`)) throw new FactoryError('Its conversation is already on the floor, as another item');
+    const intakes = this.intakesOf(stored.source);
+    if (!intakes.length) throw new FactoryError(`No ${stored.source} intake on the floor: put one there first (Build › Place › Intake)`);
+    const intake = intakes.find((m) => m.spec.id === stored.intakeId) ?? intakes[0]!, nowIso = new Date(this.now()).toISOString();
+    const row: FactoryItemRow = { ...stored, intakeId: intake.spec.id, machineId: null, state: null, archivedAt: null, archivedReason: null, updatedAt: nowIso };
+    const t: Ticket = { ticketId: row.id, machineId: null, s: this.looseState(), createdAt: row.createdAt, info: itemInfo(row), item: row };
+    this.tickets.set(t.ticketId, t); this.itemKeys.set(`${row.source}\u0000${row.sourceKey}`, row.id);
+    this.accept(intake, t);
+    await this.flush();
+  }
+
+  /** An item as the Factory keeps it, on the floor or archived; null when there is none. */
+  async findItem(itemId: string): Promise<FactoryItemRow | null> {
+    return this.tickets.get(itemId)?.item ?? (await this.deps.store.getItem(itemId));
+  }
+
   async archiveItem(itemId: string): Promise<void> {
     const t = this.get(itemId);
     if (!t.item) throw new FactoryError('Only an item can be archived from the floor: a ticket is given back');
@@ -1089,7 +1114,7 @@ export class FactoryEngine {
   async itemBody(itemId: string): Promise<(ItemBody & { kept: boolean }) | null> {
     const kept = await this.deps.store.getItemBody(itemId);
     if (kept) return { ...kept, kept: true };
-    const t = this.tickets.get(itemId), item = t?.item ?? null;
+    const item = await this.findItem(itemId);
     if (!item) return null;
     const reading = await this.read(item);
     if (reading) return { ...reading.body, kept: true };

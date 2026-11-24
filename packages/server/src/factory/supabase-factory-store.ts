@@ -84,6 +84,18 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     return data ? { text: (data as ItemBody).text, html: (data as ItemBody).html } : null;
   }
 
+  async getItem(id: string): Promise<FactoryItemRow | null> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('id', id).maybeSingle();
+    if (error) this.fail('getItem', error.message);
+    return data ? itemFromRow(data as ItemDbRow) : null;
+  }
+
+  async listArchivedItems(floorId: string, sinceIso: string): Promise<FactoryItemRow[]> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('floor_id', floorId).not('archived_at', 'is', null).gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(2000);
+    if (error) this.fail('listArchivedItems', error.message);
+    return (data as ItemDbRow[]).map(itemFromRow);
+  }
+
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
     const { data, error } = await this.conn.client.from('factory_items').select('intake_id').eq('floor_id', floorId).eq('archived_reason', 'dropped').gte('archived_at', sinceIso).limit(20000);
     if (error) this.fail('countDropped', error.message);

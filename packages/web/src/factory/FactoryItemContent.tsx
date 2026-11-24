@@ -45,7 +45,7 @@ function MailFrame({ html }: { html: string }) {
  * of an item whose message was kept is its whole latest message, read only; an item made by hand (or kept before
  * messages were) has its first lines there, which can be changed.
  */
-export function ItemContent({ itemId, excerpt, version, onEdit }: { itemId: string; excerpt: string; /** Changes when a new message comes. */ version: string; onEdit: (excerpt: string) => void }) {
+export function ItemContent({ itemId, excerpt, version, onEdit }: { itemId: string; excerpt: string; /** Changes when a new message comes. */ version: string; /** Without it (an archived item), the text is read only. */ onEdit?: (excerpt: string) => void }) {
   const [body, setBody] = useState<{ text: string; html: string | null; kept: boolean } | null>(null);
   const [tab, setTab] = useState<'text' | 'mail'>('text'), [draft, setDraft] = useState<string | null>(null);
   useEffect(() => {
@@ -67,9 +67,9 @@ export function ItemContent({ itemId, excerpt, version, onEdit }: { itemId: stri
       </div>
       {shown === 'mail' && html ? <MailFrame html={html} />
         : !body ? <p className="py-4 text-xs text-[var(--theme-text-muted)]">Reading it…</p>
-        : body.kept
+        : body.kept || !onEdit
           ? <div className="max-h-[420px] min-h-[82px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-3 py-2 text-sm text-[var(--theme-text-primary)]" aria-label="Its text">{body.text || 'Nothing but its title.'}</div>
-          : <textarea id="i-text" aria-label="Text" value={draft ?? body.text} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== null && draft !== excerpt) onEdit(draft); setDraft(null); }} rows={5}
+          : <textarea id="i-text" aria-label="Text" value={draft ?? body.text} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== null && draft !== excerpt) onEdit?.(draft); setDraft(null); }} rows={5}
               className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none" />}
     </div>
   );

@@ -2,7 +2,7 @@ import { API_URL } from '../lib/constants';
 import { toast } from '../lib/toast';
 import type { ItemSource } from './items';
 import type { ItemFields } from './types';
-import type { ExitLog, FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
+import type { ArchivedItem, ExitLog, FactoryLayout, FactoryRun, FactorySettings, FactorySnapshot, FactoryStats, Target } from './types';
 
 async function call<T>(path: string, init?: RequestInit, quiet = false): Promise<T> {
   const res = await fetch(`${API_URL}/factory${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json' } : undefined });
@@ -54,6 +54,12 @@ export const factoryApi = {
   /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */
   editItem: (itemId: string, patch: { title?: string; author?: string; url?: string | null; excerpt?: string; tags?: string[]; fields?: ItemFields }) =>
     call<FactorySnapshot>(`/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  /** The items archived over the last `days` days, the latest first. */
+  archivedItems: (days: number) => call<{ days: number; since: string; items: ArchivedItem[] }>(`/items/archived?days=${days}`, undefined, true),
+  /** An item, on the floor or archived. */
+  item: (itemId: string) => call<unknown>(`/items/${itemId}`, undefined, true),
+  /** Bring an archived item back to the intake it came in by. */
+  bringBack: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/bring-back`),
   /** Archive an item: junk, or done with. A new message in its conversation brings it back. */
   archiveItem: (itemId: string) => post<FactorySnapshot>(`/items/${itemId}/archive`),
   /** What left by an exit (by every exit of the floor, with null) over the last `days` days. */

@@ -47,6 +47,7 @@ import { FactoryItemPopup, FactoryNewItem } from './FactoryItemPopup';
 import { FactoryPlanModal } from './FactoryPlanModal';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
 import { FactoryExitLog } from './FactoryExitLog';
+import { FactoryArchivedItemPopup, FactoryArchivedItems } from './FactoryArchivedItems';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
@@ -219,6 +220,9 @@ function Floor() {
   const [openMachine, setOpenMachine] = useState<string | null>(null);
   /* what left by an exit (`FactoryExitLog`): one exit (its double-click out of build mode, View), or every one (Exits, `machineId: null`) */
   const [exitLog, setExitLog] = useState<{ machineId: string | null } | null>(null);
+  /* the archived items (`FactoryArchivedItems`): every intake's, or one intake's; and an archived item opened from it */
+  const [archived, setArchived] = useState<{ intakeId: string | null } | null>(null);
+  const [archivedItem, setArchivedItem] = useState<string | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   /* the console put away, to give the floor the whole page: kept in the browser like the toggles */
@@ -713,6 +717,8 @@ function Floor() {
       limits: () => setLimitsOpen(true),
       viewExit: () => { if (selMachine?.kind === 'exit') setExitLog({ machineId: selMachine.id }); },
       exits: () => setExitLog({ machineId: null }),
+      archived: () => setArchived({ intakeId: null }),
+      archivedHere: () => { if (selMachine?.kind === 'intake') setArchived({ intakeId: selMachine.id }); },
       next: () => stepWaiting(1),
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
@@ -756,7 +762,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -797,7 +803,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, archived, archivedItem, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
   const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
@@ -873,6 +879,8 @@ function Floor() {
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} onNewItem={setNewItemAt} />}
       {exitLog && !openTicket && <FactoryExitLog machineId={exitLog.machineId} onClose={() => setExitLog(null)} onOpenTicket={setOpenTicket}
         onSettings={exitLog.machineId ? () => { const id = exitLog.machineId!; setExitLog(null); setOpenMachine(id); } : undefined} />}
+      {archived && !archivedItem && <FactoryArchivedItems intakeId={archived.intakeId} onClose={() => setArchived(null)} onOpenItem={setArchivedItem} />}
+      {archivedItem && <FactoryArchivedItemPopup itemId={archivedItem} onClose={() => setArchivedItem(null)} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}

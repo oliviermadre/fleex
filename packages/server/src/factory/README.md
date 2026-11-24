@@ -163,6 +163,16 @@ and the brief says so). Without its source (gog cannot read Gmail), the latest m
   nothing) and opens links in a new tab. Images from the internet stay unloaded until Load images: loading them tells
   the sender the mail was opened.
 
+### Archived items
+
+Picked on `docs/factory/archived-items.html` (A, A, A). **Archived** on the floor's card (every intake) and on an
+intake's card (what it let in) lists the items archived over the stats' period (`GET /api/factory/items/archived`),
+the latest first, with how each left: **by hand** (Archive, Give back), **by an exit** (named when that was kept, since
+an item archived at an exit keeps it), or **dropped by a rule** (hidden unless the filter asks). Filters: a title or
+sender, intakes, how it left, sources. A line opens the item read only (`GET /api/factory/items/:id`: what it
+delivered, its content, how it left, what the stations said); **Bring back** (`POST …/bring-back`,
+`FactoryEngine.bringBack`) puts it in the intake it came in by, past the rules, with what it had.
+
 ### Gmail: a pulled intake
 
 Gmail is the first source with a connector. It is **pulled**: Fleex asks it, rather than it telling Fleex

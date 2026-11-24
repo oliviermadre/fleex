@@ -28,6 +28,8 @@ class MemoryStore implements FactoryStorePort {
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
   async listExitItems(_f: string, machineId: string, since: string) { return [...this.items.values()].filter((i) => i.archivedReason === 'exit' && i.machineId === machineId && (i.archivedAt ?? '') >= since); }
+  async getItem(id: string) { const i = this.items.get(id); return i ? structuredClone(i) : null; }
+  async listArchivedItems() { return [...this.items.values()].filter((i) => i.archivedAt).map((i) => structuredClone(i)); }
   bodies = new Map<string, { text: string; html: string | null }>();
   async saveItemBody(id: string, b: { text: string; html: string | null }) { this.bodies.set(id, structuredClone(b)); }
   async getItemBody(id: string) { return this.bodies.get(id) ?? null; }
@@ -335,6 +337,28 @@ describe('FactoryEngine', () => {
         expect(await engine.ingest(mail('t1', iso(10_000)), { intakeId: 'urgent' })).toMatchObject({ status: 'back' });
         expect(where(t.itemId!)).toBe('urgent:zone');
       });
+    });
+
+    it('brings an archived item back to the intake it came in by, past the rules, with what it had', async () => {
+      await boot([intake('ops', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }] })]);
+      const a = await engine.ingest({ ...msg('a'), tags: ['finance'] });
+      await engine.archiveItem(a.itemId!);
+      await engine.flush();
+      expect(store.items.get(a.itemId!)).toMatchObject({ archivedReason: 'junk' });
+      expect((await engine.findItem(a.itemId!))!.archivedReason).toBe('junk');
+      await engine.bringBack(a.itemId!);
+      expect(where(a.itemId!)).toBe('ops:zone');
+      expect(engine.snapshot().tickets.find((t) => t.ticketId === a.itemId)!.info!.tags).toContain('finance');
+      await engine.flush();
+      expect(store.items.get(a.itemId!)).toMatchObject({ archivedAt: null, archivedReason: null, machineId: 'ops' });
+      await expect(engine.bringBack(a.itemId!)).rejects.toThrow('already on the floor');
+      /* dropped by a rule: back past it */
+      const d = await engine.ingest({ ...msg('d'), fields: { bot: true } });
+      expect(d.status).toBe('dropped');
+      const dropped = [...store.items.values()].find((i) => i.sourceKey === 'd')!;
+      await engine.bringBack(dropped.id);
+      expect(where(dropped.id)).toBe('ops:zone');
+      await expect(engine.bringBack('nope')).rejects.toThrow('No archived item');
     });
 
     it('refuses an item with no intake for its source, or with no key', async () => {
