@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor } from './layoutOps';
+import { armFacing, canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor } from './layoutOps';
 import type { FactoryLayout } from './types';
 
 const empty: FactoryLayout = { w: 20, h: 10, machines: [] };
@@ -137,5 +137,34 @@ describe('areas among the machines', () => {
     expect(moveMany(floor, new Set(['line']), 3, 0)).not.toBeNull();
     const two: FactoryLayout = { ...floor, machines: [...floor.machines, { ...line, id: 'other', x: 12 }] };
     expect(moveMany(two, new Set(['other']), -5, 0)).toBeNull();
+  });
+});
+
+describe('the way an arm faces when it is put down', () => {
+  const station = { id: 's', kind: 'station', x: 0, y: 0, w: 5, h: 4, name: 'Dev', exec: 'agent', outcomes: ['ok'], cap: 2 } as const;
+  const at = (...machines: unknown[]): FactoryLayout => ({ w: 0, h: 0, machines: machines as FactoryLayout['machines'] });
+
+  it('takes from the station, the zone, the desk or the intake beside it, and drops away from it, on any side', () => {
+    const L = at(station);
+    expect(armFacing(L, 5, 1, 2)).toBe(0);      // right of it: faces right
+    expect(armFacing(L, -1, 1, 0)).toBe(2);     // left of it: faces left
+    expect(armFacing(L, 2, 4, 0)).toBe(1);      // under it: faces down
+    expect(armFacing(L, 2, -1, 0)).toBe(3);     // above it: faces up
+    expect(armFacing(at({ id: 'z', kind: 'zone', x: 0, y: 0, w: 2, h: 2, name: 'In', release: 'auto' }), 2, 0, 3)).toBe(0);
+    expect(armFacing(at({ id: 'i', kind: 'intake', x: 0, y: 0, w: 3, h: 2, source: 'gmail' }), 1, 2, 0)).toBe(1);
+  });
+
+  it('takes from a belt that ends on it, not from one that leaves it; drops into an exit when nothing gives', () => {
+    expect(armFacing(at({ id: 'b', kind: 'belt', x: 3, y: 5, w: 1, h: 1, dir: 1 }), 3, 6, 0)).toBe(1);        // a belt above, pointing down at it
+    expect(armFacing(at({ id: 'b', kind: 'belt', x: 3, y: 5, w: 1, h: 1, dir: 0 }), 3, 6, 2)).toBe(2);        // a belt that goes elsewhere: as asked
+    expect(armFacing(at({ id: 'x', kind: 'exit', x: 4, y: 6, w: 3, h: 3, name: 'Exit' }), 3, 7, 1)).toBe(0);
+  });
+
+  it('between two that give, keeps the way asked when it fits, else drops onto something', () => {
+    const two = at(station, { id: 'z', kind: 'zone', x: 6, y: 0, w: 2, h: 2, name: 'Z', release: 'auto' });
+    expect(armFacing(two, 5, 1, 2)).toBe(2);   // from the zone into the station, as asked
+    expect(armFacing(two, 5, 1, 0)).toBe(0);   // from the station into the zone, as asked
+    expect([0, 2]).toContain(armFacing(two, 5, 1, 1));
+    expect(armFacing(at(), 3, 3, 1)).toBe(1);  // nothing round it: as asked
   });
 });

@@ -407,7 +407,11 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   the arrow under it take the same colour. Under it, painted on its own tile, an arrow in that colour says which way it works: narrow where it takes, wide
   where it drops, its head at the edge. In build mode, an arm that is selected, or in hand before it is put down,
   shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
-  ON"), and that R turns it.
+  ON"), and that a right click turns it. **In hand, an arm finds its own way** (`armFacing` in `layoutOps.ts`): put
+  against a station, a zone, a desk, an intake, an arrival or a belt that ends on its tile, it takes from that and drops
+  away from it, on whichever side; with nothing that gives, it drops into an exit or a departure beside it; else it faces
+  the way chosen. A right click (or Face) turns what is in hand a quarter turn, from the way it is shown, and it then
+  stays as turned until it is put down.
 - **What left by an exit** (`FactoryExitLog.tsx`, picked on `docs/factory/exit-log.html`: A, A, A). A double-click on
   an exit out of build mode, Enter with it selected, or **View** on its card (Edit, its name and size, is under E)
   opens a list like Tab's: the tickets it shipped over the stats' period (the period its counter on the floor shows),

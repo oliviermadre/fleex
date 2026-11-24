@@ -15,6 +15,32 @@ export function machineAt(layout: FactoryLayout, x: number, y: number): MachineS
   return null;
 }
 
+/**
+ * Which way an arm put down here should work, read from what is round it (an arm takes from the tile behind it and
+ * drops on the tile in front). It takes from what gives: a station, a zone, a desk, an intake, an arrival, or a belt
+ * that ends on it; and drops away from it. With nothing that gives, it drops into what takes only: an exit, a
+ * departure. When several ways fit, the one asked for (`dir`) if it is one of them, else one that drops onto
+ * something; when nothing tells, `dir`.
+ */
+export function armFacing(layout: FactoryLayout, x: number, y: number, dir: Dir): Dir {
+  const at = (d: number) => machineAt(layout, x + DX[d]!, y + DY[d]!);
+  const gives = (d: number) => {
+    const m = at(d);
+    if (!m) return false;
+    if (m.kind === 'station' || m.kind === 'zone' || m.kind === 'desk' || m.kind === 'intake') return true;
+    if (m.kind === 'teleporter') return m.role === 'arrival';
+    /* a belt that ends on this tile: it points back here */
+    return m.kind === 'belt' && m.dir === (d + 2) % 4;
+  };
+  const takes = (d: number) => { const m = at(d); return !!m && m.kind !== 'label' && !(m.kind === 'belt' && m.dir === (d + 2) % 4); };
+  /* facing f, it takes from the side opposite f */
+  const fits = ([0, 1, 2, 3] as Dir[]).filter((f) => gives((f + 2) % 4));
+  if (fits.length === 1) return fits[0]!;
+  if (fits.length > 1) return fits.includes(dir) ? dir : fits.find((f) => takes(f)) ?? fits[0]!;
+  const sinks = ([0, 1, 2, 3] as Dir[]).filter((f) => { const m = at(f); return !!m && (m.kind === 'exit' || (m.kind === 'teleporter' && m.role !== 'arrival')); });
+  return sinks.length === 1 ? sinks[0]! : dir;
+}
+
 /** The machine a tool would place with its top-left corner chosen so the cursor sits near its middle. */
 /** A station is a machine of 5 by 4 tiles: room for its places, its tray and its bay. A status station stays 2 by 2. */
 export const STATION_W = 5, STATION_H = 4;

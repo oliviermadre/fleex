@@ -1363,12 +1363,12 @@ export class FleexSkin implements Skin {
       /* side by side over the arm, each on its own side of it */
       this.label(takes, x + 0.5 - dx * 0.1, y - 0.34, 0.22, idle ? pink : '#bfdbfe', { ...blue, align: dx > 0 ? 'right' : 'left' });
       this.label(drops, x + 0.5 + dx * 0.1, y - 0.34, 0.22, shut ? pink : '#bbf7d0', { ...green, align: dx > 0 ? 'left' : 'right' });
-      if (turn) this.label('R · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
+      if (turn) this.label('right click · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
     } else {
       /* one above the other, to the right of the tiles they name */
       this.label(takes, x + 1.16, sy + 0.5, 0.22, idle ? pink : '#bfdbfe', blue);
       this.label(drops, x + 1.16, ty + 0.5, 0.22, shut ? pink : '#bbf7d0', green);
-      if (turn) this.label('R · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
+      if (turn) this.label('right click · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
   }
 

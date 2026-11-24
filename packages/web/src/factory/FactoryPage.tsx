@@ -27,7 +27,7 @@ import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { frameGap } from './frameRate';
-import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
+import { armFacing, canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder } from './FactoryFinder';
@@ -78,7 +78,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['set', 'E', 'Set', 'A gantry over a belt: sets fields and tags on every ticket that goes under it'],
   ['teleporter', 'T', 'Teleporter', 'A jump across the floor: a departure sends its ticket to the arrival it is set to'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
-  ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. R turns it'],
+  ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. Against a station, a zone or a belt that ends there, it faces away from it by itself; a right click (or Face) turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
   ['skill', 'S', 'Skill', 'A station that runs a skill'],
   ['panel', 'N', 'Panel', 'A station that runs a panel of personas'],
@@ -244,7 +244,8 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
+  const live = useRef({ turned: false, shownDir: 0 as Dir, building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
+  if (live.current.tool !== tool) live.current.turned = false;
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
@@ -368,6 +369,13 @@ function Floor() {
   const moved = useRef(0);
   const lastPt = useRef({ x: 0, y: 0 });
   const local = (e: React.PointerEvent | React.WheelEvent | React.MouseEvent) => { const r = canvasRef.current!.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  /*
+   * The way what is in hand faces: an arm reads it from what is round it (`armFacing`: from the station, the zone or
+   * the belt that gives, away from it), until it is turned by hand; the rest faces the way chosen.
+   */
+  const handDir = (l: FactoryLayout, t: Tool, x: number, y: number): Dir => (t === 'arm' && !live.current.turned ? armFacing(l, x, y, live.current.dir) : live.current.dir);
+  /* a quarter turn of what is in hand, from the way it is shown: then it stays as turned until it is put down */
+  const turnInHand = () => { const next = ((live.current.shownDir + 1) % 4) as Dir; live.current.turned = true; live.current.dir = next; live.current.shownDir = next; setDir(next); };
   const ghostAt = (v: FactoryView, wx: number, wy: number): Ghost | null => {
     const l = useFactoryStore.getState().layout, t = live.current.tool;
     if (!live.current.building || t === 'select' || !l) return null;
@@ -379,7 +387,8 @@ function Floor() {
       return { cells, ok: canPaste(l, clipboard, x, y), text: cells.length > 1 ? `Paste ${cells.length} machines` : 'Paste' };
     }
     if (t === 'set' || t === 'toll') return { cells: [{ x, y, w: 1, h: 1 }], ok: !!gantryAt(l, x, y, live.current.dir, t === 'toll'), text: t === 'toll' ? 'Toll' : 'Set gantry' };
-    const spec = specFor(t, x, y, live.current.dir); if (!spec) return null;
+    const spec = specFor(t, x, y, handDir(l, t, x, y)); if (!spec) return null;
+    if (spec.kind === 'arm' || spec.kind === 'belt') live.current.shownDir = spec.dir;
     return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined, arm: spec.kind === 'arm' }], ok: canPlace(l, spec) };
   };
 
@@ -397,6 +406,11 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
+    /* a right click turns what is in hand, a quarter turn, and puts nothing down (anywhere else it moves the view) */
+    if (e.button === 2 && live.current.building && ['arm', 'belt', 'fastbelt', 'set', 'toll'].includes(live.current.tool)) {
+      press.current = null; turnInHand(); live.current.ghost = ghostAt(v, w.x, w.y);
+      return;
+    }
     moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide(); lampTipRef.current?.hide();
     /* right or middle button, or Space held: move the view, whatever the tool */
     if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; e.currentTarget.style.cursor = 'grabbing'; return; }
@@ -520,8 +534,10 @@ function Floor() {
         if (done) { commit(done.layout); setTool('select'); setSelection({ machine: done.id }); live.current.ghost = null; }
         else toast.warning('A gantry goes on a belt, or on bare floor');
       } else if (click) {
-        const spec = specFor(live.current.tool, tx, ty, live.current.dir), next = spec ? place(st.layout, spec) : null;
+        const spec = specFor(live.current.tool, tx, ty, handDir(st.layout, live.current.tool, tx, ty)), next = spec ? place(st.layout, spec) : null;
         commit(next);
+        /* the next arm in hand reads its way from where it goes again */
+        if (next && spec?.kind === 'arm') live.current.turned = false;
         if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); live.current.ghost = null; }
       }
     } else if (pr?.kind === 'ticket') {
@@ -682,7 +698,7 @@ function Floor() {
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
       select: () => setTool('select'),
       back: () => { setPath((p) => p.slice(0, -1)); setTool('select'); },
-      face: () => setDir((d) => ((d + 1) % 4) as Dir),
+      face: turnInHand,
       undo: () => void store.undo(), redo: () => void store.redo(),
       copy: () => copy(false), cut: () => copy(true),
       turn: () => { const l = useFactoryStore.getState().layout; if (l && selMachine) commit(rotate(l, selMachine.id)); },

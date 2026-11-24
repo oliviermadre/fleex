@@ -224,7 +224,7 @@ export function factoryMenu(c: MenuContext): Menu {
     4: place('teleporter', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
     5: place('toll', 'Toll', 'move', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds: what stops a loop'),
     6: place('set', 'Set', 'move', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
-    7: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Direction of the belts and arms you place', run: a.face },
+    7: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Turn what you place, a quarter turn (also a right click while it is in hand). An arm finds its own way from what is round it: from a station, a zone or a belt that ends on it, away from it; turned by hand, it stays as turned', run: a.face },
   }, previous);
   const station = frame('Station', {
     0: place('agent', 'Agent', 'station', 'A station that runs a persona on the ticket'),
