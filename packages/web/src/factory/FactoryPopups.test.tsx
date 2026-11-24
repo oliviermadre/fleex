@@ -288,26 +288,36 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined, toll: undefined });
   });
 
-  it('sets up a script station: an optional default action, lines of its own, and what "nothing to run" means', () => {
+  it('sets up a script station: what runs on a ticket and on an item, lines that choose where they run, variables to click', () => {
     const sc: MachineSpec = { id: 'sc', kind: 'station', x: 20, y: 1, w: 5, h: 4, name: 'On arrival', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
     seed([], [dev, sc]);
     useSettingsStore.setState((s) => ({ settings: { ...s.settings, namedActions: [{ name: 'test' }, { name: 'lint' }], resolvedRepositories: ['acme/api', 'acme/front'] } }) as never);
     const on = open('sc'), popup = screen.getByRole('region', { name: 'Machine' });
     expect(popup.textContent).toContain('Script station');
     expect(screen.queryByLabelText('Persona')).toBeNull();                                  // it runs no agent
-    expect(popup.textContent).toContain('With none, only the lines below are run.');
-    /* no default action is a choice, and so is one of the named actions */
-    const action = screen.getByLabelText('Default action') as HTMLSelectElement;
-    expect([...action.options].map((o) => o.textContent)).toEqual(['none', 'test', 'lint']);
-    fireEvent.change(action, { target: { value: 'test' } });
-    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'ignore', onFail: 'all', action: 'test' }, outcomes: ['ok', 'ko'] });
-    /* a line is for any repository, the ticket's workspace, or one repository */
-    expect([...(screen.getByLabelText('What the line is for') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['any repository', 'ticket workspace', 'acme/api', 'acme/front']);
+    /* nothing yet: on a ticket as on an item, it would leave by "ko" */
+    const runs = screen.getByLabelText('What runs');
+    expect(runs.textContent!.match(/Nothing: it leaves by "ko"/g)).toHaveLength(2);
+    /* a new line runs in the workspace */
     fireEvent.click(screen.getByRole('button', { name: 'Add a line' }));
-    const command = within(screen.getByRole('group', { name: 'Line for any repository' })).getByRole('textbox');
-    fireEvent.change(command, { target: { value: 'open http://localhost:3000' } }); fireEvent.blur(command);
-    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: '*', kind: 'command', value: 'open http://localhost:3000' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
-    /* asking for its own way out gives the station a third outcome */
+    const where = screen.getByLabelText('Where it runs') as HTMLSelectElement;
+    expect(where.value).toBe('workspace');
+    expect([...where.options].map((o) => o.textContent)).toEqual(["Workspace: the ticket's, or the item's folder", 'Every repository of the ticket', 'acme/api only', 'acme/front only']);
+    const command = within(screen.getByRole('group', { name: 'Line 1' })).getByRole('textbox');
+    fireEvent.focus(command);
+    fireEvent.change(command, { target: { value: 'gog gmail archive' } }); fireEvent.blur(command);
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    /* a variable, clicked, goes in quoted */
+    fireEvent.click(screen.getByRole('button', { name: '$FLEEX_ITEM_KEY' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    expect(runs.textContent).toContain('in its folder: gog gmail archive "$FLEEX_ITEM_KEY"');
+    /* moved to every repository: an item would run nothing, and the summary says why */
+    fireEvent.change(screen.getByLabelText('Where it runs'), { target: { value: '*' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: '*', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    expect(runs.textContent).toContain('a line for a repository does not run for it');
+    /* folded away: a ticket's default action, and what to do when something goes wrong */
+    const action = screen.getByLabelText('Default action, run in every repository with no line of its own') as HTMLSelectElement;
+    expect([...action.options].map((o) => o.textContent)).toEqual(['none', 'test', 'lint']);
     fireEvent.change(screen.getByLabelText('A repository it has nothing to run for'), { target: { value: 'own' } });
     expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'own', onFail: 'all' }, outcomes: ['ok', 'ko', 'unconfigured'] });
   });

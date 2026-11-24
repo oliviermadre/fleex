@@ -491,6 +491,13 @@ toll, already dealt with, and is rejected again without being counted again.
 
 ## Named actions, and the script station
 
+**Its panel** (picked on `docs/factory/script-station.html`: B, A, A) says first what runs, on a ticket and on an item,
+and says it when nothing would. Each line chooses where it runs (the workspace, every repository of the ticket, one
+repository), and that can change at any time; a new line runs in the workspace. The variables a command gets are pills
+to click, put quoted in the command last edited. A ticket's default action and what to do when something goes wrong are
+folded away. **When nothing ran at all** (an item and only lines for repositories, a ticket with no repository), the
+station leaves by "ko" (or its own "unconfigured"), and says why: leaving by "ok" would say it was done.
+
 **On an item**, a script station has no repository and no worktree: its lines for the workspace run in a folder of the
 item's own (`factory-item-<id>` under the workspaces), its lines for a repository have nothing to run for. The item is
 in the environment, under the same names whatever its source (`item-env.ts`): `FLEEX_ITEM_KEY` (its key in its source:

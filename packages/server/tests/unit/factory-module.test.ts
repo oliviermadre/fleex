@@ -169,7 +169,7 @@ describe('FactoryModule: what left by an exit', () => {
     const run = (ticketId: string, machineId: string, machineName: string) => ({ id: `r-${ticketId}-${machineId}`, ticketId, floorId: 'default', machineId, machineName, executor: 'exit', status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: ago(3 * day), finishedAt: ago(day) });
     const store = factory.store as unknown as Record<string, unknown>;
     let asked: unknown = 'not asked';
-    store['listRunsSince'] = async () => [run('a', 'x1', 'Delivery'), run('a', 'old', 'Old exit'), { ...run('a', 'dev', 'Dev'), executor: 'agent' }];
+    store['listRunsSince'] = async () => [{ ...run('a', 'x1', 'Delivery'), finishedAt: ago(day / 2) }, run('a', 'old', 'Old exit'), { ...run('a', 'dev', 'Dev'), executor: 'agent' }];
     store['listExitItems'] = async (_f: string, machineId: string | null) => { asked = machineId; return []; };
     await factory.engine.setLayout({ version: 2, w: 0, h: 0, machines: [{ id: 'x1', kind: 'exit', x: 0, y: 0, w: 3, h: 3, name: 'Delivery' }, { id: 'x2', kind: 'exit', x: 5, y: 0, w: 3, h: 3, name: '' }] } as never);
     const log = await factory.exitLog(null, 7);

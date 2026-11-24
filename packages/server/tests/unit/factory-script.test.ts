@@ -93,8 +93,14 @@ describe('what it concludes', () => {
     expect((await runScript(spec({ action: 'test', missing: 'own' }), ctx(['acme/api', 'acme/dmc']), shell({ 'make test': { exitCode: 1 } }).run)).outcome).toBe('ko');
   });
 
-  it('a ticket with no repository and no workspace line has nothing to run: the same rule applies', async () => {
-    expect((await runScript(spec({ action: 'test' }), ctx([]), shell().run)).outcome).toBe('ok');
+  it('nothing ran at all is not done: "ko" (or the station\'s own way out), and it says why', async () => {
+    expect((await runScript(spec({ action: 'test' }), ctx([]), shell().run)).outcome).toBe('ko');
+    /* an item: no repository, only a line for repositories */
+    const item = await runScript(spec({ lines: [{ target: '*', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }] }), ctx([]), shell().run);
+    expect(item.outcome).toBe('ko');
+    expect(item.error).toContain('no line for the workspace');
+    /* one repository ran: the others skipped, as the station says */
+    expect((await runScript(spec({ action: 'test' }), ctx(['acme/api', 'acme/dmc']), shell().run)).outcome).toBe('ok');
     expect((await runScript(spec({ action: 'test', missing: 'own' }), ctx([]), shell().run)).outcome).toBe('unconfigured');
   });
 

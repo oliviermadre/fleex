@@ -17,7 +17,7 @@ import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
 import { blankOp, choicesFor, incompleteOp, SET_FIELD_LABEL, SET_FIELDS, TAG_OP_HINT, TAG_OP_LABEL, type AnyField, type SetOp } from './setOps';
 import { TAG_OPS, type TagOp } from './tags';
-import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetName, WORKSPACE, type ScriptLine, type ScriptSpec } from './script';
+import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetLabel, WORKSPACE, whatRuns, type ScriptLine, type ScriptSpec } from './script';
 import { useSettingsStore } from '../stores/settingsStore';
 import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
@@ -154,58 +154,119 @@ function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetO
   );
 }
 
+const ITEM_VARS = ['FLEEX_ITEM_KEY', 'FLEEX_ITEM_SOURCE', 'FLEEX_ITEM_TITLE', 'FLEEX_ITEM_AUTHOR', 'FLEEX_ITEM_URL', 'FLEEX_ITEM_TAGS', 'FLEEX_ITEM_ID', 'FLEEX_ITEM_FIELD_LABELS', 'FLEEX_ITEM_JSON', 'FLEEX_WORKSPACE'];
+const TICKET_VARS = ['FLEEX_TICKET_NUMBER', 'FLEEX_TICKET_TITLE', 'FLEEX_TICKET_ID', 'FLEEX_REPO', 'FLEEX_WORKSPACE'];
+
 /**
- * A script station: an optional default action, lines of its own (for a repository, for any repository, or for the
- * ticket's workspace), and what it concludes when it has nothing to run for a repository. A line with no command yet
- * stays in this form only.
+ * A script station's settings (picked on `docs/factory/script-station.html`: B, A, A). What runs, on a ticket and on
+ * an item, in words first, and said when nothing would (it then leaves by "ko"). Each line chooses where it runs, and
+ * that can change at any time; a new line runs in the workspace. The variables a command gets are pills: a click puts
+ * one, quoted, in the command last edited. What only a ticket's repositories need, and what to do when something goes
+ * wrong, are folded away.
  */
 function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; onChange: (s: ScriptSpec) => void }) {
   const named = useSettingsStore((s) => s.settings.namedActions) ?? [], repos = useSettingsStore((s) => s.settings.resolvedRepositories ?? s.settings.repositories) ?? [];
   const saved = scriptOf(script), savedKey = JSON.stringify(saved.lines);
-  const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [target, setTarget] = useState(ANY_REPO);
+  const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [focus, setFocus] = useState(0), [vars, setVars] = useState<'item' | 'ticket'>('item');
   useEffect(() => { setRows((cur) => (JSON.stringify(cur.filter((l) => !incompleteLine(l))) === savedKey ? cur : (JSON.parse(savedKey) as ScriptLine[]))); }, [savedKey]);
   const put = (patch: Partial<ScriptSpec>) => onChange({ ...saved, ...patch });
   const commit = (next: ScriptLine[]) => { setRows(next); const complete = next.filter((l) => !incompleteLine(l)); if (JSON.stringify(complete) !== savedKey) put({ lines: complete }); };
   const line = (i: number, l: ScriptLine) => commit(rows.map((r, k) => (k === i ? l : r)));
-  const free = [ANY_REPO, WORKSPACE, ...repos].filter((t) => !rows.some((r) => r.target === t));
-  const pick = free.includes(target) ? target : free[0] ?? '';
+  const all = [WORKSPACE, ANY_REPO, ...repos];
+  /* one line per place: a line can move to a place no other line has */
+  const placesFor = (i: number) => all.filter((t) => t === rows[i]?.target || !rows.some((r, k) => k !== i && r.target === t));
+  const firstFree = all.find((t) => !rows.some((r) => r.target === t));
+  const runs = whatRuns({ ...saved, lines: rows });
+  const insert = (v: string) => {
+    const i = rows[focus] ? focus : rows.length - 1;
+    if (i < 0) { if (firstFree) commit([...rows, { target: firstFree, kind: 'command', value: `"$${v}"` }]); return; }
+    const l = rows[i]!;
+    if (l.kind !== 'command') return;
+    line(i, { ...l, value: `${l.value}${l.value && !l.value.endsWith(' ') ? ' ' : ''}"$${v}"` });
+  };
+  const Summary = ({ label, list, item }: { label: string; list: string[]; item?: boolean }) => (
+    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-2">
+      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">{label}</span>
+      <div className="flex min-w-0 flex-col gap-0.5 text-xs">
+        {list.length ? list.map((x) => <span key={x} className="break-words font-mono text-[var(--theme-text-primary)]">{x}</span>)
+          : <span className="text-[var(--theme-danger)]">Nothing: it leaves by "ko".{item && rows.some((r) => r.target !== WORKSPACE && !incompleteLine(r)) ? ' An item has no repository: a line for a repository does not run for it. Set the line to Workspace.' : ''}</span>}
+      </div>
+    </div>
+  );
   return (
     <>
-      <Hint>Runs shell commands when a ticket or an item arrives: in each of the ticket's worktrees, or in its workspace (for an item, a folder of its own: only the workspace lines run). No agent runs here. It ends "ok" when every command exits with 0, "ko" when one does not; on an item, what the commands printed is the station's answer.</Hint>
-      <Select id="f-script-action" label="Default action" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
-        options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
-      <Hint>{saved.action ? `Each repository of the ticket runs its own "${saved.action}", unless a line below says otherwise.` : 'With none, only the lines below are run.'}{named.length === 0 ? ' Named actions are created in Settings, under General, then filled in repository by repository.' : ''}</Hint>
-      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">Lines of this station</div>
-      {rows.length === 0 && <Hint>None.</Hint>}
+      <Hint>Shell commands, no agent: "ok" when every command exits with 0, "ko" when one does not, or when nothing ran. On an item, what the commands printed is the station's answer.</Hint>
+      <Head>What runs</Head>
+      <div className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2.5" aria-label="What runs">
+        <Summary label="A ticket" list={runs.ticket} />
+        <Summary label="An item" list={runs.item} item />
+      </div>
+      <Head>Lines</Head>
+      {rows.length === 0 && <Hint>None yet.</Hint>}
       {rows.map((l, i) => (
-        <div key={l.target} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Line for ${targetName(l.target)}`}>
+        <div key={i} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Line ${i + 1}`}>
           <div className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--theme-text-primary)]">{targetName(l.target)}</span>
+            <div className="min-w-0 flex-1"><Select id={`f-script-target-${i}`} aria-label="Where it runs" value={l.target} onChange={(e) => line(i, { ...l, target: e.target.value, ...(e.target.value === WORKSPACE ? { kind: 'command' as const } : {}) })}
+              options={placesFor(i).map((t) => ({ value: t, label: targetLabel(t) }))} /></div>
             {l.target !== WORKSPACE && (
               <div className="w-36 flex-none"><Select id={`f-script-kind-${i}`} aria-label="What it runs" value={l.kind} onChange={(e) => line(i, { ...l, kind: e.target.value as ScriptLine['kind'], value: '' })} options={[{ value: 'command', label: 'a command' }, { value: 'action', label: 'a named action' }]} /></div>
             )}
-            <Button size="sm" variant="ghost" aria-label={`Remove the line for ${targetName(l.target)}`} onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
+            <Button size="sm" variant="ghost" aria-label={`Remove line ${i + 1}`} onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
           </div>
           {l.kind === 'action'
             ? <Select id={`f-script-value-${i}`} aria-label="Named action" value={l.value} onChange={(e) => line(i, { ...l, value: e.target.value })} options={[{ value: '', label: 'choose' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(l.value && !named.some((a) => a.name === l.value) ? [{ value: l.value, label: l.value }] : [])]} />
-            : <CommitInput id={`f-script-value-${i}`} label="" placeholder={l.target === WORKSPACE ? 'a command, run once in the workspace of the ticket' : 'a command, run in the worktree'} value={l.value} onCommit={(v) => line(i, { ...l, value: v.trim() })} />}
+            : <ScriptCommand id={`f-script-value-${i}`} value={l.value} placeholder={l.target === WORKSPACE ? 'a command, run once: in the ticket\'s workspace, or the item\'s folder' : 'a command, run in the worktree'} onFocus={() => setFocus(i)} onCommit={(v) => line(i, { ...l, value: v })} />}
         </div>
       ))}
-      {free.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <div className="min-w-0 flex-1"><Select id="f-script-target" aria-label="What the line is for" value={pick} onChange={(e) => setTarget(e.target.value)} options={free.map((t) => ({ value: t, label: targetName(t) }))} /></div>
-          <Button size="sm" onClick={() => commit([...rows, { target: pick, kind: 'command', value: '' }])}>Add a line</Button>
+      {firstFree && <div className="flex items-center gap-2"><Button size="sm" onClick={() => { commit([...rows, { target: firstFree, kind: 'command', value: '' }]); setFocus(rows.length); }}>Add a line</Button><span className="text-[11px] text-[var(--theme-text-muted)]">{firstFree === WORKSPACE ? 'It runs in the workspace; change where with its first field.' : 'Change where it runs with its first field.'}</span></div>}
+
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Head>Variables</Head>
+          <div className="flex gap-1" role="radiogroup" aria-label="Variables of">
+            {(['item', 'ticket'] as const).map((k) => <Button key={k} size="sm" role="radio" aria-checked={vars === k} variant={vars === k ? 'primary' : 'secondary'} onClick={() => setVars(k)}>{k === 'item' ? 'Item' : 'Ticket'}</Button>)}
+          </div>
         </div>
-      )}
-      <Select id="f-script-missing" label="A repository it has nothing to run for" value={saved.missing} onChange={(e) => put({ missing: e.target.value as ScriptSpec['missing'] })}
-        options={[{ value: 'ignore', label: 'is skipped' }, { value: 'ko', label: 'counts as a failure' }, { value: 'own', label: 'sends the ticket out by "unconfigured"' }]} />
-      <div className="grid grid-cols-2 gap-2">
-        <Select id="f-script-fail" label="After a command fails" value={saved.onFail} onChange={(e) => put({ onFail: e.target.value as ScriptSpec['onFail'] })} options={[{ value: 'all', label: 'run the others anyway' }, { value: 'stop', label: 'stop there' }]} />
-        <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
+        <div className="flex flex-wrap gap-1">
+          {(vars === 'item' ? ITEM_VARS : TICKET_VARS).map((v) => (
+            <button key={v} type="button" onClick={() => insert(v)} title={`Put "$${v}" in the command`}
+              className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 py-0.5 font-mono text-[11px] text-[var(--theme-text-primary)] hover:border-[var(--theme-accent)]">${v}</button>
+          ))}
+        </div>
+        <Hint>{vars === 'item' ? 'FLEEX_ITEM_KEY is its key in its source (a Gmail thread id); each field of its source is FLEEX_ITEM_FIELD_<NAME>. ' : ''}A click puts it, quoted, in the command last edited. Keep them quoted: a mail's subject is written by anyone.</Hint>
       </div>
-      <Hint>A command gets the ticket in its environment: FLEEX_TICKET_NUMBER, FLEEX_TICKET_TITLE, FLEEX_TICKET_ID, FLEEX_REPO, FLEEX_WORKSPACE.</Hint>
-      <Hint>Or the item: FLEEX_ITEM_KEY (its key in its source: a Gmail thread id), FLEEX_ITEM_SOURCE, FLEEX_ITEM_TITLE, FLEEX_ITEM_AUTHOR, FLEEX_ITEM_URL, FLEEX_ITEM_TAGS, FLEEX_ITEM_ID, each field of its source as FLEEX_ITEM_FIELD_&lt;NAME&gt; (FLEEX_ITEM_FIELD_LABELS…), and the whole item as FLEEX_ITEM_JSON. Quote them: a mail's subject is written by anyone. Example: <span className="font-mono">gog gmail archive "$FLEEX_ITEM_KEY"</span></Hint>
+
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--theme-text-secondary)]">When something goes wrong</summary>
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Select id="f-script-fail" label="After a command fails" value={saved.onFail} onChange={(e) => put({ onFail: e.target.value as ScriptSpec['onFail'] })} options={[{ value: 'all', label: 'run the others anyway' }, { value: 'stop', label: 'stop there' }]} />
+            <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
+          </div>
+          <Select id="f-script-missing" label="A repository it has nothing to run for" value={saved.missing} onChange={(e) => put({ missing: e.target.value as ScriptSpec['missing'] })}
+            options={[{ value: 'ignore', label: 'is skipped' }, { value: 'ko', label: 'counts as a failure' }, { value: 'own', label: 'sends the ticket out by "unconfigured"' }]} />
+        </div>
+      </details>
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--theme-text-secondary)]">A ticket's repositories</summary>
+        <div className="mt-2 flex flex-col gap-1.5">
+          <Select id="f-script-action" label="Default action, run in every repository with no line of its own" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
+            options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
+          {named.length === 0 && <Hint>Named actions are created in Settings, under General, then filled in repository by repository.</Hint>}
+        </div>
+      </details>
     </>
+  );
+}
+
+/** A command, in monospace, on as many lines as it needs; kept when the field is left. */
+function ScriptCommand({ id, value, placeholder, onFocus, onCommit }: { id: string; value: string; placeholder: string; onFocus: () => void; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => { setDraft(null); }, [value]);
+  return (
+    <textarea id={id} aria-label="Command" value={draft ?? value} placeholder={placeholder} rows={Math.min(6, Math.max(2, (draft ?? value).split('\n').length))} spellCheck={false}
+      onFocus={onFocus} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== null && draft.trim() !== value) onCommit(draft.trim()); setDraft(null); }}
+      className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 py-1.5 font-mono text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none" />
   );
 }
 
