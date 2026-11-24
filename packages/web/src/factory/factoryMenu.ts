@@ -232,7 +232,7 @@ export function factoryMenu(c: MenuContext): Menu {
     2: place('panel', 'Panel', 'station', 'A station that runs a panel of personas'),
     3: place('script', 'Script', 'station', 'A station that runs shell commands in the ticket\'s worktrees or its workspace: tests, a build, anything'),
     4: place('gate', 'Gate', 'station', 'Waits for your decision; each outcome leaves by its own arm'),
-    5: place('native', 'Status', 'station', 'Sets a status on the ticket and lets it through'),
+    /* no status station any more: a Set gantry on a belt does it (one already built still works) */
   }, previous);
   const where = frame('Place', {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),

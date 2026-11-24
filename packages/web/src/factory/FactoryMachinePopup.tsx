@@ -154,6 +154,14 @@ function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetO
   );
 }
 
+/**
+ * The sizes a machine of a fixed size can be given, odd so that what comes in and goes out lines up on its middle: a
+ * station (but a status one), a desk, an intake. One built before keeps its size until it is given another.
+ */
+const sizesOf = (m: MachineSpec): [number, number][] | null =>
+  m.kind === 'station' ? (m.exec === 'native' ? null : [[5, 5], [5, 3], [7, 5]])
+    : m.kind === 'desk' || m.kind === 'intake' ? [[3, 3]] : null;
+
 const ITEM_VARS = ['FLEEX_ITEM_KEY', 'FLEEX_ITEM_SOURCE', 'FLEEX_ITEM_TITLE', 'FLEEX_ITEM_AUTHOR', 'FLEEX_ITEM_URL', 'FLEEX_ITEM_TAGS', 'FLEEX_ITEM_ID', 'FLEEX_ITEM_FIELD_LABELS', 'FLEEX_ITEM_JSON', 'FLEEX_WORKSPACE'];
 const TICKET_VARS = ['FLEEX_TICKET_NUMBER', 'FLEEX_TICKET_TITLE', 'FLEEX_TICKET_ID', 'FLEEX_REPO', 'FLEEX_WORKSPACE'];
 
@@ -651,6 +659,16 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
         </>
       )}
       {m.kind === 'exit' && <Hint>A ticket that arrives here is set to done and handed back to plain Fleex.</Hint>}
+      {sizesOf(m) && (() => {
+        const list = sizesOf(m)!, now = `${m.w}x${m.h}`, known = list.some(([w, h]) => `${w}x${h}` === now);
+        return (
+          <div className="flex flex-col gap-1">
+            <Select id="f-size" label="Size" value={now} onChange={(e) => { const [w, h] = e.target.value.split('x').map(Number); onPatch({ w, h } as Partial<MachineSpec>); }}
+              options={[...list.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` })), ...(known ? [] : [{ value: now, label: `${m.w} × ${m.h} (as built)` }])]} />
+            <Hint>Odd, so that what comes in and goes out lines up on its middle. It grows down and right; where there is no room, it says so.</Hint>
+          </div>
+        );
+      })()}
       {(m.kind === 'zone' || m.kind === 'exit') && (
         <div className="grid grid-cols-2 gap-2">
           <CommitInput id="f-w" label="Width" value={String(m.w)} onCommit={(v) => onPatch({ w: Math.max(1, Math.min(30, Number(v) || m.w)) })} />

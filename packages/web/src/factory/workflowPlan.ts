@@ -37,7 +37,7 @@ type Unplaced<T = MachineSpec> = T extends unknown ? Omit<T, 'x' | 'y'> : never;
 
 const EAST: Dir = 0, SOUTH: Dir = 1, WEST: Dir = 2, NORTH: Dir = 3;
 /** The room every step is given: wide and high enough for a station, which is a machine of 5 by 4 tiles. */
-const SLOT_W = 5, SLOT_H = 4;
+const SLOT_W = 5, SLOT_H = 5;
 /** Vertical distance between two stations of one column, and room under the last one before the rows of belts. */
 const PITCH = SLOT_H + 2, UNDER = 2;
 
@@ -185,7 +185,8 @@ export function planFromWorkflow(t: WorkflowTemplate): WorkflowPlan {
   const nodes: Node[] = [], byStep = new Map<string, Node>();
   const blank = (key: string, step: WorkflowStep | null, layer: number, machine: Unplaced, small: boolean): Node => {
     /* an arm can stand against each row of the machine's east side; row 1 first, which is the one a straight belt leaves by */
-    const rows = Array.from({ length: machine.h }, (_, i) => i), armRows = [1, ...rows.filter((r) => r > 1), 0].filter((r) => r < machine.h);
+    /* the first arm on the middle row (odd heights: one), the next ones nearest to it */
+    const mid = Math.floor(machine.h / 2), armRows = Array.from({ length: machine.h }, (_, i) => i).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid) || a - b);
     void small;
     const n: Node = { key, step, layer, row: 0, sx: 0, sy: 0, machine: { ...machine, x: 0, y: 0 } as MachineSpec, armRows, trunk: null, land: 0 };
     nodes.push(n); return n;

@@ -42,12 +42,16 @@ export function armFacing(layout: FactoryLayout, x: number, y: number, dir: Dir)
 }
 
 /** The machine a tool would place with its top-left corner chosen so the cursor sits near its middle. */
-/** A station is a machine of 5 by 4 tiles: room for its places, its tray and its bay. A status station stays 2 by 2. */
-export const STATION_W = 5, STATION_H = 4;
+/**
+ * A station is a machine of 5 by 5 tiles: room for its places, its tray and its bay, and a middle row for its arm out.
+ * Odd, so that what goes in and out lines up with it (`docs`: sizes are odd, but for zones and exits, sized by hand).
+ * One built before keeps its 5 by 4 until it is resized (Size, in its popup).
+ */
+export const STATION_W = 5, STATION_H = 5;
 /** How many tickets a machine can be asked to work on at once: as many places as it can show. */
 export const MAX_PLACES = 6;
-/** A desk is a dock of 3 by 2 tiles, whatever it is set to. */
-export const DESK_W = 3, DESK_H = 2;
+/** A desk or an intake is a dock of 3 by 3 tiles (3 by 2 for one built before, until it is resized). */
+export const DESK_W = 3, DESK_H = 3;
 
 export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec | null {
   const id = newId();
@@ -57,9 +61,9 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [] };
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
-      return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 2 };
-    case 'script': return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: 'Script', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
-    case 'gate': return { id, kind: 'station', x: x - 2, y: y - 1, w: STATION_W, h: STATION_H, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
+      return { id, kind: 'station', x: x - 2, y: y - 2, w: STATION_W, h: STATION_H, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 2 };
+    case 'script': return { id, kind: 'station', x: x - 2, y: y - 2, w: STATION_W, h: STATION_H, name: 'Script', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
+    case 'gate': return { id, kind: 'station', x: x - 2, y: y - 2, w: STATION_W, h: STATION_H, name: 'Gate', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
     case 'native': return { id, kind: 'station', x, y, w: 2, h: 2, name: 'Set status', exec: 'native', outcomes: ['ok'], cap: 3, sets: 'doing' };
     case 'zone': return { id, kind: 'zone', x: x - 1, y: y - 1, w: 4, h: 4, name: 'Zone', status: '', release: 'manual' };
     case 'exit': return { id, kind: 'exit', x: x - 1, y: y - 1, w: 3, h: 3, name: 'Exit' };
@@ -71,9 +75,9 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'toll': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, set: [], toll: { when: [], out: ((dir + 1) % 4) as Dir } };
     case 'teleporter': return { id, kind: 'teleporter', x, y, w: 1, h: 1, name: '', role: 'departure' };
     /* a dock of three by two, its mouth on the right: where a ticket created at it waits for an arm */
-    case 'desk': return { id, kind: 'desk', x: x - 1, y, w: DESK_W, h: DESK_H, name: 'Desk' };
+    case 'desk': return { id, kind: 'desk', x: x - 1, y: y - 1, w: DESK_W, h: DESK_H, name: 'Desk' };
     /* Slack until its popup says otherwise; a conversation must be quiet two minutes before its item leaves */
-    case 'intake': return { id, kind: 'intake', x: x - 1, y, w: DESK_W, h: DESK_H, name: '', source: 'slack', quietSec: 120, drop: [] };
+    case 'intake': return { id, kind: 'intake', x: x - 1, y: y - 1, w: DESK_W, h: DESK_H, name: '', source: 'slack', quietSec: 120, drop: [] };
     default: return null;
   }
 }

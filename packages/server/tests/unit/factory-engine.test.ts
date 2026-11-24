@@ -361,6 +361,13 @@ describe('FactoryEngine', () => {
       await expect(engine.bringBack('nope')).rejects.toThrow('No archived item');
     });
 
+    it('a dock keeps 3 by 2 when it was built so, and is 3 by 3 otherwise; a station is 5 by 5 unless it says', async () => {
+      await boot([{ id: 'd2', kind: 'desk', x: 0, y: 0, w: 3, h: 2 } as unknown as MachineSpec, intake('i', 0, 4, { h: 7 }),
+        { id: 's', kind: 'station', x: 10, y: 0, w: 0, h: 0, exec: 'agent', outcomes: ['ok'], cap: 2 } as unknown as MachineSpec, station('old', 20, 0)]);
+      const size = (id: string) => { const m = engine.snapshot().floor.layout.machines.find((q) => q.id === id)!; return [m.w, m.h]; };
+      expect([size('d2'), size('i'), size('s')]).toEqual([[3, 2], [3, 3], [5, 5]]);
+    });
+
     it('refuses an item with no intake for its source, or with no key', async () => {
       await boot([intake('in', 1, 1)]);
       await expect(engine.ingest(msg('k', { source: 'gmail' }))).rejects.toThrow('No gmail intake on the floor');
@@ -372,7 +379,7 @@ describe('FactoryEngine', () => {
   it('a desk holds the ticket created at it until an arm takes it out, and takes nothing from the floor', async () => {
     const desk = { id: 'desk', kind: 'desk', x: 1, y: 1, w: 9, h: 9, name: '  Bug desk ', defaults: { boardId: 'b1', type: 'fix', priority: 7, junk: 'x' } } as unknown as MachineSpec;
     await boot([desk, arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
-    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 2, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });
+    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 3, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });     // a dock of 3 by 3
     await engine.transfer('a', { machineId: 'desk' });
     await engine.transfer('b', { machineId: 'desk' });     // several can be created in a row: a desk has no capacity
     expect(where('a')).toBe('desk:zone');

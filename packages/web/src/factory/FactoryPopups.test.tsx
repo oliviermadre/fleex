@@ -322,6 +322,23 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'own', onFail: 'all' }, outcomes: ['ok', 'ko', 'unconfigured'] });
   });
 
+  it('gives a station or a dock an odd size, and says the size it was built with', () => {
+    const old: MachineSpec = { ...dev, id: 'old', h: 4 } as MachineSpec;
+    const desk: MachineSpec = { id: 'dk', kind: 'desk', x: 20, y: 10, w: 3, h: 2, name: 'Desk' } as MachineSpec;
+    seed([], [old, desk]);
+    const on = open('old');
+    const size = screen.getByLabelText('Size') as HTMLSelectElement;
+    expect([...size.options].map((o) => o.textContent)).toEqual(['5 × 5', '5 × 3', '7 × 5', '5 × 4 (as built)']);
+    expect(size.value).toBe('5x4');
+    fireEvent.change(size, { target: { value: '5x5' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('old', { w: 5, h: 5 });
+    cleanup();
+    const onDesk = open('dk');
+    expect([...(screen.getByLabelText('Size') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['3 × 3', '3 × 2 (as built)']);
+    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '3x3' } });
+    expect(onDesk.onPatch).toHaveBeenLastCalledWith('dk', { w: 3, h: 3 });
+  });
+
   it('closes when its machine is no longer on the floor', () => {
     seed([]);
     const on = open('gone');

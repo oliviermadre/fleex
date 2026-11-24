@@ -244,7 +244,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
     else if (m.kind === 'station') {
       /* a status station is two tiles a side; the others are machines the page draws with places, a tray and a bay: 5 by 4 unless said otherwise */
       if (m.exec === 'native') { m.w = 2; m.h = 2; }
-      else { m.w = Math.max(3, Math.min(8, Math.floor(m.w || 5))); m.h = Math.max(3, Math.min(6, Math.floor(m.h || 4))); }
+      else { m.w = Math.max(3, Math.min(8, Math.floor(m.w || 5))); m.h = Math.max(3, Math.min(6, Math.floor(m.h || 5))); }
       m.outcomes = Array.isArray(m.outcomes) && m.outcomes.length ? m.outcomes.map(String).filter(Boolean) : ['ok'];
       if (!m.outcomes.length) m.outcomes = ['ok'];
       m.cap = Math.max(1, Math.min(50, Math.floor(m.cap || 8)));
@@ -260,14 +260,14 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.inbound = m.inbound === true && !machines.some((o) => o.kind === 'zone' && o.inbound);
     } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
     else if (m.kind === 'desk') {
-      /* a desk is a dock of three tiles by two, whatever the page sent */
-      m.w = 3; m.h = 2;
+      /* a desk is a dock three tiles wide, three high (two for one built before docks were) */
+      m.w = 3; m.h = m.h === 2 ? 2 : 3;
       m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
       const defaults = cleanDefaults(m.defaults); if (defaults) m.defaults = defaults; else delete m.defaults;
     }
     else if (m.kind === 'intake') {
-      /* a dock of three by two, as a desk */
-      m.w = 3; m.h = 2;
+      /* a dock of three by three (two high for one built before), as a desk */
+      m.w = 3; m.h = m.h === 2 ? 2 : 3;
       if (!ITEM_SOURCES.includes(m.source)) throw new FactoryError(`unknown item source "${String(m.source)}"`);
       m.name = typeof m.name === 'string' ? m.name.trim().slice(0, 40) : '';
       m.quietSec = Math.max(0, Math.min(7 * 86_400, Math.floor(Number(m.quietSec ?? DEFAULT_QUIET_SEC) || 0)));

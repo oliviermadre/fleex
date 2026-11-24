@@ -254,6 +254,14 @@ geometry cannot be: the step returns null, the old layout is kept as an archived
 `factory_floors`), the floor starts over with only Inbound, the tickets go back to Inbound, and the page says so once
 (`notice` in the snapshot, `POST /api/factory/notice/ack`). Version 2 is the first such step: stations grew from 3 by 3.
 
+**Odd sizes.** A machine of a fixed size is odd on both sides, so that what comes in and goes out lines up on its
+middle row: a station is 5 by 5 (5 by 3 and 7 by 5 can be chosen too), a desk and an intake 3 by 3. Zones, exits and
+areas are sized by hand. Nothing was migrated: a station built 5 by 4, a dock built 3 by 2, keep their size (the engine
+accepts both) until they are given another in their popup (Size: it grows down and right, and says when there is no
+room); no layout version was needed. A plan made from a workflow puts its first arm out on a station's middle row. The
+status station is no longer offered in the build menu (a Set gantry on a belt does what it did); one already built
+still works.
+
 ## Areas
 
 An area (`kind: 'area'`) is a part of the floor named as a place, "Build line", "Rework": a rectangle of whole
