@@ -24,7 +24,8 @@ import { runScript, normaliseScript, type ScriptContext, type Shell } from './sc
 import { buildTicketWorkspaceId } from '@fleex/shared';
 import { basename } from 'node:path';
 import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
-import type { ExitLog, FactoryTicketInfo, StationSpec } from './types.js';
+import type { ExitLog, FactoryItemRow, FactoryTicketInfo, StationSpec } from './types.js';
+import { itemEnv } from './item-env.js';
 import type { StationRunResult } from './station-runner.js';
 import type { CommentPostedEvent } from '../domain/events.js';
 
@@ -80,9 +81,10 @@ export class FactoryModule {
    * defines as named actions, and the commands run through the host's shell. A repository the ticket is linked to
    * whose worktree is not on disk is told as such: the station says so and counts it as a failure.
    */
-  private async runScript(station: StationSpec, ticketId: string): Promise<StationRunResult> {
+  private async runScript(station: StationSpec, ticketId: string, item?: FactoryItemRow): Promise<StationRunResult> {
     const host = this.deps.host;
     if (!host) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
+    if (item) return this.runScriptOnItem(station, item, host);
     const entity = await this.deps.ticketStore.getTicketById(ticketId);
     if (!entity) return { status: 'failed', outcome: '', executionId: null, error: 'The ticket is gone' };
     const t = entity.toDTO(), links = t.links ?? [], workspaceId = buildTicketWorkspaceId(t.title, t.id), workspace = host.workspacePath(workspaceId);
@@ -101,6 +103,20 @@ export class FactoryModule {
       env: { FLEEX_TICKET_ID: t.id, FLEEX_TICKET_NUMBER: String(t.displayId), FLEEX_TICKET_TITLE: t.title, FLEEX_WORKSPACE: workspace, FLEEX_STATION: station.name || 'Script' },
     }, host.shell);
   }
+  /**
+   * A script station on an item: no repository, no worktree; its lines for the workspace run in a folder of the item's
+   * own, with the item in the environment (`itemEnv`: FLEEX_ITEM_KEY is its key in its source, a Gmail thread id). A
+   * line for a repository has nothing to run for and is treated as the station says. What the commands printed is the
+   * station's answer on the item.
+   */
+  private async runScriptOnItem(station: StationSpec, item: FactoryItemRow, host: NonNullable<FactoryModuleDeps['host']>): Promise<StationRunResult> {
+    const workspace = host.workspacePath(`factory-item-${item.id}`), spec = normaliseScript(station.script);
+    if (spec.lines.some((l) => l.target === 'workspace')) await host.shell(`mkdir -p '${workspace.replace(/'/g, `'\\''`)}'`, { cwd: '/', timeoutMs: 10_000 }).catch(() => undefined);
+    return runScript(spec, {
+      workspace, worktrees: [], actions: () => ({}),
+      env: { ...itemEnv(item), FLEEX_WORKSPACE: workspace, FLEEX_STATION: station.name || 'Script' },
+    }, host.shell);
+  }
   private statsCache = new Map<number, { at: number; value: Promise<FactoryStats> }>();
 
   constructor(private readonly deps: FactoryModuleDeps & { store: FactoryStorePort }) {
@@ -110,7 +126,7 @@ export class FactoryModule {
         skill: new SkillStepExecutor(deps.executeAgent, deps.skillStore, deps.personaStore, deps.config),
         panel: new PanelStepExecutor(deps.runPanel, deps.config),
       },
-      script: (station, ticketId) => this.runScript(station, ticketId),
+      script: (station, ticketId, item) => this.runScript(station, ticketId, item),
       submitDeliverable: deps.submitDeliverable, postComment: deps.postComment, agentEventStore: deps.agentEventStore, eventBus: deps.eventBus,
     });
     this.store = deps.store;

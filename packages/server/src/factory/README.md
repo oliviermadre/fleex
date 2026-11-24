@@ -105,7 +105,7 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   the item leaves by the outcome the agent names. An item has no thread, so each visit is kept in
   `factory_item_runs` (migration 048) with the agent's reply and the deliverable it produced (saved with no ticket, so
   it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
-  the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
+  the agent is told what it said before. A script station runs on an item too (see "Named actions, and the script station"). Item
   visits count with the tickets' runs: in a station's latest runs (`GET /api/factory/runs` reads both tables, an item
   by its title and source) and in the floor's figures and the cost layer (`computeStats`: an item's run has no ticket,
   so its cost is read by execution, `AgentEventStorePort.getExecutionsByIds`). An exit's counter counts the items
@@ -490,6 +490,15 @@ the arms, under the belt's id. A ticket in that arm is `arm` on the belt's id; a
 toll, already dealt with, and is rejected again without being counted again.
 
 ## Named actions, and the script station
+
+**On an item**, a script station has no repository and no worktree: its lines for the workspace run in a folder of the
+item's own (`factory-item-<id>` under the workspaces), its lines for a repository have nothing to run for. The item is
+in the environment, under the same names whatever its source (`item-env.ts`): `FLEEX_ITEM_KEY` (its key in its source:
+a Gmail thread id), `FLEEX_ITEM_SOURCE`, `FLEEX_ITEM_TITLE`, `FLEEX_ITEM_AUTHOR`, `FLEEX_ITEM_URL`, `FLEEX_ITEM_TAGS`,
+`FLEEX_ITEM_ID`, `FLEEX_ITEM_MESSAGES`, each field of its source as `FLEEX_ITEM_FIELD_<NAME>`, and the whole item as
+`FLEEX_ITEM_JSON`. A new source brings its fields; the station has nothing to learn. What the commands printed is the
+station's answer on the item. Values from outside (a subject) are exported quoted, never spliced: a command quotes them
+(`gog gmail archive "$FLEEX_ITEM_KEY"`).
 
 **Named actions** are actions that have a name of their own ("test", "lint", "build"), which each repository fills
 in with its own command. The list is `namedActions` in the configuration, edited in Settings › General; a

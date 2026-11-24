@@ -179,3 +179,28 @@ describe('FactoryModule: what left by an exit', () => {
     expect(log.tickets.map((t) => t.machineId)).toEqual(['x1', 'old']);
   });
 });
+
+describe('FactoryModule: a script station on an item', () => {
+  it('runs its workspace lines in a folder of the item\'s own, the item in the environment, and answers with what they printed', async () => {
+    const ran: { command: string; cwd: string }[] = [];
+    const shell = async (command: string, o: { cwd: string }) => { ran.push({ command, cwd: o.cwd }); return { stdout: command.includes('archive') ? 'Archived 1 message\n' : '', stderr: '', exitCode: 0 }; };
+    const m = createFactoryModule({
+      store: memoryStore(), eventBus: new EventBus(), config: { get: () => ({ factoryEnabled: true }) } as never,
+      ticketStore: { getTicketById: async () => null } as never, skillStore: {} as never, personaStore: {} as never, agentEventStore: {} as never, executeAgent: {} as never, runPanel: {} as never,
+      applyTicketMutation: { execute: async () => {} } as never, submitDeliverable: {} as never, postComment: {} as never, logger: { warn: () => {}, info: () => {} },
+      host: { shell, exists: async () => true, workspacePath: (id: string) => `/ws/${id}`, workspaceRepoPath: (id: string, n: string) => `/ws/${id}/${n}` },
+    })!;
+    const station = { id: 's', kind: 'station', x: 0, y: 0, w: 5, h: 4, name: 'Archiver', exec: 'script', outcomes: ['ok', 'ko'], cap: 2,
+      script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }, { target: 'org/api', kind: 'command', value: 'make test' }], missing: 'ignore', onFail: 'all' } };
+    const item = { id: 'i1', floorId: 'default', source: 'gmail', sourceKey: '1a20cdcfb877b396', title: 'Re: devis', author: 'Ana', excerpt: '', url: null, tags: [], fields: { labels: ['INBOX'] }, messages: 1, lastActivityAt: '', intakeId: null, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: '', updatedAt: '' };
+    const res = await (m as unknown as { runScript: (s: unknown, id: string, i: unknown) => Promise<{ outcome: string; reply?: string }> }).runScript(station, 'i1', item);
+    expect(res.outcome).toBe('ok');
+    expect(ran[0]).toEqual({ command: "mkdir -p '/ws/factory-item-i1'", cwd: '/' });
+    expect(ran).toHaveLength(2);                                                 // the repository line has nothing to run for
+    expect(ran[1]!.cwd).toBe('/ws/factory-item-i1');
+    expect(ran[1]!.command).toContain("export FLEEX_ITEM_KEY='1a20cdcfb877b396'");
+    expect(ran[1]!.command).toContain("export FLEEX_ITEM_FIELD_LABELS='INBOX'");
+    expect(ran[1]!.command.endsWith('gog gmail archive "$FLEEX_ITEM_KEY"')).toBe(true);
+    expect(res.reply).toContain('Archived 1 message');
+  });
+});

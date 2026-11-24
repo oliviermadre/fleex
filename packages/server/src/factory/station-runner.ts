@@ -39,8 +39,8 @@ export interface StationRunnerPort {
 export class StationRunner implements StationRunnerPort {
   constructor(private readonly deps: {
     executors: Partial<Record<'agent' | 'skill' | 'panel', StepExecutor>>;
-    /** Runs a script station: shell commands, no agent. */
-    script?: (station: StationSpec, ticketId: string) => Promise<StationRunResult>;
+    /** Runs a script station: shell commands, no agent; on an item, in a folder of its own, the item in the environment. */
+    script?: (station: StationSpec, ticketId: string, item?: FactoryItemRow) => Promise<StationRunResult>;
     submitDeliverable: SubmitDeliverableUseCase;
     postComment: PostCommentUseCase;
     agentEventStore: AgentEventStorePort;
@@ -48,10 +48,9 @@ export class StationRunner implements StationRunnerPort {
   }) {}
 
   async run(station: StationSpec, ticketId: string, runId: string, targets: Record<string, string>, onExecutionStarted: (executionId: string) => void, item?: ItemRunTarget): Promise<StationRunResult> {
-    if (station.exec === 'script' && item) return { status: 'failed', outcome: '', executionId: null, error: 'A script station runs in a ticket\'s worktrees: it cannot run on an item' };
     if (station.exec === 'script') {
       if (!this.deps.script) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
-      try { return await this.deps.script(station, ticketId); }
+      try { return await this.deps.script(station, ticketId, item?.item); }
       catch (err) { return { status: 'failed', outcome: '', executionId: null, error: err instanceof Error ? err.message : String(err) }; }
     }
     const executor = this.deps.executors[station.exec as 'agent' | 'skill' | 'panel'];

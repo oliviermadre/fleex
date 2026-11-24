@@ -59,7 +59,8 @@ describe('what a script station runs', () => {
 describe('what it concludes', () => {
   it('ok when every command ends well, each run in its own worktree with the ticket in its environment', async () => {
     const sh = shell(), res = await runScript(spec({ action: 'test' }), ctx(['acme/api', 'acme/front']), sh.run);
-    expect(res).toEqual({ status: 'completed', outcome: 'ok', executionId: null, error: null });
+    expect(res).toMatchObject({ status: 'completed', outcome: 'ok', executionId: null, error: null });
+    expect(res.reply).toContain('$ make test');
     expect(sh.ran).toEqual([['/ws/t1/api', 'make test'], ['/ws/t1/front', 'pnpm test --run']]);
     expect(withEnv('make test', { FLEEX_TICKET_TITLE: "it's here" })).toBe("export FLEEX_TICKET_TITLE='it'\\''s here'\nmake test");
   });
@@ -121,5 +122,21 @@ describe('what a layout keeps of a script station', () => {
     expect(out[0]!.outcomes).toEqual(['ok', 'ko', 'unconfigured']);
     expect(out[0]!.script).toEqual({ lines: [], missing: 'own', onFail: 'all' });
     expect('script' in out[1]!).toBe(false);
+  });
+});
+
+describe('a script station on an item', () => {
+  it('passes the item in its environment, the same names for every source, each field of its own as FLEEX_ITEM_FIELD_*', async () => {
+    const { itemEnv } = await import('../../src/factory/item-env.js');
+    const env = itemEnv({ id: 'i1', floorId: 'default', source: 'gmail', sourceKey: '1a20cdcfb877b396', title: "Re: l'offre; rm -rf /", author: 'Ana <ana@acme.com>', excerpt: '', url: null, tags: ['finance', 'reason:mention'], fields: { labels: ['INBOX', 'IMPORTANT'], attachment: true, 'x-thing': 'v' }, messages: 2, lastActivityAt: '2026-11-20T08:00:00.000Z', intakeId: 'in', machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: '', updatedAt: '' });
+    expect(env).toMatchObject({
+      FLEEX_ITEM_ID: 'i1', FLEEX_ITEM_SOURCE: 'gmail', FLEEX_ITEM_KEY: '1a20cdcfb877b396', FLEEX_ITEM_TITLE: "Re: l'offre; rm -rf /", FLEEX_ITEM_AUTHOR: 'Ana <ana@acme.com>',
+      FLEEX_ITEM_URL: '', FLEEX_ITEM_TAGS: 'finance,reason:mention', FLEEX_ITEM_MESSAGES: '2',
+      FLEEX_ITEM_FIELD_LABELS: 'INBOX,IMPORTANT', FLEEX_ITEM_FIELD_ATTACHMENT: 'yes', FLEEX_ITEM_FIELD_X_THING: 'v',
+    });
+    expect(JSON.parse(env['FLEEX_ITEM_JSON']!)).toMatchObject({ key: '1a20cdcfb877b396', fields: { labels: ['INBOX', 'IMPORTANT'] } });
+    /* exported, quoted: a subject cannot become a command */
+    const { withEnv } = await import('../../src/factory/script-runner.js');
+    expect(withEnv('gog gmail archive "$FLEEX_ITEM_KEY"', { FLEEX_ITEM_TITLE: env['FLEEX_ITEM_TITLE']! })).toContain("export FLEEX_ITEM_TITLE='Re: l'\\''offre; rm -rf /'");
   });
 });

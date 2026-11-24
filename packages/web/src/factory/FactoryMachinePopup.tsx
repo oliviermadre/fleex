@@ -171,7 +171,7 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
   const pick = free.includes(target) ? target : free[0] ?? '';
   return (
     <>
-      <Hint>Runs shell commands when a ticket arrives: in each of the ticket's worktrees, or in its workspace. No agent runs here. It ends "ok" when every command exits with 0, "ko" when one does not.</Hint>
+      <Hint>Runs shell commands when a ticket or an item arrives: in each of the ticket's worktrees, or in its workspace (for an item, a folder of its own: only the workspace lines run). No agent runs here. It ends "ok" when every command exits with 0, "ko" when one does not; on an item, what the commands printed is the station's answer.</Hint>
       <Select id="f-script-action" label="Default action" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
         options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
       <Hint>{saved.action ? `Each repository of the ticket runs its own "${saved.action}", unless a line below says otherwise.` : 'With none, only the lines below are run.'}{named.length === 0 ? ' Named actions are created in Settings, under General, then filled in repository by repository.' : ''}</Hint>
@@ -204,6 +204,7 @@ function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; 
         <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
       </div>
       <Hint>A command gets the ticket in its environment: FLEEX_TICKET_NUMBER, FLEEX_TICKET_TITLE, FLEEX_TICKET_ID, FLEEX_REPO, FLEEX_WORKSPACE.</Hint>
+      <Hint>Or the item: FLEEX_ITEM_KEY (its key in its source: a Gmail thread id), FLEEX_ITEM_SOURCE, FLEEX_ITEM_TITLE, FLEEX_ITEM_AUTHOR, FLEEX_ITEM_URL, FLEEX_ITEM_TAGS, FLEEX_ITEM_ID, each field of its source as FLEEX_ITEM_FIELD_&lt;NAME&gt; (FLEEX_ITEM_FIELD_LABELS…), and the whole item as FLEEX_ITEM_JSON. Quote them: a mail's subject is written by anyone. Example: <span className="font-mono">gog gmail archive "$FLEEX_ITEM_KEY"</span></Hint>
     </>
   );
 }

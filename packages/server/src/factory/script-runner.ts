@@ -96,11 +96,13 @@ export async function runScript(spec: ScriptSpec, ctx: ScriptContext, shell: She
     if (!s.cwd) { failed = true; report.push(`✗ ${s.where}: its worktree is not on disk`); continue; }
     try {
       const r = await shell(withEnv(s.command, { ...ctx.env, ...(s.repo ? { FLEEX_REPO: s.repo } : {}) }), { cwd: s.cwd, timeoutMs });
-      if (r.exitCode === 0 && !r.timedOut) report.push(`✓ ${s.where} $ ${s.command}`);
+      if (r.exitCode === 0 && !r.timedOut) report.push(`✓ ${s.where} $ ${s.command}`, ...(r.stdout.trim() ? [tail(r.stdout)] : []));
       else { failed = true; report.push(`✗ ${s.where} $ ${s.command} · ${r.timedOut ? `timed out after ${timeoutMs / 1000} s` : `exit ${r.exitCode}`}`, tail(r.stderr || r.stdout)); }
     } catch (err) { failed = true; report.push(`✗ ${s.where} $ ${s.command} · could not be run`, tail(err instanceof Error ? err.message : String(err))); }
   }
-  if (steps.length === 0) report.push('? nothing to run: the ticket has no repository, and the station has no line for its workspace');
+  if (steps.length === 0) report.push('? nothing to run: no repository to run in, and the station has no line for the workspace');
+  const said = report.filter(Boolean).join('\n');
   const outcome = failed || (missing && spec.missing === 'ko') ? 'ko' : missing && spec.missing === 'own' ? 'unconfigured' : 'ok';
-  return { status: 'completed', outcome, executionId: null, error: outcome === 'ok' ? null : report.filter(Boolean).join('\n').slice(0, 4000) };
+  /* what it ran and what that said: an item keeps it as the station's answer (a ticket's run keeps only its error) */
+  return { status: 'completed', outcome, executionId: null, error: outcome === 'ok' ? null : said.slice(0, 4000), reply: `\`\`\`\n${said.slice(0, 8000)}\n\`\`\`` };
 }

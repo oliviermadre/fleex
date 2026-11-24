@@ -59,7 +59,8 @@ describe('StationRunner', () => {
     /* nothing is posted on a ticket: there is none; the deliverable has no ticket either */
     expect(posted).toEqual([]);
     expect(delivered[0]).toMatchObject({ ticketId: null, title: 'Triage' });
-    expect(await r.run(station({ exec: 'script' }), 'i1', 'run-2', {}, () => {}, { item: item(), earlier: [] })).toMatchObject({ status: 'failed', error: expect.stringContaining('cannot run on an item') });
+    /* a script station runs on it too: no script runner here, so it says it cannot run */
+    expect(await r.run(station({ exec: 'script' }), 'i1', 'run-2', {}, () => {}, { item: item(), earlier: [] })).toMatchObject({ status: 'failed', error: 'Script stations cannot run here' });
   });
 
   it('falls back to the first outcome when the agent names none of them, and reports a question or a failure as such', async () => {
