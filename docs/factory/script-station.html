@@ -1,0 +1,205 @@
+<title>Station Script</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<style>
+  .panel { background: #1f1f23; border: 1px solid #3f3f46; border-radius: 14px; color: #fafafa; font-size: 0.8rem; color-scheme: dark; padding: 16px; display: flex; flex-direction: column; gap: 14px; max-width: 620px; }
+  .panel h5 { margin: 0; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .panel select, .panel input, .panel textarea { font: inherit; font-size: 0.8rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .panel textarea { font-family: var(--mono); font-size: 0.78rem; width: 100%; box-sizing: border-box; resize: vertical; }
+  .panel button { color: #fafafa; border-color: #3f3f46; font-size: 0.76rem; padding: 4px 10px; }
+  .panel .muted { color: #8b8b94; font-size: 0.74rem; }
+  .sum { border: 1px solid #3f3f46; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: #18181b; }
+  .sum .r { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+  .sum b { color: #a1a1aa; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .warn { color: #fcd34d; } .bad { color: #fca5a5; }
+  .lineCard { border: 1px solid #3f3f46; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .lineRow { display: grid; grid-template-columns: 190px 130px minmax(0, 1fr) 26px; gap: 6px; align-items: start; }
+  @media (max-width: 640px) { .lineRow { grid-template-columns: 1fr; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip2 { font-family: var(--mono); font-size: 0.7rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 2px 8px; cursor: pointer; background: #131316; color: #e4e4e7; }
+  .chip2:hover { border-color: #a78bfa; }
+  .tabsy { display: flex; gap: 4px; } .tabsy button[aria-pressed="true"] { background: #fafafa; color: #18181b; }
+  details summary { cursor: pointer; color: #c4c4cc; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>La station Script, plus lisible</h1>
+    <p class="lede">Chaque ligne choisit et garde sa propre cible, modifiable à tout moment ; un résumé dit ce qui tournera <b>sur un ticket</b> et <b>sur un item</b>, et prévient quand rien ne tournera ; les variables se cliquent pour s'insérer dans la commande ; ce qui ne concerne que les repos d'un ticket est rangé à part.</p>
+  </header>
+  <section aria-labelledby="h-v"><h2 id="h-v">Le panneau</h2><p class="brief">Il marche : change la cible d'une ligne, ajoute-en, clique une variable. Les choix plus bas changent le dessin.</p><div class="panel" id="panel"></div></section>
+  <section aria-labelledby="h-p1"><h2 id="h-p1">Choix 1 · une ligne</h2><div class="grid small" id="g-p1"></div></section>
+  <section aria-labelledby="h-p2"><h2 id="h-p2">Choix 2 · les variables</h2><div class="grid small" id="g-p2"></div></section>
+  <section aria-labelledby="h-p3"><h2 id="h-p3">Choix 3 · quand rien n'a tourné</h2><p class="brief">Ton cas : un item arrive, la station n'a aucune ligne pour lui. Aujourd'hui elle dit « ok », et l'item part comme si c'était fait.</p><div class="grid small" id="g-p3"></div></section>
+</div>
+<div class="bar" role="region" aria-label="Ta sélection"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copier ma sélection</button><span class="said" id="said" role="status"></span></div></div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const KEY = 'factory-script-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  picks.p1 = picks.p1 || 'row'; picks.p2 = picks.p2 || 'chips'; picks.p3 = picks.p3 || 'ko';
+  const TARGETS = [['workspace', 'Workspace: the ticket\'s, or the item\'s folder'], ['*', 'Every repository of the ticket'], ['evaneos/shop', 'evaneos/shop only']];
+  let lines = [{ target: '*', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }], focus = 0, vtab = 'item';
+  const VARS = { item: ['FLEEX_ITEM_KEY', 'FLEEX_ITEM_SOURCE', 'FLEEX_ITEM_TITLE', 'FLEEX_ITEM_AUTHOR', 'FLEEX_ITEM_URL', 'FLEEX_ITEM_TAGS', 'FLEEX_ITEM_FIELD_LABELS', 'FLEEX_ITEM_JSON', 'FLEEX_WORKSPACE'], ticket: ['FLEEX_TICKET_NUMBER', 'FLEEX_TICKET_TITLE', 'FLEEX_TICKET_ID', 'FLEEX_REPO', 'FLEEX_WORKSPACE'] };
+  const name = (t) => (TARGETS.find((x) => x[0] === t) ?? [t, t])[1];
+  function summary() {
+    const ws = lines.filter((l) => l.target === 'workspace' && l.value), repo = lines.filter((l) => l.target !== 'workspace' && l.value);
+    const onTicket = [...ws.map((l) => `in its workspace: <code>${esc(l.value)}</code>`), ...repo.map((l) => `in ${l.target === '*' ? 'each repository' : esc(l.target)}: <code>${esc(l.value)}</code>`)];
+    const onItem = ws.map((l) => `in its folder: <code>${esc(l.value)}</code>`);
+    const none = picks.p3 === 'ko' ? '<span class="bad">nothing: it leaves by "ko"</span>' : '<span class="warn">nothing: it leaves by "ok", as if done</span>';
+    return `<div class="sum"><div class="r"><b>A ticket</b><span>${onTicket.length ? onTicket.join('<br>') : none}</span></div><div class="r"><b>An item</b><span>${onItem.length ? onItem.join('<br>') : none + (repo.length ? '<br><span class="muted">An item has no repository: a line for a repository does not run for it. Set the line to Workspace.</span>' : '')}</span></div></div>`;
+  }
+  function lineHtml(l, i) {
+    const target = `<select data-i="${i}" data-f="target" aria-label="Where it runs">${TARGETS.map(([v, t]) => `<option value="${v}" ${v === l.target ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+    const kind = `<select data-i="${i}" data-f="kind" aria-label="What it runs"><option value="command" ${l.kind === 'command' ? 'selected' : ''}>a command</option><option value="action" ${l.kind === 'action' ? 'selected' : ''}>a named action</option></select>`;
+    const value = `<textarea data-i="${i}" data-f="value" rows="2" aria-label="Command">${esc(l.value)}</textarea>`;
+    const rm = `<button type="button" data-rm="${i}" aria-label="Remove this line">×</button>`;
+    return picks.p1 === 'row' ? `<div class="lineRow">${target}${kind}${value}${rm}</div>` : `<div class="lineCard"><div style="display:flex;gap:6px">${target}${kind}<span style="flex:1"></span>${rm}</div>${value}</div>`;
+  }
+  function vars() {
+    const list = VARS[vtab];
+    if (picks.p2 === 'chips') return `<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:center;gap:8px"><h5>Variables</h5><div class="tabsy"><button type="button" data-vt="item" aria-pressed="${vtab === 'item'}">Item</button><button type="button" data-vt="ticket" aria-pressed="${vtab === 'ticket'}">Ticket</button></div></div><div class="chips">${list.map((v) => `<span class="chip2" data-var="${v}" title="Insert &quot;$${v}&quot; in the command">$${v}</span>`).join('')}</div><span class="muted">A click inserts it, quoted, where the cursor is. Quote them: a mail's subject is written by anyone.</span></div>`;
+    return `<details><summary>Variables a command gets</summary><div class="muted" style="margin-top:6px;line-height:1.6"><b>Item</b>: ${VARS.item.join(', ')}<br><b>Ticket</b>: ${VARS.ticket.join(', ')}<br>Quote them.</div></details>`;
+  }
+  function render() {
+    $('panel').innerHTML = `<div style="display:flex;gap:8px;align-items:center"><b style="font-size:.95rem">Gmail Archiver Script</b><span class="muted">Script station</span></div>
+      <div><div class="muted" style="margin-bottom:4px">Name</div><input value="Gmail Archiver Script" style="width:100%;box-sizing:border-box"></div>
+      <h5>What runs</h5>${summary()}
+      <h5>Lines</h5>${lines.map(lineHtml).join('')}<div><button type="button" id="add">Add a line</button> <span class="muted">a new line runs in the workspace; change where with its first field</span></div>
+      ${vars()}
+      <details><summary>When something goes wrong</summary><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><label class="muted">After a command fails<br><select><option>run the others anyway</option><option>stop there</option></select></label><label class="muted">Time per command (s)<br><input value="300"></label><label class="muted" style="grid-column:1/-1">A repository with nothing to run<br><select><option>is skipped</option><option>counts as a failure</option></select></label></div></details>
+      <details><summary>A ticket's repositories</summary><div style="margin-top:8px" class="muted">Default action, run in every repository with no line of its own<br><select><option>none</option><option>test</option></select></div></details>`;
+    $('panel').querySelectorAll('[data-f]').forEach((el) => el.addEventListener(el.tagName === 'TEXTAREA' ? 'input' : 'change', () => { const i = +el.dataset.i; lines[i] = { ...lines[i], [el.dataset.f]: el.value }; if (el.tagName !== 'TEXTAREA') render(); else $('panel').querySelector('.sum').outerHTML = summary(); }));
+    $('panel').querySelectorAll('textarea').forEach((el) => el.addEventListener('focus', () => { focus = +el.dataset.i; }));
+    $('panel').querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { lines.splice(+b.dataset.rm, 1); render(); }));
+    $('add').addEventListener('click', () => { lines.push({ target: 'workspace', kind: 'command', value: '' }); render(); });
+    $('panel').querySelectorAll('[data-vt]').forEach((b) => b.addEventListener('click', () => { vtab = b.dataset.vt; render(); }));
+    $('panel').querySelectorAll('[data-var]').forEach((c) => c.addEventListener('click', () => { const l = lines[focus] ?? lines[lines.length - 1]; if (!l) return; l.value = `${l.value}${l.value && !l.value.endsWith(' ') ? ' ' : ''}"$${c.dataset.var}"`; render(); }));
+  }
+  const P1 = [['row', 'A', 'Une ligne, une rangée', 'Où, quoi, la commande et × sur une même rangée : compact, toutes les cibles se lisent d\'un coup d\'œil.'], ['card', 'B', 'Une carte par ligne', 'Où et quoi en haut, la commande dessous, en grand : plus de place pour une longue commande.']];
+  const P2 = [['chips', 'A', 'Des pastilles à cliquer', 'Item / Ticket, chaque variable en pastille : un clic l\'insère, entre guillemets, dans la commande.'], ['list', 'B', 'Une liste repliée', 'Un « Variables a command gets » qu\'on déplie pour lire la liste.']];
+  const P3 = [['ko', 'A', 'Il sort par « ko »', 'Rien n\'a tourné : c\'est un échec, et le passage dit pourquoi. Le résumé du panneau prévient avant.'], ['ok', 'B', 'Il sort par « ok », signalé', 'Comme aujourd\'hui, mais le résumé du panneau le dit en jaune.']];
+  function cards(el, list, key) { $(el).innerHTML = list.map(([v, L, title, desc]) => `<div class="card ${picks[key] === v ? 'picked' : ''}"><div class="card-head"><span class="letter">${L}</span><h3>${esc(title)}</h3>${picks[key] === v ? '<span class="mine">Mon choix</span>' : ''}</div><p>${esc(desc)}</p><button type="button" data-k="${key}" data-v="${v}" aria-pressed="${picks[key] === v}">${picks[key] === v ? 'Choisi' : 'Choisir'}</button></div>`).join(''); }
+  const L = (list, key) => list.find((x) => x[0] === picks[key])[1];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept */ }
+    cards('g-p1', P1, 'p1'); cards('g-p2', P2, 'p2'); cards('g-p3', P3, 'p3');
+    $('picks').innerHTML = `Ligne : <b>${L(P1, 'p1')}</b> · Variables : <b>${L(P2, 'p2')}</b> · Rien n'a tourné : <b>${L(P3, 'p3')}</b>`;
+    render();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('button[data-k]'); if (!b) return; picks[b.dataset.k] = b.dataset.v; save(); });
+  $('copy').addEventListener('click', () => { const line = `Script : ligne ${L(P1, 'p1')}, variables ${L(P2, 'p2')}, rien n'a tourné ${L(P3, 'p3')}`; navigator.clipboard?.writeText(line).then(() => { $('said').textContent = 'Copié'; }, () => { $('said').textContent = line; }); });
+  save();
+})();
+</script>
