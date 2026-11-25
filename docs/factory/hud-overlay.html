@@ -1,0 +1,287 @@
+<title>Factory HUD overlay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one screen of the Factory without its top bar (overlays on the floor), which the picks below redraw; then the filter popup and the emergency stop up close. Single dark look: it is the floor's own. */
+  :root {
+    --bg: #0c0b14; --surface: #15131f; --ink: #ecebf5; --muted: #9894b0; --line: #2a2740; --accent: #a78bfa; --accent-soft: #2a2148;
+    --floor: #17142a; --dot: #2c2848; --hud: #1d1a2e; --hud-edge: #3a3557; --warn: #facc15; --danger: #ef4444; --go: #22c55e;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede, .brief { color: var(--muted); max-width: 76ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+  .card { display: flex; flex-direction: column; gap: 8px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; color: var(--muted); }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #140f24; }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  code { font-family: var(--mono); font-size: 0.85em; }
+
+  /* ---------- the screen ---------- */
+  .scroll { overflow-x: auto; border-radius: 12px; border: 1px solid var(--line); }
+  .screen { position: relative; width: 1180px; height: 700px; background: var(--floor); background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px); background-size: 28px 28px; overflow: hidden; font-size: 12px; }
+  .titlebar { position: absolute; inset: 0 0 auto 0; height: 30px; background: #f4f4f6; color: #1d1d22; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 12px; border-bottom: 1px solid #d4d4d8; z-index: 4; }
+  .titlebar .dots { display: flex; gap: 6px; } .titlebar .dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .titlebar b { font-weight: 700; letter-spacing: -0.02em; } .titlebar b span { color: #7c3aed; }
+  .titlebar .ws { color: #71717a; }
+  .nav { position: absolute; top: 30px; bottom: 0; left: 0; width: 54px; background: #13111f; border-right: 1px solid var(--line); }
+  .nav i { display: block; width: 22px; height: 22px; margin: 14px auto 0; border-radius: 6px; background: #2a2740; }
+  .nav i.on { background: var(--accent); }
+  .floor { position: absolute; top: 30px; left: 54px; right: 0; bottom: 0; }
+  /* machines, drawn plain: the floor is the backdrop here */
+  .m { position: absolute; border-radius: 8px; border: 2px solid #6d5bd0; background: #221d3d; }
+  .area { position: absolute; border: 1px solid #6b2b45; background: rgba(120, 30, 70, 0.18); border-radius: 2px; }
+  .belt { position: absolute; height: 6px; background: repeating-linear-gradient(90deg, #4c4580 0 8px, transparent 8px 14px); }
+  .exit { position: absolute; width: 22px; height: 22px; border: 2px solid var(--go); border-radius: 4px; background: #0f2a1c; }
+
+  /* overlays: no plate, only the floor behind them */
+  .needs { position: absolute; top: 10px; left: 10px; width: 230px; display: flex; flex-direction: column; gap: 5px; }
+  .needs h5 { margin: 0 0 2px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: #b9b5d6; text-shadow: 0 1px 2px #000; }
+  .need { border: 1px solid var(--hud-edge); border-radius: 7px; padding: 5px 8px; background: rgba(20, 17, 34, 0.78); backdrop-filter: blur(6px); }
+  .need b { display: block; font-size: 11.5px; } .need span { font-size: 10.5px; color: #a5a1c2; } .need em { font-style: normal; color: var(--warn); }
+
+  .counters { position: absolute; display: flex; gap: 16px; align-items: center; }
+  .counters.tr { top: 10px; right: 14px; } .counters.tc { top: 10px; left: 50%; transform: translateX(-50%); }
+  .ctr { position: relative; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-weight: 700; font-size: 14px; color: #f4f3ff; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.6); cursor: default; }
+  .ctr svg { width: 18px; height: 18px; filter: drop-shadow(0 1px 2px #000); }
+  .ctr small { font-size: 11px; color: #a5a1c2; font-weight: 500; }
+  .ctr.hot { color: var(--warn); }
+  .ctr .tip { position: absolute; top: 26px; right: 0; white-space: nowrap; background: #0b0a14; border: 1px solid var(--hud-edge); border-radius: 6px; padding: 5px 8px; font: 500 11px/1.4 var(--body); color: var(--ink); text-shadow: none; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 6; }
+  .ctr:hover .tip, .ctr:focus-visible .tip { opacity: 1; }
+  .counters.tc .ctr .tip { right: auto; left: 50%; transform: translateX(-50%); }
+
+  /* the console: the three plates of today, unchanged but for what the picks add */
+  .plate { box-sizing: border-box; position: absolute; bottom: 0; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; }
+  .mini { left: 0; width: 250px; height: 172px; border-radius: 0 14px 0 0; }
+  .mini .map { position: absolute; left: 12px; right: 44px; top: 34px; bottom: 12px; border: 1px solid #4a4470; background: #120f22; }
+  .mini .map i { position: absolute; background: #7c5cd8; }
+  .mini .clock { position: absolute; top: 8px; left: 12px; font-family: var(--mono); font-weight: 700; font-size: 13px; }
+  .mini .layers { position: absolute; right: 8px; top: 34px; display: flex; flex-direction: column; gap: 4px; } .mini .layers i { width: 26px; height: 22px; border-radius: 5px; background: #2a2645; display: block; } .mini .layers i:first-child { background: #c9a21a; }
+  .info { left: 262px; right: 312px; height: 128px; border-radius: 12px 12px 0 0; padding: 10px 14px; }
+  .info b { font-family: var(--mono); font-size: 13px; } .info p { font-family: var(--mono); color: #a5a1c2; font-size: 11px; margin-top: 4px; }
+  .cmd { right: 0; width: 300px; height: 172px; border-radius: 14px 0 0 0; padding: 26px 10px 10px; }
+  .cmd h6 { position: absolute; top: 6px; left: 0; right: 0; margin: 0; text-align: center; font-family: var(--mono); letter-spacing: .16em; font-size: 11px; }
+  .cmd .keys { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .cmd .keys i { aspect-ratio: 1.05; border-radius: 6px; background: #2c2850; border: 1px solid #423c6a; display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 9.5px; color: #cfcaf0; }
+  .cmd .keys i.e { background: transparent; border-style: dashed; border-color: #2a2645; }
+  .hide { position: absolute; bottom: 132px; right: 318px; font-family: var(--mono); font-size: 10px; color: #a5a1c2; border: 1px solid var(--hud-edge); background: var(--hud); border-radius: 6px 6px 0 0; padding: 2px 8px; }
+
+  /* the Filters tab on the minimap */
+  .ftab { position: absolute; left: 12px; bottom: 172px; display: flex; gap: 0; }
+  .ftab button { font: 600 11px var(--body); color: #e7e4ff; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 4px 10px; display: flex; align-items: center; gap: 6px; }
+  .ftab button svg { width: 13px; height: 13px; }
+  .ftab .n { background: var(--accent); color: #140f24; border-radius: 999px; padding: 0 6px; font-size: 10px; }
+  .ftab .found { font-family: var(--mono); font-size: 10px; color: #a5a1c2; align-self: center; margin-left: 8px; text-shadow: 0 1px 2px #000; }
+
+  /* the emergency stop */
+  .stopbtn { position: absolute; display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .mush { position: relative; width: 38px; height: 38px; border-radius: 50%; background: repeating-conic-gradient(#facc15 0 22.5deg, #18181b 22.5deg 45deg); display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.6); flex: none; }
+  .mush::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff7b7b, #dc2626 55%, #7f1d1d); box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.2); }
+  .mush svg { position: relative; width: 15px; height: 15px; }
+  .mush.go::before { background: radial-gradient(circle at 35% 30%, #86efac, #16a34a 55%, #14532d); }
+  .ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid transparent; }
+  .stoplbl { font-family: var(--mono); font-weight: 700; font-size: 10px; letter-spacing: .12em; color: #fca5a5; text-shadow: 0 1px 2px #000; line-height: 1.2; }
+  .stoplbl small { display: block; font-weight: 500; letter-spacing: .02em; color: #a5a1c2; }
+  /* placements */
+  .stop-edge { bottom: 128px; left: 50%; transform: translateX(-50%); background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 22px 22px 0 0; padding: 5px 14px 3px 6px; }
+  .stop-card { bottom: 180px; right: 10px; }
+  .stop-mini { bottom: 172px; left: 196px; transform: translateY(18%); }
+  .menu-strip[hidden] { display: none; }
+  .menu-strip { position: absolute; right: 0; bottom: 172px; display: flex; gap: 6px; padding: 5px 8px; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 10px 0 0 0; align-items: center; }
+  .menu-strip span { font: 600 10px var(--mono); color: #cfcaf0; border: 1px solid #423c6a; border-radius: 5px; padding: 3px 8px; }
+
+  /* the popup of filters */
+  .shade { position: absolute; inset: 30px 0 0 54px; background: rgba(8, 6, 16, 0.45); display: none; }
+  .fpop { position: absolute; display: none; width: 400px; background: rgba(27, 24, 44, 0.94); backdrop-filter: blur(14px); border: 1px solid var(--hud-edge); border-radius: 12px; padding: 12px; gap: 10px; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,.55); }
+  .screen.open .fpop { display: flex; }
+  .screen.open.modal .shade { display: block; }
+  .fpop.anchored { left: 12px; bottom: 202px; }
+  .fpop.centred { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 460px; }
+  .fpop .search { display: flex; align-items: center; gap: 8px; border: 1px solid #4a4470; border-radius: 8px; padding: 6px 9px; background: #120f22; color: #a5a1c2; font-size: 12px; }
+  .fpop .search kbd { margin-left: auto; font-family: var(--mono); font-size: 10px; border: 1px solid #4a4470; border-radius: 4px; padding: 0 5px; }
+  .fpop h6 { margin: 0; font: 700 9.5px var(--mono); letter-spacing: .12em; color: #8f8aae; text-transform: uppercase; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-size: 11px; border: 1px solid #423c6a; border-radius: 999px; padding: 2px 9px; color: #d6d2f2; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #140f24; font-weight: 600; }
+  .fpop .foot { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a5a1c2; border-top: 1px solid #2f2b4a; padding-top: 8px; }
+  .fpop .foot b { color: var(--ink); } .fpop .foot span:last-child { margin-left: auto; }
+  .halted .floor::after { content: ""; position: absolute; inset: 0; border: 8px solid transparent; border-image: repeating-linear-gradient(45deg, #facc15 0 14px, #18181b 14px 28px) 8; pointer-events: none; }
+
+  /* the stop, up close */
+  .close { display: flex; flex-wrap: wrap; gap: 28px; align-items: center; background: var(--floor); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+  .big { transform: scale(1.8); transform-origin: left center; margin-right: 60px; }
+  .state { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-width: 46ch; font-size: .88rem; color: var(--muted); }
+  .state b { color: var(--ink); }
+  @keyframes fill { from { background: conic-gradient(#fafafa 0deg, transparent 0deg) } to { background: conic-gradient(#fafafa 360deg, transparent 360deg) } }
+  .holding .ring { border: 3px solid #fafafa; clip-path: inset(0 0 50% 0); }
+
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1240px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (prefers-reduced-motion: reduce) { .ctr .tip { transition: none; } }
+</style>
+
+<div class="page">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>The Factory without its top bar</h1>
+    <p class="lede">Everything the bar held moves onto the floor as overlays, with no plate behind them. The counters sit along the top edge, the filters live in a popup opened from the minimap, and the emergency stop becomes a machine button. The title bar reads <b>fleex.factory</b> on this page and <b>fleex.dev</b> elsewhere. That one is cheap: the desktop app draws its own title bar, so it only has to follow the page.</p>
+  </header>
+
+  <section>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <h2 style="flex:1 1 auto">The screen, as picked below</h2>
+      <div class="toggles">
+        <button type="button" id="t-filters" aria-pressed="false">Open Filters ( / )</button>
+        <button type="button" id="t-halt" aria-pressed="false">Emergency stop on</button>
+      </div>
+    </div>
+    <div class="scroll"><div class="screen" id="screen">
+      <div class="titlebar"><span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span><b>⚡ fleex<span>.factory</span></b><span class="ws">| workspace : default</span><span style="margin-left:auto;color:#71717a">⌘K command palette</span></div>
+      <div class="nav"><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i></div>
+      <div class="floor">
+        <div class="area" style="left:330px;top:120px;width:420px;height:130px"></div>
+        <div class="m" style="left:370px;top:150px;width:60px;height:60px"></div><div class="belt" style="left:432px;top:178px;width:60px"></div>
+        <div class="m" style="left:494px;top:150px;width:60px;height:60px;border-color:var(--warn);border-style:dashed"></div><div class="belt" style="left:556px;top:178px;width:60px"></div>
+        <div class="m" style="left:618px;top:150px;width:60px;height:60px"></div><div class="exit" style="left:690px;top:169px"></div>
+        <div class="area" style="left:330px;top:270px;width:520px;height:110px;border-color:#2b4f6b;background:rgba(30,80,120,.18)"></div>
+        <div class="m" style="left:370px;top:295px;width:60px;height:60px"></div><div class="belt" style="left:432px;top:323px;width:80px"></div>
+        <div class="m" style="left:514px;top:295px;width:60px;height:60px"></div><div class="belt" style="left:576px;top:323px;width:80px"></div>
+        <div class="m" style="left:658px;top:295px;width:60px;height:60px"></div><div class="exit" style="left:740px;top:314px"></div>
+
+        <div class="needs"><h5>NEEDS YOU · 3 &nbsp;<span style="border:1px solid #4a4470;border-radius:3px;padding:0 4px">N</span> next</h5>
+          <div class="need"><b>TECH-11 — KPIs de tickets</b><span>Gate · <em>decision</em></span></div>
+          <div class="need"><b>TECH-15 — Historique des…</b><span>MAJ documentation · <em>question</em></span></div>
+          <div class="need"><b>#788 unipile</b><span>Doing · <em>waiting for you</em></span></div>
+        </div>
+
+        <div class="counters tr" id="counters">
+          <span class="ctr" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linejoin="round"><path d="M3 8a2 2 0 0 0 0 8v3h18v-3a2 2 0 0 1 0-8V5H3z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>60<span class="tip">60 tickets on the floor</span></span>
+          <span class="ctr" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>14<span class="tip">14 items on the floor (Gmail, Slack, GitHub)</span></span>
+          <span class="ctr" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="#86efac" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z" fill="#86efac"/></svg>1<small>/10</small><span class="tip">1 run in progress, 10 at most at once</span></span>
+          <span class="ctr" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="#fdba74" stroke-width="2" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>23<small>/100</small><span class="tip">23 runs started this hour, 100 at most per hour</span></span>
+          <span class="ctr hot" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>3<span class="tip">3 wait for you: the list top left, N goes through them</span></span>
+        </div>
+      </div>
+
+      <div class="ftab" id="ftab"><button type="button" id="ftab-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filters <span class="n">2</span></button><span class="found">12 of 60 shown</span></div>
+      <div class="plate mini"><span class="clock">● 10:44:43</span><div class="map"><i style="left:40%;top:10%;width:30%;height:6%"></i><i style="left:30%;top:30%;width:28%;height:16%;background:#8b2d55"></i><i style="left:62%;top:30%;width:22%;height:16%;background:#8b2d55"></i><i style="left:30%;top:52%;width:50%;height:14%;background:#2b6c9a"></i><i style="left:30%;top:72%;width:28%;height:10%;background:#8b2d55"></i></div><div class="layers"><i></i><i></i><i></i><i></i></div></div>
+      <div class="plate info"><b>Factory floor</b><p>Click to select, drag a ticket to move it, double-click a ticket or a machine to open it…</p><p>last 7 days · shipped 16 · lead time 7h 24m · runs 349 · failed 8 · cost $119</p></div>
+      <span class="hide">⌄ U</span>
+      <div class="plate cmd"><h6>FACTORY</h6><div class="keys"><i>Intake</i><i>Tickets</i><i>Stats</i><i>Limits</i><i>New</i><i class="e"></i><i>Archived</i><i>Exits</i><i>Fit</i><i class="e"></i><i class="e"></i><i class="e"></i><i class="e"></i><i>Next</i><i>Build</i></div></div>
+
+      <div class="menu-strip" id="strip" hidden><span>☰ Menu</span><span>U hide</span></div>
+      <div class="stopbtn" id="stop" role="button" tabindex="0" title="Emergency stop: hold to stop every belt, arm and station">
+        <span class="mush" id="mush"><span class="ring"></span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></svg></span>
+        <span class="stoplbl" id="stoplbl">STOP<small>hold</small></span>
+      </div>
+
+      <div class="shade"></div>
+      <div class="fpop anchored" id="fpop">
+        <div class="search">⌕ Find a ticket: title, number, tag<kbd>/</kbd></div>
+        <h6>Boards</h6><div class="chips"><span class="chip on">Shop</span><span class="chip">Core</span><span class="chip">Tech</span><span class="chip">Marketing</span></div>
+        <h6>Types</h6><div class="chips"><span class="chip">Build</span><span class="chip on">Fix</span><span class="chip">Spec</span><span class="chip">Gmail</span><span class="chip">No type</span></div>
+        <h6>Priorities</h6><div class="chips"><span class="chip">Urgent</span><span class="chip">High</span><span class="chip">Medium</span><span class="chip">Low</span><span class="chip">None</span></div>
+        <div class="chips"><span class="chip">★ Favourites</span><span class="chip">Waiting for me</span></div>
+        <div class="foot"><span><b>12</b> of 60 shown · Enter jumps to the next</span><span>Clear · Esc</span></div>
+      </div>
+    </div></div>
+    <p class="brief">Hover a counter to see what it counts. The dashed machine is a station that is not set up. The list top left stays where it is.</p>
+  </section>
+
+  <section data-pick="p1">
+    <h2>1 · Where the counters sit</h2>
+    <div class="grid">
+      <div class="card" data-v="tr"><div class="card-head"><span class="letter">A</span><h3>Top right, as in a strategy game</h3><span class="mine">recommended</span></div><p>Opposite the list of what needs you, so the two never meet. The eye finds resources there.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="tc"><div class="card-head"><span class="letter">B</span><h3>Top centre</h3></div><p>Symmetric, but over the middle of the floor, where the work is.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Where the filter popup opens</h2>
+    <p class="brief">Either way, the Filters tab on the minimap counts the filters on and the tickets shown, "/" opens it with the cursor in the search, and Escape closes it. The filters keep working with the popup closed.</p>
+    <div class="grid">
+      <div class="card" data-v="anchored"><div class="card-head"><span class="letter">A</span><h3>Out of the minimap, with no backdrop</h3><span class="mine">recommended</span></div><p>It rises from its tab, the floor stays live behind it, and what is filtered fades as you click.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="centred"><div class="card-head"><span class="letter">B</span><h3>A modal in the middle</h3></div><p>More room, but it covers the floor you are filtering.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · Where the emergency stop goes</h2>
+    <div class="grid">
+      <div class="card" data-v="edge"><div class="card-head"><span class="letter">A</span><h3>On the console's top edge, in the middle</h3><span class="mine">recommended</span></div><p>Always there, in build mode too, and away from the buttons you click all day. Hiding the console (U) leaves it on the floor's bottom edge.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="strip"><div class="card-head"><span class="letter">B</span><h3>In a strip over the command card</h3></div><p>As the menu sits over the action buttons in a game: Stop, Menu and Hide together. Close to the buttons you press without looking.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="mini"><div class="card-head"><span class="letter">C</span><h3>On the minimap's corner</h3></div><p>Next to Filters, with the floor-wide tools. The left side gets busy.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p4">
+    <h2>4 · How it is pressed</h2>
+    <div class="close">
+      <div class="stopbtn big" style="position:static"><span class="mush"><span class="ring"></span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></svg></span><span class="stoplbl">STOP<small>hold</small></span></div>
+      <div class="stopbtn big" style="position:static"><span class="mush go"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg></span><span class="stoplbl" style="color:#86efac">RESTART<small>click</small></span></div>
+      <div class="state"><p><b>Stopped</b>, the button turns green with a play sign, the floor gets a hazard-tape border, and the "Emergency stop" notice stays at the top of the floor with its own Restart button.</p></div>
+    </div>
+    <div class="grid">
+      <div class="card" data-v="hold"><div class="card-head"><span class="letter">A</span><h3>Hold for a second to stop</h3><span class="mine">recommended</span></div><p>A white ring fills round the button while it is held. A stray click does nothing, and in an emergency there is no dialog to read. Restart is a plain click.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="click"><div class="card-head"><span class="letter">B</span><h3>One click stops</h3></div><p>As today: immediate, and a stray click stops the floor.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'factory-hud-overlay-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'tr', p2: 'anchored', p3: 'edge', p4: 'hold' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const NAMES = ['Counters', 'Filters', 'Stop', 'Press'];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    $('counters').className = `counters ${picks.p1}`;
+    $('fpop').className = `fpop ${picks.p2}`;
+    $('screen').classList.toggle('modal', picks.p2 === 'centred');
+    $('stop').className = `stopbtn stop-${picks.p3 === 'strip' ? 'card' : picks.p3}`;
+    $('strip').hidden = picks.p3 !== 'strip';
+    if (picks.p3 === 'strip') { $('stop').style.bottom = '176px'; $('stop').style.right = '150px'; } else { $('stop').style.bottom = ''; $('stop').style.right = ''; }
+    const halted = $('screen').classList.contains('halted');
+    $('mush').classList.toggle('go', halted);
+    $('mush').querySelector('svg').innerHTML = halted ? '<path d="M8 5v14l11-7z" fill="#fff" stroke="none"/>' : '<path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/>';
+    $('stoplbl').innerHTML = halted ? '<span style="color:#86efac">RESTART</span><small>click</small>' : `STOP<small>${picks.p4 === 'hold' ? 'hold' : 'click'}</small>`;
+    $('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); })));
+  const flip = (btn, cls) => { const on = !$('screen').classList.contains(cls); $('screen').classList.toggle(cls, on); btn.setAttribute('aria-pressed', String(on)); paint(); };
+  $('t-filters').addEventListener('click', (e) => flip(e.currentTarget, 'open'));
+  $('ftab-btn').addEventListener('click', () => flip($('t-filters'), 'open'));
+  $('t-halt').addEventListener('click', (e) => flip(e.currentTarget, 'halted'));
+  $('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint();
+})();
+</script>
