@@ -23,6 +23,7 @@ import { PrBadgeGroup } from '../ui/PrBadgeGroup';
 import { linkedPrs } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
+import { FactoryCardToggle } from '../../factory/FactoryCardToggle';
 
 const PRIORITY_BORDER: Record<TicketPriority, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -189,7 +190,7 @@ export function KanbanCard({
             meet in the middle — layout stays intact. */}
         <CostBadge costUsd={cumulativeCost} />
 
-        {/* RIGHT cluster — github, blocked, favorite */}
+        {/* RIGHT cluster — github, factory, blocked, favorite */}
         <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
           {/* GitHub issue link */}
           {issueLinks.length > 0 && issueLinks[0]?.url && (
@@ -206,6 +207,9 @@ export function KanbanCard({
               </svg>
             </a>
           )}
+
+          {/* Factory: who drives it */}
+          <FactoryCardToggle ticketId={ticket.id} closed={isCompleted} />
 
           {/* Blocked */}
           {!isCompleted && (
