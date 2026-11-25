@@ -8,7 +8,7 @@
  */
 import type { LensLayer } from './lens';
 import { inRect, machineParts } from './machineArt';
-import { FloorScene, isBox } from './scene';
+import { FloorScene, isBox, type Scene } from './scene';
 import { FleexSkin } from './skins/fleex';
 import { paintPieces, type Piece, type Skin } from './skins/skin';
 import type { ArmSpec, FactoryLayout, FactoryTicket, IntakeState, MachineSpec, StationSpec } from './types';
@@ -85,6 +85,8 @@ const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 /** Empty tiles kept around what is built, so there is always room to extend it. */
 /** The amber of a station that is not set up. */
 const UNSET_INK = '#facc15';
+/** The blue of what is fast: fast belts, fast arms. */
+const FAST_INK = '#60a5fa';
 export const FLOOR_MARGIN = 8;
 /** The smallest floor, in tiles: a new factory starts on it, its Inbound in the middle. */
 export const FLOOR_MIN_W = 300, FLOOR_MIN_H = 150;
@@ -289,7 +291,46 @@ export class FactoryView {
     this.skin.pieces(S, st, pieces);
     paintPieces(pieces, this.ctx, this.failed);
     this.skin.top(S, st);
+    this.fastArms(S);
     this.unsetMarks(st);
+  }
+
+  /** Where the cup of each fast arm was over the last frames: its trail. */
+  private readonly trails = new Map<string, { x: number; y: number }[]>();
+  /**
+   * A fast arm, whatever the skin (picked on `docs/factory/fast-arm.html`, C): a double ring in the fast belts' blue
+   * round its pivot, and a blue trail behind its cup while it swings. Its own colour is left as it is.
+   */
+  private fastArms(S: Scene): void {
+    const fast = S.arms.filter((v) => v.m.fast);
+    if (!fast.length) { this.trails.clear(); return; }
+    const c = this.ctx, z = this.cam.z, sx = (x: number) => (x - this.cam.x) * z + this.w / 2, sy = (y: number) => (y - this.cam.y) * z + this.h / 2;
+    const seen = new Set<string>();
+    c.save();
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    c.strokeStyle = FAST_INK; c.lineCap = 'round';
+    for (const v of fast) {
+      seen.add(v.m.id);
+      const lift = this.raised(v.m), bx = sx(v.bx), by = sy(v.by - lift);
+      if (bx < -z || by < -z || bx > this.w + z || by > this.h + z) continue;
+      const trail = this.trails.get(v.m.id) ?? [], last = trail[0];
+      if (!last || Math.hypot(last.x - v.hx, last.y - v.hy) > 0.01) trail.unshift({ x: v.hx, y: v.hy }); else trail.pop();
+      if (trail.length > 7) trail.length = 7;
+      this.trails.set(v.m.id, trail);
+      /* the trail: the cup's last places, fading, while it moves */
+      c.lineWidth = Math.max(1.5, z * 0.09);
+      for (let i = 1; i < trail.length; i++) {
+        c.globalAlpha = 0.5 * (1 - i / trail.length);
+        c.beginPath(); c.moveTo(sx(trail[i - 1]!.x), sy(trail[i - 1]!.y - lift)); c.lineTo(sx(trail[i]!.x), sy(trail[i]!.y - lift)); c.stroke();
+      }
+      c.globalAlpha = 1;
+      /* the pivot: two blue rings, as a fast belt has blue rails */
+      c.lineWidth = Math.max(1, z * 0.05);
+      c.beginPath(); c.arc(bx, by, z * 0.34, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.arc(bx, by, z * 0.16, 0, Math.PI * 2); c.stroke();
+    }
+    for (const id of this.trails.keys()) if (!seen.has(id)) this.trails.delete(id);
+    c.restore();
   }
 
   /**

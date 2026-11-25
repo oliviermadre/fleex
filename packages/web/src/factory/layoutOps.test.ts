@@ -26,7 +26,16 @@ describe('fast belts', () => {
     expect(setBelt(upgraded, 2, 1, 0, true)).toBe(upgraded);
   });
 
-  it('a selection is sped up or slowed down, belts only', () => {
+  it('an arm is sped up and slowed down as a belt is, and a Fast arm is placed fast', () => {
+    let l = place(empty, specFor('arm', 4, 4, 0)!)!;
+    const arm = l.machines[0]!;
+    l = setSpeed(l, new Set([arm.id]), true);
+    expect(l.machines[0]).toMatchObject({ kind: 'arm', fast: true });
+    expect(setSpeed(l, new Set([arm.id]), false).machines[0]).not.toHaveProperty('fast');
+    expect(specFor('fastarm', 1, 1, 2)).toMatchObject({ kind: 'arm', dir: 2, fast: true, when: [] });
+  });
+
+  it('a selection is sped up or slowed down, belts (and arms) only', () => {
     let l = paintBelts(empty, { x: 1, y: 1 }, { x: 3, y: 1 }).layout;
     l = place(l, specFor('zone', 6, 6, 0)!)!;
     const ids = new Set(l.machines.map((m) => m.id));

@@ -118,7 +118,7 @@ describe('the command card', () => {
     const build = factoryMenu(ctx({ building: true }));
     expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, 'Export', 'Import', 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
-    expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
+    expect(rows(menuAt(build, ['move']).menu)).toEqual([['Belt', 'Arm', 'Bridge', 'Teleporter', 'Set'], ['Fast belt', 'Fast arm', 'Toll', 'Fit', 'Face →'], ['Undo', 'Redo', null, null, 'Previous']]);
     expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], [null, null, null, 'Fit', null]]);
     expect(rows(menuAt(build, ['place']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Area', 'Desk'], ['Intake', null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
@@ -131,6 +131,14 @@ describe('the command card', () => {
     const sel = factoryMenu(ctx({ building: true, many: 3 }));
     expect(sel.slots[6]).toMatchObject({ id: 'export', title: expect.stringContaining('3 machines selected') });
     expect(sel.slots[7]).toBeFalsy();
+  });
+
+  it('speeds up arms as belts: Fast arm to place, and Speed up on an arm selected', () => {
+    const c = ctx({ building: true }), move = menuAt(factoryMenu(c), ['move']).menu;
+    move.slots[6]!.run!();
+    expect(c.act.tool).toHaveBeenCalledWith('fastarm');
+    const arm = factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false, popup: true }, speed: 'up' }));
+    expect(arm.slots[1]).toMatchObject({ label: 'Speed up', title: expect.stringContaining('belts and arms') });
   });
 
   it('keeps Undo, Redo and the way back at the same place in every build menu, and leaves copy, cut and paste to the keyboard', () => {
@@ -163,7 +171,7 @@ describe('the command card', () => {
     expect(at(erasing, BACK_SLOT)).toBe('Cancel');
     const belts = menuAt(factoryMenu(ctx({ building: true, tool: 'belt', dir: 1 })), ['move']).menu;
     expect(belts.slots[0]).toMatchObject({ label: 'Belt', active: true });
-    expect(at(belts, 7)).toBe('Face ↓');
+    expect(at(belts, 9)).toBe('Face ↓');
     expect(at(factoryMenu(ctx({ building: true, tool: 'paste' })), BACK_SLOT)).toBe('Cancel');   // what was pasted from the keyboard is put down the same way
   });
 

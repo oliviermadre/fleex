@@ -6,7 +6,7 @@ import { areasOf, fits } from './areas';
 /** What takes no tile: a label and an area are written or laid on the floor, machines stand on them. */
 export const decor = (m: Pick<MachineSpec, 'kind'>): boolean => m.kind === 'label' || m.kind === 'area';
 
-export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'area' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
+export type Tool = 'select' | 'belt' | 'fastbelt' | 'bridge' | 'arm' | 'fastarm' | 'agent' | 'skill' | 'panel' | 'script' | 'gate' | 'native' | 'zone' | 'exit' | 'label' | 'area' | 'teleporter' | 'desk' | 'intake' | 'set' | 'toll' | 'erase' | 'paste';
 
 export const newId = (): string => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
@@ -59,6 +59,7 @@ export function specFor(tool: Tool, x: number, y: number, dir: Dir): MachineSpec
     case 'belt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir };
     case 'fastbelt': return { id, kind: 'belt', x, y, w: 1, h: 1, dir, fast: true };
     case 'arm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [] };
+    case 'fastarm': return { id, kind: 'arm', x, y, w: 1, h: 1, dir, when: [], fast: true };
     case 'bridge': return { id, kind: 'bridge', x, y, w: 1, h: 1 };
     case 'agent': case 'skill': case 'panel':
       return { id, kind: 'station', x: x - 2, y: y - 2, w: STATION_W, h: STATION_H, name: tool === 'agent' ? 'Agent' : tool === 'skill' ? 'Skill' : 'Panel', exec: tool as StationExec, ref: '', mode: 'edit', outcomes: ['ok'], cap: 2 };
@@ -130,12 +131,12 @@ export function setBelt(layout: FactoryLayout, x: number, y: number, dir: Dir, f
   return { ...layout, machines: [...layout.machines, { id: newId(), kind: 'belt', x, y, w: 1, h: 1, dir, ...speedOf(fast) }] };
 }
 
-/** Make belts fast, or plain again; what is not a belt is left alone. */
+/** Make belts and arms fast, or plain again; anything else is left alone. */
 export function setSpeed(layout: FactoryLayout, ids: ReadonlySet<string>, fast: boolean): FactoryLayout {
   return { ...layout, machines: layout.machines.map((m) => {
-    if (m.kind !== 'belt' || !ids.has(m.id) || !!m.fast === fast) return m;
+    if ((m.kind !== 'belt' && m.kind !== 'arm') || !ids.has(m.id) || !!m.fast === fast) return m;
     const { fast: _was, ...rest } = m;
-    return { ...rest, ...speedOf(fast) };
+    return { ...rest, ...speedOf(fast) } as MachineSpec;
   }) };
 }
 

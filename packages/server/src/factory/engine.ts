@@ -17,6 +17,8 @@ import {
 const BELT_SPEED = 1.2;
 /** How many times faster a fast belt carries a ticket. */
 export const FAST_BELT = 2;
+/** How many times faster a fast arm swings than a plain one. */
+export const FAST_ARM = 2;
 /** Seconds for an arm to swing one way: slow enough for the half turn to be watched. */
 const ARM_SWING = 1.1;
 /** How long a ticket rests in a station once it is done there, before an arm may take it: long enough to be seen. */
@@ -231,6 +233,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
         m.when = normaliseConditions(m); delete m.filter;
         /* a colour is paint, nothing more: kept when it is one, dropped otherwise */
         if (typeof m.color === 'string' && /^#[0-9a-f]{6}$/i.test(m.color)) m.color = m.color.toLowerCase(); else delete m.color;
+        if (m.fast === true) m.fast = true; else delete m.fast;
       }
       if (m.kind === 'belt') {
         if (m.fast === true) m.fast = true; else delete m.fast;
@@ -628,7 +631,7 @@ export class FactoryEngine {
   }
 
   private updateArm(a: Machine, dt: number): void {
-    const spec = a.spec as ArmSpec, step = dt / this.armSwing;
+    const spec = a.spec as ArmSpec, step = (dt / this.armSwing) * (spec.fast ? FAST_ARM : 1);
     if (a.armState === 'carry' && a.item) {
       a.armP = Math.min(1, a.armP + step); a.item.s.p = a.armP;
       if (a.armP < 1) return;

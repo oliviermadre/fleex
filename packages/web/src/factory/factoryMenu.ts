@@ -30,7 +30,7 @@ export interface MenuContext {
    * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
    */
   machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; popup?: boolean } | null;
-  /** In build mode, what the selection's belts can be made: `up` when one of them is a plain belt, `down` when all are fast, null with no belt selected. */
+  /** In build mode, what the selection's belts and arms can be made: `up` when one of them is plain, `down` when all are fast, null with none selected. */
   speed?: 'up' | 'down' | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
   many: number;
@@ -211,7 +211,7 @@ export function factoryMenu(c: MenuContext): Menu {
     const turns = c.many <= 1 && (c.machine?.kind === 'belt' || c.machine?.kind === 'arm');
     return frame(c.many > 1 ? 'Selection' : 'Machine', {
       0: turns && { id: 'turn', label: 'Turn', icon: 'rotate', tone: 'move', title: 'Quarter turn', run: a.turn },
-      1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts selected fast: they carry tickets twice as fast' : 'Make the belts selected plain belts again', run: a.speed },
+      1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts and arms selected fast: twice as fast' : 'Make the belts and arms selected plain again', run: a.speed },
       4: { id: 'remove', also: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : c.machine?.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor', run: a.remove },
       5: c.many <= 1 && !!c.machine?.popup && edit,
       6: { id: 'export', label: 'Export', icon: 'give', tone: 'plain', title: c.many > 1 ? `Download the ${c.many} machines selected as a JSON file, to import elsewhere` : 'Download this machine as a JSON file, to import elsewhere', run: a.exportFloor },
@@ -221,13 +221,14 @@ export function factoryMenu(c: MenuContext): Menu {
   /* what goes on a line of belts is in Move: the gantry that sets, like the toll */
   const move = frame('Move', {
     0: place('belt', 'Belt', 'move', 'Drag to lay belts: each tile points the way you drag'),
-    1: place('fastbelt', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
+    1: place('arm', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
     2: place('bridge', 'Bridge', 'move', 'Where two belts cross: each ticket goes straight across, the lines do not mix'),
-    3: place('arm', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
-    4: place('teleporter', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
-    5: place('toll', 'Toll', 'move', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds: what stops a loop'),
-    6: place('set', 'Set', 'move', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
-    7: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Turn what you place, a quarter turn (also a right click while it is in hand). An arm finds its own way from what is round it: from a station, a zone or a belt that ends on it, away from it; turned by hand, it stays as turned', run: a.face },
+    3: place('teleporter', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
+    4: place('set', 'Set', 'move', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
+    5: place('fastbelt', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
+    6: place('fastarm', 'Fast arm', 'move', 'An arm that swings twice as fast: a blue pivot, and a blue trail as it swings'),
+    7: place('toll', 'Toll', 'move', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds: what stops a loop'),
+    9: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Turn what you place, a quarter turn (also a right click while it is in hand). An arm finds its own way from what is round it: from a station, a zone or a belt that ends on it, away from it; turned by hand, it stays as turned', run: a.face },
   }, previous);
   const station = frame('Station', {
     0: place('agent', 'Agent', 'station', 'A station that runs a persona on the ticket'),

@@ -479,6 +479,21 @@ describe('FactoryEngine', () => {
     expect([where('a'), where('b')]).toEqual(['west:zone', 'north:zone']);
   });
 
+  it('a fast arm swings twice as fast; anything but true is no fast arm', async () => {
+    await boot([
+      zone('in1', 0, 0, { release: 'auto' }), arm('slow', 2, 0, 0), zone('out1', 3, 0),
+      zone('in2', 0, 4, { release: 'auto' }), { ...arm('quick', 2, 4, 0), fast: true } as MachineSpec, zone('out2', 3, 4),
+    ], 30, 12, { armSwing: 1, stationRestMs: 0, teleportRestMs: 0 });
+    await engine.transfer('a', { machineId: 'in1' });
+    await engine.transfer('b', { machineId: 'in2' });
+    await run(0.75);
+    expect(where('b')).toBe('out2:zone');                 // the fast arm has dropped its ticket
+    expect(where('a')).not.toBe('out1:zone');             // the plain one is still on its way
+    await run(0.5);
+    expect(where('a')).toBe('out1:zone');
+    expect(normaliseLayout({ w: 9, h: 9, machines: [{ ...arm('x', 1, 1, 0), fast: 'yes' } as unknown as MachineSpec] }).machines[0]).not.toHaveProperty('fast');
+  });
+
   it('an arm can drop on a bridge: the ticket crosses the way the arm points', async () => {
     const bridge: MachineSpec = { id: 'x', kind: 'bridge', x: 4, y: 5, w: 1, h: 1 };
     await boot([

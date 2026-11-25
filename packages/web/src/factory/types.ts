@@ -34,6 +34,8 @@ export interface ArmSpec extends MachineBase {
   when?: ArmCondition[];
   /** The colour it was given by hand (one of `PALETTE`). Without one it has its own: grey, or amber when it has conditions. */
   color?: string;
+  /** A fast arm: it swings twice as fast. Told apart from its colour: a blue pivot, and a blue trail as it swings. */
+  fast?: boolean;
   /** The single condition of floors saved before `when`: still read, rewritten at the next save. */
   filter?: { field: string; values: string[] } | null;
 }

@@ -84,6 +84,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['teleporter', 'T', 'Teleporter', 'A jump across the floor: a departure sends its ticket to the arrival it is set to'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
   ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. Against a station, a zone or a belt that ends there, it faces away from it by itself; a right click (or Face) turns it'],
+  ['fastarm', '', 'Fast arm', 'An arm that swings twice as fast. It finds its way as an arm does; a right click (or Face) turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
   ['skill', 'S', 'Skill', 'A station that runs a skill'],
   ['panel', 'N', 'Panel', 'A station that runs a panel of personas'],
@@ -388,7 +389,7 @@ function Floor() {
    * The way what is in hand faces: an arm reads it from what is round it (`armFacing`: from the station, the zone or
    * the belt that gives, away from it), until it is turned by hand; the rest faces the way chosen.
    */
-  const handDir = (l: FactoryLayout, t: Tool, x: number, y: number): Dir => (t === 'arm' && !live.current.turned ? armFacing(l, x, y, live.current.dir) : live.current.dir);
+  const handDir = (l: FactoryLayout, t: Tool, x: number, y: number): Dir => ((t === 'arm' || t === 'fastarm') && !live.current.turned ? armFacing(l, x, y, live.current.dir) : live.current.dir);
   /* a quarter turn of what is in hand, from the way it is shown: then it stays as turned until it is put down */
   const turnInHand = () => { const next = ((live.current.shownDir + 1) % 4) as Dir; live.current.turned = true; live.current.dir = next; live.current.shownDir = next; setDir(next); };
   const ghostAt = (v: FactoryView, wx: number, wy: number): Ghost | null => {
@@ -422,7 +423,7 @@ function Floor() {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
     /* a right click turns what is in hand, a quarter turn, and puts nothing down (anywhere else it moves the view) */
-    if (e.button === 2 && live.current.building && ['arm', 'belt', 'fastbelt', 'set', 'toll'].includes(live.current.tool)) {
+    if (e.button === 2 && live.current.building && ['arm', 'fastarm', 'belt', 'fastbelt', 'set', 'toll'].includes(live.current.tool)) {
       press.current = null; turnInHand(); live.current.ghost = ghostAt(v, w.x, w.y);
       return;
     }
@@ -760,11 +761,11 @@ function Floor() {
   const [path, setPath] = useState<string[]>([]);
   const zoneNext = selMachine?.kind === 'zone' ? snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0] ?? null : null;
   const gate = selTicket ? layout?.machines.find((q) => q.id === selTicket.machineId) : null;
-  /* what the belts of the selection can be made: fast when one of them is not yet, plain when all are */
+  /* what the belts and arms of the selection can be made: fast when one of them is not yet, plain when all are */
   const beltSpeed = useMemo<'up' | 'down' | null>(() => {
     const ids = selMany.length > 1 ? new Set(selMany) : selMachine ? new Set([selMachine.id]) : null;
-    const belts = ids && layout ? layout.machines.filter((m) => m.kind === 'belt' && ids.has(m.id)) : [];
-    return belts.length === 0 ? null : belts.some((m) => m.kind === 'belt' && !m.fast) ? 'up' : 'down';
+    const movers = ids && layout ? layout.machines.filter((m) => (m.kind === 'belt' || m.kind === 'arm') && ids.has(m.id)) : [];
+    return movers.length === 0 ? null : movers.some((m) => (m.kind === 'belt' || m.kind === 'arm') && !m.fast) ? 'up' : 'down';
   }, [selMany, selMachine, layout]);
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,

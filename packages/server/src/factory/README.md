@@ -605,6 +605,14 @@ They are placed from Build › Move › Teleporter, as a departure; the popup se
 (among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
 with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
 
+## Fast arms
+
+An arm can be fast, as a belt can (`fast` on the arm, picked on `docs/factory/fast-arm.html`): it swings twice as
+fast, there and back. It keeps its own colour; what says it is fast, in every skin, is the fast belts' blue, painted
+by the renderer over the skin: a double ring round its pivot, and a trail behind its cup while it swings. In build
+mode, Fast arm is in Move next to Arm (as Fast belt is next to Belt), and Speed up / Slow down acts on the arms
+selected as on the belts.
+
 ## No top bar: the overlays
 
 The Factory has no bar over the floor (picked on `docs/factory/hud-overlay.html`). What it held is on the floor:

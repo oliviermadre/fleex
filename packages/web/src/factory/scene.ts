@@ -419,7 +419,8 @@ export class FloorScene {
   private arm(a: ArmSpec, carried: FactoryTicket | null): ArmView {
     const st = this.st, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir];
     /* the half turn is drawn here, not sampled from the server: see `armMotion.ts` */
-    const swing = st.armSwing || 1.1, p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), this.dt, swing);
+    /* a fast arm swings twice as fast, as the engine has it */
+    const swing = (st.armSwing || 1.1) / (a.fast ? 2 : 1), p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), this.dt, swing);
     this.armShown.set(a.id, p);
     const e = easeSwing(p), src = this.at(a.x - dx, a.y - dy), dst = this.at(a.x + dx, a.y + dy), R = reachOf(src, dst);
     /* the cup goes where the ticket is: over the middle of a belt's tile, over its quay on the edge of a box */

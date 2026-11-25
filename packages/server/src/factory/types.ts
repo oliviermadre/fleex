@@ -49,6 +49,8 @@ export interface ArmSpec extends MachineBase {
   color?: string;
   /** How floors saved before `when` wrote a single condition. Still read; rewritten as `when` at the next save. */
   filter?: { field: string; values: string[] } | null;
+  /** A fast arm: it swings twice as fast, there and back, as a fast belt carries twice as fast. */
+  fast?: boolean;
 }
 export interface StationSpec extends MachineBase {
   kind: 'station';
