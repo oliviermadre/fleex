@@ -652,6 +652,10 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
             <input type="checkbox" checked={m.inbound === true} onChange={(e) => onPatch({ inbound: e.target.checked })} className="accent-[var(--theme-accent)]" />
             Tickets handed over land here (Inbound)
           </label>
+          <label className="flex cursor-pointer items-start gap-2 text-xs text-[var(--theme-text-primary)]">
+            <input type="checkbox" checked={m.needsYou === true} onChange={(e) => onPatch({ needsYou: e.target.checked || undefined })} className="mt-0.5 accent-[var(--theme-accent)]" />
+            <span>Its tickets wait for me<span className="block text-[var(--theme-text-muted)]">They are listed under Needs you, top left, for as long as they stay here. N goes to them.</span></span>
+          </label>
           <Select id="f-status" label="Sets the ticket status to" value={m.status ?? ''} onChange={(e) => onPatch({ status: e.target.value as TicketStatus | '' })} options={STATUS_OPTIONS} />
           <Select id="f-release" label="Tickets leave" value={m.release} onChange={(e) => onPatch({ release: e.target.value as 'manual' | 'auto' })}
             options={[{ value: 'manual', label: 'when you release them' }, { value: 'auto', label: 'automatically, one at a time' }]} />

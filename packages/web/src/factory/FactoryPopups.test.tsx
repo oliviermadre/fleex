@@ -126,6 +126,15 @@ describe('<FactoryMachinePopup/>', () => {
     expect(popup.textContent).toContain('Takes a ticket from the tile behind it');
   });
 
+  it('a zone can say its tickets wait for you', () => {
+    seed([]);
+    const on = open('parked');
+    const box = screen.getByRole('checkbox', { name: /Its tickets wait for me/ });
+    expect((box as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(box);
+    expect(on.onPatch).toHaveBeenLastCalledWith('parked', { needsYou: true });
+  });
+
   it('gives an arm a colour: its own unless one of the sixteen is picked', () => {
     seed([]);
     const on = open('a1'), colours = screen.getByRole('radiogroup', { name: 'Arm colour' });

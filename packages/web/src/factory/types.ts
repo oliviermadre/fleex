@@ -47,7 +47,11 @@ export interface StationSpec extends MachineBase {
   /** A script station: the shell commands it runs for a ticket (see `script.ts`). */
   script?: ScriptSpec;
 }
-export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
+export interface ZoneSpec extends MachineBase {
+  kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean;
+  /** Its tickets wait for someone: they are listed under Needs you while they are in it. */
+  needsYou?: boolean;
+}
 export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
 /** Where two belts cross: a ticket that enters keeps going straight. */

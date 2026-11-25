@@ -636,6 +636,11 @@ Out of build mode, the tickets that wait for someone are listed top-left over th
 floor; longest wait first, with what each is, where it stands and for how long. N goes to the next one and Shift+N to the one before
 (**Next** on the command card, at the same place in every menu out of build mode); the arrows only ever move the view.
 
+A zone can say that its tickets wait for someone ("Its tickets wait for me" in its popup, `needsYou`): a zone of work
+done by hand, such as Doing. Every ticket in it, released or not, is then listed too, as "Doing · waiting for you",
+counted from when it came into the zone; it leaves the list when an arm takes it out. Other zones list nothing, so
+Inbound and queues do not fill the list (picked on `docs/factory/zone-needs.html`).
+
 A click on a ticket, there or on the floor, opens its thread beside its machine (`FactoryPeek.tsx`): the whole
 conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:
 a gate's decision with an optional reason, an answer (which gives the ticket back to the station that asked, see

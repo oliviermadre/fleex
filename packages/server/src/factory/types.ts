@@ -78,6 +78,8 @@ export interface ZoneSpec extends MachineBase {
   kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number;
   /** Where a ticket lands when it is handed over without saying where. One per floor. */
   inbound?: boolean;
+  /** Its tickets wait for someone (a zone of work done by hand): the page lists them under Needs you while they are in it. */
+  needsYou?: boolean;
 }
 /** Sets the ticket to `done` and hands it back to plain Fleex. */
 export interface ExitSpec extends MachineBase { kind: 'exit' }

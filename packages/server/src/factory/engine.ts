@@ -268,6 +268,7 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.w = Math.max(2, Math.min(30, Math.floor(m.w || 4))); m.h = Math.max(2, Math.min(30, Math.floor(m.h || 4)));
       m.release = m.release === 'auto' ? 'auto' : 'manual';
       m.inbound = m.inbound === true && !machines.some((o) => o.kind === 'zone' && o.inbound);
+      if (m.needsYou === true) m.needsYou = true; else delete m.needsYou;
     } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
     else if (m.kind === 'desk') {
       /* a desk is a dock three tiles wide, three high (two for one built before docks were) */

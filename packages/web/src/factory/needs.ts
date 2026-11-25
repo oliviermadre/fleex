@@ -6,9 +6,9 @@
 import { portName } from './teleport';
 import { QUESTION_OUTCOME, type FactoryTicket, type MachineSpec } from './types';
 
-export type NeedKind = 'decision' | 'question' | 'failed' | 'aside' | 'floor';
+export type NeedKind = 'decision' | 'question' | 'failed' | 'aside' | 'floor' | 'zone';
 export interface Need { ticket: FactoryTicket; kind: NeedKind; where: string; waitMs: number }
-export const NEED_LABEL: Record<NeedKind, string> = { decision: 'decision', question: 'question', failed: 'run failed', aside: 'set aside by you', floor: 'on the floor' };
+export const NEED_LABEL: Record<NeedKind, string> = { decision: 'decision', question: 'question', failed: 'run failed', aside: 'set aside by you', floor: 'on the floor', zone: 'waiting for you' };
 
 export function needKind(t: FactoryTicket): NeedKind | null {
   if (t.phase === 'review') return 'decision';
@@ -43,10 +43,12 @@ export function standing(t: FactoryTicket, m: MachineSpec | null | undefined): {
 export function needsOf(tickets: readonly FactoryTicket[], machines: readonly MachineSpec[], now: string): Need[] {
   const byId = new Map(machines.map((m) => [m.id, m])), at = Date.parse(now) || 0, out: Need[] = [];
   for (const t of tickets) {
-    const kind = needKind(t);
+    const m = t.machineId ? byId.get(t.machineId) : undefined;
+    /* a ticket in a zone whose tickets wait for someone (work done by hand), released or not, for as long as it is in it */
+    const kind = needKind(t) ?? (t.phase === 'zone' && m?.kind === 'zone' && m.needsYou ? 'zone' : null);
     if (!kind) continue;
     const since = Date.parse(t.since);
-    out.push({ ticket: t, kind, where: placeOf(t.machineId ? byId.get(t.machineId) : undefined), waitMs: at && since ? Math.max(0, at - since) : 0 });
+    out.push({ ticket: t, kind, where: placeOf(m), waitMs: at && since ? Math.max(0, at - since) : 0 });
   }
   return out.sort((a, b) => b.waitMs - a.waitMs || a.ticket.ticketId.localeCompare(b.ticket.ticketId));
 }

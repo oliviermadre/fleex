@@ -7,11 +7,11 @@ import { NEED_LABEL, type Need } from './needs';
 
 const INK: Record<Need['kind'], string> = {
   decision: 'text-[var(--theme-warning)]', question: 'text-[var(--theme-warning)]', failed: 'text-[var(--theme-danger)]',
-  aside: 'text-[var(--theme-accent)]', floor: 'text-[var(--theme-text-secondary)]',
+  aside: 'text-[var(--theme-accent)]', floor: 'text-[var(--theme-text-secondary)]', zone: 'text-[var(--theme-warning)]',
 };
 const BAR: Record<Need['kind'], string> = {
   decision: 'bg-[var(--theme-warning)]', question: 'bg-[var(--theme-warning)]', failed: 'bg-[var(--theme-danger)]',
-  aside: 'bg-[var(--theme-accent)]', floor: 'bg-[var(--theme-text-muted)]',
+  aside: 'bg-[var(--theme-accent)]', floor: 'bg-[var(--theme-text-muted)]', zone: 'bg-[var(--theme-warning)]',
 };
 
 /**

@@ -423,6 +423,9 @@ describe('FactoryEngine', () => {
     expect([inbound.x + inbound.w / 2, inbound.y + inbound.h / 2]).toEqual([150, 75]);
     const two = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), inbound: true } as MachineSpec, { ...zone('z2', 6, 1), inbound: true } as MachineSpec] });
     expect(two.machines.map((m) => (m.kind === 'zone' ? m.inbound : null))).toEqual([true, false]);
+    /* a zone whose tickets wait for someone keeps saying so; anything but true is dropped */
+    const marked = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), needsYou: true } as MachineSpec, { ...zone('z2', 6, 1), needsYou: 'yes' } as unknown as MachineSpec] });
+    expect(marked.machines.map((m) => 'needsYou' in m)).toEqual([true, false]);
   });
 
   it('a bridge lets two lines cross: each ticket goes straight across', async () => {

@@ -44,6 +44,19 @@ describe('the tickets that wait for someone', () => {
   });
 });
 
+describe('a zone whose tickets wait for someone', () => {
+  it('lists every ticket in it, released or not, as waiting for you since it came in; another zone lists none', () => {
+    const zones: MachineSpec[] = [
+      { id: 'doing', kind: 'zone', x: 0, y: 6, w: 4, h: 4, name: 'Doing', release: 'manual', needsYou: true },
+      { id: 'todo', kind: 'zone', x: 6, y: 6, w: 4, h: 4, name: 'Todo', release: 'manual' },
+    ];
+    const list = needsOf([
+      t('a', 'zone', 30, { machineId: 'doing' }), t('b', 'zone', 90, { machineId: 'doing', released: true }), t('c', 'zone', 200, { machineId: 'todo' }),
+    ], zones, now);
+    expect(list.map((n) => [n.ticket.ticketId, n.kind, n.where, n.waitMs / 60_000])).toEqual([['b', 'zone', 'Doing', 90], ['a', 'zone', 'Doing', 30]]);
+  });
+});
+
 describe('standing', () => {
   const build = machines[0]!, gate = machines[1]!, belt = machines[2]!;
   it('names the machine and what happens to the ticket there', () => {
