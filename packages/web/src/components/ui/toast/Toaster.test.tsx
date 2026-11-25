@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { Toaster } from './Toaster';
+import { FloorLine, Toaster } from './Toaster';
 import { toast } from '../../../lib/toast';
 import { resetToasts, useToastStore } from '../../../stores/toastStore';
 
@@ -93,14 +93,20 @@ describe('<Toaster/> on the floor skin', () => {
     expect(document.querySelector('.fleex-toaster')).toBeNull();
   });
 
-  it('offers choices as replies to click, each dismissing the line', () => {
+  it('over the floor, a message keeps to one line and its choices wait for the log; there, it is whole and its choices answer', () => {
     useToastStore.getState().pushSkin('floor');
     renderToaster();
     const pick = vi.fn();
-    act(() => void toast.show({ tone: 'action', title: 'From #788 · Spec', message: 'Which key?', choices: [{ label: 'staging', onClick: () => pick('staging') }, { label: 'prod', onClick: () => pick('prod') }] }));
-    fireEvent.click(screen.getByRole('button', { name: 'prod' }));
-    expect(pick).toHaveBeenCalledWith('prod');
-    expect(useToastStore.getState().toasts).toHaveLength(0);
+    act(() => void toast.show({ tone: 'action', title: 'From #786 · Spec', message: 'Two ways:\nkeep it or cut it', choices: [{ label: 'Couper : evaneos_informations seulement (recommandé)', onClick: () => pick('cut') }, { label: 'Garder et documenter', onClick: () => pick('keep') }] }));
+    const line = document.querySelector<HTMLElement>('[data-skin="floor"] .fleex-floor-line')!;
+    expect(line.querySelector('.truncate')!.textContent).toBe('From #786 · Spec Two ways: keep it or cut it');
+    expect(line.textContent).toContain('Enter to answer');
+    expect(screen.queryByRole('button', { name: /Couper/ })).toBeNull();
+    cleanup();
+    render(<MemoryRouter><FloorLine toast={useToastStore.getState().history.at(-1)!} /></MemoryRouter>);
+    expect(document.querySelector('.whitespace-pre-line')!.textContent).toBe('From #786 · Spec Two ways:\nkeep it or cut it');
+    fireEvent.click(screen.getByRole('button', { name: /Couper/ }));
+    expect(pick).toHaveBeenCalledWith('cut');
   });
 
   it('draws the floor lines with the colours of the page that set the skin, not the app theme', () => {

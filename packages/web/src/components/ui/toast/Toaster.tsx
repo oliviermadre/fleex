@@ -85,21 +85,41 @@ export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toa
     <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={!live || t.durationMs === null}
       className="fleex-floor-line flex max-w-full items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]"
       style={live && t.durationMs !== null ? { animationDuration: `200ms, ${t.durationMs}ms` } : undefined}>
-      <span className="pointer-events-auto flex min-w-0 items-baseline gap-1.5" onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
+      <span className={cn('pointer-events-auto flex min-w-0 max-w-full items-baseline gap-1.5', !live && 'w-full')} onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
         <span className="flex-none font-mono text-[10.5px] text-[var(--theme-text-muted)]">{clock(t.createdAt)}</span>
         <span className={cn('flex-none font-bold', floorInk[t.tone])} aria-hidden>{t.icon ?? floorSign[t.tone]}</span>
-        {/* over the floor a long message (an assistant's answer) keeps to a few lines; the log shows it whole, its lines kept */}
-        <span className={cn('min-w-0 whitespace-pre-line', live && 'line-clamp-4', open && 'cursor-pointer hover:underline')} onClick={open} title={live && t.message.length > 280 ? 'Enter shows it whole, in the log' : undefined}>
-          {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
-          {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
-        </span>
-        {t.choices?.map((c) => (
-          <button key={c.label} type="button" className="flex-none rounded-full border border-[var(--tint-blue-solid)] px-2 font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] hover:bg-[color-mix(in_srgb,var(--tint-blue-solid)_18%,transparent)]"
-            onClick={() => { c.onClick(); dismiss(t.id, 'action'); }}>{c.label}</button>
-        ))}
-        {t.action && (
-          <button type="button" className="flex-none font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
-            onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+        {live ? (
+          /* over the floor: one line, cut; the whole message and its choices are in the log (Enter) */
+          <>
+            <span className={cn('min-w-0 truncate', open && 'cursor-pointer hover:underline')} onClick={open} title={t.message}>
+              {t.title && <b className="font-semibold">{t.title} </b>}{t.message.replace(/\s+/g, ' ')}
+            </span>
+            {!!t.choices?.length && <span className="flex-none text-[11px] text-[var(--theme-text-muted)]">· Enter to answer</span>}
+            {t.action && (
+              <button type="button" className="flex-none font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
+                onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+            )}
+          </>
+        ) : (
+          /* in a log: the whole message, its lines kept; its choices and its action under it, wrapping */
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className={cn('whitespace-pre-line break-words', open && 'cursor-pointer hover:underline')} onClick={open}>
+              {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
+              {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
+            </span>
+            {(!!t.choices?.length || t.action) && (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {t.choices?.map((c) => (
+                  <button key={c.label} type="button" className="max-w-full rounded-full border border-[var(--tint-blue-solid)] px-2 py-px text-left font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] hover:bg-[color-mix(in_srgb,var(--tint-blue-solid)_18%,transparent)]"
+                    onClick={() => { c.onClick(); dismiss(t.id, 'action'); }}>{c.label}</button>
+                ))}
+                {t.action && (
+                  <button type="button" className="font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
+                    onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+                )}
+              </span>
+            )}
+          </span>
         )}
       </span>
     </div>
