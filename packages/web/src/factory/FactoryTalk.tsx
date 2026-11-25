@@ -71,12 +71,15 @@ function answer(t: TalkTicket, body: string): void {
   talkLog.onSaid?.();
 }
 
-/** The targets Tab goes through, the one the line opens on first: the ticket given (selected), else the last talked to. */
-export function talkTargets(ticket: TalkTicket | null, last: 'assistant' | 'ticket'): TalkTarget[] {
-  const a: TalkTarget = { kind: 'assistant' };
-  if (!ticket) return [a];
-  const t: TalkTarget = { kind: 'ticket', ...ticket };
-  return last === 'assistant' ? [a, t] : [t, a];
+/**
+ * The targets Tab goes through, the first one the line opens on: the ticket given (selected, or the last that wrote),
+ * then every other ticket that needs you, in the list's order, and the assistant; the assistant first when it was the
+ * last talked to.
+ */
+export function talkTargets(ticket: TalkTicket | null, last: 'assistant' | 'ticket', others: readonly TalkTicket[] = []): TalkTarget[] {
+  const a: TalkTarget = { kind: 'assistant' }, seen = new Set<string>(), tickets: TalkTarget[] = [];
+  for (const t of [...(ticket ? [ticket] : []), ...others]) if (!seen.has(t.ticketId)) { seen.add(t.ticketId); tickets.push({ kind: 'ticket', ...t }); }
+  return last === 'assistant' ? [a, ...tickets] : [...tickets, a];
 }
 
 /**
@@ -118,9 +121,11 @@ function askAssistant(text: string, onAnswer: (answer: string, sessionId: string
   });
 }
 
-export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
-  /** The ticket a message can go to: the one selected, else the first that needs you; null when there is none. */
+export function FactoryTalk({ ticket, others = [], onClose, onOpenTicket, style }: {
+  /** The ticket the line opens on: the one selected, else the last that wrote, else the first that needs you; null when there is none. */
   ticket: TalkTicket | null;
+  /** The other tickets Tab reaches: those that need you. */
+  others?: readonly TalkTicket[];
   onClose: () => void; onOpenTicket: (ticketId: string) => void;
   style?: React.CSSProperties;
 }) {
@@ -128,9 +133,12 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
   const history = useToastHistory();
   const [said, setSaid] = useState<Said[]>(() => talkLog.said);
   const [text, setText] = useState('');
-  const targets = useMemo(() => talkTargets(ticket, talkLog.last), [ticket]);
-  const [at, setAt] = useState(0);
-  const target = targets[at % targets.length]!;
+  /* the floor is read again every few seconds: the list follows it, and Tab keeps to the one it is on */
+  const targets = useMemo(() => talkTargets(ticket, talkLog.last, others), [ticket, others]);
+  const [onId, setOnId] = useState<string | null>(null);
+  const idOf = (t: TalkTarget) => (t.kind === 'assistant' ? 'assistant' : t.ticketId);
+  const target = targets.find((t) => idOf(t) === onId) ?? targets[0]!;
+  const setAt = (step: (n: number) => number) => { const i = targets.indexOf(target); setOnId(idOf(targets[step(i) % targets.length]!)); };
   const input = useRef<HTMLInputElement>(null), hist = useRef<HTMLDivElement>(null);
   useEffect(() => { input.current?.focus(); }, []);
   /* what is said elsewhere (a choice clicked in the log) shows here too */

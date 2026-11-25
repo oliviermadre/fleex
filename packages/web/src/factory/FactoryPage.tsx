@@ -666,6 +666,9 @@ function Floor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selTicket?.ticketId, talkOpen, describeTicket]);
   useTicketVoices(snapshot?.tickets ?? NO_TICKETS, describeTicket, setOpenTicket);
+  /* the other tickets Tab reaches in the line: every ticket that needs you (items have no thread) */
+  const needIds = needs.filter((n) => !n.ticket.item).map((n) => n.ticket.ticketId).join(',');
+  const talkOthers = useMemo(() => (needIds ? needIds.split(',').map(describeTicket).filter((t): t is TalkTicket => !!t) : []), [needIds, describeTicket]);
   useTalkReplies(setOpenTicket);
   /* the stations that cannot run yet (no persona, skill or panel, or one this instance does not have; a script with nothing to run) */
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
@@ -1009,7 +1012,7 @@ function Floor() {
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
-      {talkOpen && <FactoryTalk ticket={talkTicket} onClose={() => setTalkOpen(false)} onOpenTicket={(id) => { setTalkOpen(false); setOpenTicket(id); }}
+      {talkOpen && <FactoryTalk ticket={talkTicket} others={talkOthers} onClose={() => setTalkOpen(false)} onOpenTicket={(id) => { setTalkOpen(false); setOpenTicket(id); }}
         style={hudHidden ? { left: '50%', bottom: 44, width: 'min(640px, calc(100% - 32px))', transform: 'translateX(-50%)', position: 'fixed' } : { left: '50%', bottom: HUD.mid + 30, width: `min(640px, calc(100% - ${HUD.left + HUD.right + 32}px))`, transform: 'translateX(-50%)', position: 'fixed' }} />}
       {filtersOpen && snapshot && (
         <FloatingPortal>

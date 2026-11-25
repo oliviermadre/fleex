@@ -135,4 +135,14 @@ describe('talking from the floor', () => {
     expect(screen.getByRole('dialog', { name: 'Talk' }).textContent).toContain('/run');
     expect(useToastStore.getState().history.at(-1)?.message).toBe('#788 unipile: its station runs again');
   });
+
+  it('Tab goes through every ticket that needs you, then the assistant, and back', () => {
+    const others = [{ ticketId: 't1', label: '#788 unipile' }, { ticketId: 't2', label: '#786 exposer les Next Best…' }];
+    expect(talkTargets(others[0]!, 'ticket', others).map((t) => (t.kind === 'assistant' ? 'assistant' : t.ticketId))).toEqual(['t1', 't2', 'assistant']);
+    expect(talkTargets(null, 'assistant', others).map((t) => (t.kind === 'assistant' ? 'assistant' : t.ticketId))).toEqual(['assistant', 't1', 't2']);
+    render(<MemoryRouter><FactoryTalk ticket={others[0]!} others={others} onClose={vi.fn()} onOpenTicket={vi.fn()} /></MemoryRouter>);
+    const seen = [screen.getByTestId('talk-target').textContent];
+    for (let i = 0; i < 3; i++) { fireEvent.keyDown(line(), { key: 'Tab' }); seen.push(screen.getByTestId('talk-target').textContent); }
+    expect(seen.map((x) => x!.trim())).toEqual(['[#788 unipile]', '[#786 exposer les Next Best…]', '[Assistant]', '[#788 unipile]']);
+  });
 });
