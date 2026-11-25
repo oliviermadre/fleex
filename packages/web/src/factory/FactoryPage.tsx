@@ -32,7 +32,7 @@ import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, 
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder, FiltersTab } from './FactoryFinder';
 import { ConsoleStrip, FactoryCounters } from './FactoryHudOverlay';
-import { FactoryTalk, useTalkReplies, type TalkTicket } from './FactoryTalk';
+import { FactoryTalk, talkLog, useTalkReplies, useTicketVoices, type TalkTicket } from './FactoryTalk';
 import { FloatingPortal, usePopover } from '../hooks/usePopover';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
@@ -75,6 +75,7 @@ const NAMED_MAX = 30;
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 /** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
 let clipboard: Clip | null = null;
+const NO_TICKETS: never[] = [];
 const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
@@ -647,10 +648,23 @@ function Floor() {
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
   /* who the line talks to besides the assistant: the ticket selected, else the first ticket that needs you */
+  /* a ticket as the line names it: its number and title, where it stands, the station it is at */
+  const describeTicket = useCallback((ticketId: string): TalkTicket | null => {
+    const s = useFactoryStore.getState(), t = s.snapshot?.tickets.find((x) => x.ticketId === ticketId);
+    if (!t || t.item) return null;
+    const m = t.machineId ? s.layout?.machines.find((q) => q.id === t.machineId) : null;
+    const title = t.info?.title ?? '';
+    return { ticketId, label: `#${t.info?.displayId ?? '?'}${title ? ` ${title.length > 28 ? `${title.slice(0, 27)}…` : title}` : ''}`, phase: t.phase, note: t.note, station: m && 'name' in m ? m.name || undefined : undefined };
+  }, []);
+  /* who the line talks to besides the assistant: the ticket selected, else the last one that wrote to you, else the first that needs you */
   const talkTicket = useMemo((): TalkTicket | null => {
-    const t = selTicket && !selTicket.item ? selTicket : needs.find((n) => !n.ticket.item)?.ticket ?? null;
-    return t ? { ticketId: t.ticketId, label: `#${t.info?.displayId ?? '?'}${t.info?.title ? ` ${t.info.title.length > 28 ? `${t.info.title.slice(0, 27)}…` : t.info.title}` : ''}` } : null;
-  }, [selTicket, needs]);
+    const id = selTicket && !selTicket.item ? selTicket.ticketId
+      : (talkLog.lastSpoke && snapshot?.tickets.some((t) => t.ticketId === talkLog.lastSpoke!.ticketId) ? talkLog.lastSpoke.ticketId : null)
+        ?? needs.find((n) => !n.ticket.item)?.ticket.ticketId ?? null;
+    return id ? describeTicket(id) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selTicket?.ticketId, talkOpen, describeTicket]);
+  useTicketVoices(snapshot?.tickets ?? NO_TICKETS, describeTicket, setOpenTicket);
   useTalkReplies(setOpenTicket);
   /* the stations that cannot run yet (no persona, skill or panel, or one this instance does not have; a script with nothing to run) */
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);

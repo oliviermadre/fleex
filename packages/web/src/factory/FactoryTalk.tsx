@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TicketComment } from '@fleex/shared';
+import { formatQuestionAnswer } from '../components/work/task/questionAnswer';
 import { FloorLine } from '../components/ui/toast/Toaster';
 import { toast, useToastHistory, type ToastItem } from '../lib/toast';
 import { cn } from '../lib/cn';
-import { postTicketComment } from '../services/api';
+import { fetchTicketComments, postTicketComment } from '../services/api';
+import { useFactoryStore } from './factoryStore';
+import type { TicketPhase } from './types';
 import { appWs } from '../services/websocket';
 import { useAssistantStore } from '../stores/assistantStore';
 
@@ -16,7 +19,8 @@ import { useAssistantStore } from '../stores/assistantStore';
  * fade over the floor like any message and stay in the log.
  */
 
-export interface TalkTicket { ticketId: string; label: string }
+/** A ticket the line can talk to: what it is called, and where it stands (a question, a failed run, a gate's decision). */
+export interface TalkTicket { ticketId: string; label: string; phase?: TicketPhase; station?: string; note?: string }
 export type TalkTarget = { kind: 'assistant' } | ({ kind: 'ticket' } & TalkTicket);
 /** What was said from the line, kept in the log with the toasts. */
 interface Said { at: number; to: string; text: string }
@@ -27,6 +31,44 @@ const writeSession = (id: string) => { try { localStorage.setItem(SESSION_KEY, i
 /** Said once, at the start of the Factory's conversation: the answer is read in a one-line log. */
 const FLOOR_PREAMBLE = 'I am on the Factory floor of Fleex. Answer in two or three sentences: I read you in a one-line log over the floor.\n\n';
 const short = (s: string, n = 280) => (s.length > n ? `${s.slice(0, n - 1)}…` : s).replace(/\s+/g, ' ').trim();
+
+/**
+ * A ticket a station set aside writes to you in the log (picked on `docs/factory/ticket-talk.html`): its agent's
+ * question, with its closed choices as replies to click (a reply is the answer: the station runs again), or its failed
+ * run, with Run again. Once per time it is set aside; the line then opens on it. A gate does not write: its decision
+ * is on its buttons.
+ */
+export async function announceTicket(t: TalkTicket, onOpen: (ticketId: string) => void, since: string): Promise<void> {
+  if (t.phase !== 'question' && t.phase !== 'failed') return;
+  const key = `${t.ticketId}:${since}`;
+  if (talkLog.announced.has(key)) return;
+  talkLog.announced.add(key);
+  talkLog.lastSpoke = t; talkLog.last = 'ticket'; talkLog.tickets.set(t.ticketId, t.label);
+  const from = `From ${t.label}${t.station ? ` · ${t.station}` : ''}`;
+  const open = { label: 'Open', onClick: () => onOpen(t.ticketId) };
+  if (t.phase === 'failed') {
+    toast.show({ tone: 'error', title: from, message: `The run failed${t.note ? `: ${short(t.note, 200)}` : ''}`, durationMs: 30_000,
+      choices: [{ label: 'Run again', onClick: () => { void useFactoryStore.getState().retry(t.ticketId); } }], action: open });
+    return;
+  }
+  /* the question is the agent's last comment in the thread, with the closed choices it declared */
+  const comments = await fetchTicketComments(t.ticketId).catch(() => [] as TicketComment[]);
+  const asked = [...comments].reverse().find((c) => c.authorType === 'agent');
+  const one = asked?.questions?.length === 1 ? asked.questions : null;
+  toast.show({
+    tone: 'action', title: from, message: asked ? short(asked.body, 400) : 'It asked you a question: read it in its thread.', durationMs: 30_000,
+    choices: one ? one[0]!.options.map((o) => ({ label: o, onClick: () => answer(t, formatQuestionAnswer(one, [o])) })) : undefined,
+    action: open,
+  });
+}
+
+/** A reply to a ticket, from the line or a choice: a comment from you in its thread, kept in the log. */
+function answer(t: TalkTicket, body: string): void {
+  talkLog.said = [...talkLog.said, { at: Date.now(), to: t.label, text: body }].slice(-50);
+  talkLog.last = 'ticket'; talkLog.tickets.set(t.ticketId, t.label);
+  void postTicketComment(t.ticketId, body).catch((err: unknown) => toast.error(`Not sent to ${t.label}`, { detail: err instanceof Error ? err.message : String(err) }));
+  talkLog.onSaid?.();
+}
 
 /** The targets Tab goes through, the one the line opens on first: the ticket given (selected), else the last talked to. */
 export function talkTargets(ticket: TalkTicket | null, last: 'assistant' | 'ticket'): TalkTarget[] {
@@ -90,6 +132,10 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
   const target = targets[at % targets.length]!;
   const input = useRef<HTMLInputElement>(null), hist = useRef<HTMLDivElement>(null);
   useEffect(() => { input.current?.focus(); }, []);
+  /* what is said elsewhere (a choice clicked in the log) shows here too */
+  useEffect(() => { talkLog.onSaid = () => setSaid(talkLog.said); return () => { talkLog.onSaid = null; }; }, []);
+  /* a ticket that waited before the page was open: its question (or its failed run) is put in the log first */
+  useEffect(() => { if (ticket) void announceTicket(ticket, onOpenTicket, 'seen-on-open'); }, [ticket, onOpenTicket]);
   /* the log: the toasts and what was said, in the order they came */
   const lines = useMemo(() => [...history.map((t) => ({ at: t.createdAt, t })), ...said.map((s) => ({ at: s.at, s }))].sort((a, b) => a.at - b.at), [history, said]);
   useEffect(() => { if (hist.current) hist.current.scrollTop = hist.current.scrollHeight; }, [lines.length]);
@@ -97,19 +143,14 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
   const send = () => {
     const body = text.trim();
     if (!body) return;
-    const entry: Said = { at: Date.now(), to: target.kind === 'assistant' ? 'Assistant' : target.label, text: body };
-    talkLog.said = [...talkLog.said, entry].slice(-50); setSaid(talkLog.said); setText('');
-    talkLog.last = target.kind;
-    if (target.kind === 'ticket') {
-      talkLog.tickets.set(target.ticketId, target.label);
-      void postTicketComment(target.ticketId, body).catch((err: unknown) =>
-        toast.error(`Not sent to ${target.label}`, { detail: err instanceof Error ? err.message : String(err), action: { label: 'Open', onClick: () => onOpenTicket(target.ticketId) } }));
-    } else {
-      askAssistant(body, (answer, sessionId) => toast.show({
-        title: '[Assistant]', message: short(answer), icon: '✦', durationMs: 15_000,
-        action: { label: 'Open', onClick: () => { useAssistantStore.getState().openSession(sessionId); navigate('/assistant'); } },
-      }));
-    }
+    setText('');
+    if (target.kind === 'ticket') { answer(target, body); return; }
+    talkLog.said = [...talkLog.said, { at: Date.now(), to: 'Assistant', text: body }].slice(-50); setSaid(talkLog.said);
+    talkLog.last = 'assistant';
+    askAssistant(body, (reply, sessionId) => toast.show({
+      title: '[Assistant]', message: short(reply), icon: '✦', durationMs: 15_000,
+      action: { label: 'Open', onClick: () => { useAssistantStore.getState().openSession(sessionId); navigate('/assistant'); } },
+    }));
   };
 
   return (
@@ -131,7 +172,7 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
           [{target.kind === 'assistant' ? 'Assistant' : target.label}]&nbsp;
         </span>
         <input ref={input} id="factory-talk" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" aria-label={`Message to ${target.kind === 'assistant' ? 'the assistant' : target.label}`}
-          placeholder={target.kind === 'assistant' ? 'Ask the assistant' : 'Comment, or answer its question'}
+          placeholder={target.kind === 'assistant' ? 'Ask the assistant' : target.phase === 'question' ? 'Answer its question: its station runs again' : target.phase === 'review' ? 'Comment: the decision is on the gate\'s buttons' : 'Comment in its thread'}
           className="min-w-0 flex-1 bg-transparent py-1.5 pr-2 text-[12.5px] text-[var(--theme-text-primary)] outline-none placeholder:text-[var(--theme-text-muted)]"
           onKeyDown={(e) => {
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
@@ -144,7 +185,32 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
 }
 
 /** What the line keeps while the page is open: what was said, who was talked to last, the tickets talked to. */
-export const talkLog = { said: [] as Said[], last: 'ticket' as 'assistant' | 'ticket', tickets: new Map<string, string>() };
+export const talkLog = {
+  said: [] as Said[], last: 'ticket' as 'assistant' | 'ticket', tickets: new Map<string, string>(),
+  /** The last ticket that wrote to you: the line opens on it when nothing is selected. */
+  lastSpoke: null as TalkTicket | null,
+  /** The set-asides already written about (a ticket, and when it was set aside). */
+  announced: new Set<string>(),
+  onSaid: null as (() => void) | null,
+};
+
+/**
+ * Watch the tickets of the floor: one that a station sets aside (a question, a failed run) while the page is open
+ * writes to you (`announceTicket`). Items have no thread: they say nothing here.
+ */
+export function useTicketVoices(tickets: readonly { ticketId: string; phase: TicketPhase; since: string; note: string; item?: unknown }[], describe: (ticketId: string) => TalkTicket | null, onOpen: (ticketId: string) => void): void {
+  const prev = useRef<Map<string, TicketPhase> | null>(null);
+  useEffect(() => {
+    const before = prev.current, now = new Map(tickets.map((t) => [t.ticketId, t.phase]));
+    prev.current = now;
+    if (!before) return;                                   // what waited before the page opened is told when you talk to it
+    for (const t of tickets) {
+      if (t.item || (t.phase !== 'question' && t.phase !== 'failed') || before.get(t.ticketId) === t.phase) continue;
+      const d = describe(t.ticketId);
+      if (d) void announceTicket({ ...d, phase: t.phase, note: t.note }, onOpen, t.since);
+    }
+  }, [tickets, describe, onOpen]);
+}
 
 /**
  * The replies of the tickets talked to from the line: an agent's comment on one of them comes back as a toast, over

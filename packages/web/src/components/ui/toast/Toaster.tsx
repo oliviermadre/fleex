@@ -92,6 +92,10 @@ export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toa
           {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
           {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
         </span>
+        {t.choices?.map((c) => (
+          <button key={c.label} type="button" className="flex-none rounded-full border border-[var(--tint-blue-solid)] px-2 font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] hover:bg-[color-mix(in_srgb,var(--tint-blue-solid)_18%,transparent)]"
+            onClick={() => { c.onClick(); dismiss(t.id, 'action'); }}>{c.label}</button>
+        ))}
         {t.action && (
           <button type="button" className="flex-none font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
             onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
@@ -157,6 +161,10 @@ function ToastCard({ toast: t, linksEnabled }: { toast: ToastItem; linksEnabled:
         )}
       </div>
 
+      {t.choices?.map((c) => (
+        <button key={c.label} type="button" onClick={(e) => { e.stopPropagation(); c.onClick(); dismiss(t.id, 'action'); }}
+          className="shrink-0 rounded-full border border-[var(--theme-border-input)] px-2 py-0.5 text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]">{c.label}</button>
+      ))}
       {t.action && (
         <button
           type="button"

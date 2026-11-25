@@ -92,4 +92,14 @@ describe('<Toaster/> on the floor skin', () => {
     act(() => { useToastStore.getState().popLayout(key); useToastStore.getState().pushSkin('quiet'); });
     expect(document.querySelector('.fleex-toaster')).toBeNull();
   });
+
+  it('offers choices as replies to click, each dismissing the line', () => {
+    useToastStore.getState().pushSkin('floor');
+    renderToaster();
+    const pick = vi.fn();
+    act(() => void toast.show({ tone: 'action', title: 'From #788 · Spec', message: 'Which key?', choices: [{ label: 'staging', onClick: () => pick('staging') }, { label: 'prod', onClick: () => pick('prod') }] }));
+    fireEvent.click(screen.getByRole('button', { name: 'prod' }));
+    expect(pick).toHaveBeenCalledWith('prod');
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
 });

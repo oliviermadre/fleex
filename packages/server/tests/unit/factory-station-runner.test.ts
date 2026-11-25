@@ -69,6 +69,10 @@ describe('StationRunner', () => {
   it('falls back to the first outcome when the agent names none of them, and reports a question or a failure as such', async () => {
     expect((await runner({ result: 'ok', schemaFields: { outcome: 'other' } }).r.run(station(), 't1', 'r', {}, () => {})).outcome).toBe('bug');
     expect((await runner({ result: 'needs_review', schemaFields: {}, comment: null }).r.run(station(), 't1', 'r', {}, () => {})).status).toBe('question');
+    /* a question on a ticket is posted with the closed choices the agent declared */
+    const asked = runner({ result: 'needs_review', schemaFields: {}, comment: 'Which key?', questions: [{ prompt: 'Key', options: ['staging', 'prod'] }] } as never);
+    await asked.r.run(station(), 't1', 'r', {}, () => {});
+    expect(asked.posted[0]).toMatchObject({ ticketId: 't1', body: 'Which key?', questions: [{ prompt: 'Key', options: ['staging', 'prod'] }] });
     expect(await runner({ result: 'ko', schemaFields: {} }).r.run(station(), 't1', 'r', {}, () => {})).toMatchObject({ status: 'failed', error: 'The agent returned no usable output' });
   });
 });

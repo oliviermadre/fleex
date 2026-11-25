@@ -135,7 +135,8 @@ export class StationRunner implements StationRunnerPort {
       });
     }
     if (output.comment && output.comment.trim().length > 0) {
-      const { comment } = await this.deps.postComment.execute({ ticketId, authorType: 'agent', authorName: author, body: output.comment });
+      /* with the closed choices the agent declared: the floor's log offers them as answers */
+      const { comment } = await this.deps.postComment.execute({ ticketId, authorType: 'agent', authorName: author, body: output.comment, questions: output.questions ?? null });
       commentId = comment.id;
       // No created mentions, as for a workflow step: the floor routes the ticket, a comment must not start agents.
       this.deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'agent', authorName: author, createdMentions: [], occurredAt: now });

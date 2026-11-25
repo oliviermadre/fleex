@@ -620,6 +620,14 @@ agents' replies come back as toasts. To the assistant it is a question in a conv
 told once that its answer is read in a one-line log; the answer comes back as a toast, with Open to read it whole.
 With a ticket selected, Enter talks to it: its thread opens with Open, or a double-click. An item still opens on Enter.
 
+A ticket a station sets aside writes to you in that log (picked on `docs/factory/ticket-talk.html`): its agent's
+question (its last comment), with its closed choices as replies to click, or its failed run, with Run again. Once per
+set-aside, and the line then opens on it (a ticket selected first, then the last one that wrote, then the first that
+needs you). A ticket that waited before the page opened puts its question in the log when the line opens on it. A
+reply to a question is the answer, so its station runs again, as from the ticket's thread; a reply to a failed run is
+a comment, and Run again stays a click. A gate does not write: talking to it comments, its decision stays on its
+buttons. The station's comment carries the agent's closed choices for this (`questions`).
+
 ## Fast arms
 
 An arm can be fast, as a belt can (`fast` on the arm, picked on `docs/factory/fast-arm.html`): it swings twice as

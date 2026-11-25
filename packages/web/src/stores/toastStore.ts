@@ -29,6 +29,8 @@ export interface ToastInput {
   icon?: string;
   /** At most one inline button — "Undo", "View logs". Clicking it also dismisses the toast. */
   action?: ToastAction;
+  /** Replies to pick from (an agent's closed choices): each one does its thing and dismisses the toast. Shown after the action. */
+  choices?: ToastAction[];
   /** In-app route: makes the whole card clickable (navigate, then dismiss). */
   link?: string;
   /** Auto-dismiss delay. `null` = persistent until closed. Default depends on the tone (see DEFAULT_DURATION_MS). */
