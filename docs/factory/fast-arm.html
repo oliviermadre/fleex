@@ -1,0 +1,175 @@
+<title>Fast arms</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: two arms at work side by side, plain and fast, drawn in each of three looks; then where a fast arm is made. A bar keeps the picks. Single dark look: the floor's own. */
+  :root {
+    --bg: #0c0b14; --surface: #15131f; --ink: #ecebf5; --muted: #9894b0; --line: #2a2740; --accent: #a78bfa; --accent-soft: #2a2148;
+    --floor: #18181b; --fast: #60a5fa;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede, .brief { color: var(--muted); max-width: 76ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+  .card { display: flex; flex-direction: column; gap: 8px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; color: var(--muted); }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #140f24; }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  canvas { display: block; width: 100%; height: auto; border-radius: 8px; background: var(--floor); }
+  .legend { display: flex; justify-content: space-around; font: 600 0.72rem var(--mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  .legend .f { color: var(--fast); }
+  /* the command card, as in the app */
+  .cmd { background: #1d1a2e; border: 1px solid #3a3557; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; max-width: 440px; }
+  .cmd h6 { margin: 0; text-align: center; font: 700 11px var(--mono); letter-spacing: .16em; color: #cfcaf0; }
+  .keys { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+  .keys i { aspect-ratio: 1.05; border-radius: 6px; background: #2c2850; border: 1px solid #423c6a; display: flex; align-items: center; justify-content: center; text-align: center; font-style: normal; font-size: 10px; color: #cfcaf0; padding: 2px; }
+  .keys i.e { background: transparent; border-style: dashed; border-color: #2a2645; }
+  .keys i.new { border-color: var(--fast); box-shadow: 0 0 0 1px var(--fast); color: #bfdbfe; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+</style>
+
+<div class="page">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Fast arms</h1>
+    <p class="lede">A fast arm swings twice as fast, there and back, as a fast belt carries twice as fast. It keeps its own colour (the one you gave it, or amber when it sorts), so "fast" is said apart from the colour, in the fast belts' blue. Below, a plain arm on the left and a fast one on the right, in each look.</p>
+  </header>
+
+  <section data-pick="p1">
+    <h2>1 · How a fast arm looks</h2>
+    <div class="grid">
+      <div class="card" data-v="ring"><div class="card-head"><span class="letter">A</span><h3>A blue pivot</h3></div>
+        <canvas width="672" height="224" data-look="ring" aria-label="A plain arm and a fast arm with a blue double ring round its pivot"></canvas><div class="legend"><span>plain</span><span class="f">fast</span></div>
+        <p>Its base has a double ring in the fast blue, as a fast belt has blue rails. It reads at rest and from far.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="chev"><div class="card-head"><span class="letter">B</span><h3>Fast chevrons on its tile</h3></div>
+        <canvas width="672" height="224" data-look="chev" aria-label="A plain arm and a fast arm with paired blue chevrons painted on its tile"></canvas><div class="legend"><span>plain</span><span class="f">fast</span></div>
+        <p>The arrow painted under it carries a pair of blue chevrons, those of a fast belt. The same sign as the belts, on the floor, under the arm.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="trail"><div class="card-head"><span class="letter">C</span><h3>A blue pivot and a trail</h3><span class="mine">recommended</span></div>
+        <canvas width="672" height="224" data-look="trail" aria-label="A plain arm and a fast arm with a blue pivot and a blue trail behind its cup as it swings"></canvas><div class="legend"><span>plain</span><span class="f">fast</span></div>
+        <p>A, plus a short blue trail behind its cup while it swings. At rest, the pivot says it; at work, the trail does.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Making an arm fast</h2>
+    <div class="two">
+      <div class="cmd"><h6>BUILD › MACHINE</h6>
+        <div class="keys"><i>Turn</i><i class="new">Speed up</i><i class="e"></i><i class="e"></i><i>Remove</i><i>Edit</i><i>Export</i><i class="e"></i><i>Fit</i><i class="e"></i><i>Undo</i><i>Redo</i><i class="e"></i><i class="e"></i><i>Previous</i></div>
+        <p style="font-size:.78rem;color:var(--muted)">An arm selected: <b style="color:#bfdbfe">Speed up</b>, or <b style="color:#bfdbfe">Slow down</b> once fast, at the place it has for belts. With belts and arms selected together, one button does them all.</p>
+      </div>
+      <div class="cmd"><h6>BUILD › MOVE</h6>
+        <div class="keys"><i>Belt</i><i>Fast belt</i><i>Bridge</i><i>Arm</i><i>Teleporter</i><i>Toll</i><i>Set</i><i>Face →</i><i>Fit</i><i class="new" id="fastTool">Fast arm</i><i>Undo</i><i>Redo</i><i class="e"></i><i class="e"></i><i>Previous</i></div>
+        <p style="font-size:.78rem;color:var(--muted)" id="fastNote">A fast arm can be placed as such, next to Arm, as Fast belt is next to Belt.</p>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card" data-v="both"><div class="card-head"><span class="letter">A</span><h3>Speed button, and a Fast arm to place</h3><span class="mine">recommended</span></div><p>As for belts: either place it fast, or speed up one already there.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="button"><div class="card-head"><span class="letter">B</span><h3>The speed button only</h3></div><p>An arm is placed plain, then sped up. One entry fewer in Move.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'factory-fast-arm-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'trail', p2: 'both' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const NAMES = ['Look', 'Making'];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    $('fastTool').className = picks.p2 === 'both' ? 'new' : 'e';
+    $('fastTool').textContent = picks.p2 === 'both' ? 'Fast arm' : '';
+    $('fastNote').textContent = picks.p2 === 'both' ? 'A fast arm can be placed as such, next to Arm, as Fast belt is next to Belt.' : 'Move stays as it is: an arm is placed plain.';
+    $('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); })));
+  $('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint();
+
+  /* ---------- the floor: two lines, belt → arm → belt, a plain arm and a fast one ---------- */
+  const T = 40, FAST = '#60a5fa', STEEL = '#55555f', BODY = '#27272a', COL = '#a1a1aa', TEXT = '#e4e4e7', BELT = '#202024', EDGE = '#3f3f46', CHEV = '#71717a';
+  const SWING = 1.1, reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lines = [...document.querySelectorAll('canvas[data-look]')].map((cv) => ({ cv, ctx: cv.getContext('2d'), look: cv.dataset.look }));
+  function belt(ctx, x, y, t, fast) {
+    ctx.fillStyle = BELT; ctx.fillRect(x * T, y * T, T, T);
+    ctx.strokeStyle = fast ? FAST : EDGE; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x * T, y * T + 3); ctx.lineTo(x * T + T, y * T + 3); ctx.moveTo(x * T, y * T + T - 3); ctx.lineTo(x * T + T, y * T + T - 3); ctx.stroke();
+    const off = ((t * 0.8) % 0.5) * T;
+    ctx.strokeStyle = CHEV; ctx.lineWidth = 2;
+    for (const u of [off, off + T / 2]) { const cx = x * T + u; if (cx > x * T + T - 4) continue; ctx.beginPath(); ctx.moveTo(cx - 4, y * T + T / 2 - 7); ctx.lineTo(cx + 3, y * T + T / 2); ctx.lineTo(cx - 4, y * T + T / 2 + 7); ctx.stroke(); }
+  }
+  function ticket(ctx, x, y) { ctx.fillStyle = '#c4b5fd'; ctx.strokeStyle = '#18181b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(x - 10, y - 10, 20, 20, 5); ctx.fill(); ctx.stroke(); }
+  function arm(ctx, bx, by, ang, look, fast, carry, moving, trail) {
+    /* the way mark under it, from where it takes to where it drops */
+    ctx.globalAlpha = 0.3; ctx.fillStyle = COL; ctx.beginPath(); ctx.moveTo(bx - 16, by - 5); ctx.lineTo(bx + 10, by - 9); ctx.lineTo(bx + 19, by); ctx.lineTo(bx + 10, by + 9); ctx.lineTo(bx - 16, by + 5); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    if (fast && look === 'chev') { ctx.strokeStyle = FAST; ctx.lineWidth = 2.4; for (const dx of [-6, 2]) { ctx.beginPath(); ctx.moveTo(bx + dx - 3, by - 6); ctx.lineTo(bx + dx + 3, by); ctx.lineTo(bx + dx - 3, by + 6); ctx.stroke(); } }
+    const hx = bx + Math.cos(ang) * 0.78 * T, hy = by + Math.sin(ang) * 0.78 * T;
+    if (fast && look === 'trail' && moving) for (const [k, a] of trail) { ctx.globalAlpha = a; ctx.strokeStyle = FAST; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(bx, by, 0.78 * T, Math.min(k, ang), Math.max(k, ang)); ctx.stroke(); ctx.globalAlpha = 1; }
+    if (carry) ticket(ctx, hx, hy);
+    ctx.lineCap = 'round'; ctx.strokeStyle = STEEL; ctx.lineWidth = 11; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.strokeStyle = COL; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(hx, hy); ctx.stroke(); ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.arc(hx, hy, 8, 0, 7); ctx.fillStyle = 'rgba(24,24,27,0.3)'; ctx.fill(); ctx.strokeStyle = TEXT; ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, by, 10, 0, 7); ctx.fillStyle = BODY; ctx.fill(); ctx.strokeStyle = COL; ctx.lineWidth = 2.7; ctx.stroke();
+    if (fast && (look === 'ring' || look === 'trail')) { ctx.strokeStyle = FAST; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bx, by, 13.5, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(bx, by, 6.5, 0, 7); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.arc(bx, by, 3.6, 0, 7); ctx.fillStyle = STEEL; ctx.fill(); }
+  }
+  /* an arm's cycle: swing over carrying (from the take side, west, to the drop side, east), then back empty, faster */
+  function phase(t, fast) {
+    const k = fast ? 2 : 1, go = SWING / k, back = (SWING * 0.6) / k, rest = 0.35, cycle = go + back + rest, u = t % cycle;
+    if (u < go) { const p = u / go, e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; return { ang: Math.PI - e * Math.PI, carry: true, moving: true }; }
+    if (u < go + back) { const p = (u - go) / back, e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; return { ang: e * Math.PI, carry: false, moving: true }; }
+    return { ang: Math.PI, carry: false, moving: false };
+  }
+  const hist = new Map();
+  function frame(now) {
+    const t = reduce ? 0.7 : now / 1000;
+    for (const L of lines) {
+      const { ctx, cv, look } = L; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = '#18181b'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.setTransform(1.4, 0, 0, 1.4, 0, 0);
+      ctx.fillStyle = '#2a2a30'; for (let x = 0; x < cv.width; x += T) for (let y = 0; y < cv.height; y += T) ctx.fillRect(x + T / 2 - 1, y + T / 2 - 1, 2, 2);
+      [[1, false], [7, true]].forEach(([x0, fast]) => {
+        const y = 1;
+        belt(ctx, x0, y, t, false); belt(ctx, x0 + 1, y, t, false); belt(ctx, x0 + 3, y, t, false); belt(ctx, x0 + 4, y, t, false);
+        const p = phase(t, fast), key = look + x0, h = hist.get(key) ?? [];
+        h.unshift(p.ang); h.length = Math.min(h.length, 6); hist.set(key, h);
+        if (!p.carry) ticket(ctx, (x0 + 1.5) * T, (y + 0.5) * T);
+        arm(ctx, (x0 + 2.5) * T, (y + 0.5) * T, p.ang + 0, look, fast, p.carry, p.moving, h.slice(1).map((a, i) => [a, 0.45 - i * 0.08]));
+        ctx.fillStyle = fast ? FAST : '#71717a'; ctx.font = '600 12px "JetBrains Mono", monospace'; ctx.textAlign = 'center';
+        ctx.fillText(fast ? `${(SWING / 2).toFixed(2)} s a swing` : `${SWING.toFixed(2)} s a swing`, (x0 + 2.5) * T, (y + 2.2) * T);
+      });
+    }
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
