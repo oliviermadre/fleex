@@ -100,9 +100,24 @@
   .stop-edge { bottom: 128px; left: 50%; transform: translateX(-50%); background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 22px 22px 0 0; padding: 5px 14px 3px 6px; }
   .stop-card { bottom: 180px; right: 10px; }
   .stop-mini { bottom: 172px; left: 196px; transform: translateY(18%); }
-  .menu-strip[hidden] { display: none; }
   .menu-strip { position: absolute; right: 0; bottom: 172px; display: flex; gap: 6px; padding: 5px 8px; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 10px 0 0 0; align-items: center; }
-  .menu-strip span { font: 600 10px var(--mono); color: #cfcaf0; border: 1px solid #423c6a; border-radius: 5px; padding: 3px 8px; }
+  .sb { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--mono); color: #d6d2f2; background: #241f3d; border: 1px solid #423c6a; border-radius: 6px; padding: 4px 9px; white-space: nowrap; }
+  .sb svg { width: 13px; height: 13px; flex: none; }
+  .sb .fill { position: absolute; inset: 0 auto 0 0; background: rgba(239, 68, 68, 0.35); }
+  .sb > *:not(.fill) { position: relative; }
+  /* A: the strip's own button, red power sign, a thin hazard edge */
+  .look-a { padding-left: 13px; } .look-a::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: repeating-linear-gradient(-45deg, #facc15 0 3px, #18181b 3px 6px); }
+  .look-a .t { color: #fca5a5; }
+  /* B: a stop sign, quiet until pointed at */
+  .look-b .t { color: #d6d2f2; } .look-b.hover { border-color: #ef4444; } .look-b.hover .t { color: #fca5a5; }
+  /* C: the floor's state, which is also its switch */
+  .look-c .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .look-c .t { color: #bbf7d0; } .look-c .k { color: #8f8aae; font-weight: 500; }
+  .sb.stopped { border-color: #ef4444; background: #3a1420; } .sb.stopped .t { color: #fecaca; }
+  .look-c.stopped .dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; border-radius: 2px; }
+  .looks { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 12px 18px; align-items: center; background: var(--floor); border: 1px solid var(--line); border-radius: 12px; padding: 18px; overflow-x: auto; }
+  .looks > .sb { justify-self: start; }
+  .looks .h { font: 700 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 
   /* the popup of filters */
   .shade { position: absolute; inset: 30px 0 0 54px; background: rgba(8, 6, 16, 0.45); display: none; }
@@ -182,14 +197,9 @@
       <div class="ftab" id="ftab"><button type="button" id="ftab-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Filters <span class="n">2</span></button><span class="found">12 of 60 shown</span></div>
       <div class="plate mini"><span class="clock">● 10:44:43</span><div class="map"><i style="left:40%;top:10%;width:30%;height:6%"></i><i style="left:30%;top:30%;width:28%;height:16%;background:#8b2d55"></i><i style="left:62%;top:30%;width:22%;height:16%;background:#8b2d55"></i><i style="left:30%;top:52%;width:50%;height:14%;background:#2b6c9a"></i><i style="left:30%;top:72%;width:28%;height:10%;background:#8b2d55"></i></div><div class="layers"><i></i><i></i><i></i><i></i></div></div>
       <div class="plate info"><b>Factory floor</b><p>Click to select, drag a ticket to move it, double-click a ticket or a machine to open it…</p><p>last 7 days · shipped 16 · lead time 7h 24m · runs 349 · failed 8 · cost $119</p></div>
-      <span class="hide">⌄ U</span>
       <div class="plate cmd"><h6>FACTORY</h6><div class="keys"><i>Intake</i><i>Tickets</i><i>Stats</i><i>Limits</i><i>New</i><i class="e"></i><i>Archived</i><i>Exits</i><i>Fit</i><i class="e"></i><i class="e"></i><i class="e"></i><i class="e"></i><i>Next</i><i>Build</i></div></div>
 
-      <div class="menu-strip" id="strip" hidden><span>☰ Menu</span><span>U hide</span></div>
-      <div class="stopbtn" id="stop" role="button" tabindex="0" title="Emergency stop: hold to stop every belt, arm and station">
-        <span class="mush" id="mush"><span class="ring"></span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></svg></span>
-        <span class="stoplbl" id="stoplbl">STOP<small>hold</small></span>
-      </div>
+      <div class="menu-strip" id="strip"></div>
 
       <div class="shade"></div>
       <div class="fpop anchored" id="fpop">
@@ -221,22 +231,25 @@
     </div>
   </section>
 
+  <section>
+    <h2>Settled</h2>
+    <p class="brief">Counters top right, filters out of the minimap, the stop in a strip over the command card, held for a second to stop. The "⌄ U" tab over the middle plate goes: hiding the console is in the strip, next to the stop. When the console is hidden, the strip stays on the floor's bottom right corner, so both remain one click away. "Menu" is left out: there is nothing to put in it yet.</p>
+  </section>
+
   <section data-pick="p3">
-    <h2>3 · Where the emergency stop goes</h2>
+    <h2>3 · The stop, in the strip's own style</h2>
+    <p class="brief">The same chip as "U hide": same height, font and border, so it reads as part of the console. Rest, held halfway, stopped.</p>
+    <div class="looks" id="looks"></div>
     <div class="grid">
-      <div class="card" data-v="edge"><div class="card-head"><span class="letter">A</span><h3>On the console's top edge, in the middle</h3><span class="mine">recommended</span></div><p>Always there, in build mode too, and away from the buttons you click all day. Hiding the console (U) leaves it on the floor's bottom edge.</p><button type="button">Pick A</button></div>
-      <div class="card" data-v="strip"><div class="card-head"><span class="letter">B</span><h3>In a strip over the command card</h3></div><p>As the menu sits over the action buttons in a game: Stop, Menu and Hide together. Close to the buttons you press without looking.</p><button type="button">Pick B</button></div>
-      <div class="card" data-v="mini"><div class="card-head"><span class="letter">C</span><h3>On the minimap's corner</h3></div><p>Next to Filters, with the floor-wide tools. The left side gets busy.</p><button type="button">Pick C</button></div>
+      <div class="card" data-v="a"><div class="card-head"><span class="letter">A</span><h3>A button with a hazard edge</h3><span class="mine">recommended</span></div><p>A red power sign and a thin yellow-and-black stripe on its left edge: noticeable at a glance, no louder than the button next to it.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="b"><div class="card-head"><span class="letter">B</span><h3>A stop sign, quiet until pointed at</h3></div><p>An octagon, grey like everything else; it turns red under the pointer. The quietest, and the slowest to find in a hurry.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="c"><div class="card-head"><span class="letter">C</span><h3>The floor's state, which is also its switch</h3></div><p>"● Running": it tells you the floor is going, and holding it stops it. The chip is useful even when nothing is wrong.</p><button type="button">Pick C</button></div>
     </div>
   </section>
 
   <section data-pick="p4">
     <h2>4 · How it is pressed</h2>
-    <div class="close">
-      <div class="stopbtn big" style="position:static"><span class="mush"><span class="ring"></span><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></svg></span><span class="stoplbl">STOP<small>hold</small></span></div>
-      <div class="stopbtn big" style="position:static"><span class="mush go"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg></span><span class="stoplbl" style="color:#86efac">RESTART<small>click</small></span></div>
-      <div class="state"><p><b>Stopped</b>, the button turns green with a play sign, the floor gets a hazard-tape border, and the "Emergency stop" notice stays at the top of the floor with its own Restart button.</p></div>
-    </div>
+    <p class="brief">Stopped, the floor gets a hazard-tape border and the "Emergency stop" notice stays at the top with its own Restart button.</p>
     <div class="grid">
       <div class="card" data-v="hold"><div class="card-head"><span class="letter">A</span><h3>Hold for a second to stop</h3><span class="mine">recommended</span></div><p>A white ring fills round the button while it is held. A stray click does nothing, and in an emergency there is no dialog to read. Restart is a plain click.</p><button type="button">Pick A</button></div>
       <div class="card" data-v="click"><div class="card-head"><span class="letter">B</span><h3>One click stops</h3></div><p>As today: immediate, and a stray click stops the floor.</p><button type="button">Pick B</button></div>
@@ -252,11 +265,22 @@
   const KEY = 'factory-hud-overlay-picks';
   let picks = {};
   try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
-  const DEF = { p1: 'tr', p2: 'anchored', p3: 'edge', p4: 'hold' };
+  const DEF = { p1: 'tr', p2: 'anchored', p3: 'a', p4: 'hold' };
   for (const k in DEF) picks[k] = picks[k] || DEF[k];
-  const NAMES = ['Counters', 'Filters', 'Stop', 'Press'];
+  const NAMES = ['Counters', 'Filters', 'Stop look', 'Press'];
   const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
   const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  const POWER = '<svg viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></svg>';
+  const OCT = (c) => `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linejoin="round"><path d="M8 2h8l6 6v8l-6 6H8l-6-6V8z"/><path d="M8 12h8"/></svg>`;
+  const PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5v14l12-7z" fill="#86efac"/></svg>';
+  function stopChip(look, st, press) {
+    const fill = st === 'held' ? '<span class="fill" style="width:50%"></span>' : '';
+    const cls = `sb look-${look}${st === 'stopped' ? ' stopped' : ''}${st === 'held' && look === 'b' ? ' hover' : ''}`;
+    if (st === 'stopped') return `<span class="${cls}">${look === 'c' ? '<span class="dot"></span><span class="t">Stopped</span>' : '<span class="t">Stopped</span>'}<span class="k" style="color:#86efac">${PLAY}</span><span class="t" style="color:#86efac">Restart</span></span>`;
+    if (look === 'a') return `<span class="${cls}">${fill}${POWER}<span class="t">Stop</span><span class="k" style="color:#8f8aae;font-weight:500">${press}</span></span>`;
+    if (look === 'b') return `<span class="${cls}">${fill}${OCT(st === 'held' ? '#f87171' : '#a5a1c2')}<span class="t">Stop</span></span>`;
+    return `<span class="${cls}">${fill}<span class="dot"></span><span class="t">Running</span><span class="k">${st === 'held' ? 'stopping…' : press + ' to stop'}</span></span>`;
+  }
   function paint() {
     document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
       const on = c.dataset.v === picks[s.dataset.pick];
@@ -266,13 +290,10 @@
     $('counters').className = `counters ${picks.p1}`;
     $('fpop').className = `fpop ${picks.p2}`;
     $('screen').classList.toggle('modal', picks.p2 === 'centred');
-    $('stop').className = `stopbtn stop-${picks.p3 === 'strip' ? 'card' : picks.p3}`;
-    $('strip').hidden = picks.p3 !== 'strip';
-    if (picks.p3 === 'strip') { $('stop').style.bottom = '176px'; $('stop').style.right = '150px'; } else { $('stop').style.bottom = ''; $('stop').style.right = ''; }
-    const halted = $('screen').classList.contains('halted');
-    $('mush').classList.toggle('go', halted);
-    $('mush').querySelector('svg').innerHTML = halted ? '<path d="M8 5v14l11-7z" fill="#fff" stroke="none"/>' : '<path d="M12 3v8"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/>';
-    $('stoplbl').innerHTML = halted ? '<span style="color:#86efac">RESTART</span><small>click</small>' : `STOP<small>${picks.p4 === 'hold' ? 'hold' : 'click'}</small>`;
+    const halted = $('screen').classList.contains('halted'), press = picks.p4 === 'hold' ? 'hold' : 'click';
+    $('strip').innerHTML = stopChip(picks.p3, halted ? 'stopped' : 'rest', press) + '<span class="sb">U&nbsp;hide</span>';
+    $('looks').innerHTML = '<span></span><span class="h">At rest</span><span class="h">Held, halfway</span><span class="h">Stopped</span>'
+      + ['a', 'b', 'c'].map((l) => `<span class="h">${l.toUpperCase()}</span>${stopChip(l, 'rest', press)}${stopChip(l, 'held', press)}${stopChip(l, 'stopped', press)}`).join('');
     $('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
     try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
   }
