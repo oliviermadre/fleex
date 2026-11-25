@@ -268,7 +268,6 @@ function Floor() {
   useToastOffset(262);   // keep toasts clear of the console
   /* Enter: the line to talk to the assistant or a ticket; while it is open, the messages are in its log, not over the floor */
   const [talkOpen, setTalkOpen] = useState(false);
-  useToastSkin(talkOpen ? 'quiet' : 'floor', chromeStyle as Record<string, string | number> | undefined);
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {
@@ -625,6 +624,11 @@ function Floor() {
   }, [selection, snapshot]);
   const group = useMemo(() => (selTickets.length > 0 && layout ? groupOf(selTickets, layout.machines) : null), [selTickets, layout]);
   const [confirmGive, setConfirmGive] = useState(false);
+  /* messages over the floor while one looks at the floor; a window opened over it (a ticket, a machine, a list) gets
+     Fleex's usual cards, which sit over it, and the lines come back once it is closed */
+  const windowOpen = !!(transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem
+    || floorOpen || limitsOpen || listOpen || planOpen || importing || importReport || confirmGive);
+  useToastSkin(windowOpen ? null : talkOpen ? 'quiet' : 'floor', chromeStyle as Record<string, string | number> | undefined);
   const closeMachine = useCallback(() => setOpenMachine(null), []);
   /* from one machine's popup to another's (a station's arm): the floor's selection follows */
   const openMachineOn = useCallback((id: string) => { setSelection({ machine: id }); setOpenMachine(id); }, []);
