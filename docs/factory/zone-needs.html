@@ -1,0 +1,163 @@
+<title>Zone needs you</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout (was: the build card with its two new buttons, then four picks (where an import lands, how what was dropped is told, how a station not set up looks, what it does), the file as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 72ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.85em; }
+
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 4px; }
+  .app .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .warn { color: #facc15; } .ok { color: #4ade80; } .gone { color: #f87171; text-decoration: line-through; }
+
+  /* the build card: the floor's own command grid */
+  .menu { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-width: 460px; }
+  .slot { aspect-ratio: 1.6; border-radius: 8px; border: 1px solid #3f3f46; background: #18181b; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 0.72rem; color: #a1a1aa; }
+  .slot b { color: #fafafa; font-size: 0.78rem; }
+  .slot.new { border-color: #f472b6; box-shadow: 0 0 0 1px #f472b6; }
+  .slot.new b { color: #f9a8d4; }
+  .slot.empty { border-style: dashed; opacity: 0.4; }
+  .slot i { font-style: normal; font-family: var(--mono); font-size: 0.66rem; color: #71717a; }
+
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .toast { align-self: center; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #27272a; border: 1px solid #3f3f46; border-radius: 10px; padding: 8px 12px; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rules ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; max-width: 80ch; }
+  pre { margin: 0; font-family: var(--mono); font-size: 0.74rem; line-height: 1.5; color: #d4d4d8; overflow-x: auto; white-space: pre; }
+
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+</style>
+
+<style>
+  .need { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 0 8px; align-items: center; border: 1px solid #3f3f46; border-radius: 8px; padding: 6px 8px; background: #18181b; }
+  .need .tok { grid-row: span 2; font-size: 18px; } .need b { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .need .sub { font-size: .74rem; color: #a1a1aa; display: flex; gap: 4px; } .need .k { color: #facc15; } .need .ago { margin-left: auto; font-family: var(--mono); }
+  .need.hot { border-color: #60a5fa; box-shadow: 0 0 0 1px #60a5fa; }
+  .chk { display: flex; gap: 8px; align-items: flex-start; } .chk input { margin-top: 3px; accent-color: #f472b6; }
+  .fld { display: flex; flex-direction: column; gap: 3px; } .fld span { color: #a1a1aa; font-size: .74rem; } .fld div { border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px; background: #131316; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>A zone whose tickets need you</h1>
+    <p class="lede">Today "Needs you" lists what waits on a station, a gate or the floor, never what stands in a zone. A zone such as <b>Doing</b> in "Manual stuff" holds tickets that are yours to do: ticked, its tickets are listed with the others, longest wait first, and N goes through them.</p>
+  </header>
+
+  <section>
+    <h2>The zone's settings</h2>
+    <div class="two">
+      <div class="app">
+        <b style="font-size:.95rem">Doing</b>
+        <div class="fld"><span>Name</span><div>Doing</div></div>
+        <span class="hint">Tickets wait here. An arm only takes a ticket that has been released.</span>
+        <label class="chk"><input type="checkbox"> <span>Tickets handed over land here (Inbound)</span></label>
+        <label class="chk"><input type="checkbox" checked> <span id="wording">Its tickets wait for me</span></label>
+        <span class="hint" style="margin-left:22px">They are listed under Needs you, top left, for as long as they stay here. N goes to them.</span>
+        <div class="fld"><span>Sets the ticket status to</span><div>doing</div></div>
+        <div class="fld"><span>Tickets leave</span><div>when you release them</div></div>
+      </div>
+      <div class="app">
+        <h4>Needs you · 6</h4>
+        <div class="need"><span class="tok">💡</span><b>TECH-11 — KPIs de tickets</b><span class="sub">Redaction · <span class="k">question</span><span class="ago">17h 26m</span></span></div>
+        <div class="need hot"><span class="tok">💡</span><b>#788 unipile</b><span class="sub">Doing · <span class="k"><span class="kw">waiting for you</span></span><span class="ago">21h 46m</span></span></div>
+        <div class="need hot"><span class="tok">💡</span><b>#790 Odys onboarding</b><span class="sub">Doing · <span class="k"><span class="kw">waiting for you</span></span><span class="ago">19h 02m</span></span></div>
+        <div class="need"><span class="tok">💡</span><b>TECH-15 — Historique des…</b><span class="sub">Gate · <span class="k">decision</span><span class="ago">16h 58m</span></span></div>
+        <span class="hint">Longest wait first, counted from when the ticket came into the zone.</span>
+      </div>
+    </div>
+  </section>
+
+  <section data-pick="p1">
+    <h2>1 · The wording of the option</h2>
+    <div class="grid">
+      <div class="card" data-v="waits"><div class="card-head"><span class="letter">A</span><h3>"Its tickets wait for me"</h3><span class="mine">recommended</span></div><p>It says what is true of the zone, and leads to the list.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="show"><div class="card-head"><span class="letter">B</span><h3>"Show its tickets in Needs you"</h3></div><p>It names the place on screen: plain, but about the screen rather than the work.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="mine"><div class="card-head"><span class="letter">C</span><h3>"Mine to do"</h3></div><p>Short, and says who does them.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Which of its tickets</h2>
+    <div class="grid">
+      <div class="card" data-v="all"><div class="card-head"><span class="letter">A</span><h3>Every ticket in it</h3><span class="mine">recommended</span></div><p>As long as a ticket stands in the zone, it is listed, released or not. Once an arm takes it out, it leaves the list.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="held"><div class="card-head"><span class="letter">B</span><h3>Only those not yet released</h3></div><p>A ticket you released, waiting for an arm, is no longer listed. In a zone that releases on its own, that lists nothing.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · What the line says it waits for</h2>
+    <div class="grid">
+      <div class="card" data-v="waiting"><div class="card-head"><span class="letter">A</span><h3>"Doing · waiting for you"</h3><span class="mine">recommended</span></div><p>The zone's name, then what every line of the list says in its own words.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="hands"><div class="card-head"><span class="letter">B</span><h3>"Doing · in your hands"</h3></div><p>It says the work is yours to do, not something to decide.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="status"><div class="card-head"><span class="letter">C</span><h3>"Doing · doing"</h3></div><p>The status the zone sets. Shortest, but it says the same thing twice when the zone is named after it.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const KEY = 'factory-zone-needs-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'waits', p2: 'all', p3: 'waiting' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${['Wording', 'Listed', 'Says'][i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    document.getElementById('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    const W = { waits: 'Its tickets wait for me', show: 'Show its tickets in Needs you', mine: 'Mine to do' }, K = { waiting: 'waiting for you', hands: 'in your hands', status: 'doing' };
+    const w = document.getElementById('wording'); if (w) w.textContent = W[picks.p1];
+    document.querySelectorAll('.kw').forEach((el) => { el.textContent = K[picks.p3]; });
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); })));
+  document.getElementById('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint();
+})();
+</script>
