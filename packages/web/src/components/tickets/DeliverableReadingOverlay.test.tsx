@@ -127,3 +127,19 @@ describe('DeliverableReadingOverlay · maximize', () => {
     expect(document.querySelector('[data-floating-panel]')!.getAttribute('data-placement')).toBe('floating');
   });
 });
+
+describe('DeliverableReadingOverlay · Escape', () => {
+  it('opened over a dialog (the Factory workbench), Escape closes the deliverable first, then the dialog', async () => {
+    const { Modal } = await import('../ui/Modal');
+    let dialogOpen = true;
+    const onClose = () => { dialogOpen = false; };
+    render(<><Modal open onClose={onClose} guardEscape><p>work</p></Modal><DeliverableReadingOverlay /></>);
+    open();
+    expect(panel()).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(useUIStore.getState().deliverableOverlay).toBeNull();
+    expect(dialogOpen).toBe(true);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(dialogOpen).toBe(false);
+  });
+});

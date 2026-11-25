@@ -16,6 +16,12 @@ export interface WorkflowContextInput {
   workflowRunId?: string;
   stepRunId?: string;
   /**
+   * Where an artifact added from the CLI goes, when the run is not a workflow run (the Factory: its run ids name no
+   * workflow run, so `workflow step deliverable add` would answer WORKFLOW_RUN_NOT_FOUND). A ticket: the agent is
+   * told to attach it to the ticket. Null: no CLI way, a deliverable is returned in the output. Undefined: the step.
+   */
+  attachTo?: { ticketId: string; agentName: string } | null;
+  /**
    * Deliverable type ids this workspace lets an agent pick. The CLI escape
    * hatch bypasses the structured-output schema, so without the list here the
    * agent has nothing to choose from at the point of use and falls back to
@@ -57,7 +63,23 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   // means re-serializing the whole content as JSON output tokens, which is slow
   // and can blow the output limit outright. `--file` reads from disk instead, so
   // the content never passes through the model.
-  if (input.workflowRunId && input.stepRunId) {
+  if (input.attachTo !== undefined) {
+    const types = input.deliverableTypeIds ?? [];
+    if (input.attachTo) {
+      parts.push(`To attach a long artifact (a generated document, a schema, a full log) to the ticket from the CLI instead of returning it in \`deliverable\`:`);
+      parts.push('');
+      parts.push('```bash');
+      parts.push(`fleex ticket deliverable add ${input.attachTo.ticketId} --agent-name "${input.attachTo.agentName}" \\`);
+      parts.push(`  --title "…" --type <TYPE> --status final --file ./path/to/content.md`);
+      parts.push('```');
+      parts.push('');
+      if (types.length > 0) { parts.push(`\`--type\` takes exactly one of: ${types.map((t) => `\`${t}\``).join(', ')}.`); parts.push(''); }
+      parts.push(`Run one command per artifact. Do not use \`fleex workflow step deliverable add\`: this is not a workflow run. An artifact added this way is on the ticket already; do not also return it in \`deliverable\`.`);
+    } else {
+      parts.push(`There is no ticket here: return what you produce in the \`deliverable\` output field (it is kept with what you worked on). Do not use \`fleex workflow step deliverable add\` nor \`fleex ticket deliverable add\`: this is not a workflow run, and there is no ticket to attach to.`);
+    }
+    parts.push('');
+  } else if (input.workflowRunId && input.stepRunId) {
     parts.push(`**This step's identity** — run \`${input.workflowRunId}\`, step run \`${input.stepRunId}\`.`);
     parts.push('');
     parts.push(`Use them to attach an artifact to *this* step from the CLI instead of returning it in \`deliverable\`:`);

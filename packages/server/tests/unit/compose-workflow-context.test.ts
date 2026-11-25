@@ -160,4 +160,13 @@ describe('composeWorkflowContextPrompt — step identity', () => {
     const out = composeWorkflowContextPrompt({ workflowName: 'W', stepName: 'S', outgoingEdges: [], previousOutputs: {} });
     expect(out).toContain('you MUST also declare them in `questions`');
   });
+  it('off a workflow run (the Factory), sends a long artifact to the ticket, or to the output when there is none', () => {
+    const onTicket = composeWorkflowContextPrompt({ workflowName: 'Factory', stepName: 'Spec', workflowRunId: 'r1', stepRunId: 'r1', deliverableTypeIds: ['prd', 'report'], attachTo: { ticketId: 'uuid-1', agentName: 'Factory → Spec' }, outgoingEdges: [], previousOutputs: {} });
+    expect(onTicket).toContain('fleex ticket deliverable add uuid-1 --agent-name "Factory → Spec"');
+    expect(onTicket).toContain('`--type` takes exactly one of: `prd`, `report`.');
+    expect(onTicket).not.toContain('fleex workflow step deliverable add r1');
+    const onItem = composeWorkflowContextPrompt({ workflowName: 'Factory', stepName: 'Triage', workflowRunId: 'r2', stepRunId: 'r2', attachTo: null, outgoingEdges: [], previousOutputs: {} });
+    expect(onItem).toContain('return what you produce in the `deliverable` output field');
+    expect(onItem).not.toContain('fleex workflow step deliverable add r2');
+  });
 });

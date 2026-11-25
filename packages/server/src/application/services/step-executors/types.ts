@@ -32,6 +32,8 @@ export interface StepExecutionInput {
       targetName: string;
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
+    /** Not a workflow run (the Factory): where an artifact added from the CLI goes (see `composeWorkflowContextPrompt`). */
+    attachTo?: { ticketId: string; agentName: string } | null;
     /**
      * The run's narrative so far (see `utils/run-history.ts`). Agentic executors
      * inject it in the prompt; `previousOutputs` stays the machine-readable

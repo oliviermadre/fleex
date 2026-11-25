@@ -34,6 +34,8 @@ describe('StationRunner', () => {
     expect(input.step).toMatchObject({ name: 'Triage', executorType: 'agent', executorRef: 'sentinel', mode: 'plan', prompt: 'Sort it.' });
     expect(input.step.outputSchema).toMatchObject({ properties: { outcome: { enum: ['bug', 'feature'] } }, required: ['outcome'] });
     expect(input.workflowContext.outgoingEdges.map((e) => [e.label, e.targetName])).toEqual([['bug', 'Fix line'], ['feature', 'Spec']]);
+    /* a long artifact goes to the ticket: the run id names no workflow run */
+    expect(input.workflowContext.attachTo).toEqual({ ticketId: 't1', agentName: 'Factory → Triage' });
   });
 
   it('runs an agent or skill station on its own model when it has one, and on the persona\'s otherwise', async () => {
@@ -50,6 +52,7 @@ describe('StationRunner', () => {
     const { r, seen, posted, delivered } = runner({ result: 'ok', schemaFields: { outcome: 'bug' }, comment: 'A bug in the cart: worth a ticket.', deliverable: { type: 'note', title: 'Triage', markdown: '# Why' } });
     const earlier: FactoryRunRow[] = [{ id: 'r0', ticketId: 'i1', floorId: 'default', machineId: 'g', machineName: 'Read', executor: 'agent', status: 'completed', outcome: 'ok', executionId: null, error: null, startedAt: '', finishedAt: '', reply: 'Ana is the shop lead.', deliverableId: null }];
     const res = await r.run(station(), 'i1', 'run-1', { bug: 'Fix line', feature: 'Spec' }, () => {}, { item: item(), earlier });
+    expect(seen[0]!.workflowContext.attachTo).toBeNull();                     // an item has no ticket to attach to
     expect(res).toEqual({ status: 'completed', outcome: 'bug', executionId: 'exec-1', error: null, reply: 'A bug in the cart: worth a ticket.', deliverableId: 'd1' });
     const input = seen[0]!;
     expect(input.ticketId).toBeNull();

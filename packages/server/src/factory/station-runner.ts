@@ -77,6 +77,8 @@ export class StationRunner implements StationRunnerPort {
           ? outcomes.map((o) => ({ id: `${station.id}:${o}`, label: o, condition: { field: 'outcome', operator: 'eq' as const, value: o }, targetName: targets[o] ?? 'the next machine' }))
           : [],
         previousOutputs: {},
+        /* the run id is the Factory's, no workflow run's: a long artifact goes to the ticket, an item has none */
+        attachTo: item ? null : { ticketId, agentName: `Factory → ${name}` },
       },
       onExecutionStarted,
     };

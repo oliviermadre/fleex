@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stripHtmlCodeFence } from '@fleex/shared';
 import { cn } from '../../lib/cn';
@@ -37,11 +37,14 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const toggleMaximized = () => setMaximized((m) => !m);
   const resolvedTicketId = ticketId ?? deliverable?.ticketId ?? '';
 
+  const backdropRef = useRef<HTMLDivElement>(null);
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Don't close if a child modal (lightbox or copy picker) is open above us
-        if (document.querySelector('[data-overlay-top]')) return;
+        // The overlay says it is on top (`data-overlay-top`), so that a dialog under it (the Factory's workbench) leaves
+        // Escape to it; and it closes only when it is the last of those, not under a lightbox or the copy picker.
+        const tops = document.querySelectorAll('[data-overlay-top]');
+        if (tops.length && tops[tops.length - 1] !== backdropRef.current) return;
         e.stopPropagation();
         e.stopImmediatePropagation();
         close();
@@ -81,6 +84,8 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
 
   return createPortal(
     <div
+      ref={backdropRef}
+      data-overlay-top
       className="deliverable-overlay-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();

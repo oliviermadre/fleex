@@ -27,6 +27,7 @@ export class PanelStepExecutor implements StepExecutor {
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
       runHistory: input.workflowContext.runHistory,
+      attachTo: input.workflowContext.attachTo,
     });
 
     // Ticket run: the panel debates the ticket thread, as always. Routine run:
