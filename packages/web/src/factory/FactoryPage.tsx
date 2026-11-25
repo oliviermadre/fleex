@@ -268,7 +268,7 @@ function Floor() {
   useToastOffset(262);   // keep toasts clear of the console
   /* Enter: the line to talk to the assistant or a ticket; while it is open, the messages are in its log, not over the floor */
   const [talkOpen, setTalkOpen] = useState(false);
-  useToastSkin(talkOpen ? 'quiet' : 'floor');
+  useToastSkin(talkOpen ? 'quiet' : 'floor', chromeStyle as Record<string, string | number> | undefined);
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {

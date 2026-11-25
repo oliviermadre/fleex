@@ -102,4 +102,13 @@ describe('<Toaster/> on the floor skin', () => {
     expect(pick).toHaveBeenCalledWith('prod');
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
+
+  it('draws the floor lines with the colours of the page that set the skin, not the app theme', () => {
+    useToastStore.getState().pushSkin('floor', { '--theme-text-primary': '#fafafa', '--theme-bg-base': '#0b0b10' });
+    renderToaster();
+    act(() => void toast.info('Deliverable ready'));
+    const host = document.querySelector<HTMLElement>('[data-skin="floor"]')!;
+    expect(host.style.getPropertyValue('--theme-text-primary')).toBe('#fafafa');
+    expect(host.style.getPropertyValue('--theme-bg-base')).toBe('#0b0b10');
+  });
 });

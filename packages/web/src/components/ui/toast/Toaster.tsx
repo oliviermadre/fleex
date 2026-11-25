@@ -32,14 +32,14 @@ export function Toaster({ linksEnabled = true }: {
   const toasts = useToastStore((s) => s.toasts);
   const offset = useToastStore((s) => s.offsets.at(-1)?.value ?? 0);
   const anchoredTop = useToastStore((s) => s.anchors.length > 0);
-  const skin = useToastStore((s) => s.skins.at(-1)?.value ?? null);
+  const skin = useToastStore((s) => s.skins.at(-1)?.value ?? null), skinStyle = useToastStore((s) => s.skinStyle);
 
   if (skin === 'quiet') return null;
   /* the floor skin: lines over the page, the latest at the bottom; only the lines take the pointer */
   if (skin === 'floor') {
     return (
       <div aria-live="polite" data-skin="floor" className="fleex-toaster pointer-events-none fixed left-1/2 z-[60] flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-start gap-[3px]"
-        style={{ bottom: `calc(${offset}px + 0.5rem)` }}>
+        style={{ ...skinStyle, bottom: `calc(${offset}px + 0.5rem)` }}>
         {toasts.map((t) => <FloorLine key={`${t.id}:${t.version}`} toast={t} linksEnabled={linksEnabled} live />)}
       </div>
     );

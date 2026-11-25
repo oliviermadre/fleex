@@ -94,6 +94,8 @@ interface ToastState {
    * shows them in its own log). None: the cards.
    */
   skins: LayoutEntry<ToastSkin>[];
+  /** The look the page that set the skin draws with (its colours and font as CSS variables): the stack is outside it. */
+  skinStyle: Record<string, string | number> | null;
   /** The last toasts shown, the latest last, updates in place: what a page's log shows again. */
   history: ToastItem[];
 
@@ -103,7 +105,7 @@ interface ToastState {
   resume: (id: string) => void;
   pushOffset: (px: number) => number;
   pushAnchor: (anchor: 'top') => number;
-  pushSkin: (skin: ToastSkin) => number;
+  pushSkin: (skin: ToastSkin, style?: Record<string, string | number> | null) => number;
   popLayout: (key: number) => void;
 }
 
@@ -134,6 +136,7 @@ export const useToastStore = create<ToastState>((set, get) => {
     offsets: [],
     anchors: [],
     skins: [],
+    skinStyle: null,
     history: [],
 
     show: (input) => {
@@ -220,9 +223,9 @@ export const useToastStore = create<ToastState>((set, get) => {
       return key;
     },
 
-    pushSkin: (skin) => {
+    pushSkin: (skin, style = null) => {
       const key = ++nextLayoutKey;
-      set((s) => ({ skins: [...s.skins, { key, value: skin }] }));
+      set((s) => ({ skins: [...s.skins, { key, value: skin }], skinStyle: style }));
       return key;
     },
 
@@ -240,5 +243,5 @@ export const useToastStore = create<ToastState>((set, get) => {
 export function resetToasts(): void {
   for (const t of timers.values()) clearTimeout(t.handle);
   timers.clear();
-  useToastStore.setState({ toasts: [], offsets: [], anchors: [], skins: [], history: [] });
+  useToastStore.setState({ toasts: [], offsets: [], anchors: [], skins: [], skinStyle: null, history: [] });
 }

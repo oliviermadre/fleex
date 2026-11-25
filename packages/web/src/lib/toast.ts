@@ -64,13 +64,15 @@ export function useToastAnchor(anchor: 'top' | null): void {
  * page that fade by themselves and never block it; `quiet`, nothing, while the page shows them in its own log. The
  * last mounted wins. Pass `null` to release. Callers of `toast()` still never choose how it looks.
  */
-export function useToastSkin(skin: ToastSkin | null): void {
+export function useToastSkin(skin: ToastSkin | null, style?: Record<string, string | number> | null): void {
+  /* `style`: the page's own colours and font (CSS variables), when it draws with others than the app's theme: the
+     stack is outside the page, and would otherwise read the app's (dark text over a dark floor in a light theme) */
   useEffect(() => {
     if (!skin) return;
     const { pushSkin, popLayout } = useToastStore.getState();
-    const key = pushSkin(skin);
+    const key = pushSkin(skin, style ?? null);
     return () => popLayout(key);
-  }, [skin]);
+  }, [skin, style]);
 }
 
 /** The last toasts shown (50 at most), the latest last: for a page that shows them again, as the Factory's log. */

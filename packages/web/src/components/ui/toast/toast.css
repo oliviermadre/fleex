@@ -51,7 +51,8 @@
 
 .fleex-floor-line {
   animation: fleex-floor-line linear forwards;
-  text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, 0.85);
+  /* a halo in the floor's own background colour: the letters read over belts and machines, on a dark skin as on a light one */
+  text-shadow: 0 1px 2px var(--theme-bg-base, #000), 0 0 6px var(--theme-bg-base, #000), 0 0 10px var(--theme-bg-base, #000);
 }
 
 .fleex-floor-line[data-keep='true'] {
