@@ -73,10 +73,15 @@
   .feed.mid { left: 280px; bottom: 150px; width: 560px; justify-content: flex-end; }
   .log { position: absolute; left: 270px; bottom: 148px; width: 600px; display: none; flex-direction: column; gap: 6px; }
   .screen.chat .log { display: flex; }
-  .screen.chat .feed.mid { display: none; }
+  .screen.chat .feed.mid, .screen.chat .hint { display: none; }
   .log .hist { max-height: 250px; background-color: rgba(10,8,20,.5); overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; background: linear-gradient(to bottom, rgba(10,8,20,0), rgba(10,8,20,.55) 30%); border-radius: 8px; }
   .log .hist .ln { animation: none; }
-  .log input { font: 500 12.5px var(--body); color: var(--ink); background: rgba(10, 8, 20, 0.6); border: 1px solid #5b5390; border-radius: 6px; padding: 6px 10px; }
+  .say { display: flex; align-items: center; gap: 0; background: rgba(10, 8, 20, 0.6); border: 1px solid #5b5390; border-radius: 6px; padding: 0 0 0 8px; }
+  .say .to { font: 700 12px var(--mono); white-space: nowrap; }
+  .say .to.as { color: #86efac; } .say .to.tk { color: var(--link); }
+  .log .tab { font: 500 10px var(--mono); color: #8f8aae; text-shadow: 0 1px 2px #000; }
+  .ln .who { font-weight: 700; flex: none; } .ln .who.as { color: #86efac; } .ln .who.tk { color: var(--link); } .ln .who.me { color: #e9d5ff; }
+  .log input { flex: 1; border: 0 !important; background: transparent !important; outline: none; font: 500 12.5px var(--body); color: var(--ink); background: rgba(10, 8, 20, 0.6); border: 1px solid #5b5390; border-radius: 6px; padding: 6px 10px; }
   .hint { position: absolute; font: 600 10px var(--mono); color: #8f8aae; text-shadow: 0 1px 2px #000; }
 
   .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -95,7 +100,7 @@
   <section>
     <div class="row">
       <h2 style="flex:1 1 auto">The floor, messages arriving</h2>
-      <button type="button" id="chatBtn" aria-pressed="false">Open the log (Enter)</button>
+      <button type="button" id="chatBtn" aria-pressed="false">Open the log and talk (Enter)</button>
     </div>
     <div class="scroll"><div class="screen" id="screen">
       <div class="m" style="left:380px;top:170px;width:66px;height:66px"></div><div class="belt" style="left:448px;top:200px;width:70px"></div>
@@ -115,7 +120,7 @@
       <div class="plate cmd"></div>
 
       <div class="feed" id="feed" aria-live="polite"></div>
-      <div class="log" id="log"><div class="hist" id="hist"></div><input id="logq" placeholder="Search the log · Esc closes" aria-label="Search the log"></div>
+      <div class="log" id="log"><div class="hist" id="hist"></div><div class="say"><span class="to" id="to"></span><input id="logq" placeholder="" aria-label="Message"></div><span class="tab">Tab · who you talk to &nbsp; Enter · send &nbsp; Esc · close</span></div>
       <span class="hint" id="hint"></span>
     </div></div>
     <p class="brief" id="explain"></p>
@@ -127,6 +132,32 @@
       <div class="card" data-v="bl"><div class="card-head"><span class="letter">A</span><h3>Bottom left, as chat in an RPG</h3></div><p>Above the minimap, the latest at the bottom, fading after a few seconds. Out of the way, but far from the list of what needs you, and the lines get long over the floor.</p><button type="button">Pick A</button></div>
       <div class="card" data-v="mid"><div class="card-head"><span class="letter">B</span><h3>In the middle, over the console, with a log</h3><span class="mine">recommended</span></div><p>In the notch over the saved selections, where nothing else is, as chat is in a strategy game. They fade by themselves. Enter (with nothing selected) opens the log there: the last messages, to scroll and to search.</p><button type="button">Pick B</button></div>
       <div class="card" data-v="tl"><div class="card-head"><span class="letter">C</span><h3>Under what needs you</h3></div><p>The latest at the top, pushing the others down as they fade. Everything about you is in one corner, but a long list of needs pushes them down the screen.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Enter: talk to the floor</h2>
+    <p class="brief">Enter opens a line over the console, as chat does in a strategy game. Who you talk to is written at its start, and Tab changes it: <b style="color:#86efac">[Assistant]</b>, or <b style="color:var(--link)">[#788 unipile]</b>, the ticket selected (or the first one that needs you). Replies come back as lines of the log, fading like the rest. Try it on the screen above: open the log, type, Tab, Enter.</p>
+    <div class="grid">
+      <div class="card" style="gap:6px"><h3 style="color:#86efac">To the assistant</h3><p>A question about the floor or anything else: "why is #788 stuck?", "what failed today?". It is the Assistant of Fleex, with the floor in view; its answer comes back in the log, and opens whole in the Assistant page.</p></div>
+      <div class="card" style="gap:6px"><h3 style="color:var(--link)">To a ticket</h3><p>A comment in its thread, as you. When the ticket waits on a question, it is the answer: the station that asked runs again. An @persona in it starts that agent, as anywhere in Fleex. Its agents' replies come back in the log.</p></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · Who you can talk to</h2>
+    <div class="grid">
+      <div class="card" data-v="both"><div class="card-head"><span class="letter">A</span><h3>Both, Tab switches</h3><span class="mine">recommended</span></div><p>The assistant and the tickets. Tab goes from one to the other; with a ticket selected, it goes through the assistant and that ticket.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="tickets"><div class="card-head"><span class="letter">B</span><h3>Tickets only</h3></div><p>A way to answer and comment without opening the ticket. The assistant stays on its page.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="assistant"><div class="card-head"><span class="letter">C</span><h3>The assistant only</h3></div><p>A console to ask about the floor. Answering a ticket still opens it.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p4">
+    <h2>4 · Who the line opens on</h2>
+    <div class="grid">
+      <div class="card" data-v="selected"><div class="card-head"><span class="letter">A</span><h3>The ticket selected, else the last one talked to</h3><span class="mine">recommended</span></div><p>Select a ticket, Enter, type: you answer it. Nothing selected: whoever you talked to last. Enter with a ticket selected then means "talk to it", and its thread opens with V or a double-click.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="assist"><div class="card-head"><span class="letter">B</span><h3>Always the assistant</h3></div><p>Enter keeps opening a ticket when one is selected; with nothing selected, it opens the line on the assistant. Tab to reach a ticket.</p><button type="button">Pick B</button></div>
     </div>
   </section>
 
@@ -147,9 +178,9 @@
   const KEY = 'factory-floor-messages-picks';
   let picks = {};
   try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
-  const DEF = { p1: 'mid', p2: 'log' };
+  const DEF = { p1: 'mid', p2: 'log', p3: 'both', p4: 'selected' };
   for (const k in DEF) picks[k] = picks[k] || DEF[k];
-  const NAMES = ['Where', 'Back'];
+  const NAMES = ['Where', 'Talk to', 'Opens on', 'Back'];
   const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
   const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -167,7 +198,7 @@
   const history = [];
   let n = 0;
   const clock = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-  const line = (m, keep) => `<div class="ln tn-${m.tone}${keep ? ' keep' : ''}"><span class="t">${m.t}</span><span class="k">${esc(m.k)}</span><span class="msg">${esc(m.msg)}</span>${m.act ? `<span class="act">${esc(m.act)}</span>` : ''}</div>`;
+  const line = (m, keep) => `<div class="ln tn-${m.tone}${keep ? ' keep' : ''}"><span class="t">${m.t}</span>${m.who ? `<span class="who ${m.whoCls}">${esc(m.who)}</span>` : `<span class="k">${esc(m.k)}</span>`}<span class="msg">${esc(m.msg)}</span>${m.act ? `<span class="act">${esc(m.act)}</span>` : ''}</div>`;
   function push() {
     const m = { ...SAMPLES[n++ % SAMPLES.length], t: clock() };
     history.push(m); if (history.length > 50) history.shift();
@@ -179,9 +210,28 @@
     if ($('screen').classList.contains('chat')) renderLog();
   }
   function renderLog() {
-    const q = $('logq').value.trim().toLowerCase();
-    $('hist').innerHTML = history.filter((m) => !q || m.msg.toLowerCase().includes(q)).map((m) => line(m, true)).join('') || '<div class="ln keep"><span class="msg" style="color:#8f8aae">Nothing matches</span></div>';
+    $('hist').innerHTML = history.map((m) => line(m, true)).join('');
     $('hist').scrollTop = $('hist').scrollHeight;
+  }
+  /* who the line talks to: Tab goes round them */
+  const TARGETS = { both: ['assistant', 'ticket'], tickets: ['ticket'], assistant: ['assistant'] };
+  let target = 0;
+  const targets = () => (picks.p4 === 'assist' ? ['assistant', 'ticket'] : ['ticket', 'assistant']).filter((t) => TARGETS[picks.p3].includes(t));
+  function showTarget() {
+    const t = targets()[target % targets().length], el = $('to');
+    el.className = `to ${t === 'assistant' ? 'as' : 'tk'}`;
+    el.textContent = t === 'assistant' ? '[Assistant]\u00a0' : '[#788 unipile]\u00a0';
+    $('logq').placeholder = t === 'assistant' ? 'Ask the assistant' : 'Comment, or answer its question';
+  }
+  const REPLY = {
+    assistant: 'It waits in Doing for you since 21 h: its run asked which API key to use. Answer it with Tab, or open it.',
+    ticket: 'Odys AI: thanks, I use the staging key and run again.',
+  };
+  function say(textIn) {
+    const t = targets()[target % targets().length], who = t === 'assistant' ? 'Assistant' : '#788';
+    history.push({ tone: 'info', k: '', who: `To ${who}`, whoCls: 'me', msg: textIn, t: clock() });
+    renderLog();
+    setTimeout(() => { history.push({ tone: 'info', k: '', who: t === 'assistant' ? '[Assistant]' : '[#788]', whoCls: t === 'assistant' ? 'as' : 'tk', msg: REPLY[t], t: clock() }); renderLog(); }, 900);
   }
   function place() {
     const feed = $('feed');
@@ -189,13 +239,13 @@
     if (picks.p1 === 'tl') feed.style.top = `${$('needs').offsetTop + $('needs').offsetHeight + 12}px`; else feed.style.top = '';
     feed.innerHTML = '';
     $('screen').classList.remove('chat'); $('chatBtn').setAttribute('aria-pressed', 'false');
-    $('chatBtn').hidden = !(picks.p1 === 'mid' && picks.p2 === 'log');
+    $('chatBtn').hidden = picks.p1 !== 'mid';
     const hint = $('hint');
     hint.textContent = picks.p2 === 'log' ? (picks.p1 === 'mid' ? 'Enter · log' : 'hover · last messages') : '';
     Object.assign(hint.style, picks.p1 === 'mid' ? { left: '520px', bottom: '128px', top: '' } : picks.p1 === 'bl' ? { left: '120px', bottom: '176px', top: '' } : { left: '14px', top: `${$('needs').offsetTop + $('needs').offsetHeight - 2}px`, bottom: '' });
     $('explain').textContent = {
       bl: 'A: lines above the minimap, the latest at the bottom. Each one fades after about six seconds (errors stay longer).',
-      mid: 'B: lines over the saved selections, in the middle. "Open the log" (Enter on the floor with nothing selected) shows the last 50 there, scrollable, with a field to search them; Escape closes it.',
+      mid: 'B: lines over the saved selections, in the middle. Enter (here, "Open the log") opens the last 50 there with a line to talk: Tab changes who to, Enter sends, Escape closes.',
       tl: 'C: lines under the list of what needs you, the latest at the top. They follow the list as it grows.',
     }[picks.p1];
   }
@@ -213,10 +263,13 @@
   $('chatBtn').addEventListener('click', () => {
     const on = !$('screen').classList.contains('chat');
     $('screen').classList.toggle('chat', on); $('chatBtn').setAttribute('aria-pressed', String(on));
-    if (on) { renderLog(); $('logq').focus(); }
+    if (on) { target = 0; showTarget(); renderLog(); $('logq').focus(); }
   });
-  $('logq').addEventListener('input', renderLog);
-  $('logq').addEventListener('keydown', (e) => { if (e.key === 'Escape') $('chatBtn').click(); });
+  $('logq').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('chatBtn').click();
+    else if (e.key === 'Tab') { e.preventDefault(); target++; showTarget(); }
+    else if (e.key === 'Enter' && $('logq').value.trim()) { e.preventDefault(); say($('logq').value.trim()); $('logq').value = ''; }
+  });
   $('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
   paint();
   push(); setTimeout(push, 700); setTimeout(push, 1400);
