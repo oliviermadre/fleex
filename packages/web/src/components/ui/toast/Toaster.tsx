@@ -32,6 +32,18 @@ export function Toaster({ linksEnabled = true }: {
   const toasts = useToastStore((s) => s.toasts);
   const offset = useToastStore((s) => s.offsets.at(-1)?.value ?? 0);
   const anchoredTop = useToastStore((s) => s.anchors.length > 0);
+  const skin = useToastStore((s) => s.skins.at(-1)?.value ?? null);
+
+  if (skin === 'quiet') return null;
+  /* the floor skin: lines over the page, the latest at the bottom; only the lines take the pointer */
+  if (skin === 'floor') {
+    return (
+      <div aria-live="polite" data-skin="floor" className="fleex-toaster pointer-events-none fixed left-1/2 z-[60] flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-start gap-[3px]"
+        style={{ bottom: `calc(${offset}px + 0.5rem)` }}>
+        {toasts.map((t) => <FloorLine key={`${t.id}:${t.version}`} toast={t} linksEnabled={linksEnabled} live />)}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -47,6 +59,44 @@ export function Toaster({ linksEnabled = true }: {
       {[...toasts].reverse().map((t) => (
         <ToastCard key={`${t.id}:${t.version}`} toast={t} linksEnabled={linksEnabled} />
       ))}
+    </div>
+  );
+}
+
+/** The sign at the head of a floor line, by tone: what a card says with its coloured dot. */
+const floorSign: Record<ToastTone, string> = { info: '·', success: '✓', warning: '!', error: '✕', action: '●' };
+const floorInk: Record<ToastTone, string> = {
+  info: 'text-[var(--tint-blue-solid)]', success: 'text-[var(--tint-green-solid)]', warning: 'text-[var(--tint-yellow-solid)]',
+  error: 'text-[var(--tint-red-solid)]', action: 'text-[var(--tint-purple-solid)]',
+};
+const clock = (at: number) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+/**
+ * One toast as a line of text, for the floor skin and for a page that shows the toasts again (the Factory's log):
+ * the time, the tone's sign (or the toast's icon), the title and the message, the action as a link. `live`: it fades
+ * over its duration and pauses under the pointer, as the card's countdown does; otherwise it stays.
+ */
+export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toast: ToastItem; linksEnabled?: boolean; live?: boolean }) {
+  const navigate = useNavigate();
+  const { dismiss, pause, resume } = useToastStore.getState();
+  const link = linksEnabled ? t.link : undefined;
+  const open = link ? () => { navigate(link); if (live) dismiss(t.id, 'click'); } : undefined;
+  return (
+    <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={!live || t.durationMs === null}
+      className="fleex-floor-line flex max-w-full items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]"
+      style={live && t.durationMs !== null ? { animationDuration: `${t.durationMs}ms` } : undefined}>
+      <span className="pointer-events-auto flex min-w-0 items-baseline gap-1.5" onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
+        <span className="flex-none font-mono text-[10.5px] text-[var(--theme-text-muted)]">{clock(t.createdAt)}</span>
+        <span className={cn('flex-none font-bold', floorInk[t.tone])} aria-hidden>{t.icon ?? floorSign[t.tone]}</span>
+        <span className={cn('min-w-0', open && 'cursor-pointer hover:underline')} onClick={open}>
+          {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
+          {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
+        </span>
+        {t.action && (
+          <button type="button" className="flex-none font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
+            onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+        )}
+      </span>
     </div>
   );
 }

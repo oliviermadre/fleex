@@ -75,3 +75,21 @@ describe('<Toaster/>', () => {
     expect(region.style.bottom).toBe('');
   });
 });
+
+describe('<Toaster/> on the floor skin', () => {
+  it('draws lines with no card, more of them, keeps a history, and draws nothing while quiet', () => {
+    const key = useToastStore.getState().pushSkin('floor');
+    renderToaster();
+    const undo = vi.fn();
+    act(() => { toast.success('Floor imported: 12 machines'); toast.info('"Build" deleted', { action: { label: 'Undo', onClick: undo } }); toast.warning('No room to paste here'); toast.error('Run failed'); toast.info('Fifth'); });
+    expect(document.querySelector('[data-skin="floor"]')).toBeTruthy();
+    expect(document.querySelectorAll('.fleex-floor-line')).toHaveLength(5);              // five lines, where cards stop at three
+    expect(document.querySelector('.fleex-toast')).toBeNull();
+    expect(screen.getByText('Floor imported: 12 machines').closest('.fleex-floor-line')!.textContent).toContain('✓');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(undo).toHaveBeenCalled();
+    expect(useToastStore.getState().history.map((h) => h.message)).toEqual(['Floor imported: 12 machines', '"Build" deleted', 'No room to paste here', 'Run failed', 'Fifth']);
+    act(() => { useToastStore.getState().popLayout(key); useToastStore.getState().pushSkin('quiet'); });
+    expect(document.querySelector('.fleex-toaster')).toBeNull();
+  });
+});

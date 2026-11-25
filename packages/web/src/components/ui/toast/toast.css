@@ -39,3 +39,31 @@
     animation: none;
   }
 }
+
+/* The floor skin (the Factory): lines of text over the floor, no card. A line is there, then fades over the last
+   quarter of its time; hovering it holds it. */
+@keyframes fleex-floor-line {
+  0% { opacity: 0; transform: translateY(4px); }
+  4% { opacity: 1; transform: none; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.fleex-floor-line {
+  animation: fleex-floor-line linear forwards;
+  text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, 0.85);
+}
+
+.fleex-floor-line[data-keep='true'] {
+  animation: fleex-toast-in 200ms ease-out;
+}
+
+.fleex-floor-line[data-paused='true'] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleex-floor-line {
+    animation: none;
+  }
+}

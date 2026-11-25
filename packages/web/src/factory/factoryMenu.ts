@@ -141,7 +141,7 @@ export function factoryMenu(c: MenuContext): Menu {
     }
     return menu('Ticket', {
       ...first,
-      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The ticket, its thread and its actions, without leaving the floor (also Enter)', run: a.openTicket },
+      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The ticket, its thread and its actions, without leaving the floor (also a double-click; Enter talks to it)', run: a.openTicket },
       6: t.favorite === null ? null : { id: 'star', label: t.favorite ? 'Unstar' : 'Star', icon: 'star', tone: 'plan', active: t.favorite, title: t.favorite ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: a.star },
       7: t.canAside ? { id: 'aside', label: 'Set aside', icon: 'person', tone: 'plan', title: t.phase === 'running' ? 'Stop the run and keep the ticket in its station until you put it back' : 'Keep the ticket in its station until you put it back', run: a.setAside } : null,
       [FIT_SLOT]: fit,

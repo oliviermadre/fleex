@@ -8,7 +8,7 @@ import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { openTicketInWork } from '../components/work/openInWork';
-import { toast, useToastOffset } from '../lib/toast';
+import { toast, useToastOffset, useToastSkin } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
@@ -32,6 +32,7 @@ import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, 
 import { find, NO_FINDER, type Finder } from './finder';
 import { FactoryFinder, FiltersTab } from './FactoryFinder';
 import { ConsoleStrip, FactoryCounters } from './FactoryHudOverlay';
+import { FactoryTalk, useTalkReplies, type TalkTicket } from './FactoryTalk';
 import { FloatingPortal, usePopover } from '../hooks/usePopover';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
@@ -264,6 +265,9 @@ function Floor() {
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
+  /* Enter: the line to talk to the assistant or a ticket; while it is open, the messages are in its log, not over the floor */
+  const [talkOpen, setTalkOpen] = useState(false);
+  useToastSkin(talkOpen ? 'quiet' : 'floor');
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {
@@ -642,6 +646,12 @@ function Floor() {
   /* what waits for someone: listed top-left, and walked with the left and right arrows */
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
+  /* who the line talks to besides the assistant: the ticket selected, else the first ticket that needs you */
+  const talkTicket = useMemo((): TalkTicket | null => {
+    const t = selTicket && !selTicket.item ? selTicket : needs.find((n) => !n.ticket.item)?.ticket ?? null;
+    return t ? { ticketId: t.ticketId, label: `#${t.info?.displayId ?? '?'}${t.info?.title ? ` ${t.info.title.length > 28 ? `${t.info.title.slice(0, 27)}…` : t.info.title}` : ''}` } : null;
+  }, [selTicket, needs]);
+  useTalkReplies(setOpenTicket);
   /* the stations that cannot run yet (no persona, skill or panel, or one this instance does not have; a script with nothing to run) */
   const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
   const unset = useMemo(() => {
@@ -864,7 +874,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem || floorOpen || limitsOpen || talkOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -886,7 +896,9 @@ function Floor() {
       /* U puts the console away and brings it back, in any mode */
       if (e.code === 'KeyU') { e.preventDefault(); flipHud(); return; }
       if (e.code === 'KeyN' && !live.current.building) { e.preventDefault(); stepWaiting(e.shiftKey ? -1 : 1); return; }
-      if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      /* Enter talks: to the ticket selected, or, with nothing selected, to whoever was talked to last; an item opens */
+      if (e.key === 'Enter' && selTicket?.item && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      if (e.key === 'Enter' && !live.current.building && (selTicket || !selMachine)) { e.preventDefault(); setTalkOpen(true); return; }
       if (e.key === 'Enter' && selMachine?.kind === 'exit' && !building) { e.preventDefault(); setExitLog({ machineId: selMachine.id }); return; }
       if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
@@ -905,7 +917,7 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, archived, archivedItem, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, archived, archivedItem, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting, talkOpen]);
 
   /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
   const skinShown = useRef(skinKey);
@@ -982,6 +994,8 @@ function Floor() {
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
+      {talkOpen && <FactoryTalk ticket={talkTicket} onClose={() => setTalkOpen(false)} onOpenTicket={(id) => { setTalkOpen(false); setOpenTicket(id); }}
+        style={hudHidden ? { left: '50%', bottom: 44, width: 'min(640px, calc(100% - 32px))', transform: 'translateX(-50%)', position: 'fixed' } : { left: '50%', bottom: HUD.mid + 30, width: `min(640px, calc(100% - ${HUD.left + HUD.right + 32}px))`, transform: 'translateX(-50%)', position: 'fixed' }} />}
       {filtersOpen && snapshot && (
         <FloatingPortal>
           <div ref={filters.refs.setFloating} style={filters.floatingStyles} {...filters.getFloatingProps()} aria-label="Filters"

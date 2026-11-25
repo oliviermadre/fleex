@@ -605,6 +605,21 @@ They are placed from Build › Move › Teleporter, as a departure; the popup se
 (among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
 with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
 
+## Messages on the floor, and Enter to talk
+
+On the Factory, toasts are not cards (picked on `docs/factory/floor-messages.html`): the page sets the Toaster's
+`floor` skin (`useToastSkin`), and every toast, the floor's own and Fleex's notifications, is a line of text over the
+console's middle, with no plate, fading by itself (hovering holds it; an action stays a link, a toast that waits for
+something stays). The Toaster keeps the last 50 (`useToastHistory`).
+
+Enter on the floor (with nothing selected, or a ticket selected) opens a line to talk over the console
+(`FactoryTalk.tsx`), with the log of those 50 above it; the messages stop showing over the floor meanwhile (`quiet`
+skin). Who it talks to is at its start and Tab changes it: the assistant, or a ticket (the one selected, else the first
+that needs you). To a ticket it is a comment in its thread, as you (an answer, when it waits on a question); its
+agents' replies come back as toasts. To the assistant it is a question in a conversation of its own ("Factory floor"),
+told once that its answer is read in a one-line log; the answer comes back as a toast, with Open to read it whole.
+With a ticket selected, Enter talks to it: its thread opens with Open, or a double-click. An item still opens on Enter.
+
 ## Fast arms
 
 An arm can be fast, as a belt can (`fast` on the arm, picked on `docs/factory/fast-arm.html`): it swings twice as

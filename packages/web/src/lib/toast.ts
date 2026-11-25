@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useToastStore, type ToastInput } from '../stores/toastStore';
+import { useToastStore, type ToastInput, type ToastItem, type ToastSkin } from '../stores/toastStore';
 
 /**
  * Fleex has ONE toast — this module is its only entry point.
@@ -17,7 +17,7 @@ import { useToastStore, type ToastInput } from '../stores/toastStore';
  * See docs/adr/0001-single-toast.md.
  */
 
-export type { ToastInput, ToastTone, ToastAction, ToastDismissReason } from '../stores/toastStore';
+export type { ToastInput, ToastTone, ToastAction, ToastDismissReason, ToastItem, ToastSkin } from '../stores/toastStore';
 
 type ToneOptions = Omit<ToastInput, 'message' | 'tone'>;
 
@@ -57,4 +57,23 @@ export function useToastAnchor(anchor: 'top' | null): void {
     const key = pushAnchor(anchor);
     return () => popLayout(key);
   }, [anchor]);
+}
+
+/**
+ * Layout hook: while mounted, draws the stack another way (see `ToastSkin`): `floor`, lines of text over a game-like
+ * page that fade by themselves and never block it; `quiet`, nothing, while the page shows them in its own log. The
+ * last mounted wins. Pass `null` to release. Callers of `toast()` still never choose how it looks.
+ */
+export function useToastSkin(skin: ToastSkin | null): void {
+  useEffect(() => {
+    if (!skin) return;
+    const { pushSkin, popLayout } = useToastStore.getState();
+    const key = pushSkin(skin);
+    return () => popLayout(key);
+  }, [skin]);
+}
+
+/** The last toasts shown (50 at most), the latest last: for a page that shows them again, as the Factory's log. */
+export function useToastHistory(): ToastItem[] {
+  return useToastStore((s) => s.history);
 }
