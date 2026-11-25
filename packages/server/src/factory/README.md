@@ -605,6 +605,18 @@ They are placed from Build › Move › Teleporter, as a departure; the popup se
 (among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
 with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
 
+## No top bar: the overlays
+
+The Factory has no bar over the floor (picked on `docs/factory/hud-overlay.html`). What it held is on the floor:
+the counters top right, with no plate behind them (tickets, items, runs in progress and per hour against their limits,
+what waits for you; each says what it counts on hover, `FactoryHudOverlay.tsx`); the search and filters in a popup
+out of the Filters tab on the minimap, which counts the filters on and the tickets kept ("/" opens it, Enter jumps to
+the next ticket found, Escape clears the search then closes); and, in a strip over the command card, the emergency
+stop beside the switch that hides the console (U). The stop is held for a second to stop the floor (let go before,
+nothing happens); stopped, it reads "Stopped · Restart" and the floor gets the hazard tape of build mode. With the
+console hidden, the tab and the strip stay in the floor's bottom corners. The desktop title bar reads fleex.factory
+on this page and fleex.dev elsewhere.
+
 ## A station that is not set up
 
 A station that runs something and has nothing to run yet takes tickets in and starts nothing on them, as if switched

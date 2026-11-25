@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useRoutineStore } from '../../stores/routineStore';
@@ -14,6 +14,8 @@ import { useFocusCount } from '../../stores/focusStore';
 import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
+  /* fleex.factory on the Factory, fleex.dev everywhere else (the desktop title bar does the same) */
+  const onFactory = useLocation().pathname.startsWith('/factory');
   return (
     <div className={cn(
       'flex items-center border-b border-[var(--theme-border)] px-4 py-4',
@@ -26,7 +28,7 @@ function FleexLogo({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <span className="text-base font-bold tracking-tight">
           <span className="text-[var(--theme-text-primary)]">fleex</span>
-          <span className="text-[var(--theme-accent)]">.dev</span>
+          <span className="text-[var(--theme-accent)]">{onFactory ? '.factory' : '.dev'}</span>
         </span>
       )}
     </div>

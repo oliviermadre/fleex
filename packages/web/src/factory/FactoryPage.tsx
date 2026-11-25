@@ -30,7 +30,9 @@ import { frameGap } from './frameRate';
 import { armFacing, canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
-import { FactoryFinder } from './FactoryFinder';
+import { FactoryFinder, FiltersTab } from './FactoryFinder';
+import { ConsoleStrip, FactoryCounters } from './FactoryHudOverlay';
+import { FloatingPortal, usePopover } from '../hooks/usePopover';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryNeeds } from './FactoryNeeds';
@@ -230,6 +232,9 @@ function Floor() {
   const [limitsOpen, setLimitsOpen] = useState(false);
   /* the console put away, to give the floor the whole page: kept in the browser like the toggles */
   const [hudHidden, setHudHidden] = useState(loadConsoleHidden);
+  /* the filters, in a popup out of the Filters tab on the minimap; the floor stays live behind it */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = usePopover({ placement: 'top-start', gap: 6, role: 'dialog', open: filtersOpen, onOpenChange: setFiltersOpen, enableClick: false });
   const flipHud = useCallback(() => setHudHidden((h) => { saveConsoleHidden(!h); return !h; }), []);
   const [planOpen, setPlanOpen] = useState(false);
   /* a floor read from a file, while it is asked where it goes; then what was taken off its machines */
@@ -868,7 +873,7 @@ function Floor() {
         if (chord === 'v') paste(); else copy(chord === 'x');
         return;
       }
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); findRef.current?.focus(); findRef.current?.select(); return; }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setFiltersOpen(true); window.setTimeout(() => { findRef.current?.focus(); findRef.current?.select(); }, 0); return; }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z' && live.current.building) {
         e.preventDefault(); setSelection(null);
         void (e.shiftKey ? useFactoryStore.getState().redo() : useFactoryStore.getState().undo());
@@ -901,7 +906,6 @@ function Floor() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
   }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, archived, archivedItem, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
 
-  const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
   const skinShown = useRef(skinKey);
   useEffect(() => { if (skinShown.current !== skinKey) { skinShown.current = skinKey; viewRef.current?.setSkin(makeSkin()); } }, [skinKey, makeSkin]);
@@ -911,16 +915,6 @@ function Floor() {
   return (
     <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]" data-skin={skin.id} style={chromeStyle}>
       <style>{EDGE_CSS}</style>
-      <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
-        <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
-        <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
-        {snapshot && <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} />}
-        <span className="flex-1" />
-        {snapshot && (halted
-          ? <Button size="sm" variant="primary" onClick={() => void store.halt(false)} title="Belts, arms and stations carry on from where they stood; the runs that were cut start again">Restart the floor</Button>
-          : <Button size="sm" variant="danger" onClick={() => void store.halt(true)} title="Stops every belt, arm and station at once, and cuts the runs in progress. They start again when the floor is restarted">Emergency stop</Button>)}
-        {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running}/{snapshot.floor.settings.maxConcurrentRuns} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
-      </div>
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
           <canvas
@@ -931,7 +925,12 @@ function Floor() {
           {/* the console casts a shadow on the floor along its contour; the build tape lies over it */}
           {!hudHidden && <FactoryHudShadow hud={HUD} light={chrome ? chrome.light : undefined} />}
           {/* build mode says so all round the view: tape, and a plate in its corner */}
-          {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
+          {(building || halted) && <FactoryBuildFrame halted={halted} building={building} hud={hudHidden ? null : HUD} />}
+          {snapshot && <FactoryCounters c={{
+            tickets: snapshot.tickets.filter((t) => !t.item).length, items: snapshot.tickets.filter((t) => t.item).length,
+            running: snapshot.running, maxRunning: snapshot.floor.settings.maxConcurrentRuns, runsHour: snapshot.runsLastHour, maxRunsHour: snapshot.floor.settings.maxRunsPerHour,
+            waiting: needs.length + unset.length,
+          }} />}
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
           {!building && needs.length + unset.length > 0 && <FactoryNeeds needs={needs} unset={unset} selected={selTicket?.ticketId ?? selMachine?.id ?? null} onPick={pickNeed} onOpen={setOpenTicket} onPickMachine={(id) => (selMachine?.id === id ? setOpenMachine(id) : showMachine(id))} />}
@@ -951,7 +950,7 @@ function Floor() {
             </div>
           )}
           {layer && !building && (
-            <div className={cn('absolute top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg', needs.length ? 'left-[292px]' : 'left-3')} role="status">
+            <div className={cn('absolute top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg', needs.length + unset.length ? 'left-[292px]' : 'left-3')} role="status">
               <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>
               <span className="min-w-0 flex-1 text-[11px] text-[var(--theme-text-secondary)]">{layer.legend}{layer.kind !== 'load' && stats && layer.values.size === 0 ? ' — nothing to show yet.' : ''}</span>
               <Button size="sm" variant="ghost" onClick={() => setLens('none')}>Off</Button>
@@ -968,7 +967,9 @@ function Floor() {
           )}
         </div>
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud} building={building}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} building={building}
+        tab={snapshot && <FiltersTab finder={finder} found={found} total={snapshot.tickets.length} open={filtersOpen} onToggle={() => setFiltersOpen((o) => !o)} tabRef={filters.refs.setReference} tabProps={filters.getReferenceProps()} />}
+        strip={<ConsoleStrip halted={halted} onHalt={(on) => void store.halt(on)} hidden={hudHidden} onHide={flipHud} />}
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
@@ -980,6 +981,14 @@ function Floor() {
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
+      {filtersOpen && snapshot && (
+        <FloatingPortal>
+          <div ref={filters.refs.setFloating} style={filters.floatingStyles} {...filters.getFloatingProps()} aria-label="Filters"
+            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl backdrop-blur-md">
+            <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} onClose={() => setFiltersOpen(false)} />
+          </div>
+        </FloatingPortal>
+      )}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
       <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Floor file to import" onChange={(e) => void onImportFile(e)} />
       {importing && <FloorImportChoice name={importing.name} incoming={importing.read.machines.length} here={layout?.machines.length ?? 0}

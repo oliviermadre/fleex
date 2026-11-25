@@ -151,7 +151,7 @@ function Tile({ c, slotKey, onRun }: { c: Command; slotKey: string; onRun: (c: C
   );
 }
 
-export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow, hidden = false, onHide, building = false }: {
+export function FactoryConsole({ view, snapshot, layout, selection, onSelect, menu, trail, onRun, title, hint, groups, onGroup, miniRef, lens, onLens, onFit, show, onShow, hidden = false, tab, strip, building = false }: {
   view: FactoryView | null; snapshot: FactorySnapshot | null; layout: FactoryLayout | null; selection: Selection; onSelect: (s: Selection) => void;
   /** The menu shown in the command card, the menus that lead to it, and what running one of its commands does. */
   menu: Menu; trail: string[]; onRun: (c: Command) => void;
@@ -159,8 +159,10 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   lens: Lens; onLens: (lens: Lens) => void; onFit: () => void;
   /** What the floor shows on top of the machines, and the switch for each. */
   show: Show; onShow: (key: keyof Show) => void;
-  /** The console is put away to give the floor the whole page; its handle stays, and the card's keys still work. */
-  hidden?: boolean; onHide?: () => void;
+  /** The console is put away to give the floor the whole page; the tab and the strip stay, and the card's keys still work. */
+  hidden?: boolean;
+  /** What stands on the minimap's top edge (the Filters tab), and over the command card (the stop, the switch that hides the console). */
+  tab?: React.ReactNode; strip?: React.ReactNode;
   /** Build mode: with nothing selected, the portrait is the work site and not the factory. */
   building?: boolean;
 }) {
@@ -192,16 +194,15 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
   const machineUnit = (m: MachineSpec): Unit => ({ id: m.id, face: <FIcon name={machineIcon(m)} size={20} />, name: ('name' in m && m.name) || (m.kind === 'label' ? m.text : machineKind(m)), sub: machineKind(m) });
   const avatar: AvatarOf = ticket ? { kind: 'ticket', info: ticket.info } : machine ? { kind: 'machine', machine } : picked ? { kind: 'many', count: picked.length, of: 'tickets' } : many ? { kind: 'many', count: many, of: 'machines' } : building ? { kind: 'build' } : { kind: 'floor' };
 
-  /* the handle: at the end of the notch over the middle; with the console hidden it is all that is left, at the foot of the floor */
-  const handle = onHide && (
-    <button type="button" onClick={onHide} aria-expanded={!hidden} aria-label={hidden ? 'Show the console' : 'Hide the console'} title={hidden ? 'Bring the console back (U)' : 'Hide the console and give the floor the whole page (U). The keys of the command card still work.'}
-      className={cn('flex h-5 flex-none items-center gap-1 rounded-t-md border border-b-0 border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]', hidden && 'absolute bottom-full left-1/2 z-10 -translate-x-1/2')}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={hidden ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} /></svg>
-      {hidden && 'Console'}
-      <kbd className="font-mono text-[var(--theme-text-faint)]">U</kbd>
-    </button>
-  );
-  if (hidden) return <div className="relative h-0 flex-shrink-0" aria-label="Factory console">{handle}</div>;
+  /* with the console put away, the tab and the strip stay at the foot of the floor, in its corners */
+  if (hidden) {
+    return (
+      <div className="relative h-0 flex-shrink-0" aria-label="Factory console">
+        {tab && <div className="absolute bottom-0 left-3 z-10">{tab}</div>}
+        {strip && <div className="absolute bottom-0 right-0 z-10">{strip}</div>}
+      </div>
+    );
+  }
 
   /*
    * The console is not a straight bar: the block of the minimap and the block of the command card stand taller than
@@ -267,11 +268,13 @@ export function FactoryConsole({ view, snapshot, layout, selection, onSelect, me
         </div>
       </Side>
 
-      {/* in the notch: the saved selections at their ten places, and the handle that puts the console away */}
+      {/* in the notch: the saved selections at their ten places */}
       <div className="absolute bottom-full z-10 flex items-end gap-2" style={{ left: HUD.left + 8, right: HUD.right + 8 }}>
         <Groups groups={groups} selection={selection} tickets={tickets} layout={layout} onGroup={onGroup} />
-        {handle}
       </div>
+      {/* on the top edges of the two side blocks: the Filters tab over the minimap, the strip over the command card */}
+      {tab && <div className="absolute z-10" style={{ left: 12, bottom: HUD.mid + HUD.step }}>{tab}</div>}
+      {strip && <div className="absolute right-0 z-10" style={{ bottom: HUD.mid + HUD.step }}>{strip}</div>}
 
       {/* the middle: what is selected, and its portrait against the command card */}
       <div className="@container absolute inset-y-0 flex gap-2 border-t bg-[var(--theme-bg-surface)] p-2" style={{ left: HUD.left, right: HUD.right, borderColor: EDGE, backgroundImage: SHEEN }}>
