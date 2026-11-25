@@ -57,7 +57,7 @@ export async function announceTicket(t: TalkTicket, onOpen: (ticketId: string) =
   const asked = [...comments].reverse().find((c) => c.authorType === 'agent');
   const one = asked?.questions?.length === 1 ? asked.questions : null;
   toast.show({
-    tone: 'action', title: from, message: asked ? short(asked.body, 400) : 'It asked you a question: read it in its thread.', durationMs: 30_000,
+    tone: 'action', title: from, message: asked ? asked.body.trim() : 'It asked you a question: read it in its thread.', durationMs: 30_000,
     choices: one ? one[0]!.options.map((o) => ({ label: o, onClick: () => answer(t, formatQuestionAnswer(one, [o])) })) : undefined,
     action: open,
   });
@@ -177,14 +177,14 @@ export function FactoryTalk({ ticket, others = [], onClose, onOpenTicket, style 
     talkLog.said = [...talkLog.said, { at: Date.now(), to: 'Assistant', text: body }].slice(-50); setSaid(talkLog.said);
     talkLog.last = 'assistant';
     askAssistant(body, (reply, sessionId) => toast.show({
-      title: '[Assistant]', message: short(reply), icon: '✦', durationMs: 15_000,
+      title: '[Assistant]', message: reply.trim(), icon: '✦', durationMs: 15_000,
       action: { label: 'Open', onClick: () => { useAssistantStore.getState().openSession(sessionId); navigate('/assistant'); } },
     }));
   };
 
   return (
     <div className="absolute z-[8] flex flex-col gap-1.5" style={style} role="dialog" aria-label="Talk">
-      <div ref={hist} className="flex max-h-[260px] flex-col gap-[3px] overflow-y-auto rounded-lg bg-[color-mix(in_srgb,var(--theme-bg-base)_55%,transparent)] px-2.5 py-2" aria-label="Log">
+      <div ref={hist} className="flex max-h-[320px] flex-col gap-[3px] overflow-y-auto rounded-xl border border-[color-mix(in_srgb,var(--theme-text-primary)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_78%,transparent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl backdrop-saturate-150 px-3 py-2.5" aria-label="Log">
         {lines.length === 0 && <span className="text-[12px] text-[var(--theme-text-muted)]">Nothing yet: messages and replies show here.</span>}
         {lines.map((l, i) => ('t' in l ? <FloorLine key={`t${(l.t as ToastItem).id}:${(l.t as ToastItem).version}`} toast={l.t as ToastItem} /> : (
           <div key={`s${i}`} className="fleex-floor-line flex items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]" data-keep="true">
@@ -194,7 +194,7 @@ export function FactoryTalk({ ticket, others = [], onClose, onOpenTicket, style 
         )))}
       </div>
       {typed !== null && (
-        <div className="flex flex-col gap-px rounded-md border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-base)_85%,transparent)] p-1 backdrop-blur-sm" role="listbox" aria-label="Commands">
+        <div className="flex flex-col gap-px rounded-lg border border-[color-mix(in_srgb,var(--theme-text-primary)_14%,transparent)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_78%,transparent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_12px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl backdrop-saturate-150 p-1" role="listbox" aria-label="Commands">
           {shown.length === 0 && <span className="px-2 py-1 text-[12px] text-[var(--theme-text-muted)]">No command starts with /{typed} here</span>}
           {shown.map((c, i) => (
             <button key={c.name} type="button" role="option" aria-selected={i === pick} onMouseDown={(e) => { e.preventDefault(); command(c.name); }}
@@ -207,7 +207,7 @@ export function FactoryTalk({ ticket, others = [], onClose, onOpenTicket, style 
       <span className="self-end font-mono text-[10px] text-[var(--theme-text-muted)] [text-shadow:0_1px_2px_var(--theme-bg-base)]">
         {targets.length > 1 ? 'Tab · who you talk to · ' : ''}/ · commands · Enter · send · Esc · close
       </span>
-      <div className="flex items-center rounded-md border border-[var(--theme-accent)] bg-[color-mix(in_srgb,var(--theme-bg-base)_70%,transparent)] pl-2 backdrop-blur-sm">
+      <div className="flex items-center rounded-lg border border-[var(--theme-accent)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_85%,transparent)] pl-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl backdrop-saturate-150">
         <span className={cn('flex-none whitespace-nowrap font-mono text-[12px] font-bold', target.kind === 'assistant' ? 'text-[var(--tint-green-solid)]' : 'text-[var(--tint-blue-solid)]')} data-testid="talk-target">
           [{target.kind === 'assistant' ? 'Assistant' : target.label}]&nbsp;
         </span>
@@ -265,6 +265,6 @@ export function useTalkReplies(onOpenTicket: (ticketId: string) => void): void {
     const c = msg.data as TicketComment;
     const label = talkLog.tickets.get(c.ticketId);
     if (!label || c.authorType !== 'agent') return;
-    toast.show({ title: `[${label}] ${c.authorName}`, message: short(c.body), icon: '↩', durationMs: 15_000, action: { label: 'Open', onClick: () => open.current(c.ticketId) } });
+    toast.show({ title: `[${label}] ${c.authorName}`, message: c.body.trim(), icon: '↩', durationMs: 15_000, action: { label: 'Open', onClick: () => open.current(c.ticketId) } });
   }), []);
 }

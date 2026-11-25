@@ -84,11 +84,12 @@ export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toa
   return (
     <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={!live || t.durationMs === null}
       className="fleex-floor-line flex max-w-full items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]"
-      style={live && t.durationMs !== null ? { animationDuration: `${t.durationMs}ms` } : undefined}>
+      style={live && t.durationMs !== null ? { animationDuration: `200ms, ${t.durationMs}ms` } : undefined}>
       <span className="pointer-events-auto flex min-w-0 items-baseline gap-1.5" onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
         <span className="flex-none font-mono text-[10.5px] text-[var(--theme-text-muted)]">{clock(t.createdAt)}</span>
         <span className={cn('flex-none font-bold', floorInk[t.tone])} aria-hidden>{t.icon ?? floorSign[t.tone]}</span>
-        <span className={cn('min-w-0', open && 'cursor-pointer hover:underline')} onClick={open}>
+        {/* over the floor a long message (an assistant's answer) keeps to a few lines; the log shows it whole, its lines kept */}
+        <span className={cn('min-w-0 whitespace-pre-line', live && 'line-clamp-4', open && 'cursor-pointer hover:underline')} onClick={open} title={live && t.message.length > 280 ? 'Enter shows it whole, in the log' : undefined}>
           {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
           {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
         </span>

@@ -42,15 +42,14 @@
 
 /* The floor skin (the Factory): lines of text over the floor, no card. A line is there, then fades over the last
    quarter of its time; hovering it holds it. */
-@keyframes fleex-floor-line {
-  0% { opacity: 0; transform: translateY(4px); }
-  4% { opacity: 1; transform: none; }
-  75% { opacity: 1; }
+@keyframes fleex-floor-out {
+  0%, 75% { opacity: 1; }
   100% { opacity: 0; }
 }
 
 .fleex-floor-line {
-  animation: fleex-floor-line linear forwards;
+  /* in at once, out over the last quarter of its time (the duration of the second animation is the toast's) */
+  animation: fleex-toast-in 200ms ease-out, fleex-floor-out 5s linear forwards;
   /* a halo in the floor's own background colour: the letters read over belts and machines, on a dark skin as on a light one */
   text-shadow: 0 1px 2px var(--theme-bg-base, #000), 0 0 6px var(--theme-bg-base, #000), 0 0 10px var(--theme-bg-base, #000);
 }
