@@ -654,7 +654,8 @@ function Floor() {
     if (!t || t.item) return null;
     const m = t.machineId ? s.layout?.machines.find((q) => q.id === t.machineId) : null;
     const title = t.info?.title ?? '';
-    return { ticketId, label: `#${t.info?.displayId ?? '?'}${title ? ` ${title.length > 28 ? `${title.slice(0, 27)}…` : title}` : ''}`, phase: t.phase, note: t.note, station: m && 'name' in m ? m.name || undefined : undefined };
+    return { ticketId, label: `#${t.info?.displayId ?? '?'}${title ? ` ${title.length > 28 ? `${title.slice(0, 27)}…` : title}` : ''}`, phase: t.phase, note: t.note, station: m && 'name' in m ? m.name || undefined : undefined,
+      released: t.released, favorite: t.info ? t.info.favorite : null, canAside: canSetAside(t, m ?? undefined) };
   }, []);
   /* who the line talks to besides the assistant: the ticket selected, else the last one that wrote to you, else the first that needs you */
   const talkTicket = useMemo((): TalkTicket | null => {

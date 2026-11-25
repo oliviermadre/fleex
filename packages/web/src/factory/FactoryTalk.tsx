@@ -8,6 +8,7 @@ import { cn } from '../lib/cn';
 import { fetchTicketComments, postTicketComment } from '../services/api';
 import { useFactoryStore } from './factoryStore';
 import type { TicketPhase } from './types';
+import { commandName, commandsFor, matching, type CommandActs } from './talkCommands';
 import { appWs } from '../services/websocket';
 import { useAssistantStore } from '../stores/assistantStore';
 
@@ -20,7 +21,7 @@ import { useAssistantStore } from '../stores/assistantStore';
  */
 
 /** A ticket the line can talk to: what it is called, and where it stands (a question, a failed run, a gate's decision). */
-export interface TalkTicket { ticketId: string; label: string; phase?: TicketPhase; station?: string; note?: string }
+export interface TalkTicket { ticketId: string; label: string; phase?: TicketPhase; station?: string; note?: string; released?: boolean; favorite?: boolean | null; canAside?: boolean }
 export type TalkTarget = { kind: 'assistant' } | ({ kind: 'ticket' } & TalkTicket);
 /** What was said from the line, kept in the log with the toasts. */
 interface Said { at: number; to: string; text: string }
@@ -140,9 +141,29 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
   const lines = useMemo(() => [...history.map((t) => ({ at: t.createdAt, t })), ...said.map((s) => ({ at: s.at, s }))].sort((a, b) => a.at - b.at), [history, said]);
   useEffect(() => { if (hist.current) hist.current.scrollTop = hist.current.scrollHeight; }, [lines.length]);
 
+  /* a slash: the commands that apply to whoever the line talks to, those that start with what is typed listed over it */
+  const typed = commandName(text), commands = useMemo(() => commandsFor(target), [target]);
+  const shown = typed === null ? [] : matching(commands, typed);
+  const [pick, setPick] = useState(0);
+  useEffect(() => setPick(0), [typed]);
+  const acts: CommandActs = {
+    retry: (id) => useFactoryStore.getState().retry(id), setAside: (id) => useFactoryStore.getState().setAside(id),
+    release: (id) => useFactoryStore.getState().release(id), star: (id, on) => useFactoryStore.getState().star(id, on),
+    giveBack: (id) => useFactoryStore.getState().giveBack(id), open: (id) => onOpenTicket(id),
+    newConversation: () => { try { localStorage.removeItem(SESSION_KEY); } catch { /* none */ } },
+  };
+  const command = (name: string) => {
+    const c = commands.find((x) => x.name === name) ?? (shown[pick] && typed !== null ? shown[pick] : null);
+    setText('');
+    if (!c) { toast.warning(`/${name}: no such command here. Type / to see them`); return; }
+    talkLog.said = [...talkLog.said, { at: Date.now(), to: target.kind === 'assistant' ? 'Assistant' : target.label, text: `/${c.name}` }].slice(-50); setSaid(talkLog.said);
+    void Promise.resolve(c.run(acts)).then((said) => { if (said) toast.info(said); }, (err: unknown) => toast.error(`/${c.name} failed`, { detail: err instanceof Error ? err.message : String(err) }));
+  };
+
   const send = () => {
     const body = text.trim();
     if (!body) return;
+    if (typed !== null) { command(typed); return; }
     setText('');
     if (target.kind === 'ticket') { answer(target, body); return; }
     talkLog.said = [...talkLog.said, { at: Date.now(), to: 'Assistant', text: body }].slice(-50); setSaid(talkLog.said);
@@ -164,8 +185,19 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
           </div>
         )))}
       </div>
+      {typed !== null && (
+        <div className="flex flex-col gap-px rounded-md border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-base)_85%,transparent)] p-1 backdrop-blur-sm" role="listbox" aria-label="Commands">
+          {shown.length === 0 && <span className="px-2 py-1 text-[12px] text-[var(--theme-text-muted)]">No command starts with /{typed} here</span>}
+          {shown.map((c, i) => (
+            <button key={c.name} type="button" role="option" aria-selected={i === pick} onMouseDown={(e) => { e.preventDefault(); command(c.name); }}
+              className={cn('flex items-baseline gap-2 rounded px-2 py-0.5 text-left text-[12px]', i === pick ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)]')}>
+              <b className="font-mono">/{c.name}</b><span className="truncate">{c.help}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <span className="self-end font-mono text-[10px] text-[var(--theme-text-muted)] [text-shadow:0_1px_2px_var(--theme-bg-base)]">
-        {targets.length > 1 ? 'Tab · who you talk to · ' : ''}Enter · send · Esc · close
+        {targets.length > 1 ? 'Tab · who you talk to · ' : ''}/ · commands · Enter · send · Esc · close
       </span>
       <div className="flex items-center rounded-md border border-[var(--theme-accent)] bg-[color-mix(in_srgb,var(--theme-bg-base)_70%,transparent)] pl-2 backdrop-blur-sm">
         <span className={cn('flex-none whitespace-nowrap font-mono text-[12px] font-bold', target.kind === 'assistant' ? 'text-[var(--tint-green-solid)]' : 'text-[var(--tint-blue-solid)]')} data-testid="talk-target">
@@ -176,7 +208,9 @@ export function FactoryTalk({ ticket, onClose, onOpenTicket, style }: {
           className="min-w-0 flex-1 bg-transparent py-1.5 pr-2 text-[12.5px] text-[var(--theme-text-primary)] outline-none placeholder:text-[var(--theme-text-muted)]"
           onKeyDown={(e) => {
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+            else if (e.key === 'Tab' && shown.length) { e.preventDefault(); setText(`/${shown[pick]!.name}`); }
             else if (e.key === 'Tab') { e.preventDefault(); setAt((n) => n + 1); }
+            else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && shown.length) { e.preventDefault(); setPick((n) => (n + (e.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length); }
             else if (e.key === 'Enter') { e.preventDefault(); send(); }
           }} />
       </div>

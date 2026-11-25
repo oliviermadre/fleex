@@ -628,6 +628,13 @@ reply to a question is the answer, so its station runs again, as from the ticket
 a comment, and Run again stays a click. A gate does not write: talking to it comments, its decision stays on its
 buttons. The station's comment carries the agent's closed choices for this (`questions`).
 
+A slash in the line lists the commands for whoever it talks to (`talkCommands.ts`), those that start with what is
+typed: Tab completes, the arrows choose, Enter runs. A ticket's are those of its command card that apply where it
+stands: `/run` (its station again, after a question, a failure, a set-aside), `/stop` (the run, kept in its station),
+`/release` (out of its zone), `/open`, `/star` or `/unstar`, `/giveback` (typed twice). The assistant's: `/new`, a new
+conversation. A command is no comment: nothing is posted in the thread; the log says what it did. A gate's
+decision has no command: it stays on its buttons.
+
 ## Fast arms
 
 An arm can be fast, as a belt can (`fast` on the arm, picked on `docs/factory/fast-arm.html`): it swings twice as

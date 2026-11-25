@@ -7,7 +7,7 @@ const post = vi.fn(async () => ({}));
 const comments = vi.hoisted(() => ({ list: [] as unknown[] }));
 vi.mock('../services/api', () => ({ postTicketComment: (...a: unknown[]) => post(...(a as [])), fetchTicketComments: async () => comments.list }));
 const retry = vi.hoisted(() => ({ fn: (() => {}) as (id: string) => void }));
-vi.mock('./factoryStore', () => ({ useFactoryStore: { getState: () => ({ retry: (id: string) => { retry.fn(id); return Promise.resolve(); } }) } }));
+vi.mock('./factoryStore', () => ({ useFactoryStore: { getState: () => ({ retry: (id: string) => { retry.fn(id); return Promise.resolve(); }, setAside: async () => {}, release: async () => {}, star: async () => {}, giveBack: async () => {} }) } }));
 let wsHandler: ((msg: { type: string; data: unknown }) => void) | null = null;
 vi.mock('../services/websocket', () => ({ appWs: { onChannel: (_c: string, h: typeof wsHandler) => { wsHandler = h; return () => { wsHandler = null; }; } } }));
 
@@ -119,5 +119,20 @@ describe('talking from the floor', () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(useToastStore.getState().history.map((x) => x.message)).toEqual(['Which key?']);
     expect(line().getAttribute('placeholder')).toBe('Answer its question: its station runs again');
+  });
+
+  it('a slash lists the commands for whoever the line talks to; Enter runs one, and the log says so', async () => {
+    const seen: string[] = []; retry.fn = (id) => seen.push(id);
+    show({ ...TICKET, phase: 'failed' } as never);
+    fireEvent.change(line(), { target: { value: '/' } });
+    expect(screen.getAllByRole('option').map((o) => o.querySelector('b')!.textContent)).toEqual(['/run', '/open', '/giveback']);
+    fireEvent.change(line(), { target: { value: '/r' } });
+    fireEvent.keyDown(line(), { key: 'Tab' });
+    expect((line() as HTMLInputElement).value).toBe('/run');
+    await act(async () => { fireEvent.keyDown(line(), { key: 'Enter' }); await Promise.resolve(); await Promise.resolve(); });
+    expect(seen).toEqual(['t1']);
+    expect(post).not.toHaveBeenCalled();                                      // a command is no comment
+    expect(screen.getByRole('dialog', { name: 'Talk' }).textContent).toContain('/run');
+    expect(useToastStore.getState().history.at(-1)?.message).toBe('#788 unipile: its station runs again');
   });
 });
