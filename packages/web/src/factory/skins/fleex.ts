@@ -64,6 +64,8 @@ const SHADOW_PAD = 1.2;
 export const PICK = '#60a5fa';
 /** The arrow painted under an arm, pointing east, round the middle of its tile: narrow where it takes, wide where it drops. */
 export const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
+/** Tiles of room kept round the view when what is beyond it is left unpainted. */
+const VIEW_ROOM = 4;
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 export const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 
@@ -207,13 +209,21 @@ export class FleexSkin implements Skin {
     this.decorPieces(st, out, false);
     this.peoplePieces(S, st, out, false);
     const pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void, turns?: boolean) => { out.push(turns ? { layer: 'standing', depth, draw, turns } : { layer: 'standing', depth, draw }); };
+    /*
+     * Only what the view shows is painted: a floor is often seen from close, most of it beyond the edges, and what is
+     * painted there costs as much as what is seen. A few tiles of room round the view, for what reaches past its own
+     * tiles (a halo, a plate, an arm's tag, a light on the floor).
+     */
+    const a0 = this.toWorld(0, 0), a1 = this.toWorld(this.w, this.h), x0 = a0.x - VIEW_ROOM, y0 = a0.y - VIEW_ROOM, x1 = a1.x + VIEW_ROOM, y1 = a1.y + VIEW_ROOM;
+    const seen = (m: { x: number; y: number; w?: number; h?: number }) => m.x < x1 && m.y < y1 && m.x + (m.w ?? 1) > x0 && m.y + (m.h ?? 1) > y0;
+    const belts = S.belts.filter((b) => seen(b.m));
     /* the areas: decor on the floor, under everything */
-    for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
-    at(0, () => this.beltBases(S.belts, pal));
+    for (const a of S.areas) if (seen(a)) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
+    at(0, () => this.beltBases(belts, pal));
     /* what runs with the belts' clock, and is painted at every frame when the rest is kept (`Piece.turns`) */
-    if (z >= 8) at(1, () => this.chevrons(S.belts, pal), true);
-    for (const b of S.bridges) at(2, () => this.bridge(b, st, pal), true);
-    for (const v of S.boxes) at(3, () => {
+    if (z >= 8) at(1, () => this.chevrons(belts, pal), true);
+    for (const b of S.bridges) if (seen(b.m)) at(2, () => this.bridge(b, st, pal), true);
+    for (const v of S.boxes) if (seen(v.m)) at(3, () => {
       if (v.kind === 'label') this.labelOf(v, pal);
       else if (v.kind === 'zone') this.zone(v, S, st, pal);
       else if (v.kind === 'station') this.station(v, st, pal);
@@ -222,17 +232,17 @@ export class FleexSkin implements Skin {
       else if (v.kind === 'dock') this.dock(v, st, pal);
       else this.port(v, st, pal);
     });
-    for (const b of S.belts) for (const r of b.riders) at(4, () => this.ticket(r, st));
+    for (const b of belts) for (const r of b.riders) at(4, () => this.ticket(r, st));
     /* gantries stand over their belt: a ticket goes under the beam */
-    for (const b of S.belts) if (b.gantry) at(5, () => this.gantry(b, pal));
-    for (const p of S.loose) at(6, () => {
+    for (const b of belts) if (b.gantry) at(5, () => this.gantry(b, pal));
+    for (const p of S.loose) if (seen(p.t)) at(6, () => {
       /* the canvas of the moment it is painted at, not of the moment the pieces are listed: they may differ (`aim`) */
       const ctx = this.ctx;
       ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(p.t.x + 0.5, p.t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
       this.ticket(p, st);
     });
-    for (const a of S.arms) at(7, () => this.arm(a, st, pal));
-    for (const b of S.belts) if (b.toll) at(8, () => this.tollArm(b, st, pal));
+    for (const a of S.arms) if (seen(a.m)) at(7, () => this.arm(a, st, pal));
+    for (const b of belts) if (b.toll) at(8, () => this.tollArm(b, st, pal));
     at(9, () => this.departures(S, pal));
     at(10, () => this.portLinks(S, pal));
   }
@@ -249,6 +259,7 @@ export class FleexSkin implements Skin {
     this.overlay(st, S, pal);
   }
   light(): void { this.lit(); }
+  forget(): void { this.labels.length = 0; this.boards.length = 0; }
   words(S: Scene | null, st: ViewState | null): void {
     this.flushLabels();
     if (S && st) this.names(st, S, this.palette());

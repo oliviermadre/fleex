@@ -102,4 +102,49 @@ describe('the picture kept in layers', () => {
     v.draw(state({ hoverMachine: 's' }), 1 / 30);
     expect(build.mock.calls.length).toBe(built + 1);
   });
+
+  it('keeps the picture though the page gives a fresh empty list at every frame for what is not selected', () => {
+    const { skin } = counting(true), v = new FactoryView(canvas(), skin);
+    for (let k = 0; k < 4; k++) v.draw(state({ selMany: [] }), 1 / 30);
+    expect(v.painted).toBe('kept');
+    expect(v.tally).toEqual({ straight: 1, layers: 1, kept: 2 });
+  });
+
+  it('paints what moves by itself at every frame, between the layers, without painting the layers again for it', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const n = { pulsing: 0, still: 0, chevrons: 0 };
+    const skin: Skin = {
+      id: 'pulse', layered: true, animated: false,
+      ground: () => { skin.animated = false; },
+      pieces: (_S, _st, out: Piece[]) => {
+        out.push({ layer: 'standing', depth: 1, draw: () => { n.chevrons++; }, turns: true });
+        /* two boxes at one depth: one whose ticket pulses (it reads the clock), one that stands */
+        out.push({ layer: 'standing', depth: 3, draw: () => { n.pulsing++; skin.animated = true; } }, { layer: 'standing', depth: 3, draw: () => { n.still++; } });
+      },
+      top: () => undefined, aim: () => undefined, readings: () => undefined, light: () => undefined, words: () => undefined, minimap: () => undefined,
+    };
+    const v = new FactoryView(canvas(), skin);
+    v.draw(state(), 0); v.draw(state(), 1 / 30);
+    const was = { ...n };
+    /* well past the time layers are painted again when something on them pulses: here nothing on them does */
+    for (let k = 1; k <= 4; k++) { now.mockReturnValue(1000 + k * 110); v.draw(state(), 1 / 30); expect(v.painted).toBe('kept'); }
+    expect(n.pulsing).toBe(was.pulsing + 4);
+    expect(n.still).toBe(was.still);
+    expect(v.ambient).toBe(true);
+  });
+
+  it('paints the layers again often when what moves by itself lies under the chevrons, where it cannot be painted apart', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const skin: Skin = {
+      id: 'under', layered: true, animated: false,
+      ground: () => { skin.animated = false; },
+      pieces: (_S, _st, out: Piece[]) => { out.push({ layer: 'floor', depth: 0, draw: () => { skin.animated = true; } }, { layer: 'standing', depth: 1, draw: () => undefined, turns: true }); },
+      top: () => undefined, aim: () => undefined, readings: () => undefined, light: () => undefined, words: () => undefined, minimap: () => undefined,
+    };
+    const v = new FactoryView(canvas(), skin);
+    v.draw(state(), 0); v.draw(state(), 1 / 30); v.draw(state(), 1 / 30);
+    expect(v.painted).toBe('kept');
+    now.mockReturnValue(1110);
+    v.draw(state(), 1 / 30); expect(v.painted).toBe('layers');
+  });
 });

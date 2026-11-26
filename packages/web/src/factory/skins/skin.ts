@@ -67,14 +67,16 @@ export interface Piece {
  * threw (a person of the decor, say) took every piece after it with it, the arms among them. What failed is told once
  * per message (`report`), for it to be found.
  */
-export function paintPieces(pieces: readonly Piece[], ctx: Pick<CanvasRenderingContext2D, 'getTransform' | 'setTransform' | 'setLineDash'> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; lineCap: CanvasLineCap; lineJoin: CanvasLineJoin; shadowBlur: number }, report: (err: unknown, p: Piece) => void, ordered = false): void {
-  const at = ctx.getTransform();
-  /* `ordered`: they come in their order already (a part of a picture kept in layers) */
-  for (const p of ordered ? pieces : order(pieces)) {
+export function paintPieces(pieces: readonly Piece[], ctx: Pick<CanvasRenderingContext2D, 'getTransform' | 'setTransform' | 'setLineDash'> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; lineCap: CanvasLineCap; lineJoin: CanvasLineJoin; shadowBlur: number }, report: (err: unknown, p: Piece) => void, ordered = false, each?: (i: number) => void): void {
+  const at = ctx.getTransform(), list = ordered ? pieces : order(pieces);
+  /* `ordered`: they come in their order already (a part of a picture kept in layers); `each`: told after each piece, by its place */
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]!;
     try { p.draw(); } catch (err) {
       ctx.setTransform(at); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.setLineDash([]); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.shadowBlur = 0;
       report(err, p);
     }
+    each?.(i);
   }
 }
 
@@ -109,9 +111,10 @@ export interface Skin {
   /**
    * Something it painted in the last frame moves by itself with the floor's clock, belts aside (they follow
    * `Scene.turn`): a pulse, a blink, a worker, someone walking. The floor is then drawn often enough for it
-   * (`frameRate.ts`); a skin that does not say is taken to hold nothing of the kind.
+   * (`frameRate.ts`); a skin that does not say is taken to hold nothing of the kind. The view puts it down between two
+   * pieces to learn which of them moves (`FactoryView.live`).
    */
-  readonly animated?: boolean;
+  animated?: boolean;
   /**
    * The picture may be kept in layers (`FactoryView`): while nothing on the floor moves, what is under the chevrons,
    * what is over them and the words are each painted once on a canvas of their own, and a frame is those three laid
@@ -132,6 +135,8 @@ export interface Skin {
    * kind.
    */
   bloomOf?(picture: HTMLCanvasElement): { cv: HTMLCanvasElement; alpha: number } | null;
+  /** Drop the words asked for and not yet written. */
+  forget?(): void;
   /** The third: the words asked for since the last time, then the names (none without a scene). */
   words?(S: Scene | null, st: ViewState | null): void;
   /** What lies under everything: the floor, its light, what stands casts on it. Leaves the canvas in the floor's units. */

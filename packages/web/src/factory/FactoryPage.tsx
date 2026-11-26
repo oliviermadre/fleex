@@ -59,6 +59,8 @@ import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150, MINIMAP_KEPT_MS = 1000;
+/** No machine selected: the same list at every frame, for the view to see that nothing changed. */
+const NONE: string[] = [];
 /** Without the WS, the floor is polled: this often while the window is in front, */
 const POLL_MS = 600;
 /** and this often while it is behind others. */
@@ -329,7 +331,7 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       /* stopped, an arm stays where the server last had it */
       halted: s.snapshot.floor.settings.halted === true, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
-      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
+      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : NONE, marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       selTickets: l.selection && 'tickets' in l.selection ? pickedSet(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       /* an area selected shows its handles, in build mode only (out of it, it is decor) */
@@ -347,6 +349,8 @@ function Floor() {
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
     const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
+    /* for whoever measures, from the console: `__factoryView.tally` counts the frames painted each way */
+    if (import.meta.env.DEV) (window as unknown as { __factoryView?: FactoryView }).__factoryView = v;
     let raf = 0, timer = 0, last = performance.now(), miniAt = 0;
     owed.current = true;
     /*
