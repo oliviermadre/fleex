@@ -4,23 +4,22 @@
  *
  * - Someone is at it (a pointer, a key, a wheel, the camera gliding, a selection): 60 a second, for a moment after the
  *   last of these, so a drag stays smooth.
- * - The window is in front and the floor is not stopped: 30 a second, enough for chevrons and arms. Its belts turn
- *   whether or not they carry anything: a floor whose belts stand still reads as a floor that is stopped.
- * - The window is not the one in front; it is watched from the corner of an eye. 15 a second while something moves on
- *   the floor (a ticket on a belt or sliding to its place, an arm that swings); 5 while nothing moves but something
- *   pulses, blinks or walks (a ticket that calls for someone, a lamp, a worker); twice a second when nothing does, and
- *   its belts then stand still (`Scene.turn`) rather than hop from one frame to the next.
- * - The floor is stopped: twice a second, only to catch what nothing told the loop about (the theme, a font come
- *   late). Its clock stands still, so there is nothing to animate.
+ * - The floor is not stopped: 30 a second, enough for chevrons and arms. Its belts turn whether or not they carry
+ *   anything: a floor whose belts stand still reads as a floor that is stopped.
+ * - The window is not the one in front: 15 a second. It may well be watched, on another screen: its belts turn there
+ *   too.
+ * - The floor is stopped and nothing moves on it: twice a second, only to catch what nothing told the loop about (the
+ *   theme, a font come late). Its clock stands still, so there is nothing to animate. What changes on it (a fresh
+ *   snapshot, a layout) is drawn at once: the loop is told (`FactoryPage.tsx`), it does not wait for its turn.
  *
- * What changes on a floor drawn twice a second (a fresh snapshot, a layout) is drawn at once: the loop is told
- * (`FactoryPage.tsx`), it does not wait for its turn.
+ * Most of these frames cost little: while nothing moves on the floor, the view keeps the picture and paints only the
+ * chevrons anew (`FactoryView`, "the picture kept in layers").
  */
 
 /** How long after the last sign of life the floor keeps its full rate. Longer than a ticket's jump (0.6 s). */
 export const AWAKE_MS = 1500;
 
-const HZ = { awake: 60, running: 30, movingBehind: 15, ambientBehind: 5, still: 2 } as const;
+const HZ = { awake: 60, running: 30, behind: 15, still: 2 } as const;
 
 /**
  * The frame to frame time is never exactly 1000/hz: a frame that comes a hair early is still drawn, so a 60 Hz screen
@@ -33,18 +32,16 @@ export interface FrameState {
   sinceWake: number;
   /** The window is the one in front. */
   focused: boolean;
-  /** The floor is not stopped: in front, its belts turn. */
+  /** The floor is not stopped: its belts turn. */
   running: boolean;
-  /** Something moves on the floor: a ticket, an arm (`FactoryView.moving`). */
+  /** Something moves on the floor, stopped or not: a ticket slides to where it was put (`FactoryView.moving`). */
   moving: boolean;
-  /** Nothing moves, but something pulses, blinks or walks (`FactoryView.ambient`). */
-  ambient?: boolean;
 }
 
 /** The time, in ms, the loop waits after a drawn frame before it draws the next one. */
 export function frameGap(s: FrameState): number {
-  const hz = s.focused ? (s.sinceWake < AWAKE_MS ? HZ.awake : s.running || s.moving ? HZ.running : HZ.still)
-    : s.moving ? HZ.movingBehind : s.ambient ? HZ.ambientBehind : HZ.still;
+  const live = s.running || s.moving;
+  const hz = !s.focused ? (live ? HZ.behind : HZ.still) : s.sinceWake < AWAKE_MS ? HZ.awake : live ? HZ.running : HZ.still;
   return 1000 / hz - SLACK_MS;
 }
 

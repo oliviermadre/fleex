@@ -79,20 +79,30 @@ export class NeonSkin extends FleexSkin {
     return this.pal;
   }
 
-  /** The glow: a blurred quarter-size copy of the picture, laid back over it in light. */
-  protected override lit(): void {
-    const cv = this.cv, g = GLOW[this.opts.glow ?? 'soft'];
-    if (!cv.width || !cv.height) return;
+  /**
+   * The glow of a picture, alone: a blurred quarter-size copy of it, to be laid back over it in light at `alpha`.
+   * The blur is what the glow costs; a view that keeps its picture (`Skin.bloomOf`) asks for it once and lays it at
+   * every frame, where `lit` works it out anew.
+   */
+  bloomOf(cv: HTMLCanvasElement): { cv: HTMLCanvasElement; alpha: number } | null {
+    const g = GLOW[this.opts.glow ?? 'soft'];
+    if (!cv.width || !cv.height) return null;
     const w = Math.max(1, Math.ceil(cv.width / 4)), h = Math.max(1, Math.ceil(cv.height / 4));
     const b = this.bloom ?? (this.bloom = document.createElement('canvas'));
     if (b.width !== w || b.height !== h) { b.width = w; b.height = h; }
     const c = b.getContext('2d');
-    if (!c) return;
+    if (!c) return null;
     c.clearRect(0, 0, w, h); c.filter = `blur(${g.blur}px)`; c.drawImage(cv, 0, 0, w, h); c.filter = 'none';
+    return { cv: b, alpha: g.alpha };
+  }
+  /** The glow: a blurred quarter-size copy of the picture, laid back over it in light. */
+  protected override lit(): void {
+    const cv = this.cv, g = this.bloomOf(cv);
+    if (!g) return;
     const ctx = this.ctx;
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = g.alpha; ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(b, 0, 0, cv.width, cv.height);
+    ctx.drawImage(g.cv, 0, 0, cv.width, cv.height);
     ctx.restore();
   }
 }

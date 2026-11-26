@@ -190,6 +190,8 @@ export class PixelSkin extends FleexSkin {
   private sn(v: number): number { return Math.round(v * ART) / ART; }
   private get sprites(): boolean { return !!this.look.sprites && this.toLow; }
 
+  /** Not kept in layers: its picture is painted small on a canvas of its own, then enlarged (`lit`). */
+  override get layered(): boolean { return false; }
   override ground(on: Surface, S: Scene, st: ViewState): void {
     this.on = on;
     /* art pixels to a CSS pixel; at most the screen's own: from far the picture is not pixelated */

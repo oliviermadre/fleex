@@ -9,8 +9,8 @@
 import type { LensLayer } from './lens';
 import { inRect, machineParts } from './machineArt';
 import { FloorScene, isBox, type Scene } from './scene';
-import { FleexSkin } from './skins/fleex';
-import { paintPieces, type Piece, type Skin } from './skins/skin';
+import { CHEVRON_PACE, FleexSkin } from './skins/fleex';
+import { order, paintPieces, type Piece, type Skin, type Surface } from './skins/skin';
 import type { ArmSpec, FactoryLayout, FactoryTicket, IntakeState, MachineSpec, StationSpec } from './types';
 
 /** A ticket's colour on the floor: the hue Fleex gives its type everywhere else. */
@@ -68,8 +68,6 @@ export interface ViewState {
   grid?: boolean;
   /** The machine whose light the pointer is on. */
   hoverLamp?: string | null;
-  /** The window is not the one in front: a floor at rest is then drawn seldom, and its belts stand still. */
-  behind?: boolean;
   /** The emergency stop is on: belts stand still, arms stay where they are, nothing pulses. */
   halted?: boolean;
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
@@ -125,6 +123,12 @@ function around(layout: FactoryLayout, minW: number, minH: number, aspect = 0): 
 }
 /** The closest and the farthest the floor is ever seen from, in pixels per tile. The farthest is also bounded by the floor: see `FactoryView.constrain`. */
 const Z_MAX = 80, Z_MIN = 3;
+/** How long the layers of a picture are kept before they are painted again, nothing having changed; and while something on them pulses or blinks. */
+const KEEP_MS = 500, PULSE_MS = 100;
+/** The moments of the chevrons' run that the light kept with a picture is worked out from, and the seconds a chevron takes to come where the one before it was. */
+const GLOW_MOMENTS = 4, GLOW_RUN_S = 0.5 / CHEVRON_PACE;
+/** What of a view's state changes at every frame without changing the picture of a floor where nothing moves: how its arms were last told to be. */
+const PASSING = new Set(['arms', 'armAge']);
 /** The wheel's travel that makes a notch, for a skin whose zoom goes by steps; and how fast the zoom glides to a step. */
 const NOTCH = 40, GLIDE = 14;
 
@@ -282,27 +286,130 @@ export class FactoryView {
     console.error(`Factory: a piece of the floor could not be painted (layer ${p.layer}, depth ${p.depth}); the rest is painted without it.`, err);
   };
 
+  /*
+   * The picture kept in layers. Painting the whole floor costs, and on a floor where nothing moves the only thing
+   * that changes from one frame to the next is the chevrons of its belts. So, with a skin that can (`Skin.layered`),
+   * what lies under the chevrons, what lies over them, and the words are each painted on a canvas of their own, and
+   * kept: a frame is then the first laid down, the chevrons painted anew, the two others laid over. They are painted
+   * again when what they show changes (the state, the view), every `KEEP_MS` in case something changed that nothing
+   * says (the theme, a font come late, a count), and every `PULSE_MS` while something on them pulses or blinks. While
+   * something moves, or the view does, the floor is painted straight on the canvas as it always was.
+   */
+  private layers: { under: HTMLCanvasElement; over: HTMLCanvasElement; words: HTMLCanvasElement; mid: Piece[]; at: number; /** The skin's light, kept too, and the picture it was worked out from. */ glow: { cv: HTMLCanvasElement; alpha: number } | null; lit: HTMLCanvasElement | null } | null = null;
+  /** The state and the view of the last frame: the picture is kept only from the second frame that shows the same. */
+  private seen: { st: ViewState; x: number; y: number; z: number; w: number; h: number; dpr: number; skin: Skin } | null = null;
+  private unchanged(st: ViewState): boolean {
+    const p = this.seen, c = this.cam;
+    this.seen = { st, x: c.x, y: c.y, z: c.z, w: this.w, h: this.h, dpr: this.dpr, skin: this.skin };
+    if (!p || p.x !== c.x || p.y !== c.y || p.z !== c.z || p.w !== this.w || p.h !== this.h || p.dpr !== this.dpr || p.skin !== this.skin) return false;
+    const a = st as unknown as Record<string, unknown>, b = p.st as unknown as Record<string, unknown>;
+    for (const k in a) if (!PASSING.has(k) && !Object.is(a[k], b[k])) return false;
+    for (const k in b) if (!(k in a)) return false;
+    return true;
+  }
+  /** How the last frame was painted: for the checks, and for whoever measures. */
+  painted: 'straight' | 'layers' | 'kept' = 'straight';
+
   draw(st: ViewState, dtReal: number): void {
     this.resize();
     const S = this.scene.build(st, dtReal);
     this.lastState = st;
     this.glide(dtReal);
     this.constrain(st.layout);
+    let trailing = false;
+    for (const t of this.trails.values()) if (t.length > 1) { trailing = true; break; }
+    const moving = S.moving || trailing || !this.resting, same = this.unchanged(st), now = performance.now();
+    if (moving || !same || !this.skin.layered || !this.skin.aim) { this.layers = null; this.straight(S, st); this.painted = 'straight'; }
+    else if (!this.layers || now - this.layers.at >= (this.ambient ? PULSE_MS : KEEP_MS)) { this.layered(S, st, now); this.painted = 'layers'; }
+    else { this.compose(S); this.painted = 'kept'; }
+    this.moving = moving;
+  }
+  /** The whole floor, straight on the canvas. */
+  private straight(S: Scene, st: ViewState): void {
     this.skin.ground(this, S, st);
     const pieces: Piece[] = [];
     this.skin.pieces(S, st, pieces);
     paintPieces(pieces, this.ctx, this.failed);
     this.skin.top(S, st);
-    this.fastArms(S);
-    this.unsetMarks(st);
-    let trailing = false;
-    for (const t of this.trails.values()) if (t.length > 1) { trailing = true; break; }
-    this.moving = S.moving || trailing || !this.resting;
+    this.fastArms(S, this.ctx);
+    this.unsetMarks(st, this.ctx);
     this.ambient = !st.halted && !!this.skin.animated;
   }
+  /** The view, on another canvas of the same size. */
+  private surface(cv: HTMLCanvasElement, ctx: CanvasRenderingContext2D): Surface {
+    return { ctx, cv, dpr: this.dpr, w: this.w, h: this.h, cam: this.cam, toWorld: (x, y) => this.toWorld(x, y), floorOf: (l) => this.floorOf(l), machine: (id) => this.machine(id) };
+  }
+  /** The floor painted on its layers, then the frame made of them. */
+  private layered(S: Scene, st: ViewState, now: number): void {
+    const skin = this.skin, L = this.layers ?? { under: document.createElement('canvas'), over: document.createElement('canvas'), words: document.createElement('canvas'), mid: [], at: 0, glow: null, lit: null };
+    const sheet = (cv: HTMLCanvasElement, clear: boolean): Surface | null => {
+      if (cv.width !== this.cv.width || cv.height !== this.cv.height) { cv.width = this.cv.width; cv.height = this.cv.height; }
+      const ctx = cv.getContext('2d'); if (!ctx) return null;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+      if (clear) ctx.clearRect(0, 0, cv.width, cv.height);
+      return this.surface(cv, ctx);
+    };
+    const U = sheet(L.under, false), O = sheet(L.over, true), W = sheet(L.words, true);
+    if (!U || !O || !W) { this.layers = null; this.straight(S, st); return; }
+    skin.ground(U, S, st);
+    const pieces: Piece[] = [];
+    skin.pieces(S, st, pieces);
+    const all = order(pieces);
+    /* from the first piece that runs with the belts to the last: painted at every frame; before and after: kept */
+    let first = all.findIndex((p) => p.turns), last = first;
+    if (first < 0) first = last = all.length; else { for (let i = all.length - 1; i > first; i--) if (all[i]!.turns) { last = i; break; } last++; }
+    paintPieces(all.slice(0, first), U.ctx, this.failed, true);
+    skin.aim!(O, S);
+    paintPieces(all.slice(last), O.ctx, this.failed, true);
+    skin.readings?.(S, st);
+    skin.aim!(W, S);
+    skin.words?.(S, st);
+    this.fastArms(S, W.ctx);
+    this.unsetMarks(st, W.ctx);
+    this.ambient = !st.halted && !!skin.animated;
+    L.mid = all.slice(first, last); L.at = now;
+    this.layers = L;
+    L.glow = this.glowOf(L, S);
+    this.compose(S);
+  }
   /**
-   * What the last frame drawn showed, for the draw loop to pace itself on (`frameRate.ts`) when the window is not in
-   * front, where belts that carry nothing do not count. `moving`: something moves
+   * The skin's light for the layers kept, when it can give it alone (`Skin.bloomOf`): worked out once from the picture,
+   * not at every frame. The chevrons run under it: they are in that picture at four moments of their run at once,
+   * each at a quarter of its strength, so the light along a belt is the one it has on average and does not stay behind them.
+   */
+  private glowOf(L: NonNullable<FactoryView['layers']>, S: Scene): { cv: HTMLCanvasElement; alpha: number } | null {
+    const skin = this.skin;
+    if (!skin.bloomOf) return null;
+    const cv = L.lit ?? (L.lit = document.createElement('canvas'));
+    if (cv.width !== this.cv.width || cv.height !== this.cv.height) { cv.width = this.cv.width; cv.height = this.cv.height; }
+    const ctx = cv.getContext('2d'); if (!ctx) return null;
+    const on = this.surface(cv, ctx), flat = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; };
+    flat(); ctx.drawImage(L.under, 0, 0);
+    for (let k = 0; k < GLOW_MOMENTS; k++) {
+      skin.aim!(on, { ...S, turn: S.turn + k * GLOW_RUN_S / GLOW_MOMENTS });
+      ctx.globalAlpha = 1 / GLOW_MOMENTS;
+      paintPieces(L.mid, ctx, this.failed, true);
+    }
+    flat(); ctx.drawImage(L.over, 0, 0);
+    skin.words?.(null, null);
+    return skin.bloomOf(cv);
+  }
+  /** A frame from the layers kept: what is under, the chevrons as they now are, what is over, the skin's light, the words. */
+  private compose(S: Scene): void {
+    const L = this.layers!, c = this.ctx, skin = this.skin, flat = () => { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; };
+    flat(); c.drawImage(L.under, 0, 0);
+    skin.aim!(this, S);
+    paintPieces(L.mid, c, this.failed, true);
+    flat(); c.drawImage(L.over, 0, 0);
+    if (L.glow) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = L.glow.alpha; c.imageSmoothingEnabled = true; c.drawImage(L.glow.cv, 0, 0, this.cv.width, this.cv.height); }
+    else skin.light?.();
+    flat(); c.drawImage(L.words, 0, 0);
+    /* the words of what was just painted, if any (a ticket standing on a bridge) */
+    skin.aim!(this, S); skin.words?.(null, null);
+  }
+
+  /**
+   * What the last frame drawn showed. `moving`: something moves
    * on the floor (a ticket, an arm, a fast arm's trail fading, the zoom gliding to a step). `ambient`: nothing moves,
    * but something painted pulses, blinks or walks with the floor's clock.
    */
@@ -315,10 +422,10 @@ export class FactoryView {
    * A fast arm, whatever the skin (picked on `docs/factory/fast-arm.html`, C): a double ring in the fast belts' blue
    * round its pivot, and a blue trail behind its cup while it swings. Its own colour is left as it is.
    */
-  private fastArms(S: Scene): void {
+  private fastArms(S: Scene, c: CanvasRenderingContext2D): void {
     const fast = S.arms.filter((v) => v.m.fast);
     if (!fast.length) { this.trails.clear(); return; }
-    const c = this.ctx, z = this.cam.z, sx = (x: number) => (x - this.cam.x) * z + this.w / 2, sy = (y: number) => (y - this.cam.y) * z + this.h / 2;
+    const z = this.cam.z, sx = (x: number) => (x - this.cam.x) * z + this.w / 2, sy = (y: number) => (y - this.cam.y) * z + this.h / 2;
     const seen = new Set<string>();
     c.save();
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -351,9 +458,9 @@ export class FactoryView {
    * A station that is not set up, whatever the skin: a dashed amber outline round it (its front face too, on a skin
    * seen from three quarters) and a "!" on its corner. Painted last, in the page's pixels, so no skin hides it.
    */
-  private unsetMarks(st: ViewState): void {
+  private unsetMarks(st: ViewState, c: CanvasRenderingContext2D): void {
     if (!st.unset?.size) return;
-    const c = this.ctx, z = this.cam.z;
+    const z = this.cam.z;
     c.save();
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const m of st.layout.machines) {

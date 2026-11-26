@@ -57,7 +57,7 @@ describe('the scene', () => {
     expect(sc.clock).toBe(0.5);
   });
 
-  it('keeps the belts turning on a floor at rest, in front: nothing moves on it, they still turn', () => {
+  it('keeps the belts turning on a floor at rest: nothing moves on it, they still turn', () => {
     const sc = new FloorScene(), L = layout(agent, belt('b', 0, 1)), st = state(L, [ticket('t', 's', 'wait')]);
     sc.build(st, 1 / 30);
     let S = sc.build(st, 1 / 30);
@@ -65,16 +65,6 @@ describe('the scene', () => {
     expect(S.moving).toBe(false);
     expect(sc.build(st, 1 / 30).turn).toBeGreaterThan(S.turn);
     expect(S.turn).toBeCloseTo(S.clock, 6);
-  });
-
-  it('says nothing moves on a floor where tickets only stand; seen from behind, its belts stand still', () => {
-    const sc = new FloorScene(), L = layout(agent, belt('b', 0, 1)), st = state(L, [ticket('t', 's', 'wait')], { behind: true });
-    sc.build(st, 1 / 60);
-    let S = sc.build(st, 1 / 60);
-    for (let k = 0; k < 5; k++) S = sc.build(st, 0.5);
-    expect(S.moving).toBe(false);
-    const turn = S.turn;
-    expect(sc.build(st, 0.5).turn).toBe(turn);
   });
 
   it('says the floor moves while a ticket rides a belt, and a moment after: its belts turn', () => {

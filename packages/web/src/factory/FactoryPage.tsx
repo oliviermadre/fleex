@@ -291,7 +291,7 @@ function Floor() {
     for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
     window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
     /*
-     * A floor stopped, or at rest behind another window, is drawn twice a second: what changes on it is drawn at once, and that frame says
+     * A stopped floor is drawn twice a second: what changes on it is drawn at once, and that frame says
      * whether something moves now. One frame, not a moment at full rate: when the floor is polled, a snapshot comes
      * every 600 ms whether or not anything changed.
      */
@@ -316,15 +316,21 @@ function Floor() {
 
   const boardName = useCallback((id: string) => useTicketStore.getState().boards.find((b) => b.id === id)?.name ?? 'a board', []);
   const modelOf = useCallback((m: StationSpec) => stationModel(m, { personas: useAgentPersonaStore.getState().personas, skills: useSkillStore.getState().skills, panels: usePanelStore.getState().panels }), []);
+  /* the same set for the same selection, frame after frame: the view keeps its picture while its state is the same */
+  const picked = useRef<{ of: readonly string[]; set: ReadonlySet<string> } | null>(null);
+  const pickedSet = useCallback((ids: readonly string[]): ReadonlySet<string> => {
+    if (picked.current?.of !== ids) picked.current = { of: ids, set: new Set(ids) };
+    return picked.current.set;
+  }, []);
   const viewState = useCallback((): ViewState | null => {
     const s = useFactoryStore.getState(), l = live.current;
     if (!s.snapshot || !s.layout) return null;
     return {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       /* stopped, an arm stays where the server last had it */
-      halted: s.snapshot.floor.settings.halted === true, behind: !focused.current, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
+      halted: s.snapshot.floor.settings.halted === true, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
-      selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
+      selTickets: l.selection && 'tickets' in l.selection ? pickedSet(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       /* an area selected shows its handles, in build mode only (out of it, it is decor) */
       areaSel: l.building && l.selection && 'machine' in l.selection && s.layout.machines.some((m) => m.id === (l.selection as { machine: string }).machine && m.kind === 'area') ? l.selection.machine : null,
@@ -335,7 +341,7 @@ function Floor() {
       intakes: s.snapshot.intakes ?? null,
       unset: l.unset,
     };
-  }, [boardName, modelOf]);
+  }, [boardName, modelOf, pickedSet]);
 
   // The draw loop.
   useEffect(() => {
@@ -355,7 +361,7 @@ function Floor() {
     hurry.current = () => { if (!timer) return; window.clearTimeout(timer); timer = 0; raf = requestAnimationFrame(frame); };
     const frame = (ts: number) => {
       /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
-      const gap = () => { const snap = useFactoryStore.getState().snapshot; return frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running: !!snap && snap.floor.settings.halted !== true, moving: v.moving, ambient: v.ambient }); };
+      const gap = () => { const snap = useFactoryStore.getState().snapshot; return frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running: !!snap && snap.floor.settings.halted !== true, moving: v.moving }); };
       const wait = gap() - (ts - last);
       if (wait > 0 && !owed.current) { again(wait); return; }
       owed.current = false;

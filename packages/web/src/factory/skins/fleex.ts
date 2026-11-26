@@ -114,11 +114,19 @@ export class FleexSkin implements Skin {
   protected machine(id: string | null): MachineSpec | null { return this.on.machine(id); }
 
   ground(on: Surface, S: Scene, st: ViewState): void {
-    this.on = on; this.clockNow = S.clock; this.turn = S.turn; this.animated = false;
-    const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, z = cam.z;
-    this.floor(st, S, pal);
+    this.clockNow = S.clock; this.animated = false;
+    this.on = on; this.turn = S.turn;
+    this.floor(st, S, this.palette());
+    this.aim(on, S);
+    this.shadows(st, this.palette());
+  }
+
+  /** Painted in layers (`Skin.layered`): it is, as long as its words are written over the picture, not in it. */
+  get layered(): boolean { return !this.wordsInPicture; }
+  aim(on: Surface, S: Scene): void {
+    this.on = on; this.turn = S.turn;
+    const ctx = this.ctx, cam = this.cam, d = this.dpr, z = cam.z;
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
-    this.shadows(st, pal);
   }
 
   /**
@@ -198,12 +206,13 @@ export class FleexSkin implements Skin {
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
     this.decorPieces(st, out, false);
     this.peoplePieces(S, st, out, false);
-    const ctx = this.ctx, pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void) => { out.push({ layer: 'standing', depth, draw }); };
+    const pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void, turns?: boolean) => { out.push(turns ? { layer: 'standing', depth, draw, turns } : { layer: 'standing', depth, draw }); };
     /* the areas: decor on the floor, under everything */
     for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
     at(0, () => this.beltBases(S.belts, pal));
-    if (z >= 8) at(1, () => this.chevrons(S.belts, pal));
-    for (const b of S.bridges) at(2, () => this.bridge(b, st, pal));
+    /* what runs with the belts' clock, and is painted at every frame when the rest is kept (`Piece.turns`) */
+    if (z >= 8) at(1, () => this.chevrons(S.belts, pal), true);
+    for (const b of S.bridges) at(2, () => this.bridge(b, st, pal), true);
     for (const v of S.boxes) at(3, () => {
       if (v.kind === 'label') this.labelOf(v, pal);
       else if (v.kind === 'zone') this.zone(v, S, st, pal);
@@ -217,6 +226,8 @@ export class FleexSkin implements Skin {
     /* gantries stand over their belt: a ticket goes under the beam */
     for (const b of S.belts) if (b.gantry) at(5, () => this.gantry(b, pal));
     for (const p of S.loose) at(6, () => {
+      /* the canvas of the moment it is painted at, not of the moment the pieces are listed: they may differ (`aim`) */
+      const ctx = this.ctx;
       ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(p.t.x + 0.5, p.t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
       this.ticket(p, st);
     });
@@ -227,11 +238,20 @@ export class FleexSkin implements Skin {
   }
 
   top(S: Scene, st: ViewState): void {
+    this.readings(S, st);
+    if (this.wordsInPicture) { this.flushLabels(); this.lit(); } else { this.lit(); this.flushLabels(); }
+    this.names(st, S, this.palette());
+  }
+  /* `top`, in the three moments a picture kept in layers needs apart (`Skin.layered`) */
+  readings(S: Scene, st: ViewState): void {
     const pal = this.palette();
     if (st.lens) this.lens(st.lens, st.layout, pal);
     this.overlay(st, S, pal);
-    if (this.wordsInPicture) { this.flushLabels(); this.lit(); } else { this.lit(); this.flushLabels(); }
-    this.names(st, S, pal);
+  }
+  light(): void { this.lit(); }
+  words(S: Scene | null, st: ViewState | null): void {
+    this.flushLabels();
+    if (S && st) this.names(st, S, this.palette());
   }
 
   /** What the picture becomes once everything is painted, before the words are written over it. Nothing, here. */
