@@ -127,11 +127,15 @@ export interface Scene {
   clock: number;
   /**
    * Something on the floor moves at this frame, or did a moment ago (`LINGER_S`): a ticket rides a belt, slides to its
-   * place, leaves or jumps, an arm swings. What the draw loop paces itself on (`frameRate.ts`): a floor where nothing
-   * moves is drawn a couple of times a second.
+   * place, leaves or jumps, an arm swings. What the draw loop paces itself on (`frameRate.ts`) when the window is not
+   * in front, or the floor is stopped: nothing moves, and it is drawn a couple of times a second.
    */
   moving: boolean;
-  /** The belts' own clock, in seconds, for their chevrons: it runs while something moves, and stands still on a floor at rest or stopped. */
+  /**
+   * The belts' own clock, in seconds, for their chevrons. It runs with the floor's, belts carrying something or not;
+   * it stands still on a floor that is stopped, and on one at rest seen from behind (`ViewState.behind`), which is
+   * drawn too seldom for chevrons to run.
+   */
   turn: number;
   /** The stations that light the floor round them: one that needs someone, one that is off. Not in build mode, nor under a lens. */
   lit: [StationSpec, Lamp][];
@@ -357,7 +361,7 @@ export class FloorScene {
     /* what moved keeps the floor moving a moment: a ticket between two reports, an arm about to come back */
     this.linger = this.stirred ? LINGER_S : Math.max(0, this.linger - dt);
     const busy = this.linger > 0;
-    if (busy) this.turn += moving;
+    if (busy || !st.behind) this.turn += moving;
 
     /* the selection: what feeds it and what empties it; in build mode, where an arm takes and drops */
     const sel = this.machine(st.selMachine), feeders: MachineSpec[] = [], emptiers: ArmSpec[] = [];

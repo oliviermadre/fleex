@@ -68,6 +68,8 @@ export interface ViewState {
   grid?: boolean;
   /** The machine whose light the pointer is on. */
   hoverLamp?: string | null;
+  /** The window is not the one in front: a floor at rest is then drawn seldom, and its belts stand still. */
+  behind?: boolean;
   /** The emergency stop is on: belts stand still, arms stay where they are, nothing pulses. */
   halted?: boolean;
   /** Exit id → how many tickets left by it over the last `exitDays` days. */
@@ -299,7 +301,8 @@ export class FactoryView {
     this.ambient = !st.halted && !!this.skin.animated;
   }
   /**
-   * What the last frame drawn showed, for the draw loop to pace itself on (`frameRate.ts`). `moving`: something moves
+   * What the last frame drawn showed, for the draw loop to pace itself on (`frameRate.ts`) when the window is not in
+   * front, where belts that carry nothing do not count. `moving`: something moves
    * on the floor (a ticket, an arm, a fast arm's trail fading, the zoom gliding to a step). `ambient`: nothing moves,
    * but something painted pulses, blinks or walks with the floor's clock.
    */

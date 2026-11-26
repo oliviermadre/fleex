@@ -291,7 +291,7 @@ function Floor() {
     for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
     window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
     /*
-     * A floor where nothing moves is drawn twice a second: what changes on it is drawn at once, and that frame says
+     * A floor stopped, or at rest behind another window, is drawn twice a second: what changes on it is drawn at once, and that frame says
      * whether something moves now. One frame, not a moment at full rate: when the floor is polled, a snapshot comes
      * every 600 ms whether or not anything changed.
      */
@@ -322,7 +322,7 @@ function Floor() {
     return {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       /* stopped, an arm stays where the server last had it */
-      halted: s.snapshot.floor.settings.halted === true, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
+      halted: s.snapshot.floor.settings.halted === true, behind: !focused.current, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
       selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
       selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
@@ -355,7 +355,7 @@ function Floor() {
     hurry.current = () => { if (!timer) return; window.clearTimeout(timer); timer = 0; raf = requestAnimationFrame(frame); };
     const frame = (ts: number) => {
       /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
-      const gap = () => frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, moving: v.moving, ambient: v.ambient });
+      const gap = () => { const snap = useFactoryStore.getState().snapshot; return frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running: !!snap && snap.floor.settings.halted !== true, moving: v.moving, ambient: v.ambient }); };
       const wait = gap() - (ts - last);
       if (wait > 0 && !owed.current) { again(wait); return; }
       owed.current = false;
