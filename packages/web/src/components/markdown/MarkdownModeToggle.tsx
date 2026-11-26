@@ -63,7 +63,7 @@ export function MarkdownModeToggle({
       role="group"
       aria-label="Markdown view mode"
       className={cn(
-        'flex items-center gap-0.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]/80 p-0.5 backdrop-blur-sm',
+        'flex items-center gap-0.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-0.5',
         className,
       )}
     >
