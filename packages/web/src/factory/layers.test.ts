@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FactoryView, type ViewState } from './renderer';
+import { FloorScene } from './scene';
 import type { Piece, Skin } from './skins/skin';
 import type { FactoryLayout, FactoryTicket, MachineSpec } from './types';
 
@@ -88,5 +89,17 @@ describe('the picture kept in layers', () => {
     const { skin, n } = counting(false), v = new FactoryView(canvas(), skin);
     for (let k = 0; k < 4; k++) { v.draw(state(), 1 / 30); expect(v.painted).toBe('straight'); }
     expect(n.top).toBe(4);
+  });
+
+  it('does not work the scene out again for a frame of a picture kept: the same scene, a moment later', () => {
+    const { skin } = counting(true), v = new FactoryView(canvas(), skin), build = vi.spyOn(FloorScene.prototype, 'build');
+    v.draw(state(), 0); v.draw(state(), 1 / 30);
+    const built = build.mock.calls.length;
+    for (let k = 0; k < 5; k++) v.draw(state(), 1 / 30);
+    expect(v.painted).toBe('kept');
+    expect(build.mock.calls.length).toBe(built);
+    /* a state that changes is worked out at once */
+    v.draw(state({ hoverMachine: 's' }), 1 / 30);
+    expect(build.mock.calls.length).toBe(built + 1);
   });
 });

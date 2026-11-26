@@ -299,9 +299,14 @@ export class FactoryView {
   /** The state and the view of the last frame: the picture is kept only from the second frame that shows the same. */
   private seen: { st: ViewState; x: number; y: number; z: number; w: number; h: number; dpr: number; skin: Skin } | null = null;
   private unchanged(st: ViewState): boolean {
-    const p = this.seen, c = this.cam;
+    const p = this.seen, c = this.cam, same = this.sameState(st);
     this.seen = { st, x: c.x, y: c.y, z: c.z, w: this.w, h: this.h, dpr: this.dpr, skin: this.skin };
-    if (!p || p.x !== c.x || p.y !== c.y || p.z !== c.z || p.w !== this.w || p.h !== this.h || p.dpr !== this.dpr || p.skin !== this.skin) return false;
+    return same && !!p && p.x === c.x && p.y === c.y && p.z === c.z && p.w === this.w && p.h === this.h && p.dpr === this.dpr && p.skin === this.skin;
+  }
+  /** Is this the state of the last frame, but for what passes (`PASSING`)? */
+  private sameState(st: ViewState): boolean {
+    const p = this.seen;
+    if (!p) return false;
     const a = st as unknown as Record<string, unknown>, b = p.st as unknown as Record<string, unknown>;
     for (const k in a) if (!PASSING.has(k) && !Object.is(a[k], b[k])) return false;
     for (const k in b) if (!(k in a)) return false;
@@ -312,15 +317,18 @@ export class FactoryView {
 
   draw(st: ViewState, dtReal: number): void {
     this.resize();
-    const S = this.scene.build(st, dtReal);
+    const now = performance.now(), fresh = !!this.layers && now - this.layers.at < (this.ambient ? PULSE_MS : KEEP_MS);
+    /* the same state as at the last frame, on a picture still kept, nothing moving: the same scene, a moment later */
+    const lasting = this.resting && !this.moving && fresh && this.sameState(st) ? this.scene.again(dtReal) : null;
+    const S = lasting ?? this.scene.build(st, dtReal);
     this.lastState = st;
     this.glide(dtReal);
     this.constrain(st.layout);
     let trailing = false;
     for (const t of this.trails.values()) if (t.length > 1) { trailing = true; break; }
-    const moving = S.moving || trailing || !this.resting, same = this.unchanged(st), now = performance.now();
+    const moving = S.moving || trailing || !this.resting, same = this.unchanged(st);
     if (moving || !same || !this.skin.layered || !this.skin.aim) { this.layers = null; this.straight(S, st); this.painted = 'straight'; }
-    else if (!this.layers || now - this.layers.at >= (this.ambient ? PULSE_MS : KEEP_MS)) { this.layered(S, st, now); this.painted = 'layers'; }
+    else if (!fresh) { this.layered(S, st, now); this.painted = 'layers'; }
     else { this.compose(S); this.painted = 'kept'; }
     this.moving = moving;
   }

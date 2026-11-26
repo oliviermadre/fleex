@@ -58,7 +58,7 @@ import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } f
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
-const MINIMAP_EVERY_MS = 150;
+const MINIMAP_EVERY_MS = 150, MINIMAP_KEPT_MS = 1000;
 /** Without the WS, the floor is polled: this often while the window is in front, */
 const POLL_MS = 600;
 /** and this often while it is behind others. */
@@ -371,7 +371,8 @@ function Floor() {
         if (!fitted.current) { v.fit(st.layout, false); fitted.current = true; }
         v.draw(st, dt);
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
-        if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
+        /* a picture kept shows nothing new: the minimap, painted whole each time, is then given a second */
+        if (ts - miniAt > (v.painted === 'kept' ? MINIMAP_KEPT_MS : MINIMAP_EVERY_MS) && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
       /* what was just drawn says how soon the next one is due */
       again(gap());

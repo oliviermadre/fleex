@@ -378,10 +378,26 @@ export class FloorScene {
     const g = st.ghost;
     if (g && !g.erase) for (const c of g.cells) if (c.arm && c.dir != null) ways.push(this.armWay(c.x, c.y, c.dir, g.cells.length === 1));
 
-    return {
+    return this.last = {
       layout: L, areas: L.machines.filter((m): m is AreaSpec => m.kind === 'area'), clock: this.clock, moving: busy, turn: this.turn, lit, belts, bridges, boxes, loose, arms, leaving, links, noEntry, wip,
       feeders, emptiers, ways, dropBox: this.dropBox(st.drag), named: this.named(st),
     };
+  }
+
+  /** The scene last built. */
+  private last: Scene | null = null;
+  /**
+   * The scene a frame later, for a view whose state has not changed since it was built: on a floor where nothing
+   * moves it is the same scene, its clocks moved on, and working it all out again at every frame is most of what such
+   * a frame would cost. Null when something moved: it must then be built.
+   */
+  again(dt: number): Scene | null {
+    const S = this.last;
+    if (!S || S.moving) return null;
+    const moving = this.st.halted ? 0 : dt;
+    this.dt = dt; this.clock += moving; this.turn += moving;
+    S.clock = this.clock; S.turn = this.turn;
+    return S;
   }
 
   // ---------- what moves along the belts ----------
