@@ -127,6 +127,9 @@ function around(layout: FactoryLayout, minW: number, minH: number, aspect = 0): 
 const Z_MAX = 80, Z_MIN = 3;
 /** How long the layers of a picture are kept before they are painted again, nothing having changed; and while something on them pulses or blinks. */
 const KEEP_MS = 500, PULSE_MS = 100;
+interface Rect { x: number; y: number; w: number; h: number }
+/** Room round a belt's tile in what is painted of a frame kept: its chevrons' round ends, a hair past its edges. */
+const TILE_ROOM = 0.2;
 /** The moments of the chevrons' run that the light kept with a picture is worked out from, and the seconds a chevron takes to come where the one before it was. */
 const GLOW_MOMENTS = 4, GLOW_RUN_S = 0.5 / CHEVRON_PACE;
 /** What of a view's state changes at every frame without changing the picture of a floor where nothing moves: how its arms were last told to be. */
@@ -299,7 +302,7 @@ export class FactoryView {
    * lies where that cannot be are the layers painted again every `PULSE_MS`. While something moves, or the view does,
    * the floor is painted straight on the canvas as it always was.
    */
-  private layers: { under: HTMLCanvasElement; over: HTMLCanvasElement; /** Over what moves by itself. */ last: HTMLCanvasElement; words: HTMLCanvasElement; mid: Piece[]; /** What moves by itself, painted at every frame between `over` and `last`. */ run: Piece[]; at: number; /** The skin's light, kept too, and the picture it was worked out from. */ glow: { cv: HTMLCanvasElement; alpha: number } | null; lit: HTMLCanvasElement | null } | null = null;
+  private layers: { under: HTMLCanvasElement; over: HTMLCanvasElement; /** Over what moves by itself. */ last: HTMLCanvasElement; words: HTMLCanvasElement; mid: Piece[]; /** What moves by itself, painted at every frame between `over` and `last`. */ run: Piece[]; at: number; /** Where a frame of the picture kept is painted (`part`); null: all of it. */ part: { tiles: Rect[]; boxes: (() => Rect)[]; was: Rect[] } | null; /** The skin's light, kept too, and the picture it was worked out from. */ glow: { cv: HTMLCanvasElement; alpha: number } | null; lit: HTMLCanvasElement | null } | null = null;
   /** The state and the view of the last frame: the picture is kept only from the second frame that shows the same. */
   private seen: { st: ViewState; x: number; y: number; z: number; w: number; h: number; dpr: number; skin: Skin } | null = null;
   private unchanged(st: ViewState): boolean {
@@ -335,7 +338,7 @@ export class FactoryView {
     const moving = S.moving || trailing || !this.resting, same = this.unchanged(st);
     if (moving || !same || !this.skin.layered || !this.skin.aim) { this.layers = null; this.straight(S, st); this.painted = 'straight'; }
     else if (!fresh) { this.layered(S, st, now); this.painted = 'layers'; }
-    else { this.compose(S); this.painted = 'kept'; }
+    else { this.compose(S, false); this.painted = 'kept'; }
     this.moving = moving; this.tally[this.painted]++;
   }
   /** The whole floor, straight on the canvas. */
@@ -372,7 +375,7 @@ export class FactoryView {
   /** The floor painted on its layers, then the frame made of them. */
   private layered(S: Scene, st: ViewState, now: number): void {
     const skin = this.skin, make = () => document.createElement('canvas');
-    const L = this.layers ?? { under: make(), over: make(), last: make(), words: make(), mid: [], run: [], at: 0, glow: null, lit: null };
+    const L = this.layers ?? { under: make(), over: make(), last: make(), words: make(), mid: [], run: [], at: 0, part: null, glow: null, lit: null };
     const sheet = (cv: HTMLCanvasElement, clear: boolean): Surface | null => {
       if (cv.width !== this.cv.width || cv.height !== this.cv.height) { cv.width = this.cv.width; cv.height = this.cv.height; }
       const ctx = cv.getContext('2d'); if (!ctx) return null;
@@ -419,9 +422,10 @@ export class FactoryView {
     this.live = live; this.pulse = missed;
     this.ambient = !st.halted && (missed || run.length > 0);
     L.mid = all.slice(first, last); L.run = run.map((r) => r.p); L.at = now;
+    L.part = this.partOf(S, run.filter((r) => r.live).map((r) => r.p));
     this.layers = L;
     L.glow = this.glowOf(L, S);
-    this.compose(S);
+    this.compose(S, true);
   }
   /**
    * The skin's light for the layers kept, when it can give it alone (`Skin.bloomOf`): worked out once from the picture,
@@ -448,10 +452,48 @@ export class FactoryView {
     skin.forget?.();
     return skin.bloomOf(cv);
   }
-  /** A frame from the layers kept: what is under, the chevrons as they now are, what is over, what moves by itself, what is over that, the skin's light, the words. */
-  private compose(S: Scene): void {
+  /*
+   * A frame of a picture kept changes only where something moves: along the belts, and where a pulse or a blink is.
+   * Laying whole layers over one another at every frame, on a canvas of several million pixels, is what such a frame
+   * costs; so only those places are painted, the rest of the canvas being left as the last frame put it. The belts
+   * and bridges the view shows, joined in rows, and the boxes of what moves by itself (`Piece.box`), as they are now
+   * and as they were a frame ago. Null when one of those does not say where it paints: the whole frame is then painted.
+   */
+  private partOf(S: Scene, moving: Piece[]): { tiles: Rect[]; boxes: (() => Rect)[]; was: Rect[] } | null {
+    const boxes: (() => Rect)[] = [];
+    for (const p of moving) { if (!p.box) return null; boxes.push(p.box); }
+    const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h);
+    const cells = [...S.belts, ...S.bridges].map((v) => v.m).filter((m) => m.x + 1 > a.x && m.x < b.x && m.y + 1 > a.y && m.y < b.y).sort((p, q) => p.y - q.y || p.x - q.x);
+    const tiles: Rect[] = [];
+    for (const m of cells) {
+      const row = tiles[tiles.length - 1];
+      if (row && row.y === m.y - TILE_ROOM && Math.abs(row.x + row.w - TILE_ROOM - m.x) < 1e-6) row.w += 1; else tiles.push({ x: m.x - TILE_ROOM, y: m.y - TILE_ROOM, w: 1 + 2 * TILE_ROOM, h: 1 + 2 * TILE_ROOM });
+    }
+    return { tiles, boxes, was: [] };
+  }
+  /**
+   * A frame from the layers kept: what is under, the chevrons as they now are, what is over, what moves by itself,
+   * what is over that, the skin's light, the words. `whole`: the layers were just painted, every pixel of the frame
+   * is; otherwise only where something moves (`partOf`).
+   */
+  private compose(S: Scene, whole: boolean): void {
     const L = this.layers!, c = this.ctx, skin = this.skin, flat = () => { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; };
     skin.tick?.(S);
+    const P = L.part, now = P ? P.boxes.map((f) => f()) : [], clipped = !!P && !whole;
+    if (clipped) {
+      /*
+       * On whole pixels of the canvas: a pixel half in would be painted half over what it already shows, layer after
+       * layer, and would not come out as it was (a thin line along the edge, where a layer has something).
+       */
+      const d = this.dpr, z = this.cam.z * d, ox = (this.w / 2 - this.cam.x * this.cam.z) * d, oy = (this.h / 2 - this.cam.y * this.cam.z) * d;
+      const put = (r: Rect) => { const x0 = Math.floor(r.x * z + ox), y0 = Math.floor(r.y * z + oy); c.rect(x0, y0, Math.ceil((r.x + r.w) * z + ox) - x0, Math.ceil((r.y + r.h) * z + oy) - y0); };
+      c.save(); flat(); c.beginPath();
+      for (const r of P.tiles) put(r);
+      for (const r of now) put(r);
+      for (const r of P.was) put(r);
+      c.clip();
+    }
+    if (P) P.was = now;
     flat(); c.drawImage(L.under, 0, 0);
     skin.aim!(this, S);
     paintPieces(L.mid, c, this.failed, true);
@@ -463,6 +505,7 @@ export class FactoryView {
     flat(); c.drawImage(L.words, 0, 0);
     /* the words of what was just painted (the name of a station whose ticket pulses) */
     skin.aim!(this, S); skin.words?.(null, null);
+    if (clipped) c.restore();
   }
 
   /**

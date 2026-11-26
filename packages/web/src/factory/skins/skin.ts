@@ -55,6 +55,12 @@ export interface Piece {
    * next (`Skin.layered`), these are the pieces painted again at every frame, with whatever is ordered among them.
    */
   turns?: boolean;
+  /**
+   * Where it paints what moves by itself (a pulse, an arc that turns), at most, in tiles, at the time it is asked.
+   * A view that keeps its picture then paints, of a frame, only there and along the belts; a piece that moves by
+   * itself and does not say has the whole frame painted.
+   */
+  box?: () => { x: number; y: number; w: number; h: number };
 }
 
 /**

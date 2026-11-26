@@ -160,4 +160,40 @@ describe('the picture kept in layers', () => {
     expect(at[3]! - at[2]!).toBeCloseTo(0.1, 6);
     expect(at[3]!).toBeGreaterThan(at[0]!);
   });
+
+  it('paints, of a frame kept, only along the belts and where something moves by itself: the rest of the canvas is left as it was', () => {
+    const clips: number[] = [], rects: number[][] = [];
+    const ctx = new Proxy({}, { get: (_t, k) => (k === 'getTransform' ? () => ({}) : k === 'clip' ? () => { clips.push(rects.length); } : k === 'rect' ? (...a: number[]) => { rects.push(a); } : () => undefined), set: () => true }) as CanvasRenderingContext2D;
+    const main = { getContext: () => ctx, clientWidth: 800, clientHeight: 600, width: 0, height: 0 } as unknown as HTMLCanvasElement;
+    const { skin } = counting(true), v = new FactoryView(main, skin);
+    /* the view looks at the belt (at 0, 6) */
+    v.cam.x = 5; v.cam.y = 6;
+    v.draw(state(), 0); v.draw(state(), 1 / 30);
+    /* the layers were just painted: the whole frame is */
+    expect(clips).toHaveLength(0);
+    v.draw(state(), 1 / 30);
+    expect(v.painted).toBe('kept');
+    /* one belt on this floor, in view: one place painted, on whole pixels */
+    expect(clips).toEqual([1]);
+    expect(rects[0]!.every(Number.isInteger)).toBe(true);
+  });
+
+  it('paints the whole of a frame kept when something that moves by itself does not say where', () => {
+    let clips = 0;
+    const ctx = new Proxy({}, { get: (_t, k) => (k === 'getTransform' ? () => ({}) : k === 'clip' ? () => { clips++; } : () => undefined), set: () => true }) as CanvasRenderingContext2D;
+    const main = { getContext: () => ctx, clientWidth: 800, clientHeight: 600, width: 0, height: 0 } as unknown as HTMLCanvasElement;
+    const pulsing = (box?: Piece['box']): Skin => { const skin: Skin = {
+      id: 'pulse', layered: true, animated: false, ground: () => { skin.animated = false; },
+      pieces: (_S, _st, out: Piece[]) => { out.push({ layer: 'standing', depth: 1, draw: () => undefined, turns: true }, { layer: 'standing', depth: 3, draw: () => { skin.animated = true; }, box }); },
+      top: () => undefined, aim: () => undefined, readings: () => undefined, light: () => undefined, words: () => undefined, minimap: () => undefined,
+    }; return skin; };
+    const blind = new FactoryView(main, pulsing());
+    for (let k = 0; k < 4; k++) blind.draw(state(), 1 / 30);
+    expect(blind.painted).toBe('kept');
+    expect(clips).toBe(0);
+    const told = new FactoryView(main, pulsing(() => ({ x: 2, y: 0, w: 5, h: 4 })));
+    for (let k = 0; k < 4; k++) told.draw(state(), 1 / 30);
+    expect(told.painted).toBe('kept');
+    expect(clips).toBeGreaterThan(0);
+  });
 });

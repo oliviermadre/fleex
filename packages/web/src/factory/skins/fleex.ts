@@ -66,6 +66,8 @@ export const PICK = '#60a5fa';
 export const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
 /** Tiles of room kept round the view when what is beyond it is left unpainted. */
 const VIEW_ROOM = 4;
+/** Tiles of room round a box or a ticket within which what moves by itself on it is painted (`Piece.box`). */
+const BOX_ROOM = 0.7;
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 export const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
 
@@ -179,7 +181,7 @@ export class FleexSkin implements Skin {
     if (this.cam.z < 10 || (st.edit && o.build === 'hide')) return;
     const a = st.edit ? 0.35 : 1, faded = (f: () => void) => () => { this.ctx.globalAlpha = a; f(); this.ctx.globalAlpha = 1; };
     /* someone who walks, or will in a moment, moves with the clock: said where they are painted, as for all that does (`clock`) */
-    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, draw: faded(() => { if (!still && (p.role === 'walker' || p.path.length)) this.animated = true; this.person(p, pal); }) });
+    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, box: () => ({ x: p.x - 1.5, y: p.y - 2.5, w: 4, h: 4.5 }), draw: faded(() => { if (!still && (p.role === 'walker' || p.path.length)) this.animated = true; this.person(p, pal); }) });
     this.stationPeople(S, out, standing, o, pal);
   }
   /** The crowd moved by so many seconds, as it was last listed: between two listings, the people listed walk on (`tick`). */
@@ -207,7 +209,7 @@ export class FleexSkin implements Skin {
     for (const v of S.boxes) {
       if (v.kind !== 'station' || !v.run || v.gate) continue;
       const m = v.m, state = workerState(v, o.hands), cx = m.x + m.w - 0.45, cy = m.y + m.h - 0.4, id = m.x * 31 + m.y;
-      out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, draw: () => {
+      out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, box: () => ({ x: cx - 1.2, y: cy - 2, w: 2.6, h: 2.8 }), draw: () => {
         flatWorker(this.ctx, cx, cy, state, this.clock, pal, neon, id, ['agent', 'skill', 'panel', 'script'].indexOf(v.run!) + 1);
         if (state === 'sleep') for (const { k, size } of zees(this.clock)) this.label(size > 0.24 ? 'Z' : 'z', cx + 0.2 + k * 0.3, cy - 0.3 - k * 0.6, size, neon ? `rgba(167,163,214,${(1 - k).toFixed(2)})` : pal.light ? `rgba(75,70,85,${(1 - k).toFixed(2)})` : `rgba(210,204,219,${(1 - k).toFixed(2)})`, { weight: 800, mono: true, min: 7, max: 16, dark: true });
         if (state !== 'call' && state !== 'ask') return;
@@ -221,7 +223,9 @@ export class FleexSkin implements Skin {
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
     this.decorPieces(st, out, false);
     this.peoplePieces(S, st, out, false);
-    const pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void, turns?: boolean) => { out.push(turns ? { layer: 'standing', depth, draw, turns } : { layer: 'standing', depth, draw }); };
+    const pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void, turns?: boolean, box?: Piece['box']) => { out.push(turns ? { layer: 'standing', depth, draw, turns } : box ? { layer: 'standing', depth, draw, box } : { layer: 'standing', depth, draw }); };
+    /* where a box, or a ticket, paints what moves by itself: itself and a little room round it (a halo, an antenna, a hand raised) */
+    const round = (m: { x: number; y: number; w: number; h: number }) => () => ({ x: m.x - BOX_ROOM, y: m.y - BOX_ROOM, w: m.w + 2 * BOX_ROOM, h: m.h + 2 * BOX_ROOM }), about = (p: { x: number; y: number }) => () => ({ x: p.x - 0.5 - BOX_ROOM, y: p.y - 0.5 - BOX_ROOM, w: 1 + 2 * BOX_ROOM, h: 1 + 2 * BOX_ROOM });
     /*
      * Only what the view shows is painted: a floor is often seen from close, most of it beyond the edges, and what is
      * painted there costs as much as what is seen. A few tiles of room round the view, for what reaches past its own
@@ -244,8 +248,8 @@ export class FleexSkin implements Skin {
       else if (v.kind === 'exit') this.exit(v, pal);
       else if (v.kind === 'dock') this.dock(v, st, pal);
       else this.port(v, st, pal);
-    });
-    for (const b of belts) for (const r of b.riders) at(4, () => this.ticket(r, st));
+    }, false, round(v.m));
+    for (const b of belts) for (const r of b.riders) at(4, () => this.ticket(r, st), false, about(r));
     /* gantries stand over their belt: a ticket goes under the beam */
     for (const b of belts) if (b.gantry) at(5, () => this.gantry(b, pal));
     for (const p of S.loose) if (seen(p.t)) at(6, () => {
@@ -253,7 +257,7 @@ export class FleexSkin implements Skin {
       const ctx = this.ctx;
       ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(p.t.x + 0.5, p.t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
       this.ticket(p, st);
-    });
+    }, false, about(p));
     for (const a of S.arms) if (seen(a.m)) at(7, () => this.arm(a, st, pal));
     for (const b of belts) if (b.toll) at(8, () => this.tollArm(b, st, pal));
     at(9, () => this.departures(S, pal));
