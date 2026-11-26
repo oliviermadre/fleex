@@ -68,8 +68,8 @@ const POLL_BACKGROUND_MS = 3000;
 /** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
 const STATS_EVERY_MS = 60_000;
-/** A wait up to this long is spent in animation frames; a longer one in a timer (see the draw loop). */
-const SOON_MS = 40;
+/** A wait up to this long is left to the next animation frame; a longer one is spent in a timer that ends this early before it is due (see the draw loop). */
+const SOON_MS = 12, EARLY_MS = 4;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
 /** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */
@@ -354,20 +354,23 @@ function Floor() {
     let raf = 0, timer = 0, last = performance.now(), miniAt = 0;
     owed.current = true;
     /*
-     * The next look at the floor: at the next animation frame while frames follow one another closely; after a wait
-     * when the next one is far (a floor at rest), so that the page is not woken at every refresh of the screen, 120
-     * times a second, to find each time that it is too early.
+     * The next look at the floor: at the next animation frame when it is due by then (at full rate); otherwise after
+     * a wait that ends just before it is due, so that one animation frame is asked for each frame drawn. Asking for
+     * one at every refresh of the screen to find that it is too early is not free: each has the page run a whole
+     * frame of its own (styles, layout, commit), 120 times a second on a fast screen for 30 frames drawn, and
+     * measured on a real floor that was most of what the page's process spent.
      */
     const again = (wait: number) => {
       if (wait <= SOON_MS) { raf = requestAnimationFrame(frame); return; }
-      timer = window.setTimeout(() => { timer = 0; raf = requestAnimationFrame(frame); }, wait - SOON_MS / 2);
+      timer = window.setTimeout(() => { timer = 0; raf = requestAnimationFrame(frame); }, wait - EARLY_MS);
     };
     hurry.current = () => { if (!timer) return; window.clearTimeout(timer); timer = 0; raf = requestAnimationFrame(frame); };
     const frame = (ts: number) => {
       /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
       const gap = () => { const snap = useFactoryStore.getState().snapshot; return frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running: !!snap && snap.floor.settings.halted !== true, moving: v.moving }); };
       const wait = gap() - (ts - last);
-      if (wait > 0 && !owed.current) { again(wait); return; }
+      /* a hair early is due: the next refresh of the screen would be later than asked */
+      if (wait > EARLY_MS / 2 && !owed.current) { again(wait); return; }
       owed.current = false;
       const dt = Math.min(MAX_STEP_S, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
