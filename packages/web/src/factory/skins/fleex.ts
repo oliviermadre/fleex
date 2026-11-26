@@ -168,20 +168,33 @@ export class FleexSkin implements Skin {
    */
   protected peoplePieces(S: Scene, st: ViewState, out: Piece[], standing: boolean): void {
     const o = this.peopleOpts;
-    if (!o) return;
+    if (!o) { this.crowdStep = null; return; }
     const d = this.decorOpts, L = st.layout, hall = hallOf(L, this.floorOf(L), d?.wall ?? 'built'), pal = this.palette();
     const blocked = new Set(d?.props ? propsIn(L, hall, hall, d.props).map((q) => `${q.x},${q.y}`) : []);
-    const dt = this.crowdAt < 0 ? 0 : Math.max(0, Math.min(0.3, this.clockNow - this.crowdAt)); this.crowdAt = this.clockNow;
     const waiting = S.boxes.filter((v) => v.kind === 'station' && v.gate && v.deciding.length > 0).map((v) => v.m);
     const door = wallThings(hall, builtBox(L.machines)).find((t) => t.kind === 'door');
     const still = o.still ?? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
-    const people = this.crowd.update(dt, L, hall, blocked, waiting, { ...o, still }, door ? { x: door.x, y: hall.y } : undefined);
+    this.crowdStep = (dt) => this.crowd.update(dt, L, hall, blocked, waiting, { ...o, still }, door ? { x: door.x, y: hall.y } : undefined);
+    const people = this.stepCrowd();
     if (this.cam.z < 10 || (st.edit && o.build === 'hide')) return;
-    /* someone walks, or will in a moment */
-    if (!still && people.some((p) => p.role === 'walker' || p.path.length)) this.animated = true;
     const a = st.edit ? 0.35 : 1, faded = (f: () => void) => () => { this.ctx.globalAlpha = a; f(); this.ctx.globalAlpha = 1; };
-    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, draw: faded(() => this.person(p, pal)) });
+    /* someone who walks, or will in a moment, moves with the clock: said where they are painted, as for all that does (`clock`) */
+    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, draw: faded(() => { if (!still && (p.role === 'walker' || p.path.length)) this.animated = true; this.person(p, pal); }) });
     this.stationPeople(S, out, standing, o, pal);
+  }
+  /** The crowd moved by so many seconds, as it was last listed: between two listings, the people listed walk on (`tick`). */
+  private crowdStep: ((dt: number) => Person[]) | null = null;
+  private stepCrowd(): Person[] {
+    const dt = this.crowdAt < 0 ? 0 : Math.max(0, Math.min(0.3, this.clockNow - this.crowdAt)); this.crowdAt = this.clockNow;
+    return this.crowdStep ? this.crowdStep(dt) : [];
+  }
+  /**
+   * A frame of a picture kept (`Skin.tick`): nothing is listed anew, the clocks move on and the people walk on, so
+   * what is painted again of that picture (a pulse, someone walking) is painted as it now is.
+   */
+  tick(S: Scene): void {
+    this.clockNow = S.clock; this.turn = S.turn;
+    if (this.crowdStep) this.stepCrowd();
   }
   /** A person, as this skin draws one. */
   protected person(p: Person, pal: Palette): void { flatPerson(this.ctx, p, pal, this.decorStyle() === 'neon'); }

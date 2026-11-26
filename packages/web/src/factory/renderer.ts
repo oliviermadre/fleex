@@ -363,6 +363,8 @@ export class FactoryView {
   private live: boolean[] | null = null;
   /** Something of a picture kept moves by itself and is not among what is painted at every frame: its layers are painted again often. */
   private pulse = false;
+  /** Why, when it is so: for whoever measures. */
+  why: string | null = null;
   /** The view, on another canvas of the same size. */
   private surface(cv: HTMLCanvasElement, ctx: CanvasRenderingContext2D): Surface {
     return { ctx, cv, dpr: this.dpr, w: this.w, h: this.h, cam: this.cam, toWorld: (x, y) => this.toWorld(x, y), floorOf: (l) => this.floorOf(l), machine: (id) => this.machine(id) };
@@ -386,6 +388,7 @@ export class FactoryView {
     const all = order(pieces), known = this.live && this.live.length === all.length ? this.live : null, live = new Array<boolean>(all.length).fill(false);
     /* what moves by itself and is on a layer all the same: the layers are then painted again often (`pulse`) */
     let missed = !!skin.animated;
+    this.why = missed ? 'listing' : null;
     skin.animated = false;
     /* from the first piece that runs with the belts to the last: painted at every frame; before and after: kept */
     let first = all.findIndex((p) => p.turns), last = first;
@@ -400,7 +403,7 @@ export class FactoryView {
     let from = rest.findIndex((r) => r.live), to = from;
     if (from < 0) from = to = rest.length; else { for (let n = rest.length - 1; n > from; n--) if (rest[n]!.live) { to = n; break; } to++; }
     const before = rest.slice(0, from), run = rest.slice(from, to), after = rest.slice(to);
-    const kept = (i: number) => { if (skin.animated) { live[i] = true; missed = true; skin.animated = false; } };
+    const kept = (i: number) => { if (skin.animated) { live[i] = true; missed = true; skin.animated = false; this.why ??= i < first ? 'under the chevrons' : `piece ${i} of ${all.length}, ${all[i]!.layer} ${all[i]!.depth}`; } };
     paintPieces(all.slice(0, first), U.ctx, this.failed, true, kept);
     skin.aim!(O, S);
     paintPieces(before.map((r) => r.p), O.ctx, this.failed, true, (n) => kept(before[n]!.i));
@@ -411,7 +414,7 @@ export class FactoryView {
     skin.words?.(S, st);
     this.fastArms(S, W.ctx);
     this.unsetMarks(st, W.ctx);
-    if (skin.animated) missed = true;
+    if (skin.animated) { missed = true; this.why ??= 'readings or words'; }
     for (const r of run) live[r.i] = true;
     this.live = live; this.pulse = missed;
     this.ambient = !st.halted && (missed || run.length > 0);
@@ -448,6 +451,7 @@ export class FactoryView {
   /** A frame from the layers kept: what is under, the chevrons as they now are, what is over, what moves by itself, what is over that, the skin's light, the words. */
   private compose(S: Scene): void {
     const L = this.layers!, c = this.ctx, skin = this.skin, flat = () => { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; };
+    skin.tick?.(S);
     flat(); c.drawImage(L.under, 0, 0);
     skin.aim!(this, S);
     paintPieces(L.mid, c, this.failed, true);

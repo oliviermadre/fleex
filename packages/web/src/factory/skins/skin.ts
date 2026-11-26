@@ -135,6 +135,8 @@ export interface Skin {
    * kind.
    */
   bloomOf?(picture: HTMLCanvasElement): { cv: HTMLCanvasElement; alpha: number } | null;
+  /** A frame of a picture kept in layers: nothing is listed anew; what moves by itself is moved on to the scene's time. */
+  tick?(S: Scene): void;
   /** Drop the words asked for and not yet written. */
   forget?(): void;
   /** The third: the words asked for since the last time, then the names (none without a scene). */

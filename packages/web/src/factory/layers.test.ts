@@ -147,4 +147,17 @@ describe('the picture kept in layers', () => {
     now.mockReturnValue(1110);
     v.draw(state(), 1 / 30); expect(v.painted).toBe('layers');
   });
+
+  it('moves the skin on to the time of each frame of a picture kept, so what is painted again of it is painted as it now is', () => {
+    const { skin } = counting(true), at: number[] = [];
+    skin.tick = (S) => { at.push(S.clock); };
+    const v = new FactoryView(canvas(), skin);
+    v.draw(state(), 0); v.draw(state(), 0.1);
+    for (let k = 0; k < 3; k++) v.draw(state(), 0.1);
+    expect(v.painted).toBe('kept');
+    /* once with the layers, then at each frame kept, a tenth of a second later each time */
+    expect(at).toHaveLength(4);
+    expect(at[3]! - at[2]!).toBeCloseTo(0.1, 6);
+    expect(at[3]!).toBeGreaterThan(at[0]!);
+  });
 });
