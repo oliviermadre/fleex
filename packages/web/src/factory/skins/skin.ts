@@ -50,6 +50,17 @@ export interface Piece {
    * own layer and depth (a ticket on a belt, in a station). Several carried by one thing keep the order they came in.
    */
   on?: Piece;
+  /**
+   * It runs with the belts' clock (`Scene.turn`): chevrons. When the rest of the picture is kept from one frame to the
+   * next (`Skin.layered`), these are the pieces painted again at every frame, with whatever is ordered among them.
+   */
+  turns?: boolean;
+  /**
+   * Where it paints what moves by itself (a pulse, an arc that turns), at most, in tiles, at the time it is asked.
+   * A view that keeps its picture then paints, of a frame, only there and along the belts; a piece that moves by
+   * itself and does not say has the whole frame painted.
+   */
+  box?: () => { x: number; y: number; w: number; h: number };
 }
 
 /**
@@ -62,13 +73,16 @@ export interface Piece {
  * threw (a person of the decor, say) took every piece after it with it, the arms among them. What failed is told once
  * per message (`report`), for it to be found.
  */
-export function paintPieces(pieces: readonly Piece[], ctx: Pick<CanvasRenderingContext2D, 'getTransform' | 'setTransform' | 'setLineDash'> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; lineCap: CanvasLineCap; lineJoin: CanvasLineJoin; shadowBlur: number }, report: (err: unknown, p: Piece) => void): void {
-  const at = ctx.getTransform();
-  for (const p of order(pieces)) {
+export function paintPieces(pieces: readonly Piece[], ctx: Pick<CanvasRenderingContext2D, 'getTransform' | 'setTransform' | 'setLineDash'> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; lineCap: CanvasLineCap; lineJoin: CanvasLineJoin; shadowBlur: number }, report: (err: unknown, p: Piece) => void, ordered = false, each?: (i: number) => void): void {
+  const at = ctx.getTransform(), list = ordered ? pieces : order(pieces);
+  /* `ordered`: they come in their order already (a part of a picture kept in layers); `each`: told after each piece, by its place */
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]!;
     try { p.draw(); } catch (err) {
       ctx.setTransform(at); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.setLineDash([]); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.shadowBlur = 0;
       report(err, p);
     }
+    each?.(i);
   }
 }
 
@@ -100,6 +114,39 @@ export interface Skin {
    * tiles, its front face fills the gap. What is under the pointer is then what is seen there. None: flat.
    */
   liftOf?(m: MachineSpec, st: ViewState): number;
+  /**
+   * Something it painted in the last frame moves by itself with the floor's clock, belts aside (they follow
+   * `Scene.turn`): a pulse, a blink, a worker, someone walking. The floor is then drawn often enough for it
+   * (`frameRate.ts`); a skin that does not say is taken to hold nothing of the kind. The view puts it down between two
+   * pieces to learn which of them moves (`FactoryView.live`).
+   */
+  animated?: boolean;
+  /**
+   * The picture may be kept in layers (`FactoryView`): while nothing on the floor moves, what is under the chevrons,
+   * what is over them and the words are each painted once on a canvas of their own, and a frame is those three laid
+   * over one another with the chevrons, painted anew, in between. A skin that can says so, and gives `top` in its
+   * three moments (`readings`, `light`, `words`) and a way to be turned to another canvas (`aim`).
+   */
+  readonly layered?: boolean;
+  /** Paint on this surface from now on, in the floor's units, belts at the scene's time. The same view: another canvas at most. */
+  aim?(on: Surface, S: Scene): void;
+  /** The first moment of `top`: readings, the selection, what is being placed. */
+  readings?(S: Scene, st: ViewState): void;
+  /** The second: what the picture becomes once all is painted (a glow), on the surface aimed at. */
+  light?(): void;
+  /**
+   * What `light` adds to a picture, alone, when it is light and nothing else: a canvas to lay over that picture,
+   * stretched to its size, in light (`lighter`) at `alpha`. The view then asks for it when it paints its layers and
+   * lays it at every frame, instead of having the skin work it out at each (`light`). Null: no light, or not of that
+   * kind.
+   */
+  bloomOf?(picture: HTMLCanvasElement): { cv: HTMLCanvasElement; alpha: number } | null;
+  /** A frame of a picture kept in layers: nothing is listed anew; what moves by itself is moved on to the scene's time. */
+  tick?(S: Scene): void;
+  /** Drop the words asked for and not yet written. */
+  forget?(): void;
+  /** The third: the words asked for since the last time, then the names (none without a scene). */
+  words?(S: Scene | null, st: ViewState | null): void;
   /** What lies under everything: the floor, its light, what stands casts on it. Leaves the canvas in the floor's units. */
   ground(on: Surface, S: Scene, st: ViewState): void;
   /** The pieces of the scene. */

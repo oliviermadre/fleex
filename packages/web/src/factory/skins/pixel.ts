@@ -190,6 +190,8 @@ export class PixelSkin extends FleexSkin {
   private sn(v: number): number { return Math.round(v * ART) / ART; }
   private get sprites(): boolean { return !!this.look.sprites && this.toLow; }
 
+  /** Not kept in layers: its picture is painted small on a canvas of its own, then enlarged (`lit`). */
+  override get layered(): boolean { return false; }
   override ground(on: Surface, S: Scene, st: ViewState): void {
     this.on = on;
     /* art pixels to a CSS pixel; at most the screen's own: from far the picture is not pixelated */
@@ -248,7 +250,7 @@ export class PixelSkin extends FleexSkin {
     if (!d) return;
     const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
     const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    const paint = (): DecorPaint => ({ ctx: this.ctx, light: pal.light, clock: this.clock, time: this.wallClock(), z: this.cam.z, view, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    const paint = (): DecorPaint => ({ ctx: this.ctx, light: pal.light, clock: this.clockNow, time: this.wallClock(), z: this.cam.z, view, say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
     out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') yard(p, hall, F); walls(p, hall, built, 'FLEEX FACTORY'); } });
     if (!d.props || (st.edit && d.build === 'hide')) return;
     if (!standing) { out.push({ layer: 'floor', depth: -0.5, draw: () => props(paint(), st.layout, hall, d.props, !!st.edit) }); return; }
@@ -471,11 +473,20 @@ export class PixelSkin extends FleexSkin {
     for (let i = 0; i < 4; i++) { const [u, v] = at(head - i); ctx.fillStyle = i ? (i === 1 ? '#3ddc5a' : 'rgba(61,220,90,0.5)') : '#ffffff'; ctx.fillRect(x + u * o, y + v * o, o, o); }
     return true;
   }
+  /** As sprites, belts are painted one by one: there is no path to share. */
+  protected override beltBases(belts: readonly BeltView[], pal: Palette): void {
+    if (!this.sprites) { super.beltBases(belts, pal); return; }
+    for (const b of belts) this.beltBase(b, pal);
+  }
+  protected override chevrons(belts: readonly BeltView[], pal: Palette): void {
+    if (!this.sprites) { super.chevrons(belts, pal); return; }
+    for (const b of belts) this.beltChevrons(b, pal);
+  }
   /** A straight belt's chevrons, on whole pixels; a bend keeps the curved ones. */
   protected override beltChevrons(v: BeltView, pal: Palette): void {
     if (!this.sprites) { super.beltChevrons(v, pal); return; }
     if (v.bend >= 0) { this.bendChevrons(v, pal); return; }
-    const b = v.m, fast = !!b.fast, off = (this.clock * (fast ? 1.2 : 0.6)) % 0.5, dx = [1, 0, -1, 0][b.dir]!, dy = [0, 1, 0, -1][b.dir]!, o = 1 / ART;
+    const b = v.m, fast = !!b.fast, off = (this.turn * (fast ? 1.2 : 0.6)) % 0.5, dx = [1, 0, -1, 0][b.dir]!, dy = [0, 1, 0, -1][b.dir]!, o = 1 / ART;
     const us: number[] = [];
     for (let k = 0; k < 2; k++) { const u = off + k * 0.5; if (fast) us.push(u - 0.075, u + 0.075); else us.push(u); }
     for (const u of us) {
@@ -688,7 +699,7 @@ export class PixelSkin extends FleexSkin {
     frame(ctx, i + 1, j + 1, 14, 14, 1, col, undefined, 3);
     if (!dep) { box(ctx, i + 5, j + 1, 6, 1, pad); box(ctx, i + 5, j + 14, 6, 1, pad); box(ctx, i + 1, j + 5, 1, 6, pad); box(ctx, i + 14, j + 5, 1, 6, pad); }
     this.faint(0.12 + 0.35 * burst, () => disc(ctx, ci, cj, 4, col));
-    const turn = this.clock * 2;
+    const turn = waiting ? this.clock * 2 : 0;
     ring(ctx, ci, cj, 4.6, 1, waiting ? pal.amber : col, waiting ? (a) => Math.floor((a + Math.PI + turn) / (Math.PI / 4)) % 2 === 0 : undefined);
     if (burst > 0) this.faint(1 - burst, () => ring(ctx, ci, cj, 4.6 + 5 * burst, 1, col));
     if (z >= 9) {
@@ -781,7 +792,7 @@ export class PixelSkin extends FleexSkin {
    */
   private bendChevrons(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = DX[f as 0], fy = DY[f as 0];
-    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5, col = b.fast ? pal.fast : pal.chev;
+    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.turn * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5, col = b.fast ? pal.fast : pal.chev;
     const one = (u: number) => {
       if (u < 0.08 || u > 0.92) return;
       const ca = Math.cos((u * Math.PI) / 2), sa = Math.sin((u * Math.PI) / 2), cx = (px + 0.5 * (fx * sa - dx * ca)) * ART, cy = (py + 0.5 * (fy * sa - dy * ca)) * ART, tx = dx * sa + fx * ca, ty = dy * sa + fy * ca;
@@ -809,7 +820,7 @@ export class PixelSkin extends FleexSkin {
       if (f === 'none') this.faint(0.6, () => (horizontal ? box(ctx, i + 5, j0, 6, 1, pal.chev) : box(ctx, i + 8, j + 5, 1, 6, pal.chev)));
       else if (f === 'clash') { pair(-0.2, 1, pal.danger); pair(0.2, -1, pal.danger); }
       else {
-        const s = f === 0 || f === 1 ? 1 : -1, off = (this.clock * (fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
+        const s = f === 0 || f === 1 ? 1 : -1, off = (this.turn * (fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
         for (let k = -1; k < 2; k++) pair(s * (off + k * 0.5 - 0.5), s, fast ? pal.fast : pal.chev);
       }
     };
@@ -878,9 +889,9 @@ export class PixelSkin extends FleexSkin {
     if (dim) { this.token('ghost', type, GHOST, px, py, T, 0.32); return; }
     this.token('solid', type, color, px, py, T, dragging ? 0.25 : mark === 'wait' ? 0.5 : 1);
     /* the box of its icon, eleven pixels square */
-    const i = Math.round(px * ART - 5.5), j = Math.round(py * ART - 5.5), blink = Math.floor(this.clock * 2.4) % 2 === 0;
+    const i = Math.round(px * ART - 5.5), j = Math.round(py * ART - 5.5);
     if (mark === 'run') this.runMark(px, py, T, t.ticketId.length);
-    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) frame(ctx, i - 2, j - 2, 15, 15, blink ? 2 : 1, mark === 'fail' ? pal.danger : pal.amber, undefined, 2);
+    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) frame(ctx, i - 2, j - 2, 15, 15, Math.floor(this.clock * 2.4) % 2 === 0 ? 2 : 1, mark === 'fail' ? pal.danger : pal.amber, undefined, 2);
     else if (mark === 'out') frame(ctx, i - 2, j - 2, 15, 15, 1, pal.text2, undefined, 2);
     if (call) {
       const col = call === 'failed' ? pal.danger : pal.amber, ph = (this.clock * 0.9 + (t.ticketId.charCodeAt(0) % 10) / 10) % 1, g = Math.round(ph * 5);

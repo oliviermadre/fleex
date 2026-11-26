@@ -115,12 +115,13 @@ describe('Modal dismissal', () => {
     expect(over).toHaveBeenCalledTimes(1);
   });
 
-  it('glass: a translucent dialog that blurs what is behind it, over a backdrop that blurs nothing; flush: no padding', () => {
+  it('glass: an opaque dialog over a backdrop that blurs nothing, and nothing blurred behind the dialog either (it opens over a page that moves); flush: no padding', () => {
     const { baseElement } = render(<Modal open onClose={vi.fn()} variant="glass" flush><p>Over the floor</p></Modal>);
     const backdrop = baseElement.querySelector('[data-overlay-top]') as HTMLElement, panel = backdrop.firstElementChild as HTMLElement;
     expect(backdrop.className).not.toContain('backdrop-blur');
-    expect(panel.style.backdropFilter).toContain('blur');
-    expect(panel.style.background).toContain('transparent');
+    expect(panel.style.backdropFilter ?? '').toBe('');
+    expect(panel.style.background).not.toContain('transparent');
+    expect(panel.style.background).toContain('--theme-bg-surface');
     expect(panel.className).not.toContain('p-6');
     cleanup();
     const solid = setup();

@@ -14,8 +14,11 @@ interface ModalProps {
   /** Drawn behind the dialog, over its footprint (e.g. a pile of cards peeking below it). */
   underlay?: React.ReactNode;
   /**
-   * `glass`: the dialog is slightly translucent and blurs what is behind it, over a lighter backdrop that blurs
-   * nothing, so the page under it stays in sight. For a dialog opened over something one keeps an eye on.
+   * `glass`: the dialog stands over a lighter backdrop that blurs nothing, so the page under it stays in sight
+   * round it. For a dialog opened over something one keeps an eye on. The dialog itself is opaque: it used to
+   * blur what was behind it, and over a page that moves (the Factory's floor, painted anew many times a second)
+   * that blur is worked out again at each of those frames, over the whole dialog. Measured with a ticket open
+   * over the floor, it doubled what Fleex spent.
    */
   variant?: 'solid' | 'glass';
   /** No padding and clipped corners: the content brings its own layout (a bar, columns that scroll). */
@@ -27,10 +30,9 @@ interface ModalProps {
   guardEscape?: boolean;
 }
 
-/** What the glass variant adds to the dialog: a surface that lets a little through, and blurs it. */
+/** What the glass variant adds to the dialog: its surface, lit along its top edge, and a deeper shadow. Nothing is blurred (see `variant`). */
 const GLASS: React.CSSProperties = {
-  background: 'color-mix(in srgb, var(--theme-bg-surface) 76%, transparent)',
-  backdropFilter: 'blur(20px) saturate(1.8) brightness(1.2)', WebkitBackdropFilter: 'blur(20px) saturate(1.8) brightness(1.2)',
+  background: 'var(--theme-bg-surface)',
   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 24px 64px rgba(0, 0, 0, 0.5)',
 };
 const inField = (el: HTMLElement | null): boolean => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);

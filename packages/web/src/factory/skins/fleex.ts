@@ -64,15 +64,36 @@ const SHADOW_PAD = 1.2;
 export const PICK = '#60a5fa';
 /** The arrow painted under an arm, pointing east, round the middle of its tile: narrow where it takes, wide where it drops. */
 export const WAY: readonly (readonly [number, number])[] = [[-0.48, -0.19], [0.14, -0.26], [0.14, -0.42], [0.5, 0], [0.14, 0.42], [0.14, 0.26], [-0.48, 0.19]];
+/** Tiles of room kept round the view when what is beyond it is left unpainted. */
+const VIEW_ROOM = 4;
+/** Tiles of room round a box or a ticket within which what moves by itself on it is painted (`Piece.box`). */
+const BOX_ROOM = 0.7;
 /** How fast chevrons run along a belt, and along a fast one, in tiles per second; and how far apart the two chevrons of a fast pair are. */
 export const CHEVRON_PACE = 0.6, CHEVRON_FAST = 1.2, CHEVRON_PAIR = 0.15;
+
+/** A machine's icon as one path, made once: its strokes were parsed and stroked one by one at every frame. */
+const ICON_PATHS = new Map<string, Path2D | null>();
+function iconPath(exec: string): Path2D | null {
+  let p = ICON_PATHS.get(exec);
+  if (p === undefined) { const ds = MACHINE_ICONS[exec as keyof typeof MACHINE_ICONS]; p = ds?.length ? new Path2D(ds.join(' ')) : null; ICON_PATHS.set(exec, p); }
+  return p;
+}
 
 export class FleexSkin implements Skin {
   readonly id: string = 'fleex';
   /** The zooms the view rests on, for a skin whose pixels must be whole (see `Skin.steps`): none here. */
   readonly steps?: readonly number[];
   /** The floor's clock, as the scene last said. */
-  protected clock = 0;
+  protected clockNow = 0;
+  /**
+   * The floor's clock, for what moves by itself: a pulse, a blink, an arc that turns, a worker. Reading it says that
+   * what is being painted changes with time (`animated`), so it is read only where something is painted from it.
+   */
+  protected get clock(): number { this.animated = true; return this.clockNow; }
+  /** The belts' clock, for their chevrons: it stands still while nothing moves on the floor (`Scene.turn`). */
+  protected turn = 0;
+  /** Something painted since `ground` moves by itself: the floor is then drawn often enough for it (`Skin.animated`). */
+  animated = false;
   private labels: Label[] = [];
   protected boards: Board[] = [];
   protected pal: Palette | null = null;
@@ -97,11 +118,19 @@ export class FleexSkin implements Skin {
   protected machine(id: string | null): MachineSpec | null { return this.on.machine(id); }
 
   ground(on: Surface, S: Scene, st: ViewState): void {
-    this.on = on; this.clock = S.clock;
-    const ctx = this.ctx, pal = this.palette(), cam = this.cam, d = this.dpr, z = cam.z;
-    this.floor(st, S, pal);
+    this.clockNow = S.clock; this.animated = false;
+    this.on = on; this.turn = S.turn;
+    this.floor(st, S, this.palette());
+    this.aim(on, S);
+    this.shadows(st, this.palette());
+  }
+
+  /** Painted in layers (`Skin.layered`): it is, as long as its words are written over the picture, not in it. */
+  get layered(): boolean { return !this.wordsInPicture; }
+  aim(on: Surface, S: Scene): void {
+    this.on = on; this.turn = S.turn;
+    const ctx = this.ctx, cam = this.cam, d = this.dpr, z = cam.z;
     ctx.setTransform(z * d, 0, 0, z * d, (this.w / 2 - cam.x * z) * d, (this.h / 2 - cam.y * z) * d);
-    this.shadows(st, pal);
   }
 
   /**
@@ -124,7 +153,7 @@ export class FleexSkin implements Skin {
     if (!d) return;
     const pal = this.palette(), F = this.floorOf(st.layout), hall = hallOf(st.layout, F, d.wall), built = builtBox(st.layout.machines);
     const a = this.toWorld(0, 0), b = this.toWorld(this.w, this.h), view = { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    const paint = (): FlatDecorPaint => ({ ctx: this.ctx, pal, style: this.decorStyle(), z: this.cam.z, view, clock: this.clock, time: this.wallClock(), say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
+    const paint = (): FlatDecorPaint => ({ ctx: this.ctx, pal, style: this.decorStyle(), z: this.cam.z, view, clock: this.clockNow, time: this.wallClock(), say: (t, x, y, size, color, o) => this.label(t, x, y, size, color, o) });
     out.push({ layer: 'floor', depth: -3, draw: () => { const p = paint(); if (d.wall === 'built') flatYard(p, hall, F); flatWalls(p, hall, built, 'FLEEX FACTORY'); } });
     if (d.props && !(st.edit && d.build === 'hide')) out.push({ layer: 'floor', depth: -0.5, draw: () => flatProps(paint(), st.layout, hall, d.props, !!st.edit) });
   }
@@ -141,18 +170,33 @@ export class FleexSkin implements Skin {
    */
   protected peoplePieces(S: Scene, st: ViewState, out: Piece[], standing: boolean): void {
     const o = this.peopleOpts;
-    if (!o) return;
+    if (!o) { this.crowdStep = null; return; }
     const d = this.decorOpts, L = st.layout, hall = hallOf(L, this.floorOf(L), d?.wall ?? 'built'), pal = this.palette();
     const blocked = new Set(d?.props ? propsIn(L, hall, hall, d.props).map((q) => `${q.x},${q.y}`) : []);
-    const dt = this.crowdAt < 0 ? 0 : Math.max(0, Math.min(0.2, this.clock - this.crowdAt)); this.crowdAt = this.clock;
     const waiting = S.boxes.filter((v) => v.kind === 'station' && v.gate && v.deciding.length > 0).map((v) => v.m);
     const door = wallThings(hall, builtBox(L.machines)).find((t) => t.kind === 'door');
     const still = o.still ?? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
-    const people = this.crowd.update(dt, L, hall, blocked, waiting, { ...o, still }, door ? { x: door.x, y: hall.y } : undefined);
+    this.crowdStep = (dt) => this.crowd.update(dt, L, hall, blocked, waiting, { ...o, still }, door ? { x: door.x, y: hall.y } : undefined);
+    const people = this.stepCrowd();
     if (this.cam.z < 10 || (st.edit && o.build === 'hide')) return;
     const a = st.edit ? 0.35 : 1, faded = (f: () => void) => () => { this.ctx.globalAlpha = a; f(); this.ctx.globalAlpha = 1; };
-    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, draw: faded(() => this.person(p, pal)) });
+    /* someone who walks, or will in a moment, moves with the clock: said where they are painted, as for all that does (`clock`) */
+    for (const p of people) out.push({ layer: 'standing', depth: standing ? p.y + 1 : 6.5, box: () => ({ x: p.x - 1.5, y: p.y - 2.5, w: 4, h: 4.5 }), draw: faded(() => { if (!still && (p.role === 'walker' || p.path.length)) this.animated = true; this.person(p, pal); }) });
     this.stationPeople(S, out, standing, o, pal);
+  }
+  /** The crowd moved by so many seconds, as it was last listed: between two listings, the people listed walk on (`tick`). */
+  private crowdStep: ((dt: number) => Person[]) | null = null;
+  private stepCrowd(): Person[] {
+    const dt = this.crowdAt < 0 ? 0 : Math.max(0, Math.min(0.3, this.clockNow - this.crowdAt)); this.crowdAt = this.clockNow;
+    return this.crowdStep ? this.crowdStep(dt) : [];
+  }
+  /**
+   * A frame of a picture kept (`Skin.tick`): nothing is listed anew, the clocks move on and the people walk on, so
+   * what is painted again of that picture (a pulse, someone walking) is painted as it now is.
+   */
+  tick(S: Scene): void {
+    this.clockNow = S.clock; this.turn = S.turn;
+    if (this.crowdStep) this.stepCrowd();
   }
   /** A person, as this skin draws one. */
   protected person(p: Person, pal: Palette): void { flatPerson(this.ctx, p, pal, this.decorStyle() === 'neon'); }
@@ -165,7 +209,7 @@ export class FleexSkin implements Skin {
     for (const v of S.boxes) {
       if (v.kind !== 'station' || !v.run || v.gate) continue;
       const m = v.m, state = workerState(v, o.hands), cx = m.x + m.w - 0.45, cy = m.y + m.h - 0.4, id = m.x * 31 + m.y;
-      out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, draw: () => {
+      out.push({ layer: 'standing', depth: standing ? m.y + m.h + 0.5 : 6.6, box: () => ({ x: cx - 1.2, y: cy - 2, w: 2.6, h: 2.8 }), draw: () => {
         flatWorker(this.ctx, cx, cy, state, this.clock, pal, neon, id, ['agent', 'skill', 'panel', 'script'].indexOf(v.run!) + 1);
         if (state === 'sleep') for (const { k, size } of zees(this.clock)) this.label(size > 0.24 ? 'Z' : 'z', cx + 0.2 + k * 0.3, cy - 0.3 - k * 0.6, size, neon ? `rgba(167,163,214,${(1 - k).toFixed(2)})` : pal.light ? `rgba(75,70,85,${(1 - k).toFixed(2)})` : `rgba(210,204,219,${(1 - k).toFixed(2)})`, { weight: 800, mono: true, min: 7, max: 16, dark: true });
         if (state !== 'call' && state !== 'ask') return;
@@ -179,13 +223,24 @@ export class FleexSkin implements Skin {
   pieces(S: Scene, st: ViewState, out: Piece[]): void {
     this.decorPieces(st, out, false);
     this.peoplePieces(S, st, out, false);
-    const ctx = this.ctx, pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void) => { out.push({ layer: 'standing', depth, draw }); };
+    const pal = this.palette(), z = this.cam.z, at = (depth: number, draw: () => void, turns?: boolean, box?: Piece['box']) => { out.push(turns ? { layer: 'standing', depth, draw, turns } : box ? { layer: 'standing', depth, draw, box } : { layer: 'standing', depth, draw }); };
+    /* where a box, or a ticket, paints what moves by itself: itself and a little room round it (a halo, an antenna, a hand raised) */
+    const round = (m: { x: number; y: number; w: number; h: number }) => () => ({ x: m.x - BOX_ROOM, y: m.y - BOX_ROOM, w: m.w + 2 * BOX_ROOM, h: m.h + 2 * BOX_ROOM }), about = (p: { x: number; y: number }) => () => ({ x: p.x - 0.5 - BOX_ROOM, y: p.y - 0.5 - BOX_ROOM, w: 1 + 2 * BOX_ROOM, h: 1 + 2 * BOX_ROOM });
+    /*
+     * Only what the view shows is painted: a floor is often seen from close, most of it beyond the edges, and what is
+     * painted there costs as much as what is seen. A few tiles of room round the view, for what reaches past its own
+     * tiles (a halo, a plate, an arm's tag, a light on the floor).
+     */
+    const a0 = this.toWorld(0, 0), a1 = this.toWorld(this.w, this.h), x0 = a0.x - VIEW_ROOM, y0 = a0.y - VIEW_ROOM, x1 = a1.x + VIEW_ROOM, y1 = a1.y + VIEW_ROOM;
+    const seen = (m: { x: number; y: number; w?: number; h?: number }) => m.x < x1 && m.y < y1 && m.x + (m.w ?? 1) > x0 && m.y + (m.h ?? 1) > y0;
+    const belts = S.belts.filter((b) => seen(b.m));
     /* the areas: decor on the floor, under everything */
-    for (const a of S.areas) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
-    for (const b of S.belts) at(0, () => this.beltBase(b, pal));
-    if (z >= 8) at(1, () => { ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; for (const b of S.belts) this.beltChevrons(b, pal); ctx.lineCap = 'butt'; });
-    for (const b of S.bridges) at(2, () => this.bridge(b, st, pal));
-    for (const v of S.boxes) at(3, () => {
+    for (const a of S.areas) if (seen(a)) out.push({ layer: 'floor', depth: 0, draw: () => this.area(a, pal) });
+    at(0, () => this.beltBases(belts, pal));
+    /* what runs with the belts' clock, and is painted at every frame when the rest is kept (`Piece.turns`) */
+    if (z >= 8) at(1, () => this.chevrons(belts, pal), true);
+    for (const b of S.bridges) if (seen(b.m)) at(2, () => this.bridge(b, st, pal), true);
+    for (const v of S.boxes) if (seen(v.m)) at(3, () => {
       if (v.kind === 'label') this.labelOf(v, pal);
       else if (v.kind === 'zone') this.zone(v, S, st, pal);
       else if (v.kind === 'station') this.station(v, st, pal);
@@ -193,26 +248,38 @@ export class FleexSkin implements Skin {
       else if (v.kind === 'exit') this.exit(v, pal);
       else if (v.kind === 'dock') this.dock(v, st, pal);
       else this.port(v, st, pal);
-    });
-    for (const b of S.belts) for (const r of b.riders) at(4, () => this.ticket(r, st));
+    }, false, round(v.m));
+    for (const b of belts) for (const r of b.riders) at(4, () => this.ticket(r, st), false, about(r));
     /* gantries stand over their belt: a ticket goes under the beam */
-    for (const b of S.belts) if (b.gantry) at(5, () => this.gantry(b, pal));
-    for (const p of S.loose) at(6, () => {
+    for (const b of belts) if (b.gantry) at(5, () => this.gantry(b, pal));
+    for (const p of S.loose) if (seen(p.t)) at(6, () => {
+      /* the canvas of the moment it is painted at, not of the moment the pieces are listed: they may differ (`aim`) */
+      const ctx = this.ctx;
       ctx.strokeStyle = pal.warn; ctx.lineWidth = 0.05; ctx.setLineDash([0.12, 0.1]); ctx.beginPath(); ctx.arc(p.t.x + 0.5, p.t.y + 0.5, 0.42, 0, 6.3); ctx.stroke(); ctx.setLineDash([]);
       this.ticket(p, st);
-    });
-    for (const a of S.arms) at(7, () => this.arm(a, st, pal));
-    for (const b of S.belts) if (b.toll) at(8, () => this.tollArm(b, st, pal));
+    }, false, about(p));
+    for (const a of S.arms) if (seen(a.m)) at(7, () => this.arm(a, st, pal));
+    for (const b of belts) if (b.toll) at(8, () => this.tollArm(b, st, pal));
     at(9, () => this.departures(S, pal));
     at(10, () => this.portLinks(S, pal));
   }
 
   top(S: Scene, st: ViewState): void {
+    this.readings(S, st);
+    if (this.wordsInPicture) { this.flushLabels(); this.lit(); } else { this.lit(); this.flushLabels(); }
+    this.names(st, S, this.palette());
+  }
+  /* `top`, in the three moments a picture kept in layers needs apart (`Skin.layered`) */
+  readings(S: Scene, st: ViewState): void {
     const pal = this.palette();
     if (st.lens) this.lens(st.lens, st.layout, pal);
     this.overlay(st, S, pal);
-    if (this.wordsInPicture) { this.flushLabels(); this.lit(); } else { this.lit(); this.flushLabels(); }
-    this.names(st, S, pal);
+  }
+  light(): void { this.lit(); }
+  forget(): void { this.labels.length = 0; this.boards.length = 0; }
+  words(S: Scene | null, st: ViewState | null): void {
+    this.flushLabels();
+    if (S && st) this.names(st, S, this.palette());
   }
 
   /** What the picture becomes once everything is painted, before the words are written over it. Nothing, here. */
@@ -340,7 +407,6 @@ export class FleexSkin implements Skin {
     }
     /* marks are placed around the token's box when there is one, around the square otherwise */
     const B = token ? T : s;
-    const blink = Math.floor(this.clock * 2.4) % 2 === 0;
     if (mark === 'run' && s * z > 6 && !this.runMark(px, py, B, t.ticketId.length)) {
       /* at work: an arc turning, around a token, inside a square */
       const a0 = this.clock * 4 + t.ticketId.length, r = token ? B * 0.6 : s * 0.24;
@@ -349,7 +415,7 @@ export class FleexSkin implements Skin {
       else { ctx.strokeStyle = 'rgba(0,0,0,0.62)'; ctx.lineWidth = s * 0.15; ctx.stroke(); }
       ctx.lineCap = 'butt';
     }
-    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = blink ? 0.1 : 0.05; rr(ctx, px - B / 2 - 0.06, py - B / 2 - 0.06, B + 0.12, B + 0.12, 0.13); ctx.stroke(); }
+    else if ((mark === 'human' || mark === 'fail') && !humanCall(t)) { ctx.strokeStyle = mark === 'fail' ? pal.danger : pal.warn; ctx.lineWidth = Math.floor(this.clock * 2.4) % 2 === 0 ? 0.1 : 0.05; rr(ctx, px - B / 2 - 0.06, py - B / 2 - 0.06, B + 0.12, B + 0.12, 0.13); ctx.stroke(); }
     else if (mark === 'out') { ctx.strokeStyle = pal.text2; ctx.lineWidth = 0.04; rr(ctx, px - B / 2 - 0.04, py - B / 2 - 0.04, B + 0.08, B + 0.08, 0.1); ctx.stroke(); }
     /* a ticket waiting for a human calls for attention wherever it is: a pulsing halo and a "?" (or "!" when the run failed) */
     if (call) {
@@ -584,6 +650,55 @@ export class FleexSkin implements Skin {
     }
   }
 
+  /**
+   * Every belt's bed, rails and dead end, in a few strokes: one fill for the beds, one stroke for the rails of each
+   * colour, one for the dead ends. Painted belt by belt (`beltBase`), a floor of a few hundred tiles took a thousand
+   * small strokes a frame, for the same picture.
+   */
+  protected beltBases(belts: readonly BeltView[], pal: Palette): void {
+    const ctx = this.ctx, bends = (v: BeltView) => {
+      const b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = DX[f as 0], fy = DY[f as 0], cw = -dx * fy + dy * fx > 0, a0 = Math.atan2(-dy, -dx);
+      return { px: b.x + 0.5 - fx * 0.5 + dx * 0.5, py: b.y + 0.5 - fy * 0.5 + dy * 0.5, a0, a1: a0 + (cw ? 1 : -1) * Math.PI / 2, cw };
+    };
+    ctx.beginPath();
+    for (const v of belts) {
+      if (v.bend < 0) { ctx.rect(v.m.x - 0.01, v.m.y - 0.01, 1.02, 1.02); continue; }
+      const { px, py, a0, a1, cw } = bends(v);
+      ctx.moveTo(px, py); ctx.arc(px, py, 1.01, a0, a1, !cw); ctx.closePath();
+    }
+    ctx.fillStyle = pal.belt; ctx.fill();
+    /* a fast belt has its rails in the fast colour: it reads from far, where chevrons are no longer drawn */
+    ctx.lineWidth = 0.09;
+    for (const fast of [false, true]) {
+      let any = false;
+      ctx.beginPath();
+      for (const v of belts) {
+        if (!!v.m.fast !== fast) continue;
+        any = true;
+        const { x, y } = v.m;
+        if (v.bend >= 0) {
+          const { px, py, a0, a1, cw } = bends(v);
+          for (const r of [0.955, 0.045]) { ctx.moveTo(px + Math.cos(a0) * r, py + Math.sin(a0) * r); ctx.arc(px, py, r, a0, a1, !cw); }
+        } else for (const s of v.rails) {
+          if (s === 0) { ctx.moveTo(x + 0.955, y); ctx.lineTo(x + 0.955, y + 1); } else if (s === 2) { ctx.moveTo(x + 0.045, y); ctx.lineTo(x + 0.045, y + 1); }
+          else if (s === 1) { ctx.moveTo(x, y + 0.955); ctx.lineTo(x + 1, y + 0.955); } else { ctx.moveTo(x, y + 0.045); ctx.lineTo(x + 1, y + 0.045); }
+        }
+      }
+      if (any) { ctx.strokeStyle = fast ? mix(pal.fast, pal.belt, 0.35) : pal.edge; ctx.stroke(); }
+    }
+    /* a belt that leads nowhere says so */
+    if (belts.some((v) => v.dead)) {
+      ctx.beginPath();
+      for (const v of belts) {
+        if (!v.dead) continue;
+        const { x, y } = v.m, dx = DX[v.m.dir], dy = DY[v.m.dir];
+        ctx.moveTo(x + 0.5 + dx * 0.42 - dy * 0.4, y + 0.5 + dy * 0.42 - dx * 0.4); ctx.lineTo(x + 0.5 + dx * 0.42 + dy * 0.4, y + 0.5 + dy * 0.42 + dx * 0.4);
+      }
+      ctx.strokeStyle = pal.danger; ctx.lineWidth = 0.12; ctx.stroke();
+    }
+  }
+
+  /** One belt's bed, rails and dead end, on its own: for a skin that paints belts one by one, each at its depth. */
   protected beltBase(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, { x, y } = b, dx = DX[b.dir], dy = DY[b.dir];
     /* a fast belt has its rails in the fast colour: it reads from far, where chevrons are no longer drawn */
@@ -616,13 +731,15 @@ export class FleexSkin implements Skin {
    */
   protected beltChevrons(v: BeltView, pal: Palette): void {
     const ctx = this.ctx, b = v.m, f = v.bend, dx = DX[b.dir], dy = DY[b.dir], fx = f >= 0 ? DX[f as 0] : 0, fy = f >= 0 ? DY[f as 0] : 0;
-    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.clock * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
-    ctx.strokeStyle = b.fast ? pal.fast : pal.chev;
+    const px = b.x + 0.5 - fx * 0.5 + dx * 0.5, py = b.y + 0.5 - fy * 0.5 + dy * 0.5, off = (this.turn * (b.fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
+    /* on its own, a belt strokes its chevrons; among the others (`chevrons`), it only adds them to the path they share */
+    const alone = !this.chevronPath;
+    if (alone) { ctx.strokeStyle = b.fast ? pal.fast : pal.chev; ctx.beginPath(); }
     const one = (u: number) => {
       let cx: number, cy: number, tx: number = dx, ty: number = dy;
       if (f >= 0) { const ca = Math.cos(u * Math.PI / 2), sa = Math.sin(u * Math.PI / 2); cx = px + 0.5 * (fx * sa - dx * ca); cy = py + 0.5 * (fy * sa - dy * ca); tx = dx * sa + fx * ca; ty = dy * sa + fy * ca; }
       else { cx = b.x + 0.5 + dx * (u - 0.5); cy = b.y + 0.5 + dy * (u - 0.5); }
-      ctx.beginPath(); ctx.moveTo(cx - tx * 0.09 + ty * 0.19, cy - ty * 0.09 - tx * 0.19); ctx.lineTo(cx + tx * 0.09, cy + ty * 0.09); ctx.lineTo(cx - tx * 0.09 - ty * 0.19, cy - ty * 0.09 + tx * 0.19); ctx.stroke();
+      ctx.moveTo(cx - tx * 0.09 + ty * 0.19, cy - ty * 0.09 - tx * 0.19); ctx.lineTo(cx + tx * 0.09, cy + ty * 0.09); ctx.lineTo(cx - tx * 0.09 - ty * 0.19, cy - ty * 0.09 + tx * 0.19);
     };
     /* where a line starts, nothing comes in from behind: the half of a pair that would be drawn before the tile is left out */
     const fed = v.fed;
@@ -632,6 +749,22 @@ export class FleexSkin implements Skin {
       if (fed || u - CHEVRON_PAIR / 2 >= 0) one(u - CHEVRON_PAIR / 2);
       one(u + CHEVRON_PAIR / 2);
     }
+    if (alone) ctx.stroke();
+  }
+  /** The belts' chevrons are being gathered in one path (`chevrons`): a belt adds its own and strokes nothing. */
+  private chevronPath = false;
+  /** Every belt's chevrons: one stroke for those of each colour, instead of one a chevron. */
+  protected chevrons(belts: readonly BeltView[], pal: Palette): void {
+    const ctx = this.ctx;
+    ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const fast of [false, true]) {
+      const some = belts.filter((v) => !!v.m.fast === fast);
+      if (!some.length) continue;
+      ctx.beginPath(); this.chevronPath = true;
+      try { for (const v of some) this.beltChevrons(v, pal); } finally { this.chevronPath = false; }
+      ctx.strokeStyle = fast ? pal.fast : pal.chev; ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
   }
 
   /**
@@ -688,7 +821,7 @@ export class FleexSkin implements Skin {
     const rail = (fast: boolean, plain: string) => (fast ? mix(pal.fast, pal.belt, 0.35) : plain);
     ctx.fillStyle = pal.belt; ctx.fillRect(x - 0.01, y - 0.01, 1.02, 1.02);
     const lane = (f: LaneFlow, horizontal: boolean, fast: boolean) => {
-      const cx0 = x + 0.5, cy0 = y + 0.5, off = (this.clock * (fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
+      const cx0 = x + 0.5, cy0 = y + 0.5, off = (this.turn * (fast ? CHEVRON_FAST : CHEVRON_PACE)) % 0.5;
       ctx.lineWidth = 0.07; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       /* one chevron at `u` along the lane, pointing the way `s` says (+1 east or south, -1 west or north); a pair of them on a fast lane */
       const chevron = (u: number, s: number) => { if (fast) { single(u - s * CHEVRON_PAIR / 2, s); single(u + s * CHEVRON_PAIR / 2, s); } else single(u, s); };
@@ -981,7 +1114,8 @@ export class FleexSkin implements Skin {
     const ctx = this.ctx, k = side / 24;
     ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
     ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (const d of MACHINE_ICONS[exec as keyof typeof MACHINE_ICONS] ?? []) ctx.stroke(new Path2D(d));
+    const icon = iconPath(exec);
+    if (icon) ctx.stroke(icon);
     ctx.restore();
   }
 

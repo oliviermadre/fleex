@@ -20,8 +20,8 @@ const HEIGHT: Record<PopupSize, string> = {
 };
 
 /**
- * What the Factory opens over its floor: a popup in the middle of the window, of glass (slightly translucent, and
- * blurring what is behind it) so the floor stays in sight around and under it. A ticket (the workbench), a machine and
+ * What the Factory opens over its floor: a popup in the middle of the window, over a backdrop light enough for
+ * the floor to stay in sight around it (the popup itself is opaque: see `Modal`'s `glass`). A ticket (the workbench), a machine and
  * the floor's own figures all open in one: nothing of the Factory opens in a side panel, which would take the floor's
  * width, nor in a sheet. It is Fleex's `Modal`, with a bar along its top. Escape and a click outside go back to the
  * floor; Escape typed in a field stays in the field, and is left to whatever is opened over the popup.

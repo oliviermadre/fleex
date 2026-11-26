@@ -26,7 +26,7 @@ import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { frameGap } from './frameRate';
+import { MAX_STEP_S, frameGap } from './frameRate';
 import { armFacing, canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
@@ -58,7 +58,9 @@ import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } f
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
-const MINIMAP_EVERY_MS = 150;
+const MINIMAP_EVERY_MS = 150, MINIMAP_KEPT_MS = 1000;
+/** No machine selected: the same list at every frame, for the view to see that nothing changed. */
+const NONE: string[] = [];
 /** Without the WS, the floor is polled: this often while the window is in front, */
 const POLL_MS = 600;
 /** and this often while it is behind others. */
@@ -66,6 +68,8 @@ const POLL_BACKGROUND_MS = 3000;
 /** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
 const STATS_EVERY_MS = 60_000;
+/** A wait up to this long is left to the next animation frame; a longer one is spent in a timer that ends this early before it is due (see the draw loop). */
+const SOON_MS = 12, EARLY_MS = 4;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
 /** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */
@@ -279,14 +283,22 @@ function Floor() {
   // Is the window the one in front, and when was someone last at the page: the draw loop and the poll pace themselves on it.
   const focused = useRef(typeof document === 'undefined' || document.hasFocus());
   const wokeAt = useRef(performance.now());
+  /* a frame is owed now, whatever the pace: something changed that the loop would otherwise see at its next turn only */
+  const owed = useRef(true);
+  /* the draw loop's own: come back now instead of at the end of its wait (set by the loop) */
+  const hurry = useRef<() => void>(() => {});
   useEffect(() => {
-    const wake = () => { wokeAt.current = performance.now(); };
+    const wake = () => { wokeAt.current = performance.now(); hurry.current(); };
     const onFocus = () => { focused.current = true; wake(); }, onBlur = () => { focused.current = false; };
     for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
     window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
-    /* a stopped floor is drawn twice a second: what changes on it is drawn at once. A running one is drawn often enough. */
+    /*
+     * A stopped floor is drawn twice a second: what changes on it is drawn at once, and that frame says
+     * whether something moves now. One frame, not a moment at full rate: when the floor is polled, a snapshot comes
+     * every 600 ms whether or not anything changed.
+     */
     const unsub = useFactoryStore.subscribe((s, was) => {
-      if ((s.snapshot !== was.snapshot || s.layout !== was.layout) && s.snapshot?.floor.settings.halted) wake();
+      if (s.snapshot !== was.snapshot || s.layout !== was.layout || s.stats !== was.stats) { owed.current = true; hurry.current(); }
     });
     return () => {
       for (const e of WAKE_EVENTS) window.removeEventListener(e, wake, { capture: true });
@@ -306,6 +318,12 @@ function Floor() {
 
   const boardName = useCallback((id: string) => useTicketStore.getState().boards.find((b) => b.id === id)?.name ?? 'a board', []);
   const modelOf = useCallback((m: StationSpec) => stationModel(m, { personas: useAgentPersonaStore.getState().personas, skills: useSkillStore.getState().skills, panels: usePanelStore.getState().panels }), []);
+  /* the same set for the same selection, frame after frame: the view keeps its picture while its state is the same */
+  const picked = useRef<{ of: readonly string[]; set: ReadonlySet<string> } | null>(null);
+  const pickedSet = useCallback((ids: readonly string[]): ReadonlySet<string> => {
+    if (picked.current?.of !== ids) picked.current = { of: ids, set: new Set(ids) };
+    return picked.current.set;
+  }, []);
   const viewState = useCallback((): ViewState | null => {
     const s = useFactoryStore.getState(), l = live.current;
     if (!s.snapshot || !s.layout) return null;
@@ -313,8 +331,8 @@ function Floor() {
       layout: s.layout, tickets: s.snapshot.tickets, arms: new Map(s.snapshot.arms.map((a) => [a.id, { p: a.p, state: a.state ?? 'rest' }])),
       /* stopped, an arm stays where the server last had it */
       halted: s.snapshot.floor.settings.halted === true, armAge: s.snapshot.floor.settings.halted ? 0 : (performance.now() - s.receivedAt) / 1000, armSwing: s.snapshot.armSwing, beltSpeed: s.snapshot.beltSpeed, fastBelt: s.snapshot.fastBelt, boardName, modelOf,
-      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : [], marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
-      selTickets: l.selection && 'tickets' in l.selection ? new Set(l.selection.tickets) : null, pickTickets: l.pick,
+      selMachine: l.selection && 'machine' in l.selection ? l.selection.machine : null, selMany: l.selection && 'machines' in l.selection ? l.selection.machines : NONE, marquee: l.marquee, selTicket: l.selection && 'ticket' in l.selection ? l.selection.ticket : null,
+      selTickets: l.selection && 'tickets' in l.selection ? pickedSet(l.selection.tickets) : null, pickTickets: l.pick,
       hoverMachine: l.hover, hoverLamp: l.hoverLamp, edit: l.building, ghost: l.ghost, drag: l.drag, lens: l.building ? null : l.lens,
       /* an area selected shows its handles, in build mode only (out of it, it is decor) */
       areaSel: l.building && l.selection && 'machine' in l.selection && s.layout.machines.some((m) => m.id === (l.selection as { machine: string }).machine && m.kind === 'area') ? l.selection.machine : null,
@@ -325,29 +343,49 @@ function Floor() {
       intakes: s.snapshot.intakes ?? null,
       unset: l.unset,
     };
-  }, [boardName, modelOf]);
+  }, [boardName, modelOf, pickedSet]);
 
   // The draw loop.
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
     const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
-    let raf = 0, last = performance.now(), miniAt = 0;
+    /* for whoever measures, from the console: `__factoryView.tally` counts the frames painted each way */
+    if (import.meta.env.DEV) (window as unknown as { __factoryView?: FactoryView }).__factoryView = v;
+    let raf = 0, timer = 0, last = performance.now(), miniAt = 0;
+    owed.current = true;
+    /*
+     * The next look at the floor: at the next animation frame when it is due by then (at full rate); otherwise after
+     * a wait that ends just before it is due, so that one animation frame is asked for each frame drawn. Asking for
+     * one at every refresh of the screen to find that it is too early is not free: each has the page run a whole
+     * frame of its own (styles, layout, commit), 120 times a second on a fast screen for 30 frames drawn, and
+     * measured on a real floor that was most of what the page's process spent.
+     */
+    const again = (wait: number) => {
+      if (wait <= SOON_MS) { raf = requestAnimationFrame(frame); return; }
+      timer = window.setTimeout(() => { timer = 0; raf = requestAnimationFrame(frame); }, wait - EARLY_MS);
+    };
+    hurry.current = () => { if (!timer) return; window.clearTimeout(timer); timer = 0; raf = requestAnimationFrame(frame); };
     const frame = (ts: number) => {
-      raf = requestAnimationFrame(frame);
       /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
-      const snap = useFactoryStore.getState().snapshot, running = !!snap && snap.floor.settings.halted !== true;
-      if (ts - last < frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running })) return;
-      const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
+      const gap = () => { const snap = useFactoryStore.getState().snapshot; return frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running: !!snap && snap.floor.settings.halted !== true, moving: v.moving }); };
+      const wait = gap() - (ts - last);
+      /* a hair early is due: the next refresh of the screen would be later than asked */
+      if (wait > EARLY_MS / 2 && !owed.current) { again(wait); return; }
+      owed.current = false;
+      const dt = Math.min(MAX_STEP_S, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
         if (!fitted.current) { v.fit(st.layout, false); fitted.current = true; }
         v.draw(st, dt);
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
-        if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
+        /* a picture kept shows nothing new: the minimap, painted whole each time, is then given a second */
+        if (ts - miniAt > (v.painted === 'kept' ? MINIMAP_KEPT_MS : MINIMAP_EVERY_MS) && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
+      /* what was just drawn says how soon the next one is due */
+      again(gap());
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(timer); hurry.current = () => {}; };
   }, [viewState]);
 
   const commit = useCallback((next: FactoryLayout | null) => { if (next) void useFactoryStore.getState().setLayout(next); else toast.warning('No room here'); }, []);
@@ -1021,7 +1059,7 @@ function Floor() {
       {filtersOpen && snapshot && (
         <FloatingPortal>
           <div ref={filters.refs.setFloating} style={filters.floatingStyles} {...filters.getFloatingProps()} aria-label="Filters"
-            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl backdrop-blur-md">
+            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl">
             <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} onClose={() => setFiltersOpen(false)} />
           </div>
         </FloatingPortal>

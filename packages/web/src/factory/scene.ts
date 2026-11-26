@@ -125,6 +125,18 @@ export interface Scene {
   areas: AreaSpec[];
   /** The floor's own clock, in seconds: it stands still while the floor is stopped. */
   clock: number;
+  /**
+   * Something on the floor moves at this frame, or did a moment ago (`LINGER_S`): a ticket rides a belt, slides to its
+   * place, leaves or jumps, an arm swings. While nothing does, the view keeps the picture and paints only the
+   * chevrons anew (`FactoryView`); and a floor that is stopped is drawn a couple of times a second (`frameRate.ts`).
+   */
+  moving: boolean;
+  /**
+   * The belts' clock, in seconds, for their chevrons: the floor's own (belts turn whether or not they carry anything,
+   * and stand still on a floor that is stopped). Apart from `clock` for the skins: what runs with it is what is
+   * painted at every frame when the rest of the picture is kept (`Piece.turns`).
+   */
+  turn: number;
   /** The stations that light the floor round them: one that needs someone, one that is off. Not in build mode, nor under a lens. */
   lit: [StationSpec, Lamp][];
   belts: BeltView[];
@@ -151,8 +163,17 @@ interface Riding { t: FactoryTicket; pos: TrackPos }
 interface Jump { id: string; type: string; from: TeleporterSpec; to: TeleporterSpec; age: number }
 interface Leaving { type: string; from: { x: number; y: number }; edge: EdgePoint; exit: MachineSpec; age: number; travel: number }
 
+/** How long the floor still counts as moving after the last thing that moved: belts do not stop and start between two reports. */
+export const LINGER_S = 1.5;
+/** The least a ticket (in tiles) or an arm (in parts of its swing) moves in a frame to count as moving. */
+const STIR = 0.002;
+
 export class FloorScene {
   clock = 0;
+  turn = 0;
+  /** Something moved in the frame being built, and the seconds the floor still counts as moving. */
+  private stirred = false;
+  private linger = 0;
   private gridFor: FactoryLayout | null = null;
   private grid = new Map<string, MachineSpec>();
   private byId = new Map<string, MachineSpec>();
@@ -242,6 +263,7 @@ export class FloorScene {
     const st = this.st, cur = this.shown.get(t.ticketId), k = cur ? 1 - Math.pow(rate, this.dt) : 1;
     const px = cur ? cur.x + (x - cur.x) * k : x, py = cur ? cur.y + (y - cur.y) * k : y;
     this.shown.set(t.ticketId, { x: px, y: py });
+    if (cur && Math.abs(px - cur.x) + Math.abs(py - cur.y) > STIR) this.stirred = true;
     const dragging = st.drag?.ticketId === t.ticketId, picked = !!st.pickTickets?.has(t.ticketId), selected = st.selTicket === t.ticketId || !!st.selTickets?.has(t.ticketId);
     return { t, x: px, y: py, s, mark, dragging, picked, selected, found: !!st.found?.has(t.ticketId), dim: !!st.dim?.has(t.ticketId) && !selected && !picked && !dragging, call: dragging ? null : humanCall(t) };
   }
@@ -267,7 +289,7 @@ export class FloorScene {
   build(st: ViewState, dt: number): Scene {
     const L = st.layout, moving = st.halted ? 0 : dt;
     this.st = st; this.dt = dt;
-    this.index(L); this.clock += moving;
+    this.index(L); this.clock += moving; this.stirred = false;
     const inside = new Map<string, FactoryTicket[]>();
     for (const t of st.tickets) if (t.machineId) { const a = inside.get(t.machineId); if (a) a.push(t); else inside.set(t.machineId, [t]); }
     for (const a of inside.values()) a.sort((p, q) => p.since.localeCompare(q.since));
@@ -303,9 +325,11 @@ export class FloorScene {
       /* what a toll rejected is in its arm, no longer on its belt */
       if (t.phase === 'arm') { tollCarry.set(m.id, t); continue; }
       const told: TrackPos = { id: m.id, p: t.p, fx: t.fx, fy: t.fy };
-      let pos = follow(track, this.drawnOn.get(t.ticketId), told, moving);
+      const drawn = this.drawnOn.get(t.ticketId);
+      let pos = follow(track, drawn, told, moving);
       const tile = this.byId.get(pos.id);
       if (!tile || (tile.kind !== 'belt' && tile.kind !== 'bridge')) pos = told;
+      if (drawn && (drawn.id !== pos.id || Math.abs(drawn.p - pos.p) > STIR)) this.stirred = true;
       this.drawnOn.set(t.ticketId, pos); riding.add(t.ticketId);
       const list = onTrack.get(pos.id); if (list) list.push({ t, pos }); else onTrack.set(pos.id, [{ t, pos }]);
     }
@@ -333,6 +357,11 @@ export class FloorScene {
     for (const b of belts) if (b.m.toll) b.toll = this.tollArm(b.m, tollCarry.get(b.m.id) ?? null);
     const leaving = this.departures(dt);
     const links = this.links(st);
+    if (leaving.length || this.jumps.length) this.stirred = true;
+    /* what moved keeps the floor moving a moment: a ticket between two reports, an arm about to come back */
+    this.linger = this.stirred ? LINGER_S : Math.max(0, this.linger - dt);
+    const busy = this.linger > 0;
+    this.turn += moving;
 
     /* the selection: what feeds it and what empties it; in build mode, where an arm takes and drops */
     const sel = this.machine(st.selMachine), feeders: MachineSpec[] = [], emptiers: ArmSpec[] = [];
@@ -349,10 +378,26 @@ export class FloorScene {
     const g = st.ghost;
     if (g && !g.erase) for (const c of g.cells) if (c.arm && c.dir != null) ways.push(this.armWay(c.x, c.y, c.dir, g.cells.length === 1));
 
-    return {
-      layout: L, areas: L.machines.filter((m): m is AreaSpec => m.kind === 'area'), clock: this.clock, lit, belts, bridges, boxes, loose, arms, leaving, links, noEntry, wip,
+    return this.last = {
+      layout: L, areas: L.machines.filter((m): m is AreaSpec => m.kind === 'area'), clock: this.clock, moving: busy, turn: this.turn, lit, belts, bridges, boxes, loose, arms, leaving, links, noEntry, wip,
       feeders, emptiers, ways, dropBox: this.dropBox(st.drag), named: this.named(st),
     };
+  }
+
+  /** The scene last built. */
+  private last: Scene | null = null;
+  /**
+   * The scene a frame later, for a view whose state has not changed since it was built: on a floor where nothing
+   * moves it is the same scene, its clocks moved on, and working it all out again at every frame is most of what such
+   * a frame would cost. Null when something moved: it must then be built.
+   */
+  again(dt: number): Scene | null {
+    const S = this.last;
+    if (!S || S.moving) return null;
+    const moving = this.st.halted ? 0 : dt;
+    this.dt = dt; this.clock += moving; this.turn += moving;
+    S.clock = this.clock; S.turn = this.turn;
+    return S;
   }
 
   // ---------- what moves along the belts ----------
@@ -400,8 +445,7 @@ export class FloorScene {
   /** The arm of a toll: it takes what the toll rejects from the middle of the belt to the middle of the next tile. */
   private tollArm(b: BeltSpec, carried: FactoryTicket | null): TollView {
     const st = this.st, out = b.toll!.out, ox = DX[out], oy = DY[out], ex = b.x + 0.5 + ox * 0.5, ey = b.y + 0.5 + oy * 0.5;
-    const swing = (st.armSwing || 1.1) * 0.6, p = armShown(this.armShown.get(b.id), armDue(st.arms.get(b.id), st.armAge ?? 0, swing), this.dt, swing);
-    this.armShown.set(b.id, p);
+    const swing = (st.armSwing || 1.1) * 0.6, p = this.swung(b.id, swing);
     const way = oy === DX[b.dir] && -ox === DY[b.dir] ? 1 : -1, th = Math.atan2(-oy, -ox) + way * Math.PI * easeSwing(p), hx = ex + Math.cos(th) * 0.5, hy = ey + Math.sin(th) * 0.5;
     return { ex, ey, hx, hy, carried: this.hold(b.id, hx, hy, carried, 0.4) };
   }
@@ -416,12 +460,18 @@ export class FloorScene {
   }
 
   // ---------- arms ----------
+  /** How far an arm is drawn into its swing at this frame (see `armMotion.ts`); the floor moves while it turns or has yet to. */
+  private swung(id: string, swing: number): number {
+    const st = this.st, was = this.armShown.get(id), due = armDue(st.arms.get(id), st.armAge ?? 0, swing), p = armShown(was, due, this.dt, swing);
+    this.armShown.set(id, p);
+    if ((was !== undefined && Math.abs(p - was) > STIR) || Math.abs(due - p) > STIR) this.stirred = true;
+    return p;
+  }
   private arm(a: ArmSpec, carried: FactoryTicket | null): ArmView {
     const st = this.st, bx = a.x + 0.5, by = a.y + 0.5, dx = DX[a.dir], dy = DY[a.dir];
     /* the half turn is drawn here, not sampled from the server: see `armMotion.ts` */
     /* a fast arm swings twice as fast, as the engine has it */
-    const swing = (st.armSwing || 1.1) / (a.fast ? 2 : 1), p = armShown(this.armShown.get(a.id), armDue(st.arms.get(a.id), st.armAge ?? 0, swing), this.dt, swing);
-    this.armShown.set(a.id, p);
+    const swing = (st.armSwing || 1.1) / (a.fast ? 2 : 1), p = this.swung(a.id, swing);
     const e = easeSwing(p), src = this.at(a.x - dx, a.y - dy), dst = this.at(a.x + dx, a.y + dy), R = reachOf(src, dst);
     /* the cup goes where the ticket is: over the middle of a belt's tile, over its quay on the edge of a box */
     const th = Math.atan2(dy, dx) + Math.PI * (1 - e), reach = R.from + (R.to - R.from) * e, hx = bx + Math.cos(th) * reach, hy = by + Math.sin(th) * reach;
