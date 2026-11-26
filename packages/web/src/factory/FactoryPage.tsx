@@ -1059,7 +1059,7 @@ function Floor() {
       {filtersOpen && snapshot && (
         <FloatingPortal>
           <div ref={filters.refs.setFloating} style={filters.floatingStyles} {...filters.getFloatingProps()} aria-label="Filters"
-            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl backdrop-blur-md">
+            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl">
             <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} onClose={() => setFiltersOpen(false)} />
           </div>
         </FloatingPortal>
