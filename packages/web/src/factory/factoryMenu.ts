@@ -30,7 +30,7 @@ export interface MenuContext {
    * station that runs something is switched on (null for what has no switch); `popup` whether it opens in a popup.
    */
   machine: { kind: MachineSpec['kind']; waiting: boolean; power?: 'on' | 'off' | null; popup?: boolean } | null;
-  /** In build mode, what the selection's belts can be made: `up` when one of them is a plain belt, `down` when all are fast, null with no belt selected. */
+  /** In build mode, what the selection's belts and arms can be made: `up` when one of them is plain, `down` when all are fast, null with none selected. */
   speed?: 'up' | 'down' | null;
   /** How many machines are selected together (0 or 1 when it is not a group). */
   many: number;
@@ -70,10 +70,16 @@ export interface MenuContext {
     floor(): void;
     /** The floor's run limits, in a popup of their own. */
     limits(): void;
+    /** What left by the exit selected (`exits`: by every exit of the floor). */
+    viewExit(): void; exits(): void;
+    /** The items archived over the period (`archivedHere`: those the intake selected let in). */
+    archived(): void; archivedHere(): void;
     /** Go to the next ticket that waits for someone. */
     next(): void;
     /** Make the belts selected fast, or plain again. */
     speed(): void;
+    /** Download the floor as a file (what is selected only, when machines are); read one back. */
+    exportFloor(): void; importFloor(): void;
   };
 }
 
@@ -135,7 +141,7 @@ export function factoryMenu(c: MenuContext): Menu {
     }
     return menu('Ticket', {
       ...first,
-      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The ticket, its thread and its actions, without leaving the floor (also Enter)', run: a.openTicket },
+      5: { id: 'open', label: 'Open', icon: 'open', tone: 'ticket', title: 'The ticket, its thread and its actions, without leaving the floor (also a double-click; Enter talks to it)', run: a.openTicket },
       6: t.favorite === null ? null : { id: 'star', label: t.favorite ? 'Unstar' : 'Star', icon: 'star', tone: 'plan', active: t.favorite, title: t.favorite ? 'Remove from your favourites' : 'Make it a favourite: it then carries its name on the floor', run: a.star },
       7: t.canAside ? { id: 'aside', label: 'Set aside', icon: 'person', tone: 'plan', title: t.phase === 'running' ? 'Stop the run and keep the ticket in its station until you put it back' : 'Keep the ticket in its station until you put it back', run: a.setAside } : null,
       [FIT_SLOT]: fit,
@@ -147,6 +153,8 @@ export function factoryMenu(c: MenuContext): Menu {
 
   /* at the place where a ticket has Open: the popup of what is selected */
   const edit: Command = { id: 'edit', label: 'Edit', icon: 'edit', tone: 'station', title: 'Its settings, the tickets it holds and what it did, in a popup over the floor (also Enter, or a double-click)', run: a.openMachine };
+  /* an exit's double-click is what left by it; its settings are Edit */
+  const exitEdit: Command = { ...edit, title: 'Its name and size, in a popup over the floor' };
 
   // ---------- the floor, out of build mode ----------
   if (!c.building) {
@@ -156,9 +164,14 @@ export function factoryMenu(c: MenuContext): Menu {
         0: c.machine.kind === 'intake' ? { id: 'new-item', label: 'New item', icon: 'newticket', tone: 'go', title: 'Make an item of this source by hand, as its connector would send it', run: a.newItem }
           : c.machine.kind === 'desk' ? { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket at this desk: it is born here, with the desk\'s board, type and priority', run: a.newTicket }
           : c.machine.kind === 'zone' ? { id: 'release-next', label: 'Release 1', icon: 'play', tone: 'go', disabled: !c.machine.waiting, title: 'Release the ticket that has waited longest', run: a.releaseNext }
+          : c.machine.kind === 'exit' ? { id: 'view-exit', label: 'View', icon: 'list', tone: 'ticket', title: 'What left by this exit over the period: the tickets it shipped, the items archived there, the throughput (also Enter, or a double-click)', run: a.viewExit }
           : c.machine.power ? { id: 'power', label: off ? 'Start' : 'Stop', icon: off ? 'play' : 'stop', tone: off ? 'go' : 'danger', title: off ? 'Start the station again: it runs on the tickets it holds' : 'Stop the station: it keeps taking tickets in and starts nothing on them; what runs finishes', run: a.power }
           : null,
-        5: c.machine.popup && edit,
+        /* an exit's Edit is under E, beside View; everywhere else it is where a ticket has Open */
+        /* an intake: what it let in that was archived since */
+        1: c.machine.kind === 'intake' ? { id: 'archived-here', label: 'Archived', icon: 'list', tone: 'plain', title: 'The items this intake let in that were archived over the period: by hand, by an exit; open one, or bring it back', run: a.archivedHere } : null,
+        2: c.machine.kind === 'exit' && c.machine.popup && exitEdit,
+        5: c.machine.kind !== 'exit' && c.machine.popup && edit,
         [FIT_SLOT]: fit,
         [NEXT_SLOT]: next,
         [BACK_SLOT]: back('Previous', 'Back to the floor', a.deselect),
@@ -170,6 +183,10 @@ export function factoryMenu(c: MenuContext): Menu {
       2: { id: 'floor', label: 'Stats', icon: 'coin', tone: 'plain', title: 'What the floor did over the period, where tickets stand, and its safety limits', run: a.floor },
       3: { id: 'limits', label: 'Limits', icon: 'gauge', tone: 'plain', title: 'How many runs the floor may start per hour, and how many at once', run: a.limits },
       4: { id: 'new-ticket', label: 'New ticket', icon: 'newticket', tone: 'go', title: 'Create a ticket on the floor: at your first desk, or in Inbound when there is none (select a desk to create at that one)', run: a.newTicket },
+      /* beside Exits */
+      6: { id: 'archived', label: 'Archived', icon: 'list', tone: 'plain', title: 'The items archived over the period: by hand, by an exit; open one, or bring it back', run: a.archived },
+      /* under Stats */
+      7: { id: 'exits', label: 'Exits', icon: 'exit', tone: 'plain', title: 'What left by every exit of the floor over the period, exit by exit: the tickets shipped, the throughput', run: a.exits },
       [FIT_SLOT]: fit,
       [NEXT_SLOT]: next,
       /* the way into build mode is where the way out of it is */
@@ -194,22 +211,24 @@ export function factoryMenu(c: MenuContext): Menu {
     const turns = c.many <= 1 && (c.machine?.kind === 'belt' || c.machine?.kind === 'arm');
     return frame(c.many > 1 ? 'Selection' : 'Machine', {
       0: turns && { id: 'turn', label: 'Turn', icon: 'rotate', tone: 'move', title: 'Quarter turn', run: a.turn },
-      1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts selected fast: they carry tickets twice as fast' : 'Make the belts selected plain belts again', run: a.speed },
+      1: !!c.speed && { id: 'speed', label: c.speed === 'up' ? 'Speed up' : 'Slow down', icon: c.speed === 'up' ? 'fastbelt' : 'belt', tone: 'move', title: c.speed === 'up' ? 'Make the belts and arms selected fast: twice as fast' : 'Make the belts and arms selected plain again', run: a.speed },
       4: { id: 'remove', also: 'Delete', label: 'Remove', icon: 'trash', tone: 'danger', title: c.many > 1 ? `Remove the ${c.many} selected machines` : c.machine?.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor', run: a.remove },
       5: c.many <= 1 && !!c.machine?.popup && edit,
+      6: { id: 'export', label: 'Export', icon: 'give', tone: 'plain', title: c.many > 1 ? `Download the ${c.many} machines selected as a JSON file, to import elsewhere` : 'Download this machine as a JSON file, to import elsewhere', run: a.exportFloor },
     }, back('Previous', 'Back to the build menu', a.deselect));
   }
 
   /* what goes on a line of belts is in Move: the gantry that sets, like the toll */
   const move = frame('Move', {
     0: place('belt', 'Belt', 'move', 'Drag to lay belts: each tile points the way you drag'),
-    1: place('fastbelt', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
+    1: place('arm', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
     2: place('bridge', 'Bridge', 'move', 'Where two belts cross: each ticket goes straight across, the lines do not mix'),
-    3: place('arm', 'Arm', 'move', 'Takes from the tile behind it, drops on the tile in front'),
-    4: place('teleporter', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
-    5: place('toll', 'Toll', 'move', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds: what stops a loop'),
-    6: place('set', 'Set', 'move', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
-    7: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Direction of the belts and arms you place', run: a.face },
+    3: place('teleporter', 'Teleporter', 'move', 'A jump across the floor: a departure sends its ticket to the arrival it is set to. Its popup says which of the two it is'),
+    4: place('set', 'Set', 'move', 'A gantry over a belt: it sets fields and tags on every ticket that goes under it, without stopping it'),
+    5: place('fastbelt', 'Fast belt', 'move', 'Belts that carry tickets twice as fast. Drag to lay them; over belts already there, it speeds them up'),
+    6: place('fastarm', 'Fast arm', 'move', 'An arm that swings twice as fast: a blue pivot, and a blue trail as it swings'),
+    7: place('toll', 'Toll', 'move', 'A gantry that sets things on a ticket, then takes it off the belt when a condition holds: what stops a loop'),
+    9: { id: 'face', label: `Face ${ARROW[c.dir]}`, icon: 'rotate', tone: 'plain', title: 'Turn what you place, a quarter turn (also a right click while it is in hand). An arm finds its own way from what is round it: from a station, a zone or a belt that ends on it, away from it; turned by hand, it stays as turned', run: a.face },
   }, previous);
   const station = frame('Station', {
     0: place('agent', 'Agent', 'station', 'A station that runs a persona on the ticket'),
@@ -217,7 +236,7 @@ export function factoryMenu(c: MenuContext): Menu {
     2: place('panel', 'Panel', 'station', 'A station that runs a panel of personas'),
     3: place('script', 'Script', 'station', 'A station that runs shell commands in the ticket\'s worktrees or its workspace: tests, a build, anything'),
     4: place('gate', 'Gate', 'station', 'Waits for your decision; each outcome leaves by its own arm'),
-    5: place('native', 'Status', 'station', 'Sets a status on the ticket and lets it through'),
+    /* no status station any more: a Set gantry on a belt does it (one already built still works) */
   }, previous);
   const where = frame('Place', {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),
@@ -235,5 +254,7 @@ export function factoryMenu(c: MenuContext): Menu {
     2: { id: 'place', label: 'Place', icon: 'zone', tone: 'area', title: 'Where tickets wait or leave, names on the floor, and areas', menu: where },
     3: { id: 'plan', label: 'Plan', icon: 'plan', tone: 'plan', title: 'Turn one of your workflows into machines and put them on the floor', run: a.plan },
     4: { ...place('erase', 'Erase', 'danger', 'Click or drag to remove machines') },
+    6: { id: 'export', label: 'Export', icon: 'give', tone: 'plain', title: 'Download the floor as a JSON file: its machines and their settings, not the tickets. To share it, or keep a copy', run: a.exportFloor },
+    7: { id: 'import', label: 'Import', icon: 'inbound', tone: 'plain', title: 'Read a floor from a JSON file: in place of this one, or in hand. What this instance does not have (a persona, a skill, a board) is taken off the machines, and they show it', run: a.importFloor },
   }, inHand ? back('Cancel', 'Put down what is in hand', a.select) : back('Done', 'Leave build mode', a.done));
 }

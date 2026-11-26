@@ -34,6 +34,8 @@ export interface ArmSpec extends MachineBase {
   when?: ArmCondition[];
   /** The colour it was given by hand (one of `PALETTE`). Without one it has its own: grey, or amber when it has conditions. */
   color?: string;
+  /** A fast arm: it swings twice as fast. Told apart from its colour: a blue pivot, and a blue trail as it swings. */
+  fast?: boolean;
   /** The single condition of floors saved before `when`: still read, rewritten at the next save. */
   filter?: { field: string; values: string[] } | null;
 }
@@ -47,7 +49,11 @@ export interface StationSpec extends MachineBase {
   /** A script station: the shell commands it runs for a ticket (see `script.ts`). */
   script?: ScriptSpec;
 }
-export interface ZoneSpec extends MachineBase { kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean }
+export interface ZoneSpec extends MachineBase {
+  kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number; inbound?: boolean;
+  /** Its tickets wait for someone: they are listed under Needs you while they are in it. */
+  needsYou?: boolean;
+}
 export interface ExitSpec extends MachineBase { kind: 'exit' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
 /** Where two belts cross: a ticket that enters keeps going straight. */
@@ -75,7 +81,15 @@ export type ItemFields = Record<string, string | string[] | boolean>;
  * Where items of one source come in: a dock of 3 by 2. An item waits in it while its conversation moves, and leaves
  * once it has been quiet for `quietSec`; what a rule recognises is dropped there and counted.
  */
-export interface IntakeSpec extends MachineBase { kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[] }
+export interface IntakeSpec extends MachineBase {
+  kind: 'intake'; source: ItemSource; quietSec?: number; rules?: ItemRule[]; /** Floors saved before `rules`. */ drop?: DropRule[];
+  /** Which intake of its source is served first when several see the same item (1 first, dense per source). */
+  priority?: number;
+  /** A pulled source (Gmail): its own search, run every `everySec`. */
+  query?: string; everySec?: number;
+}
+/** Where an intake stands: what it dropped over 24 hours; for a pulled one, its last pull and what went wrong with it. */
+export interface IntakeState { dropped: number; pulledAt?: string | null; pullError?: string | null }
 /** Where an Area's name is written: in one of its corners, or over or under it. */
 export type AreaLabel = 'tl' | 'tr' | 'bl' | 'br' | 'above' | 'below';
 /**
@@ -131,7 +145,7 @@ export interface FactorySnapshot {
   /** Something to tell once (the floor was started over for a new layout version). */
   notice?: string | null;
   /** What each intake dropped over the last 24 hours, by its id. */
-  intakes?: Record<string, { dropped: number }>;
+  intakes?: Record<string, IntakeState>;
   /** The server's live feed, and the last of its patches this snapshot already holds (see `FactoryPatch`). */
   epoch?: string;
   seq?: number;
@@ -155,7 +169,7 @@ export interface FactoryPatch {
   running: number;
   notice?: string | null;
   /** What each intake dropped over the last 24 hours, by its id: every intake's, when one count changed. */
-  intakes?: Record<string, { dropped: number }>;
+  intakes?: Record<string, IntakeState>;
   serverTime: string;
 }
 /** A station visit, or a ticket reaching an exit (`startedAt` is then when it was handed over). */
@@ -166,6 +180,8 @@ export interface FactoryRun {
   outcome: string | null; executionId: string | null; error: string | null; startedAt: string; finishedAt: string | null;
   /** A visit to an item: what the station answered (an item has no thread), and the deliverable it produced. */
   reply?: string | null; deliverableId?: string | null;
+  /** On a visit to an item, in a station's latest runs: which item, by its title and source. */
+  item?: { title: string; source: ItemSource } | null;
 }
 /** What one machine did over the period. Mirrors `MachineStats` in the server's `factory/stats.ts`. */
 export interface MachineStats {
@@ -235,3 +251,21 @@ export const hasPopup = (m: { kind: MachineSpec['kind']; set?: unknown }): boole
 /** A belt that carries a toll: a gantry with something to reject, and an arm for it. */
 export const isToll = (m: MachineSpec | null | undefined): m is BeltSpec & { set: SetOp[]; toll: { when: ArmCondition[]; out: Dir } } => !!m && m.kind === 'belt' && !!m.toll;
 export const isGantry = (m: MachineSpec | null | undefined): m is BeltSpec & { set: SetOp[] } => !!m && m.kind === 'belt' && m.set !== undefined;
+
+/** What left the floor by one exit over a period (`GET /api/factory/exits/:id/log`): the tickets it shipped, as they are now, and the items archived there. */
+export interface ExitLog {
+  /** The exit asked for, or null for every exit of the floor; `exits` names each one that appears. */
+  machineId: string | null; days: number; since: string;
+  exits: { machineId: string; name: string; onFloor: boolean }[];
+  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
+}
+
+/** How an archived item left: by hand (Archive, Give back), by an exit, or dropped by a rule of its intake. */
+export type ArchivedReason = 'junk' | 'exit' | 'dropped';
+/** An archived item, as the list of them gives it (`GET /api/factory/items/archived`). */
+export interface ArchivedItem {
+  itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[];
+  intakeId: string | null; reason: ArchivedReason | null; /** The exit it left by, when that was kept. */ exitId: string | null;
+  archivedAt: string; createdAt: string; messages: number; lastActivityAt: string; excerpt: string; fields: ItemFields;
+}

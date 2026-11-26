@@ -1,9 +1,14 @@
-import type { FactoryItemRow, FactoryRunRow } from './types.js';
+import { htmlToText, looksLikeHtml } from '@fleex/shared';
+import type { ConversationEntry, FactoryItemRow, FactoryRunRow, ItemBody } from './types.js';
 import { SOURCE_FIELDS } from './item-sources.js';
 
 const SOURCE: Record<string, string> = { slack: 'Slack', gmail: 'Gmail', github: 'GitHub', manual: 'made by hand' };
 /** How many earlier visits a brief recalls, and how much of each answer. */
 const EARLIER = 3, REPLY_MAX = 4000;
+/** How much of the whole message a brief gives. */
+const BODY_MAX = 20_000;
+/** How much of a conversation a brief gives: the latest messages whole, the oldest left out past this. */
+const CONVERSATION_MAX = 60_000;
 
 /**
  * An item in words: what a station that runs on it is given as its brief, in place of a ticket. Generic: it says what
@@ -14,7 +19,10 @@ const EARLIER = 3, REPLY_MAX = 4000;
  * What stations already said about it comes last: an item has no thread, so a station that runs on it again (after
  * a question, or a second station down the line) learns what was said before from here.
  */
-export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[] = []): string {
+export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[] = [], body: ItemBody | null = null, conversation: readonly ConversationEntry[] = []): string {
+  /* the whole message when it was kept (its text; its HTML part's, for a mail that had no text), else its first lines */
+  const whole = body?.text?.trim() || (body?.html ? htmlToText(body.html) : '');
+  const shown = whole || (looksLikeHtml(item.excerpt) ? htmlToText(item.excerpt) : item.excerpt);
   const lines = [
     `An item that came in to the Factory${item.source === 'manual' ? ', made by hand' : ` from ${SOURCE[item.source] ?? item.source}`}. It is not a ticket.`,
     '',
@@ -25,11 +33,13 @@ export function itemBrief(item: FactoryItemRow, earlier: readonly FactoryRunRow[
     item.tags.length ? `- **Tags**: ${item.tags.join(', ')}` : null,
     ...details(item),
     '',
-    '## What came with it',
-    '',
-    item.excerpt || '_Nothing but its title._',
-    '',
-    '_This is all the Factory keeps of it: the rest is in its source._',
+    ...(conversation.length > 1 ? thread(conversation) : [
+      '## What came with it',
+      '',
+      shown ? (shown.length > BODY_MAX ? `${shown.slice(0, BODY_MAX)}…` : shown) : '_Nothing but its title._',
+      '',
+      whole ? '_This is its latest message, whole._' : '_This is all the Factory keeps of it: the rest is in its source._',
+    ]),
   ].filter((l): l is string => l !== null);
   const said = earlier.filter((r) => r.reply || r.outcome).slice(-EARLIER);
   if (said.length) {
@@ -50,3 +60,18 @@ function details(item: FactoryItemRow): string[] {
 
 /** The prompt's first line for a run on an item. */
 export const itemHeading = (item: FactoryItemRow): string => `Factory item${item.source === 'manual' ? '' : ` from ${SOURCE[item.source] ?? item.source}`}`;
+
+/** The whole conversation, oldest first, each message whole; past `CONVERSATION_MAX`, the oldest are left out (and said to be). */
+function thread(conversation: readonly ConversationEntry[]): string[] {
+  const kept: ConversationEntry[] = [];
+  let room = CONVERSATION_MAX;
+  for (const m of [...conversation].reverse()) {
+    const text = m.text.length > BODY_MAX ? `${m.text.slice(0, BODY_MAX)}…` : m.text;
+    if (kept.length && text.length > room) break;
+    kept.unshift({ ...m, text }); room -= text.length;
+  }
+  const out = ['## The conversation', '', `_${conversation.length} messages, oldest first; the last one is the latest._`];
+  if (kept.length < conversation.length) out.push('', `_The ${conversation.length - kept.length} oldest are left out here, for length: they are in its source._`);
+  for (const m of kept) out.push('', `### ${m.from || 'Someone'}, ${m.at}`, '', m.text || '_No text._');
+  return out;
+}

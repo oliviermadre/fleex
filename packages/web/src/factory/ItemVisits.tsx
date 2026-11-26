@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { TicketDeliverable } from '@fleex/shared';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { useUIStore } from '../stores/uiStore';
 import * as api from '../services/api';
@@ -18,11 +19,39 @@ export function useItemVisits(itemId: string): FactoryRun[] | null {
   return runs;
 }
 
+/** What an item's stations delivered, the latest first: each visit that produced a deliverable, and the deliverable once read. */
+export interface ItemDeliverable { run: FactoryRun; deliverable: TicketDeliverable | null }
+const read = new Map<string, Promise<TicketDeliverable | null>>();
+export function useItemDeliverables(runs: FactoryRun[] | null): ItemDeliverable[] {
+  const made = useMemo(() => (runs ?? []).filter((r) => r.deliverableId).sort((a, b) => (b.finishedAt ?? b.startedAt).localeCompare(a.finishedAt ?? a.startedAt)), [runs]);
+  const [seen, setSeen] = useState<Record<string, TicketDeliverable | null>>({});
+  useEffect(() => {
+    let live = true;
+    for (const r of made) {
+      const id = r.deliverableId!;
+      if (id in seen) continue;
+      if (!read.has(id)) read.set(id, api.fetchDeliverable(id).catch(() => null));
+      void read.get(id)!.then((d) => { if (live) setSeen((cur) => (id in cur ? cur : { ...cur, [id]: d })); });
+    }
+    return () => { live = false; };
+  }, [made, seen]);
+  return made.map((run) => ({ run, deliverable: seen[run.deliverableId!] ?? null }));
+}
+
+/** Open a deliverable over the page, as everywhere in Fleex. */
+export function useOpenDeliverable(): (d: ItemDeliverable) => void {
+  const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
+  return useCallback((d: ItemDeliverable) => {
+    if (d.deliverable) { openDeliverable(d.deliverable); return; }
+    void api.fetchDeliverable(d.run.deliverableId!).then(openDeliverable).catch(() => { /* the API helper raised a toast */ });
+  }, [openDeliverable]);
+}
+
 /**
  * What the stations an item went through answered: an item has no thread, so its visits stand for one. Each: the
  * station, how it left the item, the agent's reply, the deliverable it produced. Shown on the item's card and in its popup.
  */
-export function ItemVisits({ runs, empty }: { runs: FactoryRun[] | null; empty?: string }) {
+export function ItemVisits({ runs, empty, links = true }: { runs: FactoryRun[] | null; empty?: string; /** Each deliverable's link, where they are not shown on their own. */ links?: boolean }) {
   const openDeliverable = useUIStore((s) => s.openDeliverableOverlay);
   const said = (runs ?? []).filter((r) => r.reply || r.deliverableId || r.status !== 'running');
   const open = async (id: string) => { try { openDeliverable(await api.fetchDeliverable(id)); } catch { /* the API helper raised a toast */ } };
@@ -37,7 +66,7 @@ export function ItemVisits({ runs, empty }: { runs: FactoryRun[] | null; empty?:
           </div>
           {r.reply && <div className="text-[var(--theme-text-primary)]"><MarkdownRenderer content={r.reply} onToggleCheckbox={noop} /></div>}
           {r.error && !r.reply && <div className="text-[11px] text-[var(--theme-danger)]">{r.error}</div>}
-          {r.deliverableId && <button type="button" onClick={() => void open(r.deliverableId!)} className="mt-1 text-[11px] text-[var(--theme-accent)] hover:underline">Open what it delivered</button>}
+          {links && r.deliverableId && <button type="button" onClick={() => void open(r.deliverableId!)} className="mt-1 text-[11px] text-[var(--theme-accent)] hover:underline">Open what it delivered</button>}
         </div>
       ))}
     </>

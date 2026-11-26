@@ -29,6 +29,8 @@ export interface ToastInput {
   icon?: string;
   /** At most one inline button — "Undo", "View logs". Clicking it also dismisses the toast. */
   action?: ToastAction;
+  /** Replies to pick from (an agent's closed choices): each one does its thing and dismisses the toast. Shown after the action. */
+  choices?: ToastAction[];
   /** In-app route: makes the whole card clickable (navigate, then dismiss). */
   link?: string;
   /** Auto-dismiss delay. `null` = persistent until closed. Default depends on the tone (see DEFAULT_DURATION_MS). */
@@ -39,6 +41,8 @@ export interface ToastInput {
   id?: string;
   onDismiss?: (reason: ToastDismissReason) => void;
 }
+
+export type ToastSkin = 'floor' | 'quiet';
 
 export interface ToastItem extends Omit<ToastInput, 'tone' | 'durationMs' | 'pauseOnHover' | 'id'> {
   id: string;
@@ -52,6 +56,10 @@ export interface ToastItem extends Omit<ToastInput, 'tone' | 'durationMs' | 'pau
 }
 
 export const MAX_VISIBLE_TOASTS = 3;
+/** On the floor skin the stack is lines of text, not cards: more of them fit. */
+export const MAX_VISIBLE_FLOOR = 5;
+/** How many toasts the history keeps, for a page that shows them again (the Factory's log). */
+export const HISTORY_SIZE = 50;
 export const DEDUP_WINDOW_MS = 10_000;
 export const DEFAULT_DURATION_MS: Record<ToastTone, number> = {
   info: 5_000,
@@ -80,6 +88,16 @@ interface ToastState {
   offsets: LayoutEntry<number>[];
   /** Top anchors pushed by layouts (any = anchored top). */
   anchors: LayoutEntry<'top'>[];
+  /**
+   * How the stack is drawn, pushed by a layout (last mounted wins): `floor` draws it as lines of text over a game-like
+   * page (the Factory), fading by themselves, with no card to block it; `quiet` draws nothing for a while (that page
+   * shows them in its own log). None: the cards.
+   */
+  skins: LayoutEntry<ToastSkin>[];
+  /** The look the page that set the skin draws with (its colours and font as CSS variables): the stack is outside it. */
+  skinStyle: Record<string, string | number> | null;
+  /** The last toasts shown, the latest last, updates in place: what a page's log shows again. */
+  history: ToastItem[];
 
   show: (input: ToastInput) => string;
   dismiss: (id: string, reason?: ToastDismissReason) => void;
@@ -87,6 +105,7 @@ interface ToastState {
   resume: (id: string) => void;
   pushOffset: (px: number) => number;
   pushAnchor: (anchor: 'top') => number;
+  pushSkin: (skin: ToastSkin, style?: Record<string, string | number> | null) => number;
   popLayout: (key: number) => void;
 }
 
@@ -116,6 +135,9 @@ export const useToastStore = create<ToastState>((set, get) => {
     toasts: [],
     offsets: [],
     anchors: [],
+    skins: [],
+    skinStyle: null,
+    history: [],
 
     show: (input) => {
       const now = Date.now();
@@ -145,12 +167,14 @@ export const useToastStore = create<ToastState>((set, get) => {
       };
 
       let evicted: ToastItem[] = [];
+      const max = get().skins.length ? MAX_VISIBLE_FLOOR : MAX_VISIBLE_TOASTS;
+      const history = get().history.some((h) => h.id === id) ? get().history.map((h) => (h.id === id ? item : h)) : [...get().history, item].slice(-HISTORY_SIZE);
       if (existing) {
-        set({ toasts: toasts.map((t) => (t.id === id ? item : t)) });
+        set({ toasts: toasts.map((t) => (t.id === id ? item : t)), history });
       } else {
         const next = [...toasts, item];
-        evicted = next.slice(0, Math.max(0, next.length - MAX_VISIBLE_TOASTS));
-        set({ toasts: next.slice(-MAX_VISIBLE_TOASTS) });
+        evicted = next.slice(0, Math.max(0, next.length - max));
+        set({ toasts: next.slice(-max), history });
       }
       for (const old of evicted) {
         clearTimer(old.id);
@@ -199,10 +223,17 @@ export const useToastStore = create<ToastState>((set, get) => {
       return key;
     },
 
+    pushSkin: (skin, style = null) => {
+      const key = ++nextLayoutKey;
+      set((s) => ({ skins: [...s.skins, { key, value: skin }], skinStyle: style }));
+      return key;
+    },
+
     popLayout: (key) => {
       set((s) => ({
         offsets: s.offsets.filter((o) => o.key !== key),
         anchors: s.anchors.filter((a) => a.key !== key),
+        skins: s.skins.filter((k) => k.key !== key),
       }));
     },
   };
@@ -212,5 +243,5 @@ export const useToastStore = create<ToastState>((set, get) => {
 export function resetToasts(): void {
   for (const t of timers.values()) clearTimeout(t.handle);
   timers.clear();
-  useToastStore.setState({ toasts: [], offsets: [], anchors: [] });
+  useToastStore.setState({ toasts: [], offsets: [], anchors: [], skins: [], skinStyle: null, history: [] });
 }

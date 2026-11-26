@@ -59,10 +59,21 @@ describe('the command card', () => {
     for (const [name, m] of everyMenu()) expect([name, at(m, FIT_SLOT)]).toEqual([name, 'Fit']);
   });
 
+  it('an exit selected: View (what left by it) first, Edit under E', () => {
+    const c = ctx({ machine: { kind: 'exit', waiting: false, popup: true } }), m = factoryMenu(c);
+    expect(rows(m)[0]).toEqual(['View', null, 'Edit', null, null]);
+    expect(rows(m)[1]).toEqual([null, null, null, 'Fit', null]);
+    m.slots[0]!.run!(); expect(c.act.viewExit).toHaveBeenCalled();
+    m.slots[2]!.run!(); expect(c.act.openMachine).toHaveBeenCalled();
+  });
+
   it('with nothing selected: what the floor offers on the first row, and Build where Done will be', () => {
     const c = ctx(), root = factoryMenu(c);
-    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, null, null, 'Fit', null], [null, null, null, 'Next', 'Build']]);
+    expect(rows(root)).toEqual([['Intake', 'Tickets', 'Stats', 'Limits', 'New ticket'], [null, 'Archived', 'Exits', 'Fit', null], [null, null, null, 'Next', 'Build']]);
     expect(byKey(root, 'Tab')).toMatchObject({ id: 'tickets', label: 'Tickets' });
+    /* under Stats: what left by every exit */
+    root.slots[7]!.run!(); expect(c.act.exits).toHaveBeenCalled();
+    root.slots[6]!.run!(); expect(c.act.archived).toHaveBeenCalled();
     root.slots[2]!.run!(); expect(c.act.floor).toHaveBeenCalled();
     root.slots[3]!.run!(); expect(c.act.limits).toHaveBeenCalled();
     /* T on any keyboard: a ticket is created from the floor itself, never through the Work view */
@@ -74,7 +85,7 @@ describe('the command card', () => {
 
   it('an intake selected makes an item by hand at it', () => {
     const c = ctx({ machine: { kind: 'intake', waiting: false, popup: true } }), m = factoryMenu(c);
-    expect(rows(m)[0]).toEqual(['New item', null, null, null, null]);
+    expect(rows(m)[0]).toEqual(['New item', 'Archived', null, null, null]);
     m.slots[0]!.run!(); expect(c.act.newItem).toHaveBeenCalled();
   });
 
@@ -105,12 +116,29 @@ describe('the command card', () => {
 
   it('build sorts what can be placed into Move, Station and Place', () => {
     const build = factoryMenu(ctx({ building: true }));
-    expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, null, null, 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
+    expect(rows(build)).toEqual([['Move', 'Station', 'Place', 'Plan', 'Erase'], [null, 'Export', 'Import', 'Fit', null], ['Undo', 'Redo', null, null, 'Done']]);
     /* what goes on a line of belts is in Move: the Set gantry is there, next to the toll */
-    expect(rows(menuAt(build, ['move']).menu).slice(0, 2)).toEqual([['Belt', 'Fast belt', 'Bridge', 'Arm', 'Teleporter'], ['Toll', 'Set', 'Face →', 'Fit', null]]);
-    expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], ['Status', null, null, 'Fit', null]]);
+    expect(rows(menuAt(build, ['move']).menu)).toEqual([['Belt', 'Arm', 'Bridge', 'Teleporter', 'Set'], ['Fast belt', 'Fast arm', 'Toll', 'Fit', 'Face →'], ['Undo', 'Redo', null, null, 'Previous']]);
+    expect(rows(menuAt(build, ['station']).menu).slice(0, 2)).toEqual([['Agent', 'Skill', 'Panel', 'Script', 'Gate'], [null, null, null, 'Fit', null]]);
     expect(rows(menuAt(build, ['place']).menu).slice(0, 2)).toEqual([['Zone', 'Exit', 'Label', 'Area', 'Desk'], ['Intake', null, null, 'Fit', null]]);
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
+  });
+
+  it('exports the floor and imports one from the build card; with machines selected, Export takes only them', () => {
+    const c = ctx({ building: true }), build = factoryMenu(c);
+    build.slots[6]!.run!(); build.slots[7]!.run!();
+    expect(c.act.exportFloor).toHaveBeenCalledTimes(1); expect(c.act.importFloor).toHaveBeenCalledTimes(1);
+    const sel = factoryMenu(ctx({ building: true, many: 3 }));
+    expect(sel.slots[6]).toMatchObject({ id: 'export', title: expect.stringContaining('3 machines selected') });
+    expect(sel.slots[7]).toBeFalsy();
+  });
+
+  it('speeds up arms as belts: Fast arm to place, and Speed up on an arm selected', () => {
+    const c = ctx({ building: true }), move = menuAt(factoryMenu(c), ['move']).menu;
+    move.slots[6]!.run!();
+    expect(c.act.tool).toHaveBeenCalledWith('fastarm');
+    const arm = factoryMenu(ctx({ building: true, machine: { kind: 'arm', waiting: false, popup: true }, speed: 'up' }));
+    expect(arm.slots[1]).toMatchObject({ label: 'Speed up', title: expect.stringContaining('belts and arms') });
   });
 
   it('keeps Undo, Redo and the way back at the same place in every build menu, and leaves copy, cut and paste to the keyboard', () => {
@@ -143,7 +171,7 @@ describe('the command card', () => {
     expect(at(erasing, BACK_SLOT)).toBe('Cancel');
     const belts = menuAt(factoryMenu(ctx({ building: true, tool: 'belt', dir: 1 })), ['move']).menu;
     expect(belts.slots[0]).toMatchObject({ label: 'Belt', active: true });
-    expect(at(belts, 7)).toBe('Face ↓');
+    expect(at(belts, 9)).toBe('Face ↓');
     expect(at(factoryMenu(ctx({ building: true, tool: 'paste' })), BACK_SLOT)).toBe('Cancel');   // what was pasted from the keyboard is put down the same way
   });
 

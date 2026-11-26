@@ -1,0 +1,164 @@
+<title>Talking to tickets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the talk line and its log as on the floor, playing a ticket's question and its answer; then the picks. Single dark look: the floor's own. */
+  :root {
+    --bg: #0c0b14; --surface: #15131f; --ink: #ecebf5; --muted: #9894b0; --line: #2a2740; --accent: #a78bfa; --accent-soft: #2a2148;
+    --floor: #1b1a1f; --ok: #4ade80; --warn: #facc15; --bad: #f87171; --tk: #60a5fa; --as: #4ade80; --me: #c4b5fd;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1100px; margin-inline: auto; display: flex; flex-direction: column; gap: 36px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede, .brief { color: var(--muted); max-width: 78ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+  .card { display: flex; flex-direction: column; gap: 8px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; color: var(--muted); }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #140f24; }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .stage { background: var(--floor); background-image: radial-gradient(#2c2b33 1.3px, transparent 1.3px); background-size: 26px 26px; border-radius: 12px; border: 1px solid var(--line); padding: 26px 18px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .log { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; background: rgba(10, 9, 16, 0.6); max-height: 300px; overflow-y: auto; }
+  .ln { display: flex; align-items: baseline; gap: 6px; font-size: 13px; line-height: 1.4; color: var(--ink); text-shadow: 0 1px 2px #000; flex-wrap: wrap; }
+  .ln .t { font: 500 11px var(--mono); color: #8f8aae; flex: none; }
+  .ln .who { font-weight: 700; flex: none; }
+  .who.tk { color: var(--tk); } .who.me { color: var(--me); } .who.as { color: var(--as); } .who.bad { color: var(--bad); }
+  .ln .opt { font: 600 11.5px var(--mono); color: var(--tk); border: 1px solid #2f4f7a; border-radius: 999px; padding: 0 8px; cursor: pointer; background: rgba(96,165,250,.08); }
+  .ln .opt:hover { background: rgba(96,165,250,.2); }
+  .ln .lk { font: 600 11.5px var(--mono); color: var(--tk); text-decoration: underline; cursor: pointer; }
+  .ln.dim { color: #a5a1c2; }
+  .say { display: flex; align-items: center; border: 1px solid var(--as); border-radius: 6px; background: rgba(10,9,16,.7); padding-left: 8px; }
+  .say.tk { border-color: var(--tk); }
+  .say .to { font: 700 12.5px var(--mono); white-space: nowrap; }
+  .say input { flex: 1; min-width: 0; font: 500 13px var(--body); color: var(--ink); background: transparent; border: 0; outline: none; padding: 7px 8px; }
+  .hint { align-self: flex-end; font: 500 10.5px var(--mono); color: #8f8aae; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1100px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+</style>
+
+<div class="page">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Talking to a ticket</h1>
+    <p class="lede">When a station sets a ticket aside because its agent asked you something, the ticket writes in the log: <b>From #788 unipile · Spec</b>, then its question. If the agent gave closed choices ("staging or prod"), they are buttons: a click answers. The line then opens on that ticket, and what you type goes into its thread as a comment from you. Since the ticket waits on a question, your comment is the answer, and the station runs again. A gate does not write: talking to it posts a comment, and the decision stays on its buttons.</p>
+  </header>
+
+  <section>
+    <div class="row"><h2 style="flex:1 1 auto">The log, as it plays</h2><button type="button" id="replay">Play again</button></div>
+    <div class="stage">
+      <div class="log" id="log" aria-live="polite"></div>
+      <span class="hint" id="hint"></span>
+      <div class="say tk" id="say"><span class="to" id="to"></span><input id="msg" aria-label="Message" autocomplete="off"></div>
+    </div>
+    <p class="brief">Click a choice, or type an answer and press Enter. The gate line at the end shows what a gate says: nothing in the log by itself, and only a comment when you talk to it.</p>
+  </section>
+
+  <section data-pick="p1">
+    <h2>1 · Which set-asides write to you</h2>
+    <div class="grid">
+      <div class="card" data-v="both"><div class="card-head"><span class="letter">A</span><h3>A question, and a failed run</h3><span class="mine">recommended</span></div><p>The agent's question, with its choices; or "Build failed: exit 1 in pnpm test", with Run again and Logs. A ticket you set aside yourself says nothing: you know why.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="question"><div class="card-head"><span class="letter">B</span><h3>A question only</h3></div><p>A failed run stays in the list of what needs you and the usual messages, without a line of its own in the log.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Replying to a failed run</h2>
+    <div class="grid">
+      <div class="card" data-v="comment"><div class="card-head"><span class="letter">A</span><h3>A comment; Run again stays a link</h3><span class="mine">recommended</span></div><p>What you type goes into its thread. Running again is a click on its line, or the command card. No run starts because of a remark.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="rerun"><div class="card-head"><span class="letter">B</span><h3>A comment, and it runs again</h3></div><p>As for a question: your reply is the instruction for the next run ("the test is flaky, run it again"). Quicker, but every remark costs a run.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · Where the line opens</h2>
+    <div class="grid">
+      <div class="card" data-v="last"><div class="card-head"><span class="letter">A</span><h3>On the last ticket that wrote to you</h3><span class="mine">recommended</span></div><p>Enter answers whoever just spoke, as a reply in a chat. A ticket selected comes first, then the last one that wrote, then the first that needs you.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="selected"><div class="card-head"><span class="letter">B</span><h3>As now</h3></div><p>The ticket selected, else the first that needs you. Tab still reaches the others.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p4">
+    <h2>4 · A ticket already waiting when the page opens</h2>
+    <div class="grid">
+      <div class="card" data-v="replay"><div class="card-head"><span class="letter">A</span><h3>Its question shows when you talk to it</h3><span class="mine">recommended</span></div><p>Open the line on a ticket that waits on a question you have not seen here: its question is put in the log first, with its choices, so you never answer blind.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="none"><div class="card-head"><span class="letter">B</span><h3>Only what happens while the page is open</h3></div><p>A question asked before you arrived is in the ticket's thread, not in the log.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'factory-ticket-talk-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'both', p2: 'comment', p3: 'last', p4: 'replay' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const NAMES = ['Writes', 'Failed', 'Opens', 'Already'];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let minute = 41, timers = [];
+  const clock = () => `13:${String(minute).padStart(2, '0')}`;
+  const add = (html, cls = '') => { $('log').insertAdjacentHTML('beforeend', `<div class="ln ${cls}"><span class="t">${clock()}</span>${html}</div>`); $('log').scrollTop = $('log').scrollHeight; };
+  let target = { label: '#788 unipile', kind: 'tk' };
+  const setTarget = (label, kind, hint) => { target = { label, kind }; $('to').textContent = `[${label}] `; $('to').style.color = kind === 'tk' ? 'var(--tk)' : 'var(--as)'; $('say').className = `say ${kind}`; $('msg').placeholder = hint; };
+  function play() {
+    timers.forEach(clearTimeout); timers = []; $('log').innerHTML = ''; minute = 41; answered = false;
+    add('<span class="who as">·</span><span>Floor imported: 12 machines</span>', 'dim');
+    setTarget('Assistant', 'as', 'Ask the assistant');
+    timers.push(setTimeout(() => {
+      add(`<span class="who tk">From #788 unipile · Spec</span><span>Which API key should I use for the sandbox calls?</span><span class="opt" data-a="staging">staging</span><span class="opt" data-a="prod">prod</span>`);
+      if (picks.p3 === 'last') setTarget('#788 unipile', 'tk', 'Answer its question');
+      $('hint').textContent = picks.p3 === 'last' ? 'Enter answers #788 · Tab · someone else' : 'Tab · reach #788';
+    }, 700));
+    timers.push(setTimeout(() => {
+      if (picks.p1 !== 'both') return;
+      minute++;
+      add(`<span class="who bad">From #790 Odys onboarding · Build</span><span>The run failed: exit 1 in pnpm test (3 tests)</span><span class="lk">Run again</span><span class="lk">Logs</span>`);
+    }, 1600));
+  }
+  let answered = false;
+  function answer(a) {
+    if (answered) return; answered = true;
+    minute++;
+    add(`<span class="who me">To #788 unipile</span><span>${esc(a)}</span>`);
+    timers.push(setTimeout(() => { add(`<span class="who tk">#788 unipile</span><span class="dim">answered: Spec runs again</span>`, 'dim'); }, 600));
+    timers.push(setTimeout(() => { minute++; add(`<span class="who tk">From #788 unipile · Spec</span><span>Done with staging: the spec is attached.</span>`); }, 1700));
+    timers.push(setTimeout(() => { minute++; add(`<span class="who me">To #792 TECH-15 (gate)</span><span>Looks good but check the dates</span>`); add(`<span class="who tk">#792</span><span class="dim">comment posted; the decision is on the gate's buttons</span>`, 'dim'); }, 2900));
+  }
+  $('log').addEventListener('click', (e) => { const o = e.target.closest('.opt'); if (o) answer(o.dataset.a); });
+  $('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter' && $('msg').value.trim()) { answer($('msg').value.trim()); $('msg').value = ''; } if (e.key === 'Tab') { e.preventDefault(); if (target.kind === 'tk') setTarget('Assistant', 'as', 'Ask the assistant'); else setTarget('#788 unipile', 'tk', 'Answer its question'); } });
+  $('replay').addEventListener('click', play);
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    $('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); play(); })));
+  $('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint(); play();
+})();
+</script>

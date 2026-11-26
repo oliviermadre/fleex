@@ -468,7 +468,7 @@ function createWindow() {
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
             </svg>
             <span style="font-size: 13px; font-weight: 700; letter-spacing: -0.02em;">
-              <span style="color: var(--theme-text-primary, #e4e4e7);">fleex</span><span style="color: var(--theme-accent, #6ee7b7);">.dev</span>
+              <span style="color: var(--theme-text-primary, #e4e4e7);">fleex</span><span id="fleex-titlebar-tld" style="color: var(--theme-accent, #6ee7b7);">.dev</span>
             </span>
             <span id="fleex-workspace-switcher"></span>
           </div>
@@ -485,6 +485,19 @@ function createWindow() {
         \`;
 
         document.body.prepend(bar);
+
+        // ── fleex.factory on the Factory, fleex.dev everywhere else: the page routes by history, so follow it ──
+        (function followRoute() {
+          const tld = document.getElementById('fleex-titlebar-tld');
+          if (!tld) return;
+          const sync = () => { tld.textContent = location.pathname.startsWith('/factory') ? '.factory' : '.dev'; };
+          for (const k of ['pushState', 'replaceState']) {
+            const orig = history[k];
+            history[k] = function (...args) { const r = orig.apply(this, args); sync(); return r; };
+          }
+          window.addEventListener('popstate', sync);
+          sync();
+        })();
 
         // ── Workspace switcher ──
         const FLEEX_INSTANCES = ${instancesJson};

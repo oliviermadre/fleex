@@ -34,6 +34,8 @@ describe('StationRunner', () => {
     expect(input.step).toMatchObject({ name: 'Triage', executorType: 'agent', executorRef: 'sentinel', mode: 'plan', prompt: 'Sort it.' });
     expect(input.step.outputSchema).toMatchObject({ properties: { outcome: { enum: ['bug', 'feature'] } }, required: ['outcome'] });
     expect(input.workflowContext.outgoingEdges.map((e) => [e.label, e.targetName])).toEqual([['bug', 'Fix line'], ['feature', 'Spec']]);
+    /* a long artifact goes to the ticket: the run id names no workflow run */
+    expect(input.workflowContext.attachTo).toEqual({ ticketId: 't1', agentName: 'Factory → Triage' });
   });
 
   it('runs an agent or skill station on its own model when it has one, and on the persona\'s otherwise', async () => {
@@ -50,6 +52,7 @@ describe('StationRunner', () => {
     const { r, seen, posted, delivered } = runner({ result: 'ok', schemaFields: { outcome: 'bug' }, comment: 'A bug in the cart: worth a ticket.', deliverable: { type: 'note', title: 'Triage', markdown: '# Why' } });
     const earlier: FactoryRunRow[] = [{ id: 'r0', ticketId: 'i1', floorId: 'default', machineId: 'g', machineName: 'Read', executor: 'agent', status: 'completed', outcome: 'ok', executionId: null, error: null, startedAt: '', finishedAt: '', reply: 'Ana is the shop lead.', deliverableId: null }];
     const res = await r.run(station(), 'i1', 'run-1', { bug: 'Fix line', feature: 'Spec' }, () => {}, { item: item(), earlier });
+    expect(seen[0]!.workflowContext.attachTo).toBeNull();                     // an item has no ticket to attach to
     expect(res).toEqual({ status: 'completed', outcome: 'bug', executionId: 'exec-1', error: null, reply: 'A bug in the cart: worth a ticket.', deliverableId: 'd1' });
     const input = seen[0]!;
     expect(input.ticketId).toBeNull();
@@ -59,12 +62,17 @@ describe('StationRunner', () => {
     /* nothing is posted on a ticket: there is none; the deliverable has no ticket either */
     expect(posted).toEqual([]);
     expect(delivered[0]).toMatchObject({ ticketId: null, title: 'Triage' });
-    expect(await r.run(station({ exec: 'script' }), 'i1', 'run-2', {}, () => {}, { item: item(), earlier: [] })).toMatchObject({ status: 'failed', error: expect.stringContaining('cannot run on an item') });
+    /* a script station runs on it too: no script runner here, so it says it cannot run */
+    expect(await r.run(station({ exec: 'script' }), 'i1', 'run-2', {}, () => {}, { item: item(), earlier: [] })).toMatchObject({ status: 'failed', error: 'Script stations cannot run here' });
   });
 
   it('falls back to the first outcome when the agent names none of them, and reports a question or a failure as such', async () => {
     expect((await runner({ result: 'ok', schemaFields: { outcome: 'other' } }).r.run(station(), 't1', 'r', {}, () => {})).outcome).toBe('bug');
     expect((await runner({ result: 'needs_review', schemaFields: {}, comment: null }).r.run(station(), 't1', 'r', {}, () => {})).status).toBe('question');
+    /* a question on a ticket is posted with the closed choices the agent declared */
+    const asked = runner({ result: 'needs_review', schemaFields: {}, comment: 'Which key?', questions: [{ prompt: 'Key', options: ['staging', 'prod'] }] } as never);
+    await asked.r.run(station(), 't1', 'r', {}, () => {});
+    expect(asked.posted[0]).toMatchObject({ ticketId: 't1', body: 'Which key?', questions: [{ prompt: 'Key', options: ['staging', 'prod'] }] });
     expect(await runner({ result: 'ko', schemaFields: {} }).r.run(station(), 't1', 'r', {}, () => {})).toMatchObject({ status: 'failed', error: 'The agent returned no usable output' });
   });
 });

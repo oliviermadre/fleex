@@ -28,6 +28,7 @@ export class AgentStepExecutor implements StepExecutor {
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
       runHistory: input.workflowContext.runHistory,
+      attachTo: input.workflowContext.attachTo,
     });
 
     const mode: MentionExecutionMode = input.step.mode ?? 'edit';

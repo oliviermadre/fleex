@@ -15,7 +15,8 @@ import type { FactoryView } from './renderer';
 import type { FactorySnapshot, FactoryStats, FactoryTicket, MachineSpec, MachineStats, TicketPhase } from './types';
 
 vi.mock('../components/agents/ModelSelect', () => ({ ModelSelect: ({ value, ariaLabel }: { value: string; ariaLabel: string }) => <output aria-label={ariaLabel}>{value || 'own'}</output> }));
-vi.mock('./factoryApi', () => ({ factoryApi: { machineRuns: vi.fn(async () => [{ id: 'r1', ticketId: 't1', machineId: 'dev', machineName: 'Dev', executor: 'agent', status: 'failed', outcome: null, executionId: null, error: 'boom', startedAt: '2026-11-15T09:00:00.000Z', finishedAt: '2026-11-15T09:05:00.000Z' }]) } }));
+const mailStatus = vi.fn(async () => ({ provider: 'gogcli', installed: true, version: 'v0.47.1', connected: false, account: null, error: 'no token for gmail', setupUrl: 'https://gogcli.sh/quickstart.html' }));
+vi.mock('./factoryApi', () => ({ factoryApi: { mailStatus: (...a: unknown[]) => mailStatus(...(a as [])), machineRuns: vi.fn(async () => [{ id: 'r1', ticketId: 't1', machineId: 'dev', machineName: 'Dev', executor: 'agent', status: 'failed', outcome: null, executionId: null, error: 'boom', startedAt: '2026-11-15T09:00:00.000Z', finishedAt: '2026-11-15T09:05:00.000Z' }]) } }));
 
 const dev: MachineSpec = { id: 'dev', kind: 'station', x: 1, y: 1, w: 5, h: 4, name: 'Dev', exec: 'agent', ref: 'builder', mode: 'edit', model: 'some-model', outcomes: ['done', 'blocked'], cap: 2 };
 const gate: MachineSpec = { id: 'qa', kind: 'station', x: 8, y: 1, w: 5, h: 4, name: 'Check spec', exec: 'human_gate', outcomes: ['approve', 'reject'], cap: 8 };
@@ -125,6 +126,15 @@ describe('<FactoryMachinePopup/>', () => {
     expect(popup.textContent).toContain('Takes a ticket from the tile behind it');
   });
 
+  it('a zone can say its tickets wait for you', () => {
+    seed([]);
+    const on = open('parked');
+    const box = screen.getByRole('checkbox', { name: /Its tickets wait for me/ });
+    expect((box as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(box);
+    expect(on.onPatch).toHaveBeenLastCalledWith('parked', { needsYou: true });
+  });
+
   it('gives an arm a colour: its own unless one of the sixteen is picked', () => {
     seed([]);
     const on = open('a1'), colours = screen.getByRole('radiogroup', { name: 'Arm colour' });
@@ -163,6 +173,34 @@ describe('<FactoryMachinePopup/>', () => {
     expect(screen.queryByLabelText('Title')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'New item…' }));
     expect(onNewItem).toHaveBeenCalledWith('in');
+  });
+
+  it('sets up a Gmail intake: gogcli required, its search and interval instead of rules, its last pull, and the order its peers are served in', async () => {
+    const urgent: MachineSpec = { id: 'urgent', kind: 'intake', x: 20, y: 1, w: 3, h: 2, name: 'Urgent', source: 'gmail', priority: 1, query: 'label:urgent' };
+    const internal: MachineSpec = { id: 'internal', kind: 'intake', x: 20, y: 5, w: 3, h: 2, name: 'Internal', source: 'gmail', priority: 2, query: 'from:@acme.com', everySec: 900 };
+    seed([], [dev, urgent, internal]);
+    const setLayout = vi.fn(async () => {}), pullIntake = vi.fn(async () => ({ pulled: 3, new: 2, updated: 1, moved: 0, error: null }));
+    const snap = useFactoryStore.getState().snapshot!;
+    useFactoryStore.setState({ setLayout, pullIntake, snapshot: { ...snap, intakes: { internal: { dropped: 0, pulledAt: '2026-11-15T09:55:00.000Z', pullError: null } } } } as never);
+    const on = open('internal'), popup = screen.getByRole('region', { name: 'Machine' });
+    expect(await screen.findByTestId('mail-setup')).toBeTruthy();
+    expect(popup.textContent).toContain('gogcli required');
+    expect(popup.textContent).toContain('--services gmail --gmail-scope readonly');
+    expect(popup.textContent).toContain('no token for gmail');
+    /* no rules: the search is the filter */
+    expect(screen.queryByRole('button', { name: 'Add a rule' })).toBeNull();
+    expect((screen.getByLabelText('Gmail search') as HTMLInputElement).value).toBe('from:@acme.com');
+    expect((screen.getByLabelText('Pulls every') as HTMLSelectElement).value).toBe('900');
+    expect(popup.textContent).toContain('Last pull 5m ago');
+    fireEvent.change(screen.getByLabelText('Pulls every'), { target: { value: '60' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('internal', { everySec: 60 });
+    expect(popup.textContent).toContain('Served 2nd of 2 Gmail intakes');
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier' }));
+    expect(setLayout).toHaveBeenCalledTimes(1);
+    const saved = (setLayout.mock.calls[0] as unknown as [{ machines: MachineSpec[] }])[0].machines;
+    expect(saved.filter((m) => m.kind === 'intake').map((m) => [m.id, (m as { priority?: number }).priority])).toEqual([['urgent', 2], ['internal', 1]]);
+    fireEvent.click(screen.getByRole('button', { name: 'Pull now' }));
+    expect(pullIntake).toHaveBeenCalledWith('internal');
   });
 
   it('an item opens in a popup: what every item has, edited; its source\'s fields; the raw item; what stations said', () => {
@@ -259,28 +297,55 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenLastCalledWith('g', { set: undefined, toll: undefined });
   });
 
-  it('sets up a script station: an optional default action, lines of its own, and what "nothing to run" means', () => {
+  it('sets up a script station: what runs on a ticket and on an item, lines that choose where they run, variables to click', () => {
     const sc: MachineSpec = { id: 'sc', kind: 'station', x: 20, y: 1, w: 5, h: 4, name: 'On arrival', exec: 'script', outcomes: ['ok', 'ko'], cap: 2, script: { lines: [], missing: 'ignore', onFail: 'all' } };
     seed([], [dev, sc]);
     useSettingsStore.setState((s) => ({ settings: { ...s.settings, namedActions: [{ name: 'test' }, { name: 'lint' }], resolvedRepositories: ['acme/api', 'acme/front'] } }) as never);
     const on = open('sc'), popup = screen.getByRole('region', { name: 'Machine' });
     expect(popup.textContent).toContain('Script station');
     expect(screen.queryByLabelText('Persona')).toBeNull();                                  // it runs no agent
-    expect(popup.textContent).toContain('With none, only the lines below are run.');
-    /* no default action is a choice, and so is one of the named actions */
-    const action = screen.getByLabelText('Default action') as HTMLSelectElement;
-    expect([...action.options].map((o) => o.textContent)).toEqual(['none', 'test', 'lint']);
-    fireEvent.change(action, { target: { value: 'test' } });
-    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'ignore', onFail: 'all', action: 'test' }, outcomes: ['ok', 'ko'] });
-    /* a line is for any repository, the ticket's workspace, or one repository */
-    expect([...(screen.getByLabelText('What the line is for') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['any repository', 'ticket workspace', 'acme/api', 'acme/front']);
+    /* nothing yet: on a ticket as on an item, it would leave by "ko" */
+    const runs = screen.getByLabelText('What runs');
+    expect(runs.textContent!.match(/Nothing: it leaves by "ko"/g)).toHaveLength(2);
+    /* a new line runs in the workspace */
     fireEvent.click(screen.getByRole('button', { name: 'Add a line' }));
-    const command = within(screen.getByRole('group', { name: 'Line for any repository' })).getByRole('textbox');
-    fireEvent.change(command, { target: { value: 'open http://localhost:3000' } }); fireEvent.blur(command);
-    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: '*', kind: 'command', value: 'open http://localhost:3000' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
-    /* asking for its own way out gives the station a third outcome */
+    const where = screen.getByLabelText('Where it runs') as HTMLSelectElement;
+    expect(where.value).toBe('workspace');
+    expect([...where.options].map((o) => o.textContent)).toEqual(["Workspace: the ticket's, or the item's folder", 'Every repository of the ticket', 'acme/api only', 'acme/front only']);
+    const command = within(screen.getByRole('group', { name: 'Line 1' })).getByRole('textbox');
+    fireEvent.focus(command);
+    fireEvent.change(command, { target: { value: 'gog gmail archive' } }); fireEvent.blur(command);
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    /* a variable, clicked, goes in quoted */
+    fireEvent.click(screen.getByRole('button', { name: '$FLEEX_ITEM_KEY' }));
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    expect(runs.textContent).toContain('in its folder: gog gmail archive "$FLEEX_ITEM_KEY"');
+    /* moved to every repository: an item would run nothing, and the summary says why */
+    fireEvent.change(screen.getByLabelText('Where it runs'), { target: { value: '*' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [{ target: '*', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }], missing: 'ignore', onFail: 'all' }, outcomes: ['ok', 'ko'] });
+    expect(runs.textContent).toContain('a line for a repository does not run for it');
+    /* folded away: a ticket's default action, and what to do when something goes wrong */
+    const action = screen.getByLabelText('Default action, run in every repository with no line of its own') as HTMLSelectElement;
+    expect([...action.options].map((o) => o.textContent)).toEqual(['none', 'test', 'lint']);
     fireEvent.change(screen.getByLabelText('A repository it has nothing to run for'), { target: { value: 'own' } });
     expect(on.onPatch).toHaveBeenLastCalledWith('sc', { script: { lines: [], missing: 'own', onFail: 'all' }, outcomes: ['ok', 'ko', 'unconfigured'] });
+  });
+
+  it('gives a station or a dock an odd size, and says the size it was built with', () => {
+    const old: MachineSpec = { ...dev, id: 'old', h: 4 } as MachineSpec;
+    const desk: MachineSpec = { id: 'dk', kind: 'desk', x: 20, y: 10, w: 3, h: 2, name: 'Desk' } as MachineSpec;
+    seed([], [old, desk]);
+    const on = open('old');
+    const size = screen.getByLabelText('Size') as HTMLSelectElement;
+    expect([...size.options].map((o) => o.textContent)).toEqual(['5 × 5', '5 × 3', '7 × 5', '5 × 4 (as built)']);
+    expect(size.value).toBe('5x4');
+    fireEvent.change(size, { target: { value: '5x5' } });
+    expect(on.onPatch).toHaveBeenLastCalledWith('old', { w: 5, h: 5 });
+    cleanup();
+    const onDesk = open('dk');
+    expect([...(screen.getByLabelText('Size') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['3 × 3', '3 × 2 (as built)']);
+    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '3x3' } });
+    expect(onDesk.onPatch).toHaveBeenLastCalledWith('dk', { w: 3, h: 3 });
   });
 
   it('closes when its machine is no longer on the floor', () => {

@@ -1087,7 +1087,8 @@ export class FleexSkin implements Skin {
     this.label(m.name || (m.kind === 'intake' ? SOURCE_LABEL[m.source] : 'Desk'), bx + b + 0.16, by + 0.42, 0.28, pal.text, { weight: 650, min: 9, max: 15, fit: w - b - 0.6 });
     if (intake && z >= 10) {
       this.label(`HELD ${v.waiting}`, x + 0.26, y + h - 0.48, 0.16, v.waiting ? pal.warn : pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
-      this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      if (v.pullFailed === null) this.label(`DROPPED ${v.dropped}`, x + 0.26, y + h - 0.26, 0.16, pal.text3, { mono: true, weight: 700, min: 7, max: 10 });
+      else if (v.pullFailed) this.label('PULL FAILED', x + 0.26, y + h - 0.26, 0.16, pal.danger, { mono: true, weight: 700, min: 7, max: 10 });
       /* on a line of its own, under the badge: the counters and what the dock holds share the bottom */
       if (z >= 14 && v.noArm) this.label('no arm takes from it', x + 0.26, y + 1.04, 0.14, pal.danger, { mono: true });
     } else if (!intake && z >= 14) {
@@ -1127,12 +1128,15 @@ export class FleexSkin implements Skin {
     const R = Math.min(w, h) * 0.46;
     ctx.globalAlpha = 0.24; ctx.drawImage(this.glowSprite(ok), x + w / 2 - R, y + h / 2 - R, R * 2, R * 2); ctx.globalAlpha = 1;
     const plate = { mono: true, weight: 700, min: 9, max: 12 } as const;
-    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6) });
-    if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
-    if (v.count == null) return;
     /* how many left by it: on the top line too when there is room beside the name, under the frame otherwise */
-    const count = `${v.count} · ${v.days} d`, o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
-    if (w * z >= 125) this.label(count, x + w - 0.3, y + 0.06, 0.24, ok, { ...o, align: 'right' });
+    const count = v.count == null ? null : `${v.count} · ${v.days} d`, beside = count !== null && w * z >= 125;
+    /* the name stops short of the count beside it (a monospace plate: about 0.62 of its size a character, and its padding) */
+    const px = Math.min(12, Math.max(9, 0.24 * z)), countW = beside ? (count!.length * 0.62 * px + 10) / z + 0.15 : 0;
+    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6 - countW) });
+    if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
+    if (count === null) return;
+    const o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
+    if (beside) this.label(count, x + w - 0.3, y + 0.06, 0.24, ok, { ...o, align: 'right' });
     else this.label(count, x + w / 2, y + h - 0.04, 0.24, ok, { ...o, align: 'center' });
   }
 
@@ -1359,12 +1363,12 @@ export class FleexSkin implements Skin {
       /* side by side over the arm, each on its own side of it */
       this.label(takes, x + 0.5 - dx * 0.1, y - 0.34, 0.22, idle ? pink : '#bfdbfe', { ...blue, align: dx > 0 ? 'right' : 'left' });
       this.label(drops, x + 0.5 + dx * 0.1, y - 0.34, 0.22, shut ? pink : '#bbf7d0', { ...green, align: dx > 0 ? 'left' : 'right' });
-      if (turn) this.label('R · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
+      if (turn) this.label('right click · turn', x + 0.5, y + 1.34, 0.2, pal.text2, { ...o, align: 'center', plate: 'rgba(9,9,11,0.84)' });
     } else {
       /* one above the other, to the right of the tiles they name */
       this.label(takes, x + 1.16, sy + 0.5, 0.22, idle ? pink : '#bfdbfe', blue);
       this.label(drops, x + 1.16, ty + 0.5, 0.22, shut ? pink : '#bbf7d0', green);
-      if (turn) this.label('R · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
+      if (turn) this.label('right click · turn', x - 0.16, y + 0.5, 0.2, pal.text2, { ...o, align: 'right', plate: 'rgba(9,9,11,0.84)' });
     }
   }
 

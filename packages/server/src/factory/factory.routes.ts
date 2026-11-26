@@ -70,6 +70,47 @@ export function factoryRoutes(factory: FactoryModule | null) {
         throw err;
       }
     });
+    /** Whether the mailbox the Gmail intakes read can be read (gogcli installed, Gmail authorized). */
+    app.get<{ Querystring: { refresh?: string } }>('/api/factory/mail/status', async (request) => {
+      const f = await ready();
+      if (!f.mail) return { provider: null, installed: false, version: null, connected: false, account: null, error: 'No mail reader on this Fleex server', setupUrl: null };
+      return f.mail.status(request.query.refresh === '1' || request.query.refresh === 'true');
+    });
+    /** Pull a Gmail intake now, without waiting for its interval: how many messages it saw, and what became of them. */
+    app.post<{ Params: { machineId: string } }>('/api/factory/intakes/:machineId/pull', async (request) => {
+      const f = await ready();
+      return { ...(await f.puller.pull(request.params.machineId)), snapshot: f.state() };
+    });
+    /** What left by an exit over the last `days` days (7 by default): the tickets it shipped and the items archived there. */
+    app.get<{ Querystring: { days?: string } }>('/api/factory/exits/log', async (request) => (await ready()).exitLog(null, Number(request.query.days) || 7));
+    app.get<{ Params: { machineId: string }; Querystring: { days?: string } }>('/api/factory/exits/:machineId/log', async (request) => (await ready()).exitLog(request.params.machineId, Number(request.query.days) || 7));
+    /**
+     * The whole of an item's latest message: its text and, for a mail, its HTML part. One kept before messages were kept
+     * whole is asked again from its source (`FactoryEngine.itemBody`).
+     */
+    app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/body', async (request, reply) => {
+      const body = await (await ready()).engine.itemBody(request.params.itemId);
+      return body ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item on the floor' });
+    });
+    /**
+     * The items archived over the last `days` days (7 by default): by hand, at an exit (which one, when it was kept),
+     * dropped by a rule; the latest first.
+     */
+    app.get<{ Querystring: { days?: string } }>('/api/factory/items/archived', async (request) => {
+      const f = await ready(), days = Math.max(1, Math.min(90, Math.floor(Number(request.query.days)) || 7)), since = new Date(Date.now() - days * 86_400_000).toISOString();
+      const items = await f.store.listArchivedItems(f.engine.snapshot().floor.id, since);
+      return {
+        days, since,
+        items: items.map((i) => ({ itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, intakeId: i.intakeId, reason: i.archivedReason, exitId: i.archivedReason === 'exit' ? i.machineId : null, archivedAt: i.archivedAt, createdAt: i.createdAt, messages: i.messages, lastActivityAt: i.lastActivityAt, excerpt: i.excerpt, fields: i.fields })),
+      };
+    });
+    /** An item, on the floor or archived (an archived one opens read only). */
+    app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId', async (request, reply) => {
+      const item = await (await ready()).engine.findItem(request.params.itemId);
+      return item ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such item' });
+    });
+    /** Bring an archived item back to the intake it came in by. */
+    app.post<{ Params: { itemId: string } }>('/api/factory/items/:itemId/bring-back', (request, reply) => guard(reply, (f) => f.engine.bringBack(request.params.itemId)));
     /** What stations did with an item and what they answered, oldest first. */
     app.get<{ Params: { itemId: string } }>('/api/factory/items/:itemId/runs', async (request) => { await ready(); return factory.store.listItemRuns(request.params.itemId); });
     /** Change what the Factory keeps of an item: title, author, link, text, tags, its source's fields. */
@@ -84,7 +125,10 @@ export function factoryRoutes(factory: FactoryModule | null) {
     /** The latest runs of the floor, or of one machine with `machineId`. */
     app.get<{ Querystring: { limit?: string; machineId?: string } }>('/api/factory/runs', async (request) => {
       const f = await ready(), limit = Math.max(1, Math.min(200, Number(request.query.limit) || 50)), machineId = request.query.machineId;
-      return f.store.listRecentRuns(f.engine.snapshot().floor.id, limit, machineId || undefined);
+      /* the tickets' runs and the visits to items, together, the latest first */
+      const floorId = f.engine.snapshot().floor.id;
+      const [tickets, items] = await Promise.all([f.store.listRecentRuns(floorId, limit, machineId || undefined), f.store.listRecentItemRuns(floorId, limit, machineId || undefined)]);
+      return [...tickets, ...items].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, limit);
     });
     /** Runs, failures, time and cost per machine over the last `days` days (7 by default, 90 at most). */
     app.get<{ Querystring: { days?: string } }>('/api/factory/stats', async (request) => (await ready()).stats(Number(request.query.days) || 7));

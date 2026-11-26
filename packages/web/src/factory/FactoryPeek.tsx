@@ -188,7 +188,7 @@ export const FactoryPeek = forwardRef<PeekHandle, { ticketId: string; onOpen: ()
             {ft.phase === 'failed' && <Button size="sm" disabled={busy} onClick={() => run(() => store.putBack(ticketId))}>Run again</Button>}
           </>
         )}
-        <Button size="sm" variant={gate ? 'ghost' : 'primary'} className="ml-auto" onClick={onOpen} title="The whole ticket (also Enter, V, or a double-click)">Open</Button>
+        <Button size="sm" variant={gate ? 'ghost' : 'primary'} className="ml-auto" onClick={onOpen} title="The whole ticket (also a double-click; Enter on the floor talks to it)">Open</Button>
       </div>
       </div>
     </div>

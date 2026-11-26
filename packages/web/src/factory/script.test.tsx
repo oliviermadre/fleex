@@ -14,14 +14,14 @@ describe('a script station, in words', () => {
     expect(scriptSummary(s)).toBe('default "test" + 3 lines');
     const plate = scriptPlate(s);
     expect([plate[0], plate[1], plate[3], plate[4]]).toEqual(['any repository $ git status', 'front $ action lint', 'others $ action test', 'no command: unconfigured']);
-    expect(plate[2]).toMatch(/^ticket workspace \$ open http:\/\/localhost:3000.*…$/);                // a long command is cut, and says so
+    expect(plate[2]).toMatch(/^workspace \$ open http:\/\/localhost:3000.*…$/);                // a long command is cut, and says so
     expect(plate[2]!.length).toBeLessThan(60);
     expect(scriptPlate(undefined)).toEqual(['nothing to run yet', 'no command: skipped']);
   });
   it('has "unconfigured" as a way out only when asked, and names its targets', () => {
     expect(scriptOutcomes(scriptOf(undefined))).toEqual(['ok', 'ko']);
     expect(scriptOutcomes({ lines: [], missing: 'own', onFail: 'all' })).toEqual(['ok', 'ko', 'unconfigured']);
-    expect([targetName('*'), targetName('workspace'), targetName('acme/api')]).toEqual(['any repository', 'ticket workspace', 'acme/api']);
+    expect([targetName('*'), targetName('workspace'), targetName('acme/api')]).toEqual(['any repository', 'workspace', 'acme/api']);
     expect(incompleteLine({ target: '*', kind: 'command', value: ' ' })).toBe(true);
     expect(specFor('script', 5, 5, 0)).toMatchObject({ kind: 'station', exec: 'script', outcomes: ['ok', 'ko'], script: { lines: [], missing: 'ignore' } });
   });
@@ -71,5 +71,16 @@ describe('named actions', () => {
     seed([{ name: 'test' }], false);
     const { container } = render(<><NamedActionsSettings /><RepoNamedActions org="acme" name="api" /></>);
     expect(container.textContent).toBe('');
+  });
+});
+
+describe('what a script station runs, in words', () => {
+  it('says what runs on a ticket and on an item: an item has no repository, only the workspace lines run for it', async () => {
+    const { whatRuns } = await import('./script');
+    expect(whatRuns({ lines: [], missing: 'ignore', onFail: 'all' })).toEqual({ ticket: [], item: [] });
+    expect(whatRuns({ action: 'test', lines: [{ target: '*', kind: 'command', value: 'make lint' }, { target: 'workspace', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }, { target: 'acme/api', kind: 'action', value: 'build' }, { target: 'acme/front', kind: 'command', value: '' }], missing: 'ignore', onFail: 'all' })).toEqual({
+      ticket: ['in each repository: make lint', 'in its workspace: gog gmail archive "$FLEEX_ITEM_KEY"', 'in acme/api: the action "build"', 'in every other repository: the action "test"'],
+      item: ['in its folder: gog gmail archive "$FLEEX_ITEM_KEY"'],
+    });
   });
 });

@@ -86,21 +86,29 @@ const quote = (v: string): string => `'${v.replace(/'/g, `'\\''`)}'`;
 export const withEnv = (command: string, env: Record<string, string>): string => `${Object.entries(env).map(([k, v]) => `export ${k}=${quote(v)}`).join('; ')}\n${command}`;
 const tail = (s: string, n = 700): string => { const t = s.trim(); return t.length > n ? `[cut] ${t.slice(-n)}` : t; };
 
-/** Run the steps one after the other and conclude: one failure is "ko"; otherwise what the station says of a repository it has nothing to run for. */
+/**
+ * Run the steps one after the other and conclude: one failure is "ko"; otherwise what the station says of a repository
+ * it has nothing to run for. When nothing ran at all (an item and only lines for repositories, a ticket with no
+ * repository), it is "ko" (or the station's own way out): leaving by "ok" would say it was done.
+ */
 export async function runScript(spec: ScriptSpec, ctx: ScriptContext, shell: Shell): Promise<StationRunResult> {
   const steps = planScript(spec, ctx), timeoutMs = (spec.timeoutSec ?? DEFAULT_TIMEOUT_SEC) * 1000, report: string[] = [];
-  let failed = false, missing = steps.length === 0;
+  let failed = false, missing = steps.length === 0, ran = 0;
   for (const s of steps) {
     if (failed && spec.onFail === 'stop') { report.push(`– ${s.where}: not run, a command before it failed`); continue; }
     if (!s.command) { missing = true; report.push(`? ${s.where}: ${s.from === 'nothing to run' ? 'nothing to run for this repository' : `${s.from} is not defined for this repository`}`); continue; }
     if (!s.cwd) { failed = true; report.push(`✗ ${s.where}: its worktree is not on disk`); continue; }
+    ran++;
     try {
       const r = await shell(withEnv(s.command, { ...ctx.env, ...(s.repo ? { FLEEX_REPO: s.repo } : {}) }), { cwd: s.cwd, timeoutMs });
-      if (r.exitCode === 0 && !r.timedOut) report.push(`✓ ${s.where} $ ${s.command}`);
+      if (r.exitCode === 0 && !r.timedOut) report.push(`✓ ${s.where} $ ${s.command}`, ...(r.stdout.trim() ? [tail(r.stdout)] : []));
       else { failed = true; report.push(`✗ ${s.where} $ ${s.command} · ${r.timedOut ? `timed out after ${timeoutMs / 1000} s` : `exit ${r.exitCode}`}`, tail(r.stderr || r.stdout)); }
     } catch (err) { failed = true; report.push(`✗ ${s.where} $ ${s.command} · could not be run`, tail(err instanceof Error ? err.message : String(err))); }
   }
-  if (steps.length === 0) report.push('? nothing to run: the ticket has no repository, and the station has no line for its workspace');
-  const outcome = failed || (missing && spec.missing === 'ko') ? 'ko' : missing && spec.missing === 'own' ? 'unconfigured' : 'ok';
-  return { status: 'completed', outcome, executionId: null, error: outcome === 'ok' ? null : report.filter(Boolean).join('\n').slice(0, 4000) };
+  if (steps.length === 0) report.push('? nothing to run: no repository to run in, and the station has no line for the workspace');
+  else if (ran === 0 && !failed) report.push(ctx.worktrees.length ? '? nothing ran: no line has a command for these repositories' : '? nothing ran: there is no repository here (an item has none), and the station has no line for the workspace');
+  const said = report.filter(Boolean).join('\n');
+  const outcome = failed || (missing && spec.missing === 'ko') ? 'ko' : missing && spec.missing === 'own' ? 'unconfigured' : ran === 0 ? 'ko' : 'ok';
+  /* what it ran and what that said: an item keeps it as the station's answer (a ticket's run keeps only its error) */
+  return { status: 'completed', outcome, executionId: null, error: outcome === 'ok' ? null : said.slice(0, 4000), reply: `\`\`\`\n${said.slice(0, 8000)}\n\`\`\`` };
 }

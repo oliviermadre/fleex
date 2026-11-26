@@ -47,6 +47,17 @@ describe('computeStats', () => {
     expect(s.totals.costUsd).toBe(1.65);
   });
 
+  it('counts at an exit the items archived there with the tickets it shipped, not as shipped tickets', () => {
+    const s = computeStats({ runs: [run('x1', { machineId: 'out', executor: 'exit', outcome: 'shipped' })], executions: [], layout, since: SINCE, until: UNTIL, days: 7, exitItems: [{ machineId: 'out' }, { machineId: 'out' }, { machineId: null }] });
+    expect(s.exits).toEqual({ out: 3 });
+    expect(s.totals.shipped).toBe(1);
+  });
+
+  it('prices a visit to an item by its execution, which has no ticket', () => {
+    const s = stats([run('v1', { ticketId: 'item-1', executionId: 'e9' })], [exec('e9', 0.3, { ticketId: null })]);
+    expect(of(s, 'spec')).toMatchObject({ runs: 1, costUsd: 0.3 });
+  });
+
   it('a panel run also takes the executions its personas started while it ran', () => {
     const s = stats(
       [

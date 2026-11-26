@@ -18,11 +18,14 @@ import type { FactoryStorePort } from './factory-store.port.js';
 import { FactoryEngine, type FactorySnapshot } from './engine.js';
 import { FactoryFeed, type FactoryPatch } from './factory-feed.js';
 import { StationRunner } from './station-runner.js';
+import { IntakePuller } from './intake-puller.js';
+import type { MailSourcePort } from './mail-source.port.js';
 import { runScript, normaliseScript, type ScriptContext, type Shell } from './script-runner.js';
 import { buildTicketWorkspaceId } from '@fleex/shared';
 import { basename } from 'node:path';
 import { computeStats, type ExecutionCost, type FactoryStats } from './stats.js';
-import type { FactoryTicketInfo, StationSpec } from './types.js';
+import type { ExitLog, FactoryItemRow, FactoryTicketInfo, StationSpec } from './types.js';
+import { itemEnv } from './item-env.js';
 import type { StationRunResult } from './station-runner.js';
 import type { CommentPostedEvent } from '../domain/events.js';
 
@@ -54,6 +57,8 @@ export interface FactoryModuleDeps {
   /** What a script station needs of the machine: a shell, and where a ticket's workspace and worktrees are. Without it script stations cannot run. */
   host?: { shell: Shell; exists(path: string): Promise<boolean>; workspacePath(workspaceId: string): string; workspaceRepoPath(workspaceId: string, repoName: string): string };
   logger: { warn(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void };
+  /** What reads the mailbox for the Gmail intakes (gogcli today). Without it they say they cannot be pulled. */
+  mail?: MailSourcePort | null;
 }
 
 /**
@@ -68,15 +73,18 @@ export class FactoryModule {
   private loaded = false;
   private retryAt = 0;
   private readonly feed = new FactoryFeed();
+  readonly puller: IntakePuller;
+  readonly mail: MailSourcePort | null;
 
   /**
    * A script station on a ticket: where the ticket's workspace and worktrees are, what each of its repositories
    * defines as named actions, and the commands run through the host's shell. A repository the ticket is linked to
    * whose worktree is not on disk is told as such: the station says so and counts it as a failure.
    */
-  private async runScript(station: StationSpec, ticketId: string): Promise<StationRunResult> {
+  private async runScript(station: StationSpec, ticketId: string, item?: FactoryItemRow): Promise<StationRunResult> {
     const host = this.deps.host;
     if (!host) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
+    if (item) return this.runScriptOnItem(station, item, host);
     const entity = await this.deps.ticketStore.getTicketById(ticketId);
     if (!entity) return { status: 'failed', outcome: '', executionId: null, error: 'The ticket is gone' };
     const t = entity.toDTO(), links = t.links ?? [], workspaceId = buildTicketWorkspaceId(t.title, t.id), workspace = host.workspacePath(workspaceId);
@@ -95,6 +103,20 @@ export class FactoryModule {
       env: { FLEEX_TICKET_ID: t.id, FLEEX_TICKET_NUMBER: String(t.displayId), FLEEX_TICKET_TITLE: t.title, FLEEX_WORKSPACE: workspace, FLEEX_STATION: station.name || 'Script' },
     }, host.shell);
   }
+  /**
+   * A script station on an item: no repository, no worktree; its lines for the workspace run in a folder of the item's
+   * own, with the item in the environment (`itemEnv`: FLEEX_ITEM_KEY is its key in its source, a Gmail thread id). A
+   * line for a repository has nothing to run for and is treated as the station says. What the commands printed is the
+   * station's answer on the item.
+   */
+  private async runScriptOnItem(station: StationSpec, item: FactoryItemRow, host: NonNullable<FactoryModuleDeps['host']>): Promise<StationRunResult> {
+    const workspace = host.workspacePath(`factory-item-${item.id}`), spec = normaliseScript(station.script);
+    if (spec.lines.some((l) => l.target === 'workspace')) await host.shell(`mkdir -p '${workspace.replace(/'/g, `'\\''`)}'`, { cwd: '/', timeoutMs: 10_000 }).catch(() => undefined);
+    return runScript(spec, {
+      workspace, worktrees: [], actions: () => ({}),
+      env: { ...itemEnv(item), FLEEX_WORKSPACE: workspace, FLEEX_STATION: station.name || 'Script' },
+    }, host.shell);
+  }
   private statsCache = new Map<number, { at: number; value: Promise<FactoryStats> }>();
 
   constructor(private readonly deps: FactoryModuleDeps & { store: FactoryStorePort }) {
@@ -104,7 +126,7 @@ export class FactoryModule {
         skill: new SkillStepExecutor(deps.executeAgent, deps.skillStore, deps.personaStore, deps.config),
         panel: new PanelStepExecutor(deps.runPanel, deps.config),
       },
-      script: (station, ticketId) => this.runScript(station, ticketId),
+      script: (station, ticketId, item) => this.runScript(station, ticketId, item),
       submitDeliverable: deps.submitDeliverable, postComment: deps.postComment, agentEventStore: deps.agentEventStore, eventBus: deps.eventBus,
     });
     this.store = deps.store;
@@ -129,6 +151,13 @@ export class FactoryModule {
         });
       },
       cancelExecution: (executionId) => deps.executeAgent.cancelExecution(executionId),
+      /* a mail is asked again for its whole thread: what a station is told, and what an older item is filled from */
+      readItem: async (item) => {
+        if (item.source !== 'gmail' || !deps.mail) return null;
+        const messages = await deps.mail.thread(item.sourceKey), last = messages[messages.length - 1];
+        if (!last) return null;
+        return { body: { text: last.body, html: last.html }, conversation: messages.map((m) => ({ from: m.from, at: m.at, text: m.body })) };
+      },
       /* in the human's name, as a comment of theirs would be; it starts no agent (no mention is created from it) */
       recordDecision: async (ticketId, gate, outcome, reason) => {
         const { humanDisplayName, humanMentionName } = deps.config.get();
@@ -138,6 +167,8 @@ export class FactoryModule {
         deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'user', authorName, createdMentions: [], occurredAt: new Date() });
       },
     });
+    this.mail = deps.mail ?? null;
+    this.puller = new IntakePuller({ engine: this.engine, mail: this.mail, logger: deps.logger });
     this.listen();
   }
 
@@ -211,14 +242,54 @@ export class FactoryModule {
   private async computeStats(days: number): Promise<FactoryStats> {
     const now = Date.now(), since = new Date(now - days * DAY_MS).toISOString(), until = new Date(now).toISOString();
     const floor = this.engine.snapshot().floor;
-    const runs = await this.store.listRunsSince(floor.id, since);
-    const ticketIds = [...new Set(runs.filter((r) => r.executionId || r.executor === 'panel').map((r) => r.ticketId))];
+    /* a station's visits to items count as its runs; they have no ticket, so what they cost is read by execution */
+    const [ticketRuns, itemRuns, exitItems] = await Promise.all([this.store.listRunsSince(floor.id, since), this.store.listItemRunsSince(floor.id, since), this.store.listExitItems(floor.id, null, since)]);
+    const runs = [...ticketRuns, ...itemRuns];
+    const ticketIds = [...new Set(ticketRuns.filter((r) => r.executionId || r.executor === 'panel').map((r) => r.ticketId))];
     const executions: ExecutionCost[] = [];
     for (let i = 0; i < ticketIds.length; i += 8) {
       const batch = await Promise.all(ticketIds.slice(i, i + 8).map((id) => this.deps.agentEventStore.getExecutionsByTicket(id).catch(() => [])));
       for (const list of batch) for (const e of list) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
     }
-    return computeStats({ runs, executions, layout: floor.layout, since, until, days });
+    const itemExecutions = [...new Set(itemRuns.map((r) => r.executionId).filter((id): id is string => !!id))];
+    if (itemExecutions.length && this.deps.agentEventStore.getExecutionsByIds) {
+      for (const e of await this.deps.agentEventStore.getExecutionsByIds(itemExecutions).catch(() => [])) executions.push({ id: e.id, ticketId: e.ticketId, startedAt: e.startedAt, costUsd: e.costUsd ?? null });
+    }
+    return computeStats({ runs, executions, layout: floor.layout, since, until, days, exitItems });
+  }
+
+
+  /**
+   * What left by one exit (by every exit of the floor, with null) over the last `days` days: its shipments (the `exit`
+   * runs), each with the ticket as it is now (a ticket deleted since keeps its number only), and the items archived
+   * there. Each exit that appears is named: as it is on the floor, or as its runs remember it once removed.
+   */
+  async exitLog(machineId: string | null, days: number): Promise<ExitLog> {
+    const span = Math.max(1, Math.min(90, Math.floor(days) || 7)), since = new Date(Date.now() - span * DAY_MS).toISOString();
+    const floor = this.engine.snapshot().floor, floorId = floor.id;
+    const all = machineId ? await this.store.listRecentRuns(floorId, 2000, machineId) : await this.store.listRunsSince(floorId, since);
+    const runs = all.filter((r) => r.executor === 'exit' && r.finishedAt && r.finishedAt >= since);
+    const tickets: ExitLog['tickets'] = [];
+    for (let i = 0; i < runs.length; i += 8) {
+      const batch = await Promise.all(runs.slice(i, i + 8).map(async (r) => {
+        const t = (await this.deps.ticketStore.getTicketById(r.ticketId).catch(() => null))?.toDTO() ?? null;
+        return {
+          machineId: r.machineId, ticketId: r.ticketId, displayId: t?.displayId ?? null, title: t?.title ?? 'A ticket deleted since', type: t?.type ?? '', priority: t?.priority ?? '', boardId: t?.boardId ?? null,
+          status: t?.status ?? null, archived: !!t?.archivedAt, tags: t?.tags ?? [], handedAt: r.startedAt, shippedAt: r.finishedAt!,
+        };
+      }));
+      tickets.push(...batch);
+    }
+    tickets.sort((a, b) => b.shippedAt.localeCompare(a.shippedAt));
+    const items = (await this.store.listExitItems(floorId, machineId, since)).map((i) => ({
+      machineId: i.machineId!, itemId: i.id, source: i.source, title: i.title, author: i.author, url: i.url, tags: i.tags, handedAt: i.createdAt, shippedAt: i.archivedAt!,
+    }));
+    /* every exit on the floor, then those only the runs remember */
+    const exits = new Map<string, ExitLog['exits'][number]>();
+    for (const m of floor.layout.machines) if (m.kind === 'exit' && (!machineId || m.id === machineId)) exits.set(m.id, { machineId: m.id, name: m.name || 'Exit', onFloor: true });
+    for (const r of runs) if (!exits.has(r.machineId)) exits.set(r.machineId, { machineId: r.machineId, name: r.machineName || 'Exit', onFloor: false });
+    for (const i of items) if (!exits.has(i.machineId)) exits.set(i.machineId, { machineId: i.machineId, name: 'Exit', onFloor: false });
+    return { machineId, days: span, since, exits: [...exits.values()], tickets, items };
   }
 
   start(): void {
@@ -229,9 +300,10 @@ export class FactoryModule {
       }
       return true;
     });
+    this.puller.start(() => this.enabled() && this.loaded);
   }
 
-  stop(): Promise<void> { return this.engine.stop(); }
+  stop(): Promise<void> { this.puller.stop(); return this.engine.stop(); }
 }
 
 export function createFactoryModule(deps: FactoryModuleDeps): FactoryModule | null {

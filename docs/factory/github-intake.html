@@ -1,0 +1,397 @@
+<title>Factory, l'intake GitHub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one playable floor (things arrive and are followed, with the item's own panel beside), then three things to pick (the look of an item, of an intake, where a ticket is created), an intake's settings, and the rules as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 96px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  /* the scene is the app's own floor: one dark look, whatever the page's theme */
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .now { font-size: 0.93rem; min-height: 3em; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .now b { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-right: 6px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.86rem; }
+  dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button:disabled { opacity: 0.4; cursor: default; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app button.stop { background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600; }
+  .app button[aria-pressed="true"] { background: #fafafa; border-color: #fafafa; color: #18181b; }
+  .app input, .app select { font: inherit; font-size: 0.82rem; color: #fafafa; background: #131316; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 7px; min-width: 0; }
+  .app .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app .mono { font-family: var(--mono); }
+  .line { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .box { flex: 1 1 96px; min-width: 0; border: 2px solid #3f3f46; border-radius: 10px; padding: 8px; background: #18181b; display: flex; flex-direction: column; gap: 3px; }
+  .box b { font-size: 0.82rem; } .box span { color: #8b8b94; font-size: 0.72rem; }
+  .box.here { border-color: #facc15; box-shadow: 0 0 0 2px rgba(250,204,21,0.25); }
+  .box.hold { border-style: dashed; border-color: #ef4444; }
+  .box.new { border-color: #f472b6; }
+  .arrow { align-self: center; color: #71717a; font-family: var(--mono); }
+  .tok { display: inline-flex; align-items: center; gap: 6px; background: #f87171; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 0.74rem; color: #c4c4cc; max-height: 9.5em; overflow: auto; }
+  .tag { font-family: var(--mono); font-size: 0.72rem; border: 1px solid #3f3f46; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .tag.kv b { color: #60a5fa; font-weight: 700; }
+  .tag.hot, .fld.hot dd { background: rgba(250,204,21,0.18); border-color: #facc15; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  .scroll { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #2f2f35; vertical-align: top; }
+  th { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa; font-weight: 600; }
+  td input { width: 100%; box-sizing: border-box; }
+  .ok { color: #4ade80; } .ko { color: #f87171; } .na { color: #facc15; }
+  .fld { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 0.8rem; }
+  .fld dt { color: #8b8b94; font-size: 0.72rem; text-transform: none; letter-spacing: 0; font-weight: 500; padding: 0; }
+  .fld dd { margin: 0; border-radius: 4px; padding: 0 4px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 1.3em; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .grade ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; }
+  .belt { height: 30px; border-radius: 6px; background: repeating-linear-gradient(110deg, #27272a 0 14px, #3f3f46 14px 18px); background-size: 200% 100%; animation: run 6s linear infinite; }
+  .halted .belt { animation-play-state: paused; filter: saturate(0.3) brightness(0.7); }
+  @keyframes run { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .belt { animation: none; } }
+  .alert { background: rgba(239,68,68,0.16); border: 1px solid #ef4444; color: #fecaca; border-radius: 8px; padding: 8px 10px; }
+  img.shot { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+  .rules ol, .rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+  .rules li b { font-weight: 600; }
+  .rules .mineline { color: var(--muted); display: block; }
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  .said { font-size: 0.8rem; color: var(--muted); }
+  /* the playable floor is wide: on a narrow screen it scrolls inside its frame rather than shrinking to nothing */
+  .scene.wide { overflow-x: auto; }
+  .scene.wide svg { min-width: 980px; }
+  .app.inner { background: #18181b; min-height: 11em; }
+  .app .now { color: #e4e4e7; }
+  .app .draft { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.45; }
+  .app .log li b { color: #fafafa; font-weight: 600; margin-right: 4px; }
+  .app label.tag { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .app .fld dd { align-items: center; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+  code { font-family: var(--mono); font-size: 0.86em; overflow-wrap: anywhere; }
+</style>
+<style>
+  .tokn { display: inline-flex; align-items: center; gap: 6px; background: #a78bfa; color: #18181b; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; border-radius: 6px; padding: 2px 7px; }
+  .cmt { border-left: 2px solid #3f3f46; padding: 2px 0 2px 8px; display: flex; flex-direction: column; gap: 1px; }
+  .cmt b { font-size: 0.78rem; } .cmt span { color: #8b8b94; font-size: 0.72rem; font-family: var(--mono); }
+  .thread { background: #131316; border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .opt { border: 1px dashed #3f3f46; border-radius: 8px; padding: 8px; }
+  .steps { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .chk { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+<style>
+  .verdict { border: 1px solid #3f3f46; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; background: #131316; }
+  .verdict b.yes { color: #facc15; } .verdict b.new { color: #a78bfa; } .verdict b.no { color: #71717a; }
+</style>
+<div class="page">
+  <header class="top">
+    <h1>GitHub entre par l'usine</h1>
+    <p class="lede">Chaque notification GitHub qui te concerne (<b>participating</b>) devient un <b>item</b>, un par sujet (issue, PR). L'intake agrège une rafale sur le quai, commente le ticket Fleex lié s'il existe, et quand un sujet déjà avancé sur le plancher reçoit du nouveau, pose une seule question à un LLM : <b>est-ce que ça aurait pu changer l'outcome de ce qui a déjà été fait ?</b> Lecture seule sur GitHub.</p>
+  </header>
+
+  <section aria-labelledby="h-play">
+    <h2 id="h-play">Les cas</h2>
+    <p class="brief">Choisis un cas, puis avance pas à pas. Le panneau de droite montre la carte de l'item, le verdict du check, ou le fil du ticket lié. Les cas 3 à 5 partent du même item : le commentaire 1 (« le bouton devait être rouge, pas bleu ») est déjà en QA, au bout d'une lane Spec, Dev, QA.</p>
+    <div class="app">
+      <div class="row" id="plays"><h4>Case</h4></div>
+      <div class="scene wide" id="scene"></div>
+      <div class="steps"><button type="button" id="prev">Previous</button><button type="button" class="go" id="next">Next step</button><span class="hint" id="stepn"></span></div>
+      <div class="two">
+        <div><p class="now" id="now"><b>NOW</b><span id="say"></span></p></div>
+        <div class="app inner" id="panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-p1">
+    <h2 id="h-p1">Choix · ce que l'intake affiche</h2>
+    <p class="brief">Les resets et ce qui est ignoré se passent dans l'intake, hors du plancher. Faut-il les compter sur le quai ? (Le choix change le dessin du quai ci-dessus.)</p>
+    <div class="grid small" id="g-p1"></div>
+  </section>
+
+  <section aria-labelledby="h-check">
+    <h2 id="h-check">Le check, en une question</h2>
+    <div class="two">
+      <div class="app">
+        <h4>Update check · what the model is asked</h4>
+        <div class="draft">New activity came on a subject whose item has already moved on the floor. Would it have been able to change the outcome of what was done on the item so far?<br><br>
+          <b>yes</b>: it brings new information, or invalidates what the work rested on → the item is reset<br>
+          <b>new</b>: it is about something else on the same subject → a new item<br>
+          <b>no</b>: nothing useful (thanks, a reaction) → ignored</div>
+        <h4>It is given</h4>
+        <ul class="log">
+          <li><b>item</b> its comments, its tags, where it is</li>
+          <li><b>stations</b> what each one it went through answered, and what the current one is doing</li>
+          <li><b>new</b> the comments of the burst, gathered over the quiet delay</li>
+        </ul>
+        <h4>It answers</h4>
+        <div class="draft mono">{ "verdict": "yes" | "new" | "no", "reason": "the colour changed from red to aubergine: Spec, Dev and QA worked on red" }</div>
+      </div>
+      <div class="rules">
+        <ul>
+          <li><b>Pas de LLM</b> quand c'est évident : l'item attend encore sur le quai (on agrège), ou un ticket est lié (commentaire sur le ticket).</li>
+          <li><b>Oui = reset, toujours</b>, même si l'item attend sur une question : en QA, un contexte qui aurait pu changer la spec impose de rejouer toute la lane. Le run en cours est arrêté ; l'item revient au quai avec tous ses commentaires et refait sa lane. Ce que les stations avaient dit reste dans son historique, et son brief dit pourquoi il a été remis à zéro.</li>
+          <li><b>Un item archivé</b> suit la même question : oui, il revient au quai ; nouveau, un nouvel item ; non, rien.</li>
+          <li><b>Si le check échoue</b> (quota, erreur) : un nouvel item relié, signalé. Rien de perdu, rien d'interrompu.</li>
+          <li><b>Le coût</b> : un run court par rafale, sur un modèle bon marché, compté dans les limites du Factory. Le check se coupe sur l'intake ; sans lui, c'est toujours un nouvel item relié.</li>
+          <li><b>Gmail ne change pas</b> : pas de check, un mail reste une conversation qui revient.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-intake">
+    <h2 id="h-intake">Le panneau de l'intake GitHub</h2>
+    <p class="brief">Comme Gmail en deux parties, mais avec des règles : l'API des notifications n'a pas de langage de requête. Les champs des règles sont aussi posés en tags sur l'item, pour que les bras routent dessus.</p>
+    <div class="two">
+      <div class="app">
+        <div class="row" style="justify-content:space-between"><b>GitHub intake</b><span class="hint mono">Esc</span></div>
+        <h4>Every source</h4>
+        <div class="row"><label class="hint" style="width:9em">Name</label><input value="GitHub" style="flex:1"></div>
+        <div class="row"><label class="hint" style="width:9em">Source</label><select style="flex:1"><option>GitHub (gh)</option></select></div>
+        <div class="row"><label class="hint" style="width:9em">Leaves once quiet for</label><select style="flex:1"><option>2 min</option></select></div>
+        <h4>GitHub only</h4>
+        <p class="hint"><span class="ok">●</span> Read through gh 2.63 · @you, read-only (scope <span class="mono">notifications</span>)</p>
+        <label class="chk"><input type="checkbox" checked> Only what involves me <span class="hint">(participating)</span></label>
+        <p class="hint">Mentions, review requests, assignments, what you opened or commented on. Unticked: also every issue, PR and comment of the repositories you watch (tagged <span class="mono">reason:subscribed</span>).</p>
+        <div class="row"><label class="hint" style="width:9em">Pulls every</label><select style="flex:1"><option>1 min</option><option>5 min</option></select></div>
+        <label class="chk"><input type="checkbox" checked> Update check <span class="hint">(when a subject already on the floor gets news)</span></label>
+        <div class="row"><label class="hint" style="width:9em">Model</label><select style="flex:1"><option>a fast, cheap model</option></select></div>
+        <p class="hint">Rules: drop what matches, or keep only what matches.</p>
+        <div class="scroll"><table>
+          <tr><th>Way</th><th>Field</th><th>Op</th><th>Value</th></tr>
+          <tr><td>Drop if</td><td>From a bot</td><td>is</td><td>yes</td></tr>
+          <tr><td>Drop if</td><td>Why</td><td>is</td><td>ci_activity</td></tr>
+        </table></div>
+        <p class="hint">Fields: Repository, Why (review_requested, assign, mention, team_mention, comment, author, ci_activity, state_change, security_alert, invitation, approval_requested, subscribed), Kind (issue, pr, release, discussion, alert), State (open, merged, closed), A draft, From a bot.</p>
+        <div class="row" style="justify-content:space-between"><span class="hint">Last pull 40s ago · 3 notifications</span><button type="button">Pull now</button></div>
+      </div>
+      <div class="rec">
+        <p><b>Ce que l'intake pose sur chaque item</b>, en tags (lus par les bras) et en champs :</p>
+        <p class="mono" style="margin-top:6px">reason:review_requested · repo:evaneos/shop · kind:pr · state:open · draft:no · bot:no</p>
+        <p style="margin-top:6px">Et selon le cas : <span class="mono">linked:yes</span> + le ticket (<span class="mono">#812</span>) ; <span class="mono">follow-up:yes</span> + l'item qu'il suit (un sujet nouveau sur la même PR) ; <span class="mono">reset:1</span> et la raison, après un reset.</p>
+        <p style="margin-top:10px"><b>La clé</b> d'un item GitHub est le sujet plus son numéro d'ordre (<span class="mono">evaneos/shop#355·2</span>) : un sujet nouveau sur la même PR donne un deuxième item, relié. Le sujet seul sert à trouver le ticket lié et les items déjà là.</p>
+        <p style="margin-top:10px"><b>Le commentaire sur le ticket lié</b> cite les commentaires de la rafale en entier, auteur et heure.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="bar" role="region" aria-label="Ta sélection">
+  <div class="bar-in">
+    <div class="picks" id="picks"></div>
+    <button type="button" id="copy">Copier ma sélection</button>
+    <span class="said" id="said" role="status"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const C = { floor: '#18181b', dot: 'rgba(255,255,255,0.12)', body: '#26262b', edge: '#3f3f46', belt: '#27272a', ink: '#fafafa', ink2: '#a1a1aa', ink3: '#71717a', gh: '#a78bfa', warn: '#facc15', ok: '#22c55e', ticket: '#60a5fa' };
+  const MONO = "font-family=\"'JetBrains Mono', ui-monospace, monospace\"", SANS = "font-family=\"'Inter', system-ui, sans-serif\"";
+  const text = (x, y, s, o = {}) => `<text x="${x}" y="${y}" ${o.mono ? MONO : SANS} font-size="${o.size ?? 11}" font-weight="${o.weight ?? 500}" fill="${o.fill ?? C.ink}" ${o.anchor ? `text-anchor="${o.anchor}"` : ''}>${esc(s)}</text>`;
+  const KEY = 'factory-github-intake-picks-2';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  picks.p1 = picks.p1 || 'count';
+
+  const SPOT = { dock: [[64, 128], [104, 128], [144, 128]], triage: [[500, 112]], spec: [[655, 70]], dev: [[760, 70]], qa: [[865, 70]], exit: [[700, 150]], make: [[700, 258]], made: [[850, 258]] };
+  const c = (who, at, said) => ({ who, at, said });
+  const C1 = c('alice', 'Mon 10:02', 'The button should be red, not blue.');
+  const ITEMS = {
+    I1: { title: 'Button colour', ref: 'evaneos/shop#355', tags: ['reason:comment', 'repo:evaneos/shop', 'kind:pr'] },
+    I3: { title: 'Agent: retry on 502 from the proxy', ref: 'evaneos/fleex#360', tags: ['reason:author', 'repo:evaneos/fleex', 'kind:pr', 'linked:yes'], linked: '#812' },
+    I6: { title: 'Checkout: split payment', ref: 'evaneos/shop#371', tags: ['reason:review_requested', 'repo:evaneos/shop', 'kind:pr', 'draft:no'] },
+    I7: { title: 'Modal does not close on mobile', ref: 'evaneos/shop#355·2', tags: ['reason:comment', 'repo:evaneos/shop', 'kind:pr', 'follow-up:yes'], follows: 'I1' },
+  };
+  const SAID = ['Spec: the button is red (#e11d48), states hover and disabled.', 'Dev: done, PR updated.'];
+  const CASES = [
+    { id: 'burst', label: '1 · Rafale sur une PR inconnue', steps: [
+      { at: { I1: 'dock' }, cm: { I1: [C1] }, show: 'I1', say: 'alice commente evaneos/shop#355, une PR qu\'aucun ticket Fleex ne connaît. Un item, qui attend sur le quai (calme : 2 min).' },
+      { at: { I1: 'dock' }, cm: { I1: [C1, c('bob', 'Mon 10:02:40', '@you and the hover state too.')] }, show: 'I1', say: '40 s plus tard, bob ajoute un commentaire. L\'item attend encore sur le quai : il s\'y agrège, le délai repart. Pas de LLM ici.' },
+      { at: { I1: 'triage' }, show: 'I1', say: 'Deux minutes de calme : l\'item sort, un bras l\'emmène au triage, les deux commentaires dans son brief.' },
+      { at: { I1: 'spec' }, run: ['I1'], show: 'I1', say: 'Le triage l\'envoie sur la lane Spec, Dev, QA.' },
+    ] },
+    { id: 'linked', label: '2 · PR liée au ticket #812', steps: [
+      { at: { I3: 'dock' }, cm: { I3: [c('carol', '11:15', 'Looks good, one nit on the backoff constant.')] }, show: 'I3', say: 'carol commente evaneos/fleex#360, liée au ticket Fleex #812 (un agent l\'a ouverte). L\'item attend sur le quai et sait qu\'un ticket existe.' },
+      { at: { I3: 'dock' }, cm: { I3: [c('carol', '11:15', 'Looks good, one nit on the backoff constant.'), c('dan', '11:16', 'Agreed, 2s is too aggressive. Approve once fixed.')] }, show: 'I3', say: 'dan ajoute un commentaire : il s\'agrège.' },
+      { at: { I3: 'triage' }, show: 'ticket', say: 'Calme : l\'intake poste un commentaire sur #812 qui cite toute la rafale en entier (sans mention : il ne réveille aucun agent). L\'item sort quand même, avec linked:yes.' },
+      { at: { I3: 'exit' }, show: 'I3', say: 'Ici, un bras envoie les linked:yes à l\'exit : la conversation appartient au ticket. Tu pourrais aussi les envoyer ailleurs.' },
+    ] },
+    { id: 'reset', label: '3 · « aubergine » : reset', steps: [
+      { at: { I1: 'qa' }, cm: { I1: [C1] }, run: ['I1'], show: 'I1', said: 2, say: 'Le commentaire 1 (« rouge, pas bleu ») a fait Spec et Dev ; l\'item est en QA, un agent y travaille.' },
+      { at: { I1: 'qa' }, pend: [c('alice', 'Mon 15:40', 'Red, well, aubergine like in the new brand guidelines.')], run: ['I1'], show: 'pending', said: 2, say: 'Le commentaire 2 arrive sur #355. L\'item est déjà loin : le commentaire attend sur le quai que la rafale se calme, la QA continue.' },
+      { at: { I1: 'dock' }, cm: { I1: [C1, c('alice', 'Mon 15:40', 'Red, well, aubergine like in the new brand guidelines.')] }, show: 'verdict', said: 2, resets: 1,
+        verdict: { v: 'yes', reason: 'The colour changed from red to aubergine: Spec, Dev and QA worked on red.' },
+        say: 'Calme : le check répond OUI. La QA est arrêtée, l\'item revient au quai avec les deux commentaires (reset:1). Ce que Spec et Dev avaient dit reste dans son historique.' },
+      { at: { I1: 'triage' }, show: 'I1', said: 2, resets: 1, say: 'Il ressort et refait toute la lane depuis le début. Son brief dit pourquoi il a été remis à zéro, et ce qui avait été conclu avant.' },
+      { at: { I1: 'spec' }, run: ['I1'], show: 'I1', said: 2, resets: 1, say: 'Spec repart avec « aubergine ». Dev et QA suivront.' },
+    ] },
+    { id: 'new', label: '4 · 2e remontée de QA : nouvel item', steps: [
+      { at: { I1: 'qa' }, cm: { I1: [C1] }, run: ['I1'], show: 'I1', said: 2, say: 'Même départ : l\'item du commentaire 1 est en QA.' },
+      { at: { I1: 'qa' }, pend: [c('erin', 'Mon 16:05', 'Another one from QA: the modal does not close on mobile.')], run: ['I1'], show: 'pending', said: 2, say: 'erin remonte un autre souci de QA sur la même PR. Il attend sur le quai que ça se calme.' },
+      { at: { I1: 'qa', I7: 'dock' }, cm: { I7: [c('erin', 'Mon 16:05', 'Another one from QA: the modal does not close on mobile.')] }, run: ['I1'], show: 'verdict', said: 2,
+        verdict: { v: 'new', reason: 'A different problem (the modal on mobile): it would not have changed the work on the button colour.' }, verdictItem: 'I7',
+        say: 'Le check répond SUJET NOUVEAU : un deuxième item naît, relié au premier (follow-up:yes). L\'item 1 continue sa QA sans être dérangé.' },
+      { at: { I1: 'qa', I7: 'triage' }, run: ['I1'], show: 'I7', said: 2, say: 'Calme : le deuxième item sort et fait son propre chemin.' },
+    ] },
+    { id: 'ignore', label: '5 · « merci ! » : ignoré', steps: [
+      { at: { I1: 'qa' }, cm: { I1: [C1] }, run: ['I1'], show: 'I1', said: 2, say: 'Même départ : l\'item du commentaire 1 est en QA.' },
+      { at: { I1: 'qa' }, pend: [c('bob', 'Mon 15:12', 'Thanks!')], run: ['I1'], show: 'pending', said: 2, say: 'bob répond « Thanks! ». Il attend sur le quai que ça se calme.' },
+      { at: { I1: 'qa' }, run: ['I1'], show: 'verdict', said: 2, ignored: 1, ign: [c('bob', 'Mon 15:12', 'Thanks!')],
+        verdict: { v: 'no', reason: 'A thank-you: nothing that could change the outcome.' },
+        say: 'Le check répond RIEN D\'UTILE : rien ne bouge sur le plancher. Le commentaire est gardé dans l\'historique de l\'item, grisé.' },
+    ] },
+    { id: 'review', label: '6 · Review demandée', steps: [
+      { at: { I6: 'dock' }, cm: { I6: [c('erin', '14:30', 'requested your review')] }, show: 'I6', say: 'On te demande une review sur evaneos/shop#371. Un item sur le quai.' },
+      { at: { I6: 'make' }, run: ['I6'], show: 'I6', say: 'Calme : le bras du bas prend les reason:review_requested (ou reason:assign) et l\'emmène à « Make a ticket », une station agent avec le persona Fleex.' },
+      { at: { T813: 'made' }, show: 'made', say: 'L\'agent lance fleex import https://github.com/evaneos/shop/pull/371 : le ticket #813 est créé avec le lien de la PR (ou retrouvé). L\'item sort par « ticketed » et est archivé. Le ticket atterrit dans Inbound.' },
+    ] },
+  ];
+  let ci = 0, si = 0;
+  const comments = (id) => { for (let k = si; k >= 0; k--) { const cm = CASES[ci].steps[k].cm; if (cm && cm[id]) return cm[id]; } return []; };
+
+  function token(id, x, y, o = {}) {
+    let s = `<g><rect x="${x - 15}" y="${y - 15}" width="30" height="30" rx="6" fill="${o.ticket ? C.ticket : C.gh}" stroke="#18181b" stroke-width="2"/>`;
+    s += o.ticket ? text(x, y + 4, '#813', { mono: true, size: 9, weight: 700, fill: '#18181b', anchor: 'middle' })
+      : `<path d="M${x - 6} ${y - 7}v14M${x + 6} ${y + 7}v-6a4 4 0 0 0-4-4h-2" stroke="#18181b" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="${x - 6}" cy="${y - 8}" r="2.4" fill="#18181b"/><circle cx="${x - 6}" cy="${y + 8}" r="2.4" fill="#18181b"/><circle cx="${x + 6}" cy="${y + 8}" r="2.4" fill="#18181b"/>`;
+    if (o.run) s += `<circle cx="${x}" cy="${y}" r="20" fill="none" stroke="${C.ok}" stroke-width="2" stroke-dasharray="4 4"/>`;
+    if (o.reset) s += `<rect x="${x + 6}" y="${y - 22}" width="20" height="13" rx="3" fill="${C.warn}"/>` + text(x + 16, y - 12, '↺1', { mono: true, size: 9, weight: 800, fill: '#18181b', anchor: 'middle' });
+    s += text(x, y + 30, o.ticket ? 'ticket' : id, { mono: true, size: 10, fill: C.ink2, anchor: 'middle' });
+    return s + '</g>';
+  }
+  const box = (x, y, w, h, title, sub, o = {}) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${C.body}" stroke="${o.color ?? C.edge}" stroke-width="2"/>` + text(x + 9, y + 16, title, { size: 11, weight: 650 }) + (sub ? text(x + 9, y + 29, sub, { mono: true, size: 9, fill: C.ink3 }) : '');
+  function draw() {
+    const st = CASES[ci].steps[si];
+    let s = `<svg viewBox="0 0 960 310" role="img" aria-label="The floor at this step"><rect width="960" height="310" fill="${C.floor}"/>`;
+    for (let y = 20; y < 310; y += 40) for (let x = 20; x < 960; x += 40) s += `<circle cx="${x}" cy="${y}" r="1.2" fill="${C.dot}"/>`;
+    const inDock = Object.entries(st.at).filter(([, p]) => p === 'dock').map(([k]) => k);
+    s += `<rect x="20" y="40" width="180" height="120" rx="10" fill="${C.body}" stroke="${C.gh}" stroke-width="2.5"/>`;
+    s += `<rect x="32" y="52" width="26" height="26" rx="6" fill="${C.gh}"/>` + text(66, 62, 'INTAKE', { mono: true, size: 9, weight: 700, fill: C.gh }) + text(66, 76, 'GitHub', { size: 13, weight: 650 });
+    const waiting = inDock.length + (st.pend ? 1 : 0);
+    s += text(32, 96, `HELD ${waiting}`, { mono: true, size: 9, weight: 700, fill: waiting ? C.warn : C.ink3 });
+    if (picks.p1 === 'count') s += text(78, 96, `RESET ${st.resets ?? 0}`, { mono: true, size: 9, weight: 700, fill: st.resets ? C.warn : C.ink3 }) + text(132, 96, `IGNORED ${st.ignored ?? 0}`, { mono: true, size: 9, weight: 700, fill: C.ink3 });
+    if (st.pend) s += `<rect x="128" y="112" width="58" height="34" rx="6" fill="none" stroke="${C.warn}" stroke-width="1.5" stroke-dasharray="3 3"/>` + text(157, 126, '+1 new', { mono: true, size: 9, weight: 700, fill: C.warn, anchor: 'middle' }) + text(157, 139, '#355', { mono: true, size: 9, fill: C.ink2, anchor: 'middle' });
+    s += `<rect x="210" y="96" width="30" height="24" rx="4" fill="#3f3f46"/>` + text(225, 135, 'arm', { mono: true, size: 9, fill: C.ink3, anchor: 'middle' });
+    s += `<rect x="244" y="98" width="186" height="20" rx="4" fill="${C.belt}"/>`;
+    for (let x = 252; x < 424; x += 18) s += `<path d="M${x} 103l5 5-5 5" stroke="#52525b" stroke-width="2" fill="none"/>`;
+    s += box(440, 50, 120, 110, 'Triage', 'agent', { color: '#71717a' });
+    s += `<path d="M560 80 L605 60 M560 120 L605 146 M560 150 L605 240" stroke="#52525b" stroke-width="2" stroke-dasharray="5 4" fill="none"/>`;
+    s += box(610, 14, 92, 92, 'Spec', '') + box(715, 14, 92, 92, 'Dev', '') + box(820, 14, 92, 92, 'QA', '');
+    s += text(704, 64, '›', { size: 16, fill: C.ink3 }) + text(809, 64, '›', { size: 16, fill: C.ink3 });
+    s += box(610, 116, 302, 66, 'Exit', 'archives the item');
+    s += box(610, 200, 302, 96, 'Make a ticket', 'agent · persona Fleex', { color: C.ticket });
+    s += `<path d="M110 160 V252 H604" stroke="${C.ticket}" stroke-width="3" fill="none" opacity="0.55"/>`;
+    s += text(124, 246, 'arm · reason:review_requested OR reason:assign', { mono: true, size: 9, fill: C.ticket });
+    const pos = {}, used = {};
+    for (const [id, place] of Object.entries(st.at)) { const k = used[place] = (used[place] ?? -1) + 1, spots = SPOT[place]; pos[id] = spots[Math.min(k, spots.length - 1)]; }
+    for (const [id, [x, y]] of Object.entries(pos)) s += token(id, x, y, { run: (st.run ?? []).includes(id), ticket: id === 'T813', reset: id === 'I1' && st.resets });
+    if (st.show === 'made') s += text(700, 290, 'I6 archived', { mono: true, size: 9, fill: C.ink3, anchor: 'middle' });
+    $('scene').innerHTML = s + '</svg>';
+  }
+  const tags = (list) => list.map((t) => { const [k, v] = t.split(':'); return `<span class="tag kv"><b>${esc(k)}</b>:${esc(v)}</span>`; }).join(' ');
+  const cmts = (list, dim) => list.map((m) => `<div class="cmt" ${dim ? 'style="opacity:0.45"' : ''}><b>${esc(m.who)} <span>${esc(m.at)}${dim ? ' · ignored' : ''}</span></b><div>${esc(m.said)}</div></div>`).join('');
+  function card(id, st) {
+    const it = ITEMS[id], list = comments(id), where = st.at[id];
+    const notes = [];
+    if (it.linked) notes.push(`<div class="opt">Linked to ticket <b>${it.linked}</b>: the intake comments there once per burst.</div>`);
+    if (it.follows) notes.push(`<div class="opt">Follows <b>${it.follows}</b> (same PR, another subject) · at QA.</div>`);
+    if (id === 'I1' && st.resets) notes.push(`<div class="opt" style="border-color:${C.warn}">Reset 1 · the colour changed from red to aubergine: Spec, Dev and QA worked on red.</div>`);
+    const tagList = id === 'I1' && st.resets ? [...it.tags, 'reset:1'] : it.tags;
+    const said = id === 'I1' && st.said ? `<h4>What stations said${st.resets ? ' before the reset' : ''}</h4><ul class="log">${SAID.slice(0, st.said).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+    return `<div class="row"><span class="tokn">${id}</span><b>${esc(it.title)}</b></div>
+      <div class="hint mono">${esc(it.ref)} · GitHub · ${where === 'dock' ? 'waits on the dock' : esc(where ?? '')}</div>
+      <div class="row">${tags(tagList)}</div>${notes.join('')}
+      <h4>${list.length} comment${list.length === 1 ? '' : 's'}</h4>${cmts(list)}${st.ign && id === 'I1' ? cmts(st.ign, true) : ''}${said}`;
+  }
+  function panel() {
+    const st = CASES[ci].steps[si], p = $('panel');
+    if (st.show === 'ticket') {
+      const list = comments('I3');
+      p.innerHTML = `<h4>Ticket #812 · its thread</h4><div class="thread"><div class="hint">… earlier: the agent opened the PR</div><div class="cmt" style="border-color:${C.gh}"><b>GitHub <span>via the Factory · 11:18</span></b><div>${list.length} new comments on <span class="mono">evaneos/fleex#360</span>:</div>${cmts(list)}</div></div><p class="hint">And the item leaves the dock anyway, tagged linked:yes, carrying #812.</p>`;
+      return;
+    }
+    if (st.show === 'made') { p.innerHTML = `<h4>Ticket #813</h4><div class="thread"><b>Review: Checkout: split payment</b><div class="hint mono">link · github_pr evaneos/shop#371 · repo evaneos/shop</div><div class="hint">Created by the Factory's "Make a ticket" station (fleex import). Lands in Inbound.</div></div><h4>Item I6</h4><p class="hint">Archived · left by "ticketed" · carries #813</p>`; return; }
+    if (st.show === 'pending') { p.innerHTML = `<h4>On the dock · news on a subject already on the floor</h4>${cmts(st.pend)}<p class="hint">evaneos/shop#355 has an item at QA. This waits for the burst to be quiet (2 min), then the update check runs once for all of it.</p>` + card('I1', st); return; }
+    if (st.show === 'verdict') {
+      const v = st.verdict, label = { yes: 'YES · reset', new: 'NEW SUBJECT · a new item', no: 'NOTHING USEFUL · ignored' }[v.v];
+      p.innerHTML = `<div class="verdict"><h4>Update check · I1</h4><b class="${v.v}">${label}</b><div>${esc(v.reason)}</div></div>` + card(st.verdictItem ?? 'I1', st);
+      return;
+    }
+    p.innerHTML = card(st.show, st);
+  }
+  function render() {
+    const n = CASES[ci].steps.length;
+    $('say').textContent = CASES[ci].steps[si].say;
+    $('stepn').textContent = `step ${si + 1} of ${n}`;
+    $('prev').disabled = si === 0; $('next').disabled = si === n - 1;
+    draw(); panel();
+    [...$('plays').querySelectorAll('button')].forEach((b, k) => b.setAttribute('aria-pressed', String(k === ci)));
+  }
+  for (const [k, cs] of CASES.entries()) { const b = document.createElement('button'); b.type = 'button'; b.textContent = cs.label; b.addEventListener('click', () => { ci = k; si = 0; render(); }); $('plays').appendChild(b); }
+  $('prev').addEventListener('click', () => { si = Math.max(0, si - 1); render(); });
+  $('next').addEventListener('click', () => { si = Math.min(CASES[ci].steps.length - 1, si + 1); render(); });
+
+  const P1 = [
+    ['count', 'A', 'Des compteurs sur le quai', 'HELD, RESET et IGNORED sur 24 h, comme DROPPED pour les règles. On voit d\'un coup d\'œil si le check travaille beaucoup, et un ↺ sur le jeton d\'un item remis à zéro.'],
+    ['card', 'B', 'Rien que HELD', 'Le quai reste sobre ; les resets et ce qui est ignoré ne se lisent que dans la carte de l\'item (et le ↺ sur son jeton).'],
+  ];
+  function cards() {
+    $('g-p1').innerHTML = P1.map(([v, L, title, desc]) => `<div class="card ${picks.p1 === v ? 'picked' : ''}"><div class="card-head"><span class="letter">${L}</span><h3>${esc(title)}</h3>${picks.p1 === v ? '<span class="mine">Mon choix</span>' : ''}</div><p>${esc(desc)}</p><button type="button" data-v="${v}" aria-pressed="${picks.p1 === v}">${picks.p1 === v ? 'Choisi' : 'Choisir'}</button></div>`).join('');
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* not kept, that is all */ }
+    cards();
+    $('picks').innerHTML = `Quai : <b>${P1.find((x) => x[0] === picks.p1)[1]}</b>`;
+    render();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('#g-p1 button[data-v]'); if (!b) return; picks.p1 = b.dataset.v; save(); });
+  $('copy').addEventListener('click', () => {
+    const line = `GitHub intake : quai = ${P1.find((x) => x[0] === picks.p1)[1]}`;
+    navigator.clipboard?.writeText(line).then(() => { $('said').textContent = 'Copié'; }, () => { $('said').textContent = line; });
+  });
+  save();
+})();
+</script>

@@ -1,7 +1,7 @@
 import type { SupabaseConnection } from '../infrastructure/adapters/supabase/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState } from './types.js';
-import { itemFromRow, itemToRow, runFromRow, type ItemDbRow } from './sqlite-factory-store.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactorySettings, FactoryTicketRow, FactoryTicketState, IntakePullRow, ItemBody } from './types.js';
+import { itemFromRow, itemToRow, pullFromRow, pullToRow, runFromRow, type IntakePullDbRow, type ItemDbRow } from './sqlite-factory-store.js';
 
 interface FloorRow { id: string; name: string; layout: FactoryLayout; settings: FactorySettings; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: FactoryTicketState; created_at: string; updated_at: string }
@@ -66,12 +66,53 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     if (error) this.fail('saveItem', error.message);
   }
 
+  async listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]> {
+    const base = this.conn.client.from('factory_items').select('*').eq('floor_id', floorId);
+    const { data, error } = await (machineId ? base.eq('machine_id', machineId) : base.not('machine_id', 'is', null)).eq('archived_reason', 'exit').gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(1000);
+    if (error) this.fail('listExitItems', error.message);
+    return (data as ItemDbRow[]).map(itemFromRow);
+  }
+
+  async saveItemBody(itemId: string, b: ItemBody): Promise<void> {
+    const { error } = await this.conn.client.from('factory_item_bodies').upsert({ item_id: itemId, text: b.text, html: b.html, updated_at: new Date().toISOString() }, { onConflict: 'item_id' });
+    if (error) this.fail('saveItemBody', error.message);
+  }
+
+  async getItemBody(itemId: string): Promise<ItemBody | null> {
+    const { data, error } = await this.conn.client.from('factory_item_bodies').select('text, html').eq('item_id', itemId).maybeSingle();
+    if (error) this.fail('getItemBody', error.message);
+    return data ? { text: (data as ItemBody).text, html: (data as ItemBody).html } : null;
+  }
+
+  async getItem(id: string): Promise<FactoryItemRow | null> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('id', id).maybeSingle();
+    if (error) this.fail('getItem', error.message);
+    return data ? itemFromRow(data as ItemDbRow) : null;
+  }
+
+  async listArchivedItems(floorId: string, sinceIso: string): Promise<FactoryItemRow[]> {
+    const { data, error } = await this.conn.client.from('factory_items').select('*').eq('floor_id', floorId).not('archived_at', 'is', null).gte('archived_at', sinceIso).order('archived_at', { ascending: false }).limit(2000);
+    if (error) this.fail('listArchivedItems', error.message);
+    return (data as ItemDbRow[]).map(itemFromRow);
+  }
+
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
     const { data, error } = await this.conn.client.from('factory_items').select('intake_id').eq('floor_id', floorId).eq('archived_reason', 'dropped').gte('archived_at', sinceIso).limit(20000);
     if (error) this.fail('countDropped', error.message);
     const out: Record<string, number> = {};
     for (const r of data as { intake_id: string | null }[]) if (r.intake_id) out[r.intake_id] = (out[r.intake_id] ?? 0) + 1;
     return out;
+  }
+
+  async listIntakePulls(floorId: string): Promise<IntakePullRow[]> {
+    const { data, error } = await this.conn.client.from('factory_intake_pulls').select('*').eq('floor_id', floorId);
+    if (error) this.fail('listIntakePulls', error.message);
+    return (data as IntakePullDbRow[]).map(pullFromRow);
+  }
+
+  async saveIntakePull(r: IntakePullRow): Promise<void> {
+    const { error } = await this.conn.client.from('factory_intake_pulls').upsert(pullToRow(r), { onConflict: 'intake_id' });
+    if (error) this.fail('saveIntakePull', error.message);
   }
 
   async saveRun(r: FactoryRunRow): Promise<void> {
@@ -94,6 +135,22 @@ export class SupabaseFactoryStore implements FactoryStorePort {
     const { data, error } = await this.conn.client.from('factory_item_runs').select('*').eq('item_id', itemId).order('started_at', { ascending: true });
     if (error) this.fail('listItemRuns', error.message);
     return (data as Parameters<typeof runFromRow>[0][]).map(runFromRow);
+  }
+
+  async listRecentItemRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    let q = this.conn.client.from('factory_item_runs').select('*, factory_items(title, source)').eq('floor_id', floorId);
+    if (machineId) q = q.eq('machine_id', machineId);
+    const { data, error } = await q.order('started_at', { ascending: false }).limit(limit);
+    if (error) this.fail('listRecentItemRuns', error.message);
+    return (data as (RunRow & { item_id: string; factory_items: { title: string; source: string } | null })[]).map((r) => ({
+      ...runFromRow(r), item: r.factory_items ? { title: r.factory_items.title, source: r.factory_items.source as FactoryItemRow['source'] } : null,
+    }));
+  }
+
+  async listItemRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {
+    const { data, error } = await this.conn.client.from('factory_item_runs').select('*').eq('floor_id', floorId).or(`started_at.gte.${sinceIso},finished_at.gte.${sinceIso}`).order('started_at', { ascending: true }).limit(10000);
+    if (error) this.fail('listItemRunsSince', error.message);
+    return (data as (RunRow & { item_id: string })[]).map(runFromRow);
   }
 
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {

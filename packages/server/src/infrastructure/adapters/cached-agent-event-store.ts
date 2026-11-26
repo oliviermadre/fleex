@@ -87,6 +87,11 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     return this.read(this.sorted().byTicket.get(ticketId));
   }
 
+  async getExecutionsByIds(ids: readonly string[]): Promise<AgentExecution[]> {
+    await this.ensureWarmed();
+    return this.read([...new Set(ids)].filter((id) => this.executions.has(id)));
+  }
+
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     await this.ensureWarmed();
     return this.read(this.sorted().byPersona.get(personaId)?.slice(0, limit));

@@ -185,6 +185,17 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getExecutionsByIds(ids: readonly string[]): Promise<AgentExecution[]> {
+    const out: AgentExecution[] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      if (!chunk.length) continue;
+      const rows = this.conn.db.prepare(`SELECT * FROM agent_event_executions WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as ExecutionRow[];
+      out.push(...rows.map(rowToExecution));
+    }
+    return out;
+  }
+
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
     const rows = this.conn.db
       .prepare('SELECT * FROM agent_event_executions WHERE persona_id = ? ORDER BY started_at DESC LIMIT ?')

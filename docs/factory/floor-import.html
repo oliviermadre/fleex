@@ -1,0 +1,221 @@
+<title>Floor import</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: the build card with its two new buttons, then four picks (where an import lands, how what was dropped is told, how a station not set up looks, what it does), the file as understood. A bar at the bottom keeps the picks. */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --ink: #16181d; --muted: #5a6070; --line: #d9dde5; --accent: #be185d; --accent-soft: #fce7f3; --on-accent: #ffffff;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0d0e11; --surface: #16171b; --ink: #f1f2f4; --muted: #9aa1ae; --line: #2a2c34; --accent: #f472b6; --accent-soft: #3a1228; --on-accent: #3a0a22; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  header.top { display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 72ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .brief { color: var(--muted); max-width: 76ch; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+  .card { display: flex; flex-direction: column; gap: 10px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  .rec { font-size: 0.9rem; border-left: 3px solid var(--accent); padding-left: 10px; max-width: 80ch; }
+  .rec b { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.85em; }
+
+  /* the app's own widgets: dark, like the floor they belong to */
+  .app { background: #1f1f23; color: #fafafa; border: 1px solid #3f3f46; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; color-scheme: dark; min-width: 0; }
+  .app h4 { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; font-family: var(--mono); }
+  .app button { color: #fafafa; border-color: #3f3f46; font-size: 0.8rem; padding: 5px 10px; }
+  .app button.go { background: #22c55e; border-color: #22c55e; color: #052e16; font-weight: 600; }
+  .app .hint { color: #8b8b94; font-size: 0.76rem; }
+  .app ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 4px; }
+  .app .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .warn { color: #facc15; } .ok { color: #4ade80; } .gone { color: #f87171; text-decoration: line-through; }
+
+  /* the build card: the floor's own command grid */
+  .menu { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-width: 460px; }
+  .slot { aspect-ratio: 1.6; border-radius: 8px; border: 1px solid #3f3f46; background: #18181b; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 0.72rem; color: #a1a1aa; }
+  .slot b { color: #fafafa; font-size: 0.78rem; }
+  .slot.new { border-color: #f472b6; box-shadow: 0 0 0 1px #f472b6; }
+  .slot.new b { color: #f9a8d4; }
+  .slot.empty { border-style: dashed; opacity: 0.4; }
+  .slot i { font-style: normal; font-family: var(--mono); font-size: 0.66rem; color: #71717a; }
+
+  .scene { background: #18181b; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .scene svg { display: block; width: 100%; height: auto; }
+  .toast { align-self: center; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #27272a; border: 1px solid #3f3f46; border-radius: 10px; padding: 8px 12px; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .rules ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; max-width: 80ch; }
+  pre { margin: 0; font-family: var(--mono); font-size: 0.74rem; line-height: 1.5; color: #d4d4d8; overflow-x: auto; white-space: pre; }
+
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1180px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Export and import a floor</h1>
+    <p class="lede">The floor goes out as a JSON file and comes back in, on this instance or another. What the file names and this instance does not have (a persona, a skill, a panel, a model, a board) is dropped on the way in. The machine is still placed, and it shows that it needs setting up, as a station freshly placed does.</p>
+  </header>
+
+  <section>
+    <h2>Two buttons on the Build card</h2>
+    <p class="brief">Slots 6 and 7 are free in build mode. <b>Export</b> downloads <code>fleex-floor-2026-11-24.json</code> at once. <b>Import</b> opens the file picker, then does what pick 1 says.</p>
+    <div class="app">
+      <h4>Build</h4>
+      <div class="menu">
+        <div class="slot"><b>Move</b><i>0</i></div><div class="slot"><b>Station</b><i>1</i></div><div class="slot"><b>Place</b><i>2</i></div><div class="slot"><b>Plan</b><i>3</i></div>
+        <div class="slot"><b>Erase</b><i>4</i></div><div class="slot empty"><i>5</i></div><div class="slot new"><b>Export</b><i>6</i></div><div class="slot new"><b>Import</b><i>7</i></div>
+        <div class="slot"><b>Fit</b><i>8</i></div><div class="slot empty"><i>9</i></div><div class="slot"><b>Undo</b><i>10</i></div><div class="slot"><b>Redo</b><i>11</i></div>
+      </div>
+      <span class="hint">With a selection, Export takes only what is selected: a line to share, not the whole floor.</span>
+    </div>
+  </section>
+
+  <section data-pick="p1">
+    <h2>1 · Where the imported floor lands</h2>
+    <div class="grid">
+      <div class="card" data-v="replace"><div class="card-head"><span class="letter">A</span><h3>It replaces the floor</h3></div>
+        <p>You confirm first ("Replace the 84 machines of this floor?"). Undo brings the old floor back. Tickets on a machine that is gone fall on the floor, as with Erase.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="hand"><div class="card-head"><span class="letter">B</span><h3>It goes into your hand, like a paste</h3></div>
+        <p>You place it where there is room, next to what is already there. Replacing a floor then means erasing it first.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="ask"><div class="card-head"><span class="letter">C</span><h3>It asks each time</h3><span class="mine">recommended</span></div>
+        <p>A small modal: <b>Replace the floor</b> or <b>Place it in hand</b>. Restoring a backup and adding a line from someone else are both one click away. On an empty floor it skips the question and replaces.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Telling what was dropped</h2>
+    <div class="two">
+      <div class="card" data-v="report"><div class="card-head"><span class="letter">A</span><h3>A report after the import</h3><span class="mine">recommended</span></div>
+        <div class="app">
+          <b style="font-size:.95rem">Floor imported: 84 machines</b>
+          <span class="hint">3 stations need setting up. What this instance does not have was dropped:</span>
+          <ul>
+            <li><b>Triage</b> (agent): persona <span class="gone">toto</span> <button type="button" style="margin-left:6px">Go to it</button></li>
+            <li><b>Review</b> (agent): model <span class="gone">opus-old</span>; its persona's model is used <button type="button" style="margin-left:6px">Go to it</button></li>
+            <li><b>Spec</b> (skill): skill <span class="gone">/write-spec</span> <button type="button" style="margin-left:6px">Go to it</button></li>
+            <li><b>Bug desk</b>: board <span class="gone">Shop</span> <button type="button" style="margin-left:6px">Go to it</button></li>
+            <li>2 arms: the condition "board is <span class="gone">Shop</span>". An arm left with no condition takes everything, so it is <span class="warn">switched to "takes nothing"</span></li>
+          </ul>
+          <div class="row"><button type="button" class="go">OK</button></div>
+        </div>
+        <button type="button">Pick A</button></div>
+      <div class="card" data-v="toast"><div class="card-head"><span class="letter">B</span><h3>Just the toast</h3></div>
+        <div class="app" style="min-height:120px;justify-content:flex-end">
+          <div class="toast"><span>Floor imported · <span class="warn">3 stations need setting up</span></span><button type="button">Details</button></div>
+        </div>
+        <p>The floor shows which ones (pick 3). Details opens the list of A.</p>
+        <button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · A station that is not set up, on the floor</h2>
+    <p class="brief">This is the same mark as a station just placed with nothing chosen. Today only its popup says so, in red.</p>
+    <div class="two">
+      <div class="card" data-v="badge"><div class="card-head"><span class="letter">A</span><h3>A dashed amber outline and a "!"</h3><span class="mine">recommended</span></div>
+        <div class="scene"><svg viewBox="0 0 360 170" role="img" aria-label="Two stations: one set up, one with a dashed amber outline and an exclamation mark">
+          <rect width="360" height="170" fill="#18181b"/>
+          <g transform="translate(30,25)"><rect width="120" height="120" rx="8" fill="#27272a" stroke="#52525b" stroke-width="2"/><text x="60" y="58" fill="#fafafa" font-family="Inter" font-size="13" text-anchor="middle" font-weight="600">Spec</text><text x="60" y="76" fill="#a1a1aa" font-family="Inter" font-size="11" text-anchor="middle">Alice · agent</text></g>
+          <g transform="translate(210,25)"><rect width="120" height="120" rx="8" fill="#27272a" stroke="#facc15" stroke-width="2" stroke-dasharray="7 5"/><text x="60" y="58" fill="#fafafa" font-family="Inter" font-size="13" text-anchor="middle" font-weight="600">Triage</text><text x="60" y="76" fill="#facc15" font-family="Inter" font-size="11" text-anchor="middle">no persona</text>
+            <circle cx="114" cy="6" r="13" fill="#facc15"/><text x="114" y="11" fill="#18181b" font-family="Inter" font-size="15" font-weight="700" text-anchor="middle">!</text></g>
+        </svg></div>
+        <p>The mark is visible in build mode and out of it. The station is also listed top left with the tickets that wait for you, as <i>"not set up"</i>, so N gets you there.</p>
+        <button type="button">Pick A</button></div>
+      <div class="card" data-v="dim"><div class="card-head"><span class="letter">B</span><h3>Greyed, with a "Set up" tag</h3></div>
+        <div class="scene"><svg viewBox="0 0 360 170" role="img" aria-label="Two stations: one set up, one greyed with a Set up tag">
+          <rect width="360" height="170" fill="#18181b"/>
+          <g transform="translate(30,25)"><rect width="120" height="120" rx="8" fill="#27272a" stroke="#52525b" stroke-width="2"/><text x="60" y="58" fill="#fafafa" font-family="Inter" font-size="13" text-anchor="middle" font-weight="600">Spec</text><text x="60" y="76" fill="#a1a1aa" font-family="Inter" font-size="11" text-anchor="middle">Alice · agent</text></g>
+          <g transform="translate(210,25)" opacity="0.55"><rect width="120" height="120" rx="8" fill="#1f1f23" stroke="#3f3f46" stroke-width="2"/><text x="60" y="58" fill="#a1a1aa" font-family="Inter" font-size="13" text-anchor="middle" font-weight="600">Triage</text></g>
+          <g transform="translate(232,100)"><rect width="76" height="22" rx="11" fill="#3f3f46"/><text x="38" y="15" fill="#fafafa" font-family="Inter" font-size="11" text-anchor="middle">Set up</text></g>
+        </svg></div>
+        <p>It looks like a station switched off. That is quieter, but easy to mistake for one you stopped on purpose.</p>
+        <button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p4">
+    <h2>4 · What it does with tickets meanwhile</h2>
+    <div class="grid">
+      <div class="card" data-v="hold"><div class="card-head"><span class="letter">A</span><h3>It takes them in and starts nothing</h3><span class="mine">recommended</span></div>
+        <p>It behaves like a station switched off. Tickets wait in it with "Waiting: the station is not set up", and once you choose a persona it runs on them. It does not spend runs that are bound to fail.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="fail"><div class="card-head"><span class="letter">B</span><h3>As today: each run fails</h3></div>
+        <p>Each ticket ends in "run failed" and has to be put back by hand once the station is set up.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section class="rules">
+    <h2>The file, and the import, as understood</h2>
+    <div class="two">
+      <ul>
+        <li><b>In the file</b>: the machines, their names, settings and sizes, the areas, labels and decor. Intakes keep their source, rules, query and order. Script stations keep their lines.</li>
+        <li><b>Not in the file</b>: tickets, items, runs, costs, an intake's last pull date, the floor's limits.</li>
+        <li><b>Things matched by name</b>: personas, skills (command name), panels and models. A board is matched by its name, because its id differs from one instance to another. The file carries the names of the boards it uses.</li>
+        <li><b>What does not match is removed from the machine</b>, never the machine itself. A desk keeps its type and priority and loses its board. An arm condition on a board loses that board; a condition left empty would let everything through, so the arm then takes nothing (and says so).</li>
+        <li><b>Ids are new</b>, as with paste. Teleporters stay paired and arms keep their conditions.</li>
+        <li>A file from an older floor goes through the same upgrades as a stored floor (sizes as built, old filters read). A file from a <b>newer</b> Fleex is refused, with a message saying so.</li>
+        <li><b>Gmail intakes</b> come in, and pull only once gog is set up on this instance, as today.</li>
+      </ul>
+      <div class="app"><h4>fleex-floor-2026-11-24.json</h4><pre>{
+  "fleexFloor": 1,
+  "layoutVersion": 7,
+  "exportedAt": "2026-11-24T09:12:00Z",
+  "boards": { "b-41f…": "Shop" },
+  "layout": {
+    "machines": [
+      { "id": "m12", "kind": "station",
+        "exec": "agent", "ref": "toto",
+        "x": 4, "y": 2, "w": 5, "h": 5,
+        "outcomes": ["ok", "ko"], "cap": 2 },
+      { "id": "m13", "kind": "desk",
+        "defaults": { "boardId": "b-41f…",
+                      "type": "fix" }, … }
+    ]
+  }
+}</pre></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const KEY = 'factory-floor-import-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'ask', p2: 'report', p3: 'badge', p4: 'hold' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${['Lands', 'Dropped', 'Look', 'Meanwhile'][i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    document.getElementById('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); })));
+  document.getElementById('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint();
+})();
+</script>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor } from './layoutOps';
+import { armFacing, canPaste, canPlace, copyOf, erase, machinesIn, move, moveMany, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor } from './layoutOps';
 import type { FactoryLayout } from './types';
 
 const empty: FactoryLayout = { w: 20, h: 10, machines: [] };
@@ -26,7 +26,16 @@ describe('fast belts', () => {
     expect(setBelt(upgraded, 2, 1, 0, true)).toBe(upgraded);
   });
 
-  it('a selection is sped up or slowed down, belts only', () => {
+  it('an arm is sped up and slowed down as a belt is, and a Fast arm is placed fast', () => {
+    let l = place(empty, specFor('arm', 4, 4, 0)!)!;
+    const arm = l.machines[0]!;
+    l = setSpeed(l, new Set([arm.id]), true);
+    expect(l.machines[0]).toMatchObject({ kind: 'arm', fast: true });
+    expect(setSpeed(l, new Set([arm.id]), false).machines[0]).not.toHaveProperty('fast');
+    expect(specFor('fastarm', 1, 1, 2)).toMatchObject({ kind: 'arm', dir: 2, fast: true, when: [] });
+  });
+
+  it('a selection is sped up or slowed down, belts (and arms) only', () => {
     let l = paintBelts(empty, { x: 1, y: 1 }, { x: 3, y: 1 }).layout;
     l = place(l, specFor('zone', 6, 6, 0)!)!;
     const ids = new Set(l.machines.map((m) => m.id));
@@ -59,7 +68,7 @@ describe('factory layout edits', () => {
     const belts = paintBelts(empty, { x: 1, y: 4 }, { x: 8, y: 4 }).layout;
     const station = specFor('agent', 5, 4, 0)!;
     const withStation = place(belts, station)!;
-    expect([station.x, station.y, station.w, station.h]).toEqual([3, 3, 5, 4]);          // a machine of 5 by 4 tiles, around where it was put
+    expect([station.x, station.y, station.w, station.h]).toEqual([3, 2, 5, 5]);          // a machine of 5 by 5 tiles, centred where it was put
     expect(withStation.machines.filter((m) => m.kind === 'belt').map((m) => m.x)).toEqual([1, 2, 8]);
     expect(place(withStation, specFor('gate', 6, 4, 0)!)).toBeNull();
     expect(canPlace(withStation, { x: -40, y: 80, w: 3, h: 3 })).toBe(true);          // the floor has no edge
@@ -98,7 +107,7 @@ describe('factory layout edits', () => {
     expect(pasted.ids).toHaveLength(3);
     expect(pasted.ids.some((id) => [station.id, arm.id, inbound.id].includes(id))).toBe(false);
     const copies = pasted.layout.machines.filter((m) => pasted.ids.includes(m.id));
-    expect(copies.find((m) => m.kind === 'station')).toMatchObject({ name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'], x: 24, y: 20 });
+    expect(copies.find((m) => m.kind === 'station')).toMatchObject({ name: 'Spec', ref: 'catalyst', outcomes: ['ok', 'rework'], x: 24, y: 19 });
     expect(copies.find((m) => m.kind === 'arm')).toMatchObject({ when: [{ field: 'outcome', op: 'is', values: ['rework'] }], x: 29, y: 21 });
     expect(copies.find((m) => m.kind === 'zone')).toMatchObject({ inbound: false });
     expect(pasted.layout.machines).toHaveLength(7);
@@ -137,5 +146,34 @@ describe('areas among the machines', () => {
     expect(moveMany(floor, new Set(['line']), 3, 0)).not.toBeNull();
     const two: FactoryLayout = { ...floor, machines: [...floor.machines, { ...line, id: 'other', x: 12 }] };
     expect(moveMany(two, new Set(['other']), -5, 0)).toBeNull();
+  });
+});
+
+describe('the way an arm faces when it is put down', () => {
+  const station = { id: 's', kind: 'station', x: 0, y: 0, w: 5, h: 4, name: 'Dev', exec: 'agent', outcomes: ['ok'], cap: 2 } as const;
+  const at = (...machines: unknown[]): FactoryLayout => ({ w: 0, h: 0, machines: machines as FactoryLayout['machines'] });
+
+  it('takes from the station, the zone, the desk or the intake beside it, and drops away from it, on any side', () => {
+    const L = at(station);
+    expect(armFacing(L, 5, 1, 2)).toBe(0);      // right of it: faces right
+    expect(armFacing(L, -1, 1, 0)).toBe(2);     // left of it: faces left
+    expect(armFacing(L, 2, 4, 0)).toBe(1);      // under it: faces down
+    expect(armFacing(L, 2, -1, 0)).toBe(3);     // above it: faces up
+    expect(armFacing(at({ id: 'z', kind: 'zone', x: 0, y: 0, w: 2, h: 2, name: 'In', release: 'auto' }), 2, 0, 3)).toBe(0);
+    expect(armFacing(at({ id: 'i', kind: 'intake', x: 0, y: 0, w: 3, h: 2, source: 'gmail' }), 1, 2, 0)).toBe(1);
+  });
+
+  it('takes from a belt that ends on it, not from one that leaves it; drops into an exit when nothing gives', () => {
+    expect(armFacing(at({ id: 'b', kind: 'belt', x: 3, y: 5, w: 1, h: 1, dir: 1 }), 3, 6, 0)).toBe(1);        // a belt above, pointing down at it
+    expect(armFacing(at({ id: 'b', kind: 'belt', x: 3, y: 5, w: 1, h: 1, dir: 0 }), 3, 6, 2)).toBe(2);        // a belt that goes elsewhere: as asked
+    expect(armFacing(at({ id: 'x', kind: 'exit', x: 4, y: 6, w: 3, h: 3, name: 'Exit' }), 3, 7, 1)).toBe(0);
+  });
+
+  it('between two that give, keeps the way asked when it fits, else drops onto something', () => {
+    const two = at(station, { id: 'z', kind: 'zone', x: 6, y: 0, w: 2, h: 2, name: 'Z', release: 'auto' });
+    expect(armFacing(two, 5, 1, 2)).toBe(2);   // from the zone into the station, as asked
+    expect(armFacing(two, 5, 1, 0)).toBe(0);   // from the station into the zone, as asked
+    expect([0, 2]).toContain(armFacing(two, 5, 1, 1));
+    expect(armFacing(at(), 3, 3, 1)).toBe(1);  // nothing round it: as asked
   });
 });

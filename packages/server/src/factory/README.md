@@ -105,8 +105,11 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   the item leaves by the outcome the agent names. An item has no thread, so each visit is kept in
   `factory_item_runs` (migration 048) with the agent's reply and the deliverable it produced (saved with no ticket, so
   it shows in Docs); its card lists them, under "What stations said". A question keeps it in the station; run again,
-  the agent is told what it said before. A script station refuses an item: it runs in a ticket's worktrees. Item
-  visits are not in the floor's figures, nor in a station's latest runs (those read `factory_runs`).
+  the agent is told what it said before. A script station runs on an item too (see "Named actions, and the script station"). Item
+  visits count with the tickets' runs: in a station's latest runs (`GET /api/factory/runs` reads both tables, an item
+  by its title and source) and in the floor's figures and the cost layer (`computeStats`: an item's run has no ticket,
+  so its cost is read by execution, `AgentEventStorePort.getExecutionsByIds`). An exit's counter counts the items
+  archived there with the tickets it shipped.
 - **An intake** (`kind: 'intake'`, Build › Area › Intake, picked on `docs/factory/intake.html`, I1) is a dock of 3 by
   2, one per source. Items come in through `POST /api/factory/items` (`FactoryEngine.ingest`): what the sources'
   connectors will call, and what **New item** (on the command card with the intake selected, or its popup's button)
@@ -136,6 +139,76 @@ one (not built yet). Its content is not copied: a title, who it is from, a few l
   what every item has, edited (title, from, link, tags that arms read, text; `PATCH /api/factory/items/:id`), its
   source, messages and place read only; its source's part, its fields edited as they suit (each source will have
   its own part there as its connector comes); the item as the Factory holds it, as JSON; what stations said.
+
+### An item's content, and what it delivered
+
+Picked on `docs/factory/item-content.html` (A, A, A). gog gives a mail's HTML part as its text when the mail has no
+text part: the Gmail adapter reads each pull twice (text, then `--body-format html`), keeps the text part (or the HTML
+part read as text, `htmlToText` in shared) and the HTML part as sent. The whole of an item's latest message is kept
+apart, in `factory_item_bodies` (migration 051), written when the message comes and not each time the item moves;
+`GET /api/factory/items/:id/body` gives it (`kept: false` for an item made by hand, or kept before: its first lines,
+read as text when they are HTML). Before that, only the first 2,000 characters of a mail were kept: such an item is
+asked again from its source when it is opened or a station runs on it (`readItem`, `FactoryEngine.itemBody`; a mail:
+`gog gmail thread get`, the Gmail API's thread, its parts decoded by the adapter), and its message is kept whole then.
+
+A station running on a mail is told **its whole conversation**, asked again from Gmail at the start of the run: every
+message, oldest first, each whole (20,000 characters at most each, 60,000 in all: past that the oldest are left out,
+and the brief says so). Without its source (gog cannot read Gmail), the latest message as kept.
+
+- **Its card** shows text, never HTML. When a station delivered something on it, the card's first button opens the
+  latest deliverable ("Open delivered: …").
+- **Its popup**: a band under the bar lists what it delivered, each deliverable a card to open (`DeliveredBand`).
+  Content has two tabs for a mail (`ItemContent`): Text, its whole message, read only (an item made by hand keeps its
+  text editable); Email, its HTML as sent, in a frame that runs nothing (`sandbox` without scripts, a CSP that fetches
+  nothing) and opens links in a new tab. Images from the internet stay unloaded until Load images: loading them tells
+  the sender the mail was opened.
+
+### Tickets, items or both
+
+The lists that hold both (Tab's list of the floor, what left by the exits) have a choice, **Tickets · Items · Both**,
+each with its count (`KindChoice.tsx`). It narrows the list only: nothing is faded on the floor, unlike Tab's filters.
+It is kept per list in the viewer's browser; Tab opens on the tickets, the exits' list on both.
+
+### Archived items
+
+Picked on `docs/factory/archived-items.html` (A, A, A). **Archived** on the floor's card (every intake) and on an
+intake's card (what it let in) lists the items archived over the stats' period (`GET /api/factory/items/archived`),
+the latest first, with how each left: **by hand** (Archive, Give back), **by an exit** (named when that was kept, since
+an item archived at an exit keeps it), or **dropped by a rule** (hidden unless the filter asks). Filters: a title or
+sender, intakes, how it left, sources. A line opens the item read only (`GET /api/factory/items/:id`: what it
+delivered, its content, how it left, what the stations said); **Bring back** (`POST …/bring-back`,
+`FactoryEngine.bringBack`) puts it in the intake it came in by, past the rules, with what it had.
+
+### Gmail: a pulled intake
+
+Gmail is the first source with a connector. It is **pulled**: Fleex asks it, rather than it telling Fleex
+(`PULLED_SOURCES` in `item-sources.ts`). The Factory knows nothing of the tool that reads the mailbox: it asks a
+`MailSourcePort` (`mail-source.port.ts`: `status()`, `search(query, since)`), and the one adapter today is gogcli
+(`infrastructure/google/gog-mail.source.ts`), as for the agenda: installed and authorized on the server host
+(`gog auth add you@example.com --services gmail --gmail-scope readonly`), run read-only, `FLEEX_GOG_ACCOUNT` and
+`FLEEX_GOG_BIN` as for the agenda. Another tool would be another adapter; nothing else would change.
+
+- A Gmail intake has **a query** (Gmail's search syntax) and **an interval** (`everySec`, five minutes unless said,
+  one minute at least), and **no rules**: the query is the filter. Its popup says gogcli is required, with the setup
+  steps until gog can read Gmail (`GET /api/factory/mail/status`), then its version and account.
+- `IntakePuller` (`intake-puller.ts`, every 15 s) pulls each intake that is due: one `gog gmail messages search` with
+  `(<query>) after:<epoch>`, from the intake's cursor minus ten minutes (for what Gmail indexed late), every page,
+  each message's text, recipients and attachments (a flag an older gogcli does not know, `--include-recipients` before 0.44 or
+  `--include-attachments` before 0.40, is dropped and the search run again). **The first time it sees an intake it only sets the cursor**: what
+  was in the mailbox before stays there. Each message is ingested as an item of its thread (key: the thread id),
+  naming the intake that saw it; its fields are To, Cc, labels, attachment. The cursor and the last error are kept in
+  `factory_intake_pulls` (migration 050), not in the layout: a failed pull keeps its cursor, says why on the intake
+  (`PULL FAILED` on the floor, the reason in its popup) and waits its interval. **Pull now** in the popup
+  (`POST /api/factory/intakes/:id/pull`) does not wait.
+- `ItemInput.at` is when the message came. A message no later than the last one known of its conversation is
+  nothing new: a pull sees the same message twice, and an archived item stays archived until a new one comes. Without
+  `at` (by hand, `POST /api/factory/items`), every entry is new, as before.
+- **One mail is one item**, whichever intakes see it. The intakes of a source are **served in order** (`priority`,
+  kept dense 1..n per source by the save; Earlier / Later in the popup). An item that waits on the dock of an intake
+  served later is taken over by one served earlier that sees it too: the quiet delay is when that is settled. Once an
+  arm took it out, it stays on its lane. An archived item that comes back goes to the intake it came in by, or to the
+  one that saw it when that one is served first. A judgement (is it urgent?) is not a query: one intake, then a
+  triage station whose outcomes lead to the lanes.
 
 
 
@@ -180,6 +253,14 @@ is added, as a migration is for a table. A change of shape is converted when the
 geometry cannot be: the step returns null, the old layout is kept as an archived floor (`default@v<n>-<time>` in
 `factory_floors`), the floor starts over with only Inbound, the tickets go back to Inbound, and the page says so once
 (`notice` in the snapshot, `POST /api/factory/notice/ack`). Version 2 is the first such step: stations grew from 3 by 3.
+
+**Odd sizes.** A machine of a fixed size is odd on both sides, so that what comes in and goes out lines up on its
+middle row: a station is 5 by 5 (5 by 3 and 7 by 5 can be chosen too), a desk and an intake 3 by 3. Zones, exits and
+areas are sized by hand. Nothing was migrated: a station built 5 by 4, a dock built 3 by 2, keep their size (the engine
+accepts both) until they are given another in their popup (Size: it grows down and right, and says when there is no
+room); no layout version was needed. A plan made from a workflow puts its first arm out on a station's middle row. The
+status station is no longer offered in the build menu (a Set gantry on a belt does what it did); one already built
+still works.
 
 ## Areas
 
@@ -340,7 +421,24 @@ Nothing of it is in the engine or in the layout: it is the web renderer reading 
   the arrow under it take the same colour. Under it, painted on its own tile, an arrow in that colour says which way it works: narrow where it takes, wide
   where it drops, its head at the edge. In build mode, an arm that is selected, or in hand before it is put down,
   shows the tile it takes from (blue, dashed, "TAKES FROM" and what is there) and the tile it drops on (green, "DROPS
-  ON"), and that R turns it.
+  ON"), and that a right click turns it. **In hand, an arm finds its own way** (`armFacing` in `layoutOps.ts`): put
+  against a station, a zone, a desk, an intake, an arrival or a belt that ends on its tile, it takes from that and drops
+  away from it, on whichever side; with nothing that gives, it drops into an exit or a departure beside it; else it faces
+  the way chosen. A right click (or Face) turns what is in hand a quarter turn, from the way it is shown, and it then
+  stays as turned until it is put down.
+- **What left by an exit** (`FactoryExitLog.tsx`, picked on `docs/factory/exit-log.html`: A, A, A). A double-click on
+  an exit out of build mode, Enter with it selected, or **View** on its card (Edit, its name and size, is under E)
+  opens a list like Tab's: the tickets it shipped over the stats' period (the period its counter on the floor shows),
+  each with its lead time (hand-over to exit), when it left and what it is now (one set back to work since is flagged
+  "reopened"), and the items archived there, in the same list, the latest first. **Exits** on the floor's card (under
+  Stats) opens the same list for every exit of the floor, grouped by exit (one removed since keeps the name its runs
+  remember). Filters as Tab's: a title, number or tag, exits, boards, types (an item's is its source), priorities,
+  what it is now. Figures over what the filters keep: shipped, throughput (shipped per day of the period), median
+  lead time, reopened since, items archived; and the tickets shipped each day as bars. Detail opens a ticket;
+  Settings opens the exit's own popup. `GET /api/factory/exits/:id/log?days=` (one exit) and
+  `GET /api/factory/exits/log?days=` (every exit) read the `exit` runs, with each ticket as it is now, and the items
+  archived there: an item archived at an exit keeps that exit in `machine_id` (only those archived since).
+  An exit's name on the floor stops short of its counter rather than running under it.
 - **A zone** is paint on the floor, in the colour of the status it sets (the accent for the intake): a faint fill, a
   dashed line, three corners. What it says is stencilled: its name, a padlock (shut and red: nothing leaves without you; open
   and green, with chevrons: it lets tickets out by itself), and how many tickets it holds as a large figure on the ground, under
@@ -410,6 +508,22 @@ the arms, under the belt's id. A ticket in that arm is `arm` on the belt's id; a
 toll, already dealt with, and is rejected again without being counted again.
 
 ## Named actions, and the script station
+
+**Its panel** (picked on `docs/factory/script-station.html`: B, A, A) says first what runs, on a ticket and on an item,
+and says it when nothing would. Each line chooses where it runs (the workspace, every repository of the ticket, one
+repository), and that can change at any time; a new line runs in the workspace. The variables a command gets are pills
+to click, put quoted in the command last edited. A ticket's default action and what to do when something goes wrong are
+folded away. **When nothing ran at all** (an item and only lines for repositories, a ticket with no repository), the
+station leaves by "ko" (or its own "unconfigured"), and says why: leaving by "ok" would say it was done.
+
+**On an item**, a script station has no repository and no worktree: its lines for the workspace run in a folder of the
+item's own (`factory-item-<id>` under the workspaces), its lines for a repository have nothing to run for. The item is
+in the environment, under the same names whatever its source (`item-env.ts`): `FLEEX_ITEM_KEY` (its key in its source:
+a Gmail thread id), `FLEEX_ITEM_SOURCE`, `FLEEX_ITEM_TITLE`, `FLEEX_ITEM_AUTHOR`, `FLEEX_ITEM_URL`, `FLEEX_ITEM_TAGS`,
+`FLEEX_ITEM_ID`, `FLEEX_ITEM_MESSAGES`, each field of its source as `FLEEX_ITEM_FIELD_<NAME>`, and the whole item as
+`FLEEX_ITEM_JSON`. A new source brings its fields; the station has nothing to learn. What the commands printed is the
+station's answer on the item. Values from outside (a subject) are exported quoted, never spliced: a command quotes them
+(`gog gmail archive "$FLEEX_ITEM_KEY"`).
 
 **Named actions** are actions that have a name of their own ("test", "lint", "build"), which each repository fills
 in with its own command. The list is `namedActions` in the configuration, edited in Settings › General; a
@@ -491,12 +605,91 @@ They are placed from Build › Move › Teleporter, as a departure; the popup se
 (among the arrivals of the floor) and the colour, and an arrival's popup lists the departures that lead to it. Copied
 with its arrival, a departure leads to the copy; copied alone, to the arrival it led to.
 
+## Messages on the floor, and Enter to talk
+
+On the Factory, toasts are not cards (picked on `docs/factory/floor-messages.html`): the page sets the Toaster's
+`floor` skin (`useToastSkin`), and every toast, the floor's own and Fleex's notifications, is a line of text over the
+console's middle, with no plate, fading by itself (hovering holds it; an action stays a link, a toast that waits for
+something stays). The Toaster keeps the last 50 (`useToastHistory`).
+
+Enter on the floor (with nothing selected, or a ticket selected) opens a line to talk over the console
+(`FactoryTalk.tsx`), with the log of those 50 above it; the messages stop showing over the floor meanwhile (`quiet`
+skin). Who it talks to is at its start and Tab changes it: the assistant, or a ticket (the one selected, else the first
+that needs you). To a ticket it is a comment in its thread, as you (an answer, when it waits on a question); its
+agents' replies come back as toasts. To the assistant it is a question in a conversation of its own ("Factory floor"),
+told once that its answer is read in a one-line log; the answer comes back as a toast, with Open to read it whole.
+With a ticket selected, Enter talks to it: its thread opens with Open, or a double-click. An item still opens on Enter.
+
+A ticket a station sets aside writes to you in that log (picked on `docs/factory/ticket-talk.html`): its agent's
+question (its last comment), with its closed choices as replies to click, or its failed run, with Run again. Once per
+set-aside, and the line then opens on it (a ticket selected first, then the last one that wrote, then the first that
+needs you). A ticket that waited before the page opened puts its question in the log when the line opens on it. A
+reply to a question is the answer, so its station runs again, as from the ticket's thread; a reply to a failed run is
+a comment, and Run again stays a click. A gate does not write: talking to it comments, its decision stays on its
+buttons. The station's comment carries the agent's closed choices for this (`questions`).
+
+A slash in the line lists the commands for whoever it talks to (`talkCommands.ts`), those that start with what is
+typed: Tab completes, the arrows choose, Enter runs. A ticket's are those of its command card that apply where it
+stands: `/run` (its station again, after a question, a failure, a set-aside), `/stop` (the run, kept in its station),
+`/release` (out of its zone), `/open`, `/star` or `/unstar`, `/giveback` (typed twice). The assistant's: `/new`, a new
+conversation. A command is no comment: nothing is posted in the thread; the log says what it did. A gate's
+decision has no command: it stays on its buttons.
+
+## Fast arms
+
+An arm can be fast, as a belt can (`fast` on the arm, picked on `docs/factory/fast-arm.html`): it swings twice as
+fast, there and back. It keeps its own colour; what says it is fast, in every skin, is the fast belts' blue, painted
+by the renderer over the skin: a double ring round its pivot, and a trail behind its cup while it swings. In build
+mode, Fast arm is in Move next to Arm (as Fast belt is next to Belt), and Speed up / Slow down acts on the arms
+selected as on the belts.
+
+## No top bar: the overlays
+
+The Factory has no bar over the floor (picked on `docs/factory/hud-overlay.html`). What it held is on the floor:
+the counters top right, with no plate behind them (tickets, items, runs in progress and per hour against their limits,
+what waits for you; each says what it counts on hover, `FactoryHudOverlay.tsx`); the search and filters in a popup
+out of the Filters tab on the minimap, which counts the filters on and the tickets kept ("/" opens it, Enter jumps to
+the next ticket found, Escape clears the search then closes); and, in a strip over the command card, the emergency
+stop beside the switch that hides the console (U). The stop is held for a second to stop the floor (let go before,
+nothing happens); stopped, it reads "Stopped · Restart" and the floor gets the hazard tape of build mode. With the
+console hidden, the tab and the strip stay in the floor's bottom corners. The desktop title bar reads fleex.factory
+on this page and fleex.dev elsewhere.
+
+## A station that is not set up
+
+A station that runs something and has nothing to run yet takes tickets in and starts nothing on them, as if switched
+off: an agent, skill or panel station with no persona, skill or panel chosen, a script station with no line and no
+named action (`setupGap` in `engine.ts`). Its tickets wait with "X is not set up (no persona): it starts nothing until
+it is", and start as soon as it is set. On the floor it has a dashed amber outline and a "!" in every skin (painted by
+the renderer over the skin, `unsetMarks`), and it is listed with what needs you. The page also marks one that names a
+persona, skill or panel this instance does not have (`setupGap` in `floorFile.ts`); the engine does not know those
+lists, and such a station still runs (and fails).
+
+## Exporting and importing a floor
+
+In build mode, **Export** downloads the floor as `fleex-floor-<date>.json` (with machines selected, only them), and
+**Import** reads one back (`floorFile.ts`, picked on `docs/factory/floor-import.html`). The file holds the machines and
+their settings: no tickets, items, runs, nor an intake's last pull. What a machine names is matched by name on import:
+a persona, a skill (its command), a panel, a model, a board (the file carries the name of each board it uses; a
+board's id is the instance's own). What this instance does not have is taken off the machine, never the machine
+itself, and listed in a report with a way to each: a station left without its persona is then not set up (above).
+An arm or a toll whose "board is" condition is left with no board keeps the board it named, which no ticket is on
+here: it takes nothing rather than everything. A model is kept when the list of models is only the fallback one.
+Imported machines get new ids (teleporters stay paired). On an empty floor the import replaces it; otherwise it asks:
+replace the floor (Undo brings it back, the tickets of the machines gone lie on the floor), or take it in hand like a
+paste (the report shows once it is put down). A file of another layout version is refused.
+
 ## What waits for someone
 
 Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,
 `FactoryNeeds.tsx`): a decision at a gate, a question, a failed run, a ticket set aside by a human, one lying on the
 floor; longest wait first, with what each is, where it stands and for how long. N goes to the next one and Shift+N to the one before
 (**Next** on the command card, at the same place in every menu out of build mode); the arrows only ever move the view.
+
+A zone can say that its tickets wait for someone ("Its tickets wait for me" in its popup, `needsYou`): a zone of work
+done by hand, such as Doing. Every ticket in it, released or not, is then listed too, as "Doing · waiting for you",
+counted from when it came into the zone; it leaves the list when an arm takes it out. Other zones list nothing, so
+Inbound and queues do not fill the list (picked on `docs/factory/zone-needs.html`).
 
 A click on a ticket, there or on the floor, opens its thread beside its machine (`FactoryPeek.tsx`): the whole
 conversation, scrolled to its end, with the latest deliverables on top. What the ticket waits for is done from there:
@@ -585,9 +778,11 @@ tick, no `factory_*` table is read or written, the routes answer 403 and the nav
 
 ## What it touches
 
-Everything lives here, in `packages/web/src/factory/`, and in five tables created by migrations `045_factory`
-(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`) and
-`048_factory_item_runs` (`factory_item_runs`); `049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
+Everything lives here, in `packages/web/src/factory/`, and in seven tables created by migrations `045_factory`
+(`factory_floors`, `factory_tickets`, `factory_runs`), `047_factory_items` (`factory_items`),
+`048_factory_item_runs` (`factory_item_runs`), `050_factory_intake_pulls` (`factory_intake_pulls`) and
+`051_factory_item_bodies` (`factory_item_bodies`);
+`049_factory_item_fields` adds `fields` to `factory_items`. No existing table is altered: a ticket is "handed over" when it
 has a row in `factory_tickets`.
 
 It does write through the normal paths, as any automation would: a zone, a status station or the exit changes the
@@ -615,6 +810,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
   changed in Fleex (`ticket.updated`, `moved`, `blocked`, `favorited`, `deleted` and their opposites) is re-read at once
   by its event; the sweep is the safety net, mainly for archiving;
 - each station run: its row in `factory_runs`, start and end, beside the usual execution log;
+- each pull of a Gmail intake (at its interval, five minutes unless said): a gog call, then the items it touched and
+  one upsert in `factory_intake_pulls`;
 - the page, while open: the stats every 30 s (cached 20 s on the server: runs of the period, then the executions of
   the tickets that ran, 8 at a time), a machine popup's runs every 4 s, a ticket's thread every 3 s.
 
@@ -622,10 +819,12 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 | File | What |
 |---|---|
-| `infrastructure/migrations/index.ts` | registers `045_factory` to `049_factory_item_fields` (046, an index on `factory_runs`, among them) |
+| `infrastructure/migrations/index.ts` | registers `045_factory` to `051_factory_item_bodies` (046, an index on `factory_runs`, among them) |
+| `infrastructure/google/gog-mail.source.ts`, `google-calendar.client.ts` | the gogcli adapter of `MailSourcePort`; the agenda's client shares its gog runner and error mapping with it (`defaultGogRunner`, `gogFailure`, `parseJson`) |
 | shared `types/routine.ts`, `application/use-cases/execute-agent.ts` | `RunSubject.heading`: the first line of a run with no ticket ("Factory item from Slack"); unset, it stays "Routine run" |
 | `infrastructure/adapters/storage-factory.ts` | `factoryStore` per driver |
-| `infrastructure/container.ts` | builds the module, exposes `container.factory` |
+| `infrastructure/container.ts` | builds the module (with the gogcli mail source), exposes `container.factory` |
+| `application/ports/agent-event-store.port.ts` and its four adapters | an optional `getExecutionsByIds`: what a run with no ticket (an item's) cost. It can stay |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
@@ -651,8 +850,8 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 
 ## Removing it
 
-1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 049 to 045), or drop the five tables.
-2. Delete this folder, `packages/web/src/factory/`, the migration file and the test files
+1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 051 to 045), or drop the seven tables.
+2. Delete this folder, `packages/web/src/factory/`, `infrastructure/google/gog-mail.source.ts`, the migration files and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step
    execution does not; it can stay, since it changes nothing while unset.

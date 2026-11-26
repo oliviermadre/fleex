@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { order, type Layer, type Piece } from './skin';
+import { order, paintPieces, type Layer, type Piece } from './skin';
 
 const log: string[] = [];
 const piece = (name: string, layer: Layer, depth: number, on?: Piece): Piece => ({ layer, depth, on, draw: () => log.push(name) });
@@ -29,5 +29,20 @@ describe('the order pieces are painted in', () => {
     const a: Piece = piece('a', 'standing', 0), b = piece('b', 'standing', 0, a);
     a.on = b;
     expect(names([a, b]).sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('painting the pieces', () => {
+  it('leaves out a piece that fails, puts the canvas back as it was, and paints the rest: the arms after a person that threw', () => {
+    const T = { a: 2 }, calls: string[] = [], told: string[] = [];
+    const ctx = {
+      globalAlpha: 1, globalCompositeOperation: 'source-over' as GlobalCompositeOperation, lineCap: 'butt' as CanvasLineCap, lineJoin: 'miter' as CanvasLineJoin, shadowBlur: 0,
+      getTransform: () => T as unknown as DOMMatrix, setTransform: (m: unknown) => { calls.push(m === T ? 'transform back' : 'other'); }, setLineDash: () => { calls.push('dashes off'); },
+    };
+    const person: Piece = { layer: 'standing', depth: 6.5, draw: () => { ctx.globalAlpha = 0.35; ctx.lineCap = 'round'; throw new Error('no shirt'); } };
+    const arm: Piece = { layer: 'standing', depth: 7, draw: () => { calls.push(`arm at alpha ${ctx.globalAlpha}, cap ${ctx.lineCap}`); } };
+    paintPieces([arm, person], ctx as never, (err) => told.push((err as Error).message));
+    expect(calls).toEqual(['transform back', 'dashes off', 'arm at alpha 1, cap butt']);
+    expect(told).toEqual(['no shirt']);
   });
 });

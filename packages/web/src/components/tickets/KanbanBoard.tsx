@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useFactoryStore } from '../../factory/factoryStore';
 import { NameInputModal } from '../ui/NameInputModal';
 import { DEFAULT_BOARD_EMOJI } from '../../lib/boardEmoji';
 import { TICKET_STATUSES } from '@fleex/shared';
@@ -36,6 +37,9 @@ export function KanbanBoard() {
   // Load agentic activity on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
   useEffect(() => { loadActivity(ticketIds); }, [ticketIds, loadActivity]);
+  /* which tickets the Factory drives, for the toggle on each card: read once per board, again when tickets change */
+  const factoryOn = useFactoryStore((s) => s.enabled), loadManaged = useFactoryStore((s) => s.loadManaged);
+  useEffect(() => { if (factoryOn) void loadManaged(); }, [factoryOn, ticketIds, loadManaged]);
 
   // Collapsed columns state with localStorage persistence
   const COLLAPSED_STORAGE_KEY = 'fleex:collapsedColumns';

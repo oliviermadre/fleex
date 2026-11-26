@@ -100,7 +100,8 @@ export interface GogResult {
 
 export type GogRunner = (args: string[]) => Promise<GogResult>;
 
-function defaultRunner(bin: string): GogRunner {
+/** Runs the gog binary; never rejects (a missing binary is `notFound`). Shared with the Gmail intakes (`gog-mail.source.ts`). */
+export function defaultGogRunner(bin: string): GogRunner {
   return (args) => new Promise((resolve) => {
     execFile(bin, args, { timeout: GOG_TIMEOUT_MS, maxBuffer: GOG_MAX_BUFFER, encoding: 'utf8' }, (err, stdout, stderr) => {
       if (!err) return resolve({ code: 0, stdout, stderr });
@@ -112,7 +113,7 @@ function defaultRunner(bin: string): GogRunner {
   });
 }
 
-function parseJson(text: string): Record<string, unknown> | null {
+export function parseJson(text: string): Record<string, unknown> | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   try {
@@ -131,6 +132,18 @@ function gogError(res: GogResult): { message: string; cls: string | null } {
     if (typeof e.message === 'string') return { message: e.message.trim(), cls: typeof e.class === 'string' ? e.class : null };
   }
   return { message: res.stderr.trim().split('\n')[0] || `gog exited with code ${res.code}`, cls: null };
+}
+
+/** The typed error of a gog command that failed (not a missing binary: see `GogNotInstalledError`). */
+export function gogFailure(res: GogResult, args: string[]): GoogleNotConnectedError | GoogleApiError {
+  const { message, cls } = gogError(res);
+  // Setup not done: no OAuth client (config), no / unknown account (usage), consent missing or expired (auth).
+  if (res.code === GOG_EXIT.auth_required || res.code === GOG_EXIT.config || cls === 'auth' || cls === 'config'
+    || (res.code === GOG_EXIT.usage && /account/i.test(message))) {
+    return new GoogleNotConnectedError(message);
+  }
+  const status = res.code === GOG_EXIT.not_found ? 404 : res.code === GOG_EXIT.permission_denied ? 403 : res.code === GOG_EXIT.rate_limited ? 429 : 502;
+  return new GoogleApiError(`gog ${args.slice(0, 2).join(' ')}: ${message}`, status);
 }
 
 export interface GoogleCalendarClientDeps {
@@ -154,7 +167,7 @@ export class GoogleCalendarClient {
   constructor(deps: GoogleCalendarClientDeps = {}) {
     this.bin = deps.bin ?? (process.env['FLEEX_GOG_BIN'] || 'gog');
     this.account = deps.account !== undefined ? deps.account : (process.env['FLEEX_GOG_ACCOUNT'] || null);
-    this.run = deps.run ?? defaultRunner(this.bin);
+    this.run = deps.run ?? defaultGogRunner(this.bin);
     this.now = deps.now ?? Date.now;
     this.logger = deps.logger;
   }
@@ -175,14 +188,7 @@ export class GoogleCalendarClient {
       if (!body) throw new GoogleApiError(`gog ${args.slice(0, 2).join(' ')}: unreadable output`, 502);
       return body;
     }
-    const { message, cls } = gogError(res);
-    // Setup not done: no OAuth client (config), no / unknown account (usage), consent missing or expired (auth).
-    if (res.code === GOG_EXIT.auth_required || res.code === GOG_EXIT.config || cls === 'auth' || cls === 'config'
-      || (res.code === GOG_EXIT.usage && /account/i.test(message))) {
-      throw new GoogleNotConnectedError(message);
-    }
-    const status = res.code === GOG_EXIT.not_found ? 404 : res.code === GOG_EXIT.permission_denied ? 403 : res.code === GOG_EXIT.rate_limited ? 429 : 502;
-    throw new GoogleApiError(`gog ${args.slice(0, 2).join(' ')}: ${message}`, status);
+    throw gogFailure(res, args);
   }
 
   /** `gog --version` ("v0.47.1"), null when gog isn't installed. */

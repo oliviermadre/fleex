@@ -17,7 +17,7 @@ import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
 import { blankOp, choicesFor, incompleteOp, SET_FIELD_LABEL, SET_FIELDS, TAG_OP_HINT, TAG_OP_LABEL, type AnyField, type SetOp } from './setOps';
 import { TAG_OPS, type TagOp } from './tags';
-import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetName, WORKSPACE, type ScriptLine, type ScriptSpec } from './script';
+import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetLabel, WORKSPACE, whatRuns, type ScriptLine, type ScriptSpec } from './script';
 import { useSettingsStore } from '../stores/settingsStore';
 import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
@@ -28,7 +28,8 @@ import { since, span } from './format';
 import { FIcon } from './icons';
 import { MAX_PLACES } from './layoutOps';
 import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
-import { COMMON_FIELDS, opsFor, SOURCE_FIELDS, type SourceField } from './itemSources';
+import { COMMON_FIELDS, opsFor, PULLED_SOURCES, SOURCE_FIELDS, type SourceField } from './itemSources';
+import { FactoryMailSetup, useMailStatus } from './FactoryMailSetup';
 import { toast } from '../lib/toast';
 import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
@@ -154,56 +155,126 @@ function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetO
 }
 
 /**
- * A script station: an optional default action, lines of its own (for a repository, for any repository, or for the
- * ticket's workspace), and what it concludes when it has nothing to run for a repository. A line with no command yet
- * stays in this form only.
+ * The sizes a machine of a fixed size can be given, odd so that what comes in and goes out lines up on its middle: a
+ * station (but a status one), a desk, an intake. One built before keeps its size until it is given another.
+ */
+const sizesOf = (m: MachineSpec): [number, number][] | null =>
+  m.kind === 'station' ? (m.exec === 'native' ? null : [[5, 5], [5, 3], [7, 5]])
+    : m.kind === 'desk' || m.kind === 'intake' ? [[3, 3]] : null;
+
+const ITEM_VARS = ['FLEEX_ITEM_KEY', 'FLEEX_ITEM_SOURCE', 'FLEEX_ITEM_TITLE', 'FLEEX_ITEM_AUTHOR', 'FLEEX_ITEM_URL', 'FLEEX_ITEM_TAGS', 'FLEEX_ITEM_ID', 'FLEEX_ITEM_FIELD_LABELS', 'FLEEX_ITEM_JSON', 'FLEEX_WORKSPACE'];
+const TICKET_VARS = ['FLEEX_TICKET_NUMBER', 'FLEEX_TICKET_TITLE', 'FLEEX_TICKET_ID', 'FLEEX_REPO', 'FLEEX_WORKSPACE'];
+
+/**
+ * A script station's settings (picked on `docs/factory/script-station.html`: B, A, A). What runs, on a ticket and on
+ * an item, in words first, and said when nothing would (it then leaves by "ko"). Each line chooses where it runs, and
+ * that can change at any time; a new line runs in the workspace. The variables a command gets are pills: a click puts
+ * one, quoted, in the command last edited. What only a ticket's repositories need, and what to do when something goes
+ * wrong, are folded away.
  */
 function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; onChange: (s: ScriptSpec) => void }) {
   const named = useSettingsStore((s) => s.settings.namedActions) ?? [], repos = useSettingsStore((s) => s.settings.resolvedRepositories ?? s.settings.repositories) ?? [];
   const saved = scriptOf(script), savedKey = JSON.stringify(saved.lines);
-  const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [target, setTarget] = useState(ANY_REPO);
+  const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [focus, setFocus] = useState(0), [vars, setVars] = useState<'item' | 'ticket'>('item');
   useEffect(() => { setRows((cur) => (JSON.stringify(cur.filter((l) => !incompleteLine(l))) === savedKey ? cur : (JSON.parse(savedKey) as ScriptLine[]))); }, [savedKey]);
   const put = (patch: Partial<ScriptSpec>) => onChange({ ...saved, ...patch });
   const commit = (next: ScriptLine[]) => { setRows(next); const complete = next.filter((l) => !incompleteLine(l)); if (JSON.stringify(complete) !== savedKey) put({ lines: complete }); };
   const line = (i: number, l: ScriptLine) => commit(rows.map((r, k) => (k === i ? l : r)));
-  const free = [ANY_REPO, WORKSPACE, ...repos].filter((t) => !rows.some((r) => r.target === t));
-  const pick = free.includes(target) ? target : free[0] ?? '';
+  const all = [WORKSPACE, ANY_REPO, ...repos];
+  /* one line per place: a line can move to a place no other line has */
+  const placesFor = (i: number) => all.filter((t) => t === rows[i]?.target || !rows.some((r, k) => k !== i && r.target === t));
+  const firstFree = all.find((t) => !rows.some((r) => r.target === t));
+  const runs = whatRuns({ ...saved, lines: rows });
+  const insert = (v: string) => {
+    const i = rows[focus] ? focus : rows.length - 1;
+    if (i < 0) { if (firstFree) commit([...rows, { target: firstFree, kind: 'command', value: `"$${v}"` }]); return; }
+    const l = rows[i]!;
+    if (l.kind !== 'command') return;
+    line(i, { ...l, value: `${l.value}${l.value && !l.value.endsWith(' ') ? ' ' : ''}"$${v}"` });
+  };
+  const Summary = ({ label, list, item }: { label: string; list: string[]; item?: boolean }) => (
+    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-2">
+      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[var(--theme-text-muted)]">{label}</span>
+      <div className="flex min-w-0 flex-col gap-0.5 text-xs">
+        {list.length ? list.map((x) => <span key={x} className="break-words font-mono text-[var(--theme-text-primary)]">{x}</span>)
+          : <span className="text-[var(--theme-danger)]">Nothing: it leaves by "ko".{item && rows.some((r) => r.target !== WORKSPACE && !incompleteLine(r)) ? ' An item has no repository: a line for a repository does not run for it. Set the line to Workspace.' : ''}</span>}
+      </div>
+    </div>
+  );
   return (
     <>
-      <Hint>Runs shell commands when a ticket arrives: in each of the ticket's worktrees, or in its workspace. No agent runs here. It ends "ok" when every command exits with 0, "ko" when one does not.</Hint>
-      <Select id="f-script-action" label="Default action" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
-        options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
-      <Hint>{saved.action ? `Each repository of the ticket runs its own "${saved.action}", unless a line below says otherwise.` : 'With none, only the lines below are run.'}{named.length === 0 ? ' Named actions are created in Settings, under General, then filled in repository by repository.' : ''}</Hint>
-      <div className="text-xs font-medium text-[var(--theme-text-secondary)]">Lines of this station</div>
-      {rows.length === 0 && <Hint>None.</Hint>}
+      <Hint>Shell commands, no agent: "ok" when every command exits with 0, "ko" when one does not, or when nothing ran. On an item, what the commands printed is the station's answer.</Hint>
+      <Head>What runs</Head>
+      <div className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-2.5" aria-label="What runs">
+        <Summary label="A ticket" list={runs.ticket} />
+        <Summary label="An item" list={runs.item} item />
+      </div>
+      <Head>Lines</Head>
+      {rows.length === 0 && <Hint>None yet.</Hint>}
       {rows.map((l, i) => (
-        <div key={l.target} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Line for ${targetName(l.target)}`}>
+        <div key={i} className="flex flex-col gap-1.5 rounded-md border border-[var(--theme-border)] p-2" role="group" aria-label={`Line ${i + 1}`}>
           <div className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--theme-text-primary)]">{targetName(l.target)}</span>
+            <div className="min-w-0 flex-1"><Select id={`f-script-target-${i}`} aria-label="Where it runs" value={l.target} onChange={(e) => line(i, { ...l, target: e.target.value, ...(e.target.value === WORKSPACE ? { kind: 'command' as const } : {}) })}
+              options={placesFor(i).map((t) => ({ value: t, label: targetLabel(t) }))} /></div>
             {l.target !== WORKSPACE && (
               <div className="w-36 flex-none"><Select id={`f-script-kind-${i}`} aria-label="What it runs" value={l.kind} onChange={(e) => line(i, { ...l, kind: e.target.value as ScriptLine['kind'], value: '' })} options={[{ value: 'command', label: 'a command' }, { value: 'action', label: 'a named action' }]} /></div>
             )}
-            <Button size="sm" variant="ghost" aria-label={`Remove the line for ${targetName(l.target)}`} onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
+            <Button size="sm" variant="ghost" aria-label={`Remove line ${i + 1}`} onClick={() => commit(rows.filter((_, k) => k !== i))}>×</Button>
           </div>
           {l.kind === 'action'
             ? <Select id={`f-script-value-${i}`} aria-label="Named action" value={l.value} onChange={(e) => line(i, { ...l, value: e.target.value })} options={[{ value: '', label: 'choose' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(l.value && !named.some((a) => a.name === l.value) ? [{ value: l.value, label: l.value }] : [])]} />
-            : <CommitInput id={`f-script-value-${i}`} label="" placeholder={l.target === WORKSPACE ? 'a command, run once in the workspace of the ticket' : 'a command, run in the worktree'} value={l.value} onCommit={(v) => line(i, { ...l, value: v.trim() })} />}
+            : <ScriptCommand id={`f-script-value-${i}`} value={l.value} placeholder={l.target === WORKSPACE ? 'a command, run once: in the ticket\'s workspace, or the item\'s folder' : 'a command, run in the worktree'} onFocus={() => setFocus(i)} onCommit={(v) => line(i, { ...l, value: v })} />}
         </div>
       ))}
-      {free.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <div className="min-w-0 flex-1"><Select id="f-script-target" aria-label="What the line is for" value={pick} onChange={(e) => setTarget(e.target.value)} options={free.map((t) => ({ value: t, label: targetName(t) }))} /></div>
-          <Button size="sm" onClick={() => commit([...rows, { target: pick, kind: 'command', value: '' }])}>Add a line</Button>
+      {firstFree && <div className="flex items-center gap-2"><Button size="sm" onClick={() => { commit([...rows, { target: firstFree, kind: 'command', value: '' }]); setFocus(rows.length); }}>Add a line</Button><span className="text-[11px] text-[var(--theme-text-muted)]">{firstFree === WORKSPACE ? 'It runs in the workspace; change where with its first field.' : 'Change where it runs with its first field.'}</span></div>}
+
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Head>Variables</Head>
+          <div className="flex gap-1" role="radiogroup" aria-label="Variables of">
+            {(['item', 'ticket'] as const).map((k) => <Button key={k} size="sm" role="radio" aria-checked={vars === k} variant={vars === k ? 'primary' : 'secondary'} onClick={() => setVars(k)}>{k === 'item' ? 'Item' : 'Ticket'}</Button>)}
+          </div>
         </div>
-      )}
-      <Select id="f-script-missing" label="A repository it has nothing to run for" value={saved.missing} onChange={(e) => put({ missing: e.target.value as ScriptSpec['missing'] })}
-        options={[{ value: 'ignore', label: 'is skipped' }, { value: 'ko', label: 'counts as a failure' }, { value: 'own', label: 'sends the ticket out by "unconfigured"' }]} />
-      <div className="grid grid-cols-2 gap-2">
-        <Select id="f-script-fail" label="After a command fails" value={saved.onFail} onChange={(e) => put({ onFail: e.target.value as ScriptSpec['onFail'] })} options={[{ value: 'all', label: 'run the others anyway' }, { value: 'stop', label: 'stop there' }]} />
-        <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
+        <div className="flex flex-wrap gap-1">
+          {(vars === 'item' ? ITEM_VARS : TICKET_VARS).map((v) => (
+            <button key={v} type="button" onClick={() => insert(v)} title={`Put "$${v}" in the command`}
+              className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2 py-0.5 font-mono text-[11px] text-[var(--theme-text-primary)] hover:border-[var(--theme-accent)]">${v}</button>
+          ))}
+        </div>
+        <Hint>{vars === 'item' ? 'FLEEX_ITEM_KEY is its key in its source (a Gmail thread id); each field of its source is FLEEX_ITEM_FIELD_<NAME>. ' : ''}A click puts it, quoted, in the command last edited. Keep them quoted: a mail's subject is written by anyone.</Hint>
       </div>
-      <Hint>A command gets the ticket in its environment: FLEEX_TICKET_NUMBER, FLEEX_TICKET_TITLE, FLEEX_TICKET_ID, FLEEX_REPO, FLEEX_WORKSPACE.</Hint>
+
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--theme-text-secondary)]">When something goes wrong</summary>
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Select id="f-script-fail" label="After a command fails" value={saved.onFail} onChange={(e) => put({ onFail: e.target.value as ScriptSpec['onFail'] })} options={[{ value: 'all', label: 'run the others anyway' }, { value: 'stop', label: 'stop there' }]} />
+            <CommitInput id="f-script-timeout" label="Time allowed per command (seconds)" value={String(saved.timeoutSec ?? 300)} onCommit={(v) => put({ timeoutSec: Math.max(1, Math.min(1800, Math.floor(Number(v)) || 300)) })} />
+          </div>
+          <Select id="f-script-missing" label="A repository it has nothing to run for" value={saved.missing} onChange={(e) => put({ missing: e.target.value as ScriptSpec['missing'] })}
+            options={[{ value: 'ignore', label: 'is skipped' }, { value: 'ko', label: 'counts as a failure' }, { value: 'own', label: 'sends the ticket out by "unconfigured"' }]} />
+        </div>
+      </details>
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--theme-text-secondary)]">A ticket's repositories</summary>
+        <div className="mt-2 flex flex-col gap-1.5">
+          <Select id="f-script-action" label="Default action, run in every repository with no line of its own" value={saved.action ?? ''} onChange={(e) => put({ action: e.target.value || undefined })}
+            options={[{ value: '', label: 'none' }, ...named.map((a) => ({ value: a.name, label: a.name })), ...(saved.action && !named.some((a) => a.name === saved.action) ? [{ value: saved.action, label: `${saved.action} (no longer in the list)` }] : [])]} />
+          {named.length === 0 && <Hint>Named actions are created in Settings, under General, then filled in repository by repository.</Hint>}
+        </div>
+      </details>
     </>
+  );
+}
+
+/** A command, in monospace, on as many lines as it needs; kept when the field is left. */
+function ScriptCommand({ id, value, placeholder, onFocus, onCommit }: { id: string; value: string; placeholder: string; onFocus: () => void; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => { setDraft(null); }, [value]);
+  return (
+    <textarea id={id} aria-label="Command" value={draft ?? value} placeholder={placeholder} rows={Math.min(6, Math.max(2, (draft ?? value).split('\n').length))} spellCheck={false}
+      onFocus={onFocus} onChange={(e) => setDraft(e.target.value)} onBlur={() => { if (draft !== null && draft.trim() !== value) onCommit(draft.trim()); setDraft(null); }}
+      className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-base)] px-2.5 py-1.5 font-mono text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none" />
   );
 }
 
@@ -256,28 +327,104 @@ function RuleList({ id, rules, fields, onChange }: { id: string; rules: ItemRule
  * text) is too broad to filter on. A drop rule drops what it matches; keep rules let in only what one of them matches;
  * what is dropped never reaches the floor. Making an item by hand has its popup of its own (New item).
  */
+const EVERY = [60, 300, 900, 1800, 3600];
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
+/**
+ * The order the intakes of a source are served in, when several see the same item: this one's place, and a move one
+ * place earlier or later (the two swap, in one layout save). An item waiting on the dock of an intake served later is
+ * taken over by one served first that sees it too; once an arm took it out, it stays on its lane.
+ */
+function IntakeOrder({ m, onSelect }: { m: IntakeSpec; onSelect: (machineId: string) => void }) {
+  const layout = useFactoryStore((s) => s.layout);
+  const peers = (layout?.machines ?? []).filter((q): q is IntakeSpec => q.kind === 'intake' && q.source === m.source).sort((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9));
+  if (peers.length < 2) return null;
+  const i = peers.findIndex((q) => q.id === m.id), source = SOURCE_LABEL[m.source];
+  const swap = (j: number) => {
+    if (!layout || j < 0 || j >= peers.length) return;
+    const a = peers[i]!, b = peers[j]!, pa = a.priority ?? i + 1, pb = b.priority ?? j + 1;
+    void useFactoryStore.getState().setLayout({ ...layout, machines: layout.machines.map((q) => (q.id === a.id ? { ...q, priority: pb } : q.id === b.id ? { ...q, priority: pa } : q)) as MachineSpec[] });
+  };
+  return (
+    <>
+      <Head right={<span className="flex gap-1"><Button size="sm" variant="secondary" disabled={i === 0} onClick={() => swap(i - 1)} title="Served one place earlier">Earlier</Button><Button size="sm" variant="secondary" disabled={i === peers.length - 1} onClick={() => swap(i + 1)} title="Served one place later">Later</Button></span>}>
+        Served {ordinal(i + 1)} of {peers.length} {source} intakes
+      </Head>
+      <Hint>One {source} conversation is one item. When several intakes see it, the one served first keeps it: while it waits on the dock of one served later, one served earlier takes it over. Once an arm took it out, it stays on its lane.</Hint>
+      <ol className="flex flex-col gap-0.5 text-xs">
+        {peers.map((q, k) => (
+          <li key={q.id}>
+            <button type="button" disabled={q.id === m.id} onClick={() => onSelect(q.id)} className={cn('text-left', q.id === m.id ? 'font-semibold text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)] hover:underline')}>
+              {k + 1}. {q.name || `${source} intake`}{q.query ? <span className="font-mono text-[var(--theme-text-muted)]"> · {q.query}</span> : null}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+/** A pulled intake's own part (Gmail): gogcli, its search, how often it is run, its last pull, and a pull now. */
+function PulledSettings({ m, onPatch }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void }) {
+  const pulled = PULLED_SOURCES[m.source]!, state = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]), now = useFactoryStore((s) => s.snapshot?.serverTime);
+  const mail = useMailStatus(), [pulling, setPulling] = useState(false), every = m.everySec ?? pulled.everySec;
+  const pull = async () => {
+    setPulling(true);
+    try {
+      const r = await useFactoryStore.getState().pullIntake(m.id);
+      if (!r) return;
+      if (r.error) toast.error('The pull failed', { detail: r.error });
+      else if (!state?.pulledAt) toast.info('Pulls from now on: what was in the mailbox before stays there');
+      else toast.success(r.pulled ? `${r.pulled} message${r.pulled === 1 ? '' : 's'}: ${r.new} new, ${r.updated} updated${r.moved ? `, ${r.moved} taken over` : ''}` : 'Nothing new');
+    } finally { setPulling(false); }
+  };
+  const ago = state?.pulledAt ? span(Math.max(0, Date.parse(now ?? new Date().toISOString()) - Date.parse(state.pulledAt))) : null;
+  return (
+    <>
+      <FactoryMailSetup mail={mail} />
+      <div className="flex flex-col gap-1">
+        <CommitInput id="f-intake-query" label={pulled.query} value={m.query ?? ''} placeholder="everything that comes in" onCommit={(v) => onPatch({ query: v.trim().slice(0, 1000) } as Partial<MachineSpec>)} />
+        <Hint>{pulled.hint}. It is the filter: only what it finds comes in. Empty: every message.</Hint>
+      </div>
+      <Select id="f-intake-every" label="Pulls every" value={String(every)} onChange={(e) => onPatch({ everySec: Number(e.target.value) } as Partial<MachineSpec>)}
+        options={[...new Set([...EVERY, every])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className={state?.pullError ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-text-muted)]'} title={state?.pullError ?? undefined}>
+          {state?.pullError ? `Last pull failed: ${state.pullError}` : ago ? `Last pull ${ago} ago` : 'Not pulled yet: it starts from the first pull'}
+        </span>
+        <Button size="sm" disabled={pulling} onClick={() => void pull()} title="Ask the mailbox now, without waiting for the interval">{pulling ? 'Pulling…' : 'Pull now'}</Button>
+      </div>
+    </>
+  );
+}
+
 function IntakeSettings({ m, onPatch, takers, onSelect, onNewItem }: { m: IntakeSpec; onPatch: (patch: Partial<MachineSpec>) => void; takers: ArmSpec[]; onSelect: (machineId: string) => void; onNewItem?: (intakeId: string) => void }) {
   const quiet = m.quietSec ?? 120, dropped = useFactoryStore((s) => s.snapshot?.intakes?.[m.id]?.dropped ?? 0);
-  const own = SOURCE_FIELDS[m.source], source = SOURCE_LABEL[m.source], ownKeys = new Set(own.map((f) => f.key));
+  const own = SOURCE_FIELDS[m.source], source = SOURCE_LABEL[m.source], ownKeys = new Set(own.map((f) => f.key)), pulled = !!PULLED_SOURCES[m.source];
   const rules = (m.rules ?? []).filter((r) => ownKeys.has(r.field));
   return (
     <>
-      <Hint>Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first that lets it in. The sources are not connected yet: items come in through POST /api/factory/items, or by hand (New item).</Hint>
-      <Head right={<span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
+      <Hint>{pulled
+        ? `Where ${source} items come in: Fleex asks ${source} for what came since its last pull, with the search below. An item waits here while its conversation moves, and leaves once it has been quiet for the delay below: an arm then takes it.`
+        : 'Where items of one source come in. An item waits here while it moves, and leaves once it has been quiet for the delay below: an arm then takes it. With several intakes of one source, an item goes to the first served that lets it in. This source is not connected yet: items come in through POST /api/factory/items, or by hand (New item).'}</Hint>
+      <Head right={pulled ? undefined : <span className="text-xs text-[var(--theme-text-muted)]">{dropped} dropped in 24 h</span>}>Every source</Head>
       <CommitInput id="f-name" label="Name" value={m.name ?? ''} placeholder={source} onCommit={(v) => onPatch({ name: v.trim().slice(0, 40) })} />
       <div className="grid grid-cols-2 gap-2">
-        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: [], drop: undefined } as Partial<MachineSpec>)}
-          options={ITEM_SOURCES.map((s) => ({ value: s, label: SOURCE_LABEL[s] }))} />
+        <Select id="f-intake-source" label="Source" value={m.source} onChange={(e) => onPatch({ source: e.target.value, rules: [], drop: undefined, query: undefined, everySec: undefined, priority: undefined } as Partial<MachineSpec>)}
+          options={ITEM_SOURCES.map((s) => ({ value: s, label: PULLED_SOURCES[s] ? `${SOURCE_LABEL[s]} (gogcli)` : SOURCE_LABEL[s] }))} />
         <Select id="f-intake-quiet" label="Leaves once quiet for" value={String(quiet)} onChange={(e) => onPatch({ quietSec: Number(e.target.value) } as Partial<MachineSpec>)}
           options={[...new Set([...QUIET, quiet])].sort((a, b) => a - b).map((s) => ({ value: String(s), label: quietLabel(s) }))} />
       </div>
+      <IntakeOrder m={m} onSelect={onSelect} />
       <Head>{source} only</Head>
-      {own.length === 0
-        ? <Hint>An item made by hand has nothing more than what every item has: everything comes in.</Hint>
-        : <>
-            <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. No rule: everything comes in. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
-            <RuleList id="f-own" rules={rules} fields={own} onChange={(next) => onPatch({ rules: next, drop: undefined } as Partial<MachineSpec>)} />
-          </>}
+      {pulled
+        ? <PulledSettings key={m.id} m={m} onPatch={onPatch} />
+        : own.length === 0
+          ? <Hint>An item made by hand has nothing more than what every item has: everything comes in.</Hint>
+          : <>
+              <Hint>{own.map((f) => f.label).join(', ')}: what {source} says of an item, filled by its connector. No rule: everything comes in. A drop rule drops what it matches; keep rules let in only what one of them matches.</Hint>
+              <RuleList id="f-own" rules={rules} fields={own} onChange={(next) => onPatch({ rules: next, drop: undefined } as Partial<MachineSpec>)} />
+            </>}
       <Head>Leaves through {takers.length} arm{takers.length === 1 ? '' : 's'}</Head>
       {takers.length === 0 && <div className="text-xs text-[var(--theme-danger)]">No arm takes from here: items will pile up. Put an arm against one of its sides.</div>}
       {takers.map((a) => <button key={a.id} type="button" className="text-left text-xs text-[var(--theme-text-secondary)] hover:underline" title="Open this arm" onClick={() => onSelect(a.id)}>arm · {armTag(a, takers) || 'anything'}</button>)}
@@ -451,7 +598,7 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
                 <Select id="f-ref" label={m.exec === 'agent' ? 'Persona' : m.exec === 'skill' ? 'Skill' : 'Panel'} value={m.ref ?? ''} onChange={(e) => onPatch({ ref: e.target.value } as Partial<StationSpec>)}
                   options={[{ value: '', label: 'choose' }, ...refs(m.exec, m.ref ?? '').map((r) => ({ value: r, label: r }))]} />
               </div>
-              {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: without it, every run fails.</div>}
+              {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: until then it takes tickets in and starts nothing.</div>}
               {(m.exec === 'agent' || m.exec === 'skill') && (
                 <div className="grid grid-cols-2 gap-2">
                   {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
@@ -505,6 +652,10 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
             <input type="checkbox" checked={m.inbound === true} onChange={(e) => onPatch({ inbound: e.target.checked })} className="accent-[var(--theme-accent)]" />
             Tickets handed over land here (Inbound)
           </label>
+          <label className="flex cursor-pointer items-start gap-2 text-xs text-[var(--theme-text-primary)]">
+            <input type="checkbox" checked={m.needsYou === true} onChange={(e) => onPatch({ needsYou: e.target.checked || undefined })} className="mt-0.5 accent-[var(--theme-accent)]" />
+            <span>Its tickets wait for me<span className="block text-[var(--theme-text-muted)]">They are listed under Needs you, top left, for as long as they stay here. N goes to them.</span></span>
+          </label>
           <Select id="f-status" label="Sets the ticket status to" value={m.status ?? ''} onChange={(e) => onPatch({ status: e.target.value as TicketStatus | '' })} options={STATUS_OPTIONS} />
           <Select id="f-release" label="Tickets leave" value={m.release} onChange={(e) => onPatch({ release: e.target.value as 'manual' | 'auto' })}
             options={[{ value: 'manual', label: 'when you release them' }, { value: 'auto', label: 'automatically, one at a time' }]} />
@@ -512,6 +663,16 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
         </>
       )}
       {m.kind === 'exit' && <Hint>A ticket that arrives here is set to done and handed back to plain Fleex.</Hint>}
+      {sizesOf(m) && (() => {
+        const list = sizesOf(m)!, now = `${m.w}x${m.h}`, known = list.some(([w, h]) => `${w}x${h}` === now);
+        return (
+          <div className="flex flex-col gap-1">
+            <Select id="f-size" label="Size" value={now} onChange={(e) => { const [w, h] = e.target.value.split('x').map(Number); onPatch({ w, h } as Partial<MachineSpec>); }}
+              options={[...list.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` })), ...(known ? [] : [{ value: now, label: `${m.w} × ${m.h} (as built)` }])]} />
+            <Hint>Odd, so that what comes in and goes out lines up on its middle. It grows down and right; where there is no room, it says so.</Hint>
+          </div>
+        );
+      })()}
       {(m.kind === 'zone' || m.kind === 'exit') && (
         <div className="grid grid-cols-2 gap-2">
           <CommitInput id="f-w" label="Width" value={String(m.w)} onCommit={(v) => onPatch({ w: Math.max(1, Math.min(30, Number(v) || m.w)) })} />
@@ -607,7 +768,7 @@ function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: str
             <li key={r.id} className="border-t border-[var(--theme-border)] py-1.5 first:border-t-0">
               <button type="button" onClick={() => onOpenTicket(r.ticketId)} className="flex w-full items-baseline gap-2 text-left text-xs">
                 <span className={cn('h-2 w-2 flex-none rounded-full', r.status === 'failed' || r.status === 'interrupted' ? 'bg-[var(--theme-danger)]' : r.status === 'running' ? 'bg-[var(--theme-success)]' : r.status === 'completed' ? 'bg-[var(--theme-text-muted)]' : 'bg-[var(--theme-warning)]')} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)] hover:underline">{titles.get(r.ticketId) ?? r.ticketId.slice(0, 8)}</span>
+                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)] hover:underline">{titles.get(r.ticketId) ?? (r.item ? `${SOURCE_LABEL[r.item.source] ?? r.item.source} · ${r.item.title}` : r.ticketId.slice(0, 8))}</span>
                 <span className="flex-none font-mono text-[var(--theme-text-secondary)]">{r.outcome ?? (r.status === 'needs_review' ? 'waiting' : r.status)}</span>
                 <span className="flex-none font-mono text-[var(--theme-text-muted)]">{span(since(r.startedAt, r.finishedAt ?? now))}</span>
               </button>

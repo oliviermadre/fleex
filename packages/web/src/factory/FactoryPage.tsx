@@ -8,7 +8,7 @@ import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { openTicketInWork } from '../components/work/openInWork';
-import { toast, useToastOffset } from '../lib/toast';
+import { toast, useToastOffset, useToastSkin } from '../lib/toast';
 import { cn } from '../lib/cn';
 import { tint } from '../lib/tints';
 import { useFactoryStore } from './factoryStore';
@@ -27,10 +27,13 @@ import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
 import { frameGap } from './frameRate';
-import { canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
+import { armFacing, canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
-import { FactoryFinder } from './FactoryFinder';
+import { FactoryFinder, FiltersTab } from './FactoryFinder';
+import { ConsoleStrip, FactoryCounters } from './FactoryHudOverlay';
+import { FactoryTalk, talkLog, useTalkReplies, useTicketVoices, type TalkTicket } from './FactoryTalk';
+import { FloatingPortal, usePopover } from '../hooks/usePopover';
 import { FactoryTicketTip, type TicketTipHandle } from './FactoryTicketTip';
 import { FactoryLampTip, type LampTipHandle } from './FactoryLampTip';
 import { FactoryNeeds } from './FactoryNeeds';
@@ -45,7 +48,12 @@ import { FactoryDeskForm } from './FactoryDeskForm';
 import { FactoryItemPeek } from './FactoryItemPeek';
 import { FactoryItemPopup, FactoryNewItem } from './FactoryItemPopup';
 import { FactoryPlanModal } from './FactoryPlanModal';
+import { FloorImportChoice, FloorImportReport } from './FactoryFloorImport';
+import { exportFloor as floorToFile, floorFileName, readFloor, setupGap, type Dropped, type Known, type ReadFloor } from './floorFile';
+import { loadModels } from '../hooks/useModels';
 import { FactoryTicketsModal } from './FactoryTicketsModal';
+import { FactoryExitLog } from './FactoryExitLog';
+import { FactoryArchivedItemPopup, FactoryArchivedItems } from './FactoryArchivedItems';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
 import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
@@ -67,6 +75,7 @@ const NAMED_MAX = 30;
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 /** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
 let clipboard: Clip | null = null;
+const NO_TICKETS: never[] = [];
 const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
@@ -76,7 +85,8 @@ const TOOLS: [Tool, string, string, string][] = [
   ['set', 'E', 'Set', 'A gantry over a belt: sets fields and tags on every ticket that goes under it'],
   ['teleporter', 'T', 'Teleporter', 'A jump across the floor: a departure sends its ticket to the arrival it is set to'],
   ['bridge', 'H', 'Bridge', 'Where two belts cross: each ticket goes straight across, the lines do not mix'],
-  ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. R turns it'],
+  ['arm', 'B', 'Arm', 'Takes from the tile behind it, drops on the tile in front. Against a station, a zone or a belt that ends there, it faces away from it by itself; a right click (or Face) turns it'],
+  ['fastarm', '', 'Fast arm', 'An arm that swings twice as fast. It finds its way as an arm does; a right click (or Face) turns it'],
   ['agent', 'A', 'Agent', 'A station that runs a persona on the ticket'],
   ['skill', 'S', 'Skill', 'A station that runs a skill'],
   ['panel', 'N', 'Panel', 'A station that runs a panel of personas'],
@@ -216,12 +226,26 @@ function Floor() {
   /* a run's log popped out of the peek card: it outlives the card */
   const [runLog, setRunLog] = useState<{ executionId: string; title: string } | null>(null);
   const [openMachine, setOpenMachine] = useState<string | null>(null);
+  /* what left by an exit (`FactoryExitLog`): one exit (its double-click out of build mode, View), or every one (Exits, `machineId: null`) */
+  const [exitLog, setExitLog] = useState<{ machineId: string | null } | null>(null);
+  /* the archived items (`FactoryArchivedItems`): every intake's, or one intake's; and an archived item opened from it */
+  const [archived, setArchived] = useState<{ intakeId: string | null } | null>(null);
+  const [archivedItem, setArchivedItem] = useState<string | null>(null);
   const [floorOpen, setFloorOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   /* the console put away, to give the floor the whole page: kept in the browser like the toggles */
   const [hudHidden, setHudHidden] = useState(loadConsoleHidden);
+  /* the filters, in a popup out of the Filters tab on the minimap; the floor stays live behind it */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = usePopover({ placement: 'top-start', gap: 6, role: 'dialog', open: filtersOpen, onOpenChange: setFiltersOpen, enableClick: false });
   const flipHud = useCallback(() => setHudHidden((h) => { saveConsoleHidden(!h); return !h; }), []);
   const [planOpen, setPlanOpen] = useState(false);
+  /* a floor read from a file, while it is asked where it goes; then what was taken off its machines */
+  const [importing, setImporting] = useState<{ name: string; read: Extract<ReadFloor, { ok: true }> } | null>(null);
+  const [importReport, setImportReport] = useState<{ total: number; dropped: Dropped[]; unset: number } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  /** An import taken in hand: its report waits until it is put down (the machines get their ids then). */
+  const pendingReport = useRef<{ order: string[]; total: number; dropped: Dropped[]; unset: number } | null>(null);
   const [listOpen, setListOpen] = useState(false);
   /* what the floor shows on top of the machines: kept in the browser from one visit to the next */
   const [show, setShow] = useState<Show>(loadShow);
@@ -237,10 +261,13 @@ function Floor() {
     const keep = new Set(found.map((t) => t.ticketId));
     return { dim: new Set(snapshot.tickets.filter((t) => !keep.has(t.ticketId)).map((t) => t.ticketId)), found: keep, named: keep.size <= NAMED_MAX ? keep : null };
   }, [found, snapshot]);
-  const live = useRef({ building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show });
+  const live = useRef({ turned: false, shownDir: 0 as Dir, building, tool, dir, selection, lens: layer, marks, hover: null as string | null, hoverLamp: null as string | null, ghost: null as Ghost | null, areaGhost: null as ViewState['areaGhost'], drag: null as DragState | null, marquee: null as ViewState['marquee'], pick: null as ReadonlySet<string> | null, space: false, show, unset: null as ReadonlySet<string> | null });
+  if (live.current.tool !== tool) live.current.turned = false;
   live.current.building = building; live.current.tool = tool; live.current.dir = dir; live.current.selection = selection; live.current.lens = layer; live.current.marks = marks; live.current.show = show;
   const fitted = useRef(false);
   useToastOffset(262);   // keep toasts clear of the console
+  /* Enter: the line to talk to the assistant or a ticket; while it is open, the messages are in its log, not over the floor */
+  const [talkOpen, setTalkOpen] = useState(false);
 
   // Personas, skills and panels feed the station pickers.
   useEffect(() => {
@@ -296,6 +323,7 @@ function Floor() {
       allNames: l.show.names, armTags: l.show.arms, numbers: l.show.numbers, grid: l.show.grid,
       exits: s.stats?.exits ?? null, exitDays: s.stats?.days,
       intakes: s.snapshot.intakes ?? null,
+      unset: l.unset,
     };
   }, [boardName, modelOf]);
 
@@ -361,6 +389,13 @@ function Floor() {
   const moved = useRef(0);
   const lastPt = useRef({ x: 0, y: 0 });
   const local = (e: React.PointerEvent | React.WheelEvent | React.MouseEvent) => { const r = canvasRef.current!.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  /*
+   * The way what is in hand faces: an arm reads it from what is round it (`armFacing`: from the station, the zone or
+   * the belt that gives, away from it), until it is turned by hand; the rest faces the way chosen.
+   */
+  const handDir = (l: FactoryLayout, t: Tool, x: number, y: number): Dir => ((t === 'arm' || t === 'fastarm') && !live.current.turned ? armFacing(l, x, y, live.current.dir) : live.current.dir);
+  /* a quarter turn of what is in hand, from the way it is shown: then it stays as turned until it is put down */
+  const turnInHand = () => { const next = ((live.current.shownDir + 1) % 4) as Dir; live.current.turned = true; live.current.dir = next; live.current.shownDir = next; setDir(next); };
   const ghostAt = (v: FactoryView, wx: number, wy: number): Ghost | null => {
     const l = useFactoryStore.getState().layout, t = live.current.tool;
     if (!live.current.building || t === 'select' || !l) return null;
@@ -372,7 +407,8 @@ function Floor() {
       return { cells, ok: canPaste(l, clipboard, x, y), text: cells.length > 1 ? `Paste ${cells.length} machines` : 'Paste' };
     }
     if (t === 'set' || t === 'toll') return { cells: [{ x, y, w: 1, h: 1 }], ok: !!gantryAt(l, x, y, live.current.dir, t === 'toll'), text: t === 'toll' ? 'Toll' : 'Set gantry' };
-    const spec = specFor(t, x, y, live.current.dir); if (!spec) return null;
+    const spec = specFor(t, x, y, handDir(l, t, x, y)); if (!spec) return null;
+    if (spec.kind === 'arm' || spec.kind === 'belt') live.current.shownDir = spec.dir;
     return { cells: [{ x: spec.x, y: spec.y, w: spec.w, h: spec.h, dir: spec.kind === 'belt' || spec.kind === 'arm' ? spec.dir : undefined, arm: spec.kind === 'arm' }], ok: canPlace(l, spec) };
   };
 
@@ -390,6 +426,11 @@ function Floor() {
     const v = viewRef.current, st = viewState(); if (!v || !st) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e), w = v.toWorld(p.x, p.y), tx = Math.floor(w.x), ty = Math.floor(w.y);
+    /* a right click turns what is in hand, a quarter turn, and puts nothing down (anywhere else it moves the view) */
+    if (e.button === 2 && live.current.building && ['arm', 'fastarm', 'belt', 'fastbelt', 'set', 'toll'].includes(live.current.tool)) {
+      press.current = null; turnInHand(); live.current.ghost = ghostAt(v, w.x, w.y);
+      return;
+    }
     moved.current = 0; lastPt.current = p; press.current = null; tipRef.current?.hide(); lampTipRef.current?.hide();
     /* right or middle button, or Space held: move the view, whatever the tool */
     if (e.button !== 0 || live.current.space) { press.current = { kind: 'pan' }; e.currentTarget.style.cursor = 'grabbing'; return; }
@@ -505,7 +546,14 @@ function Floor() {
     } else if (pr?.kind === 'place') {
       if (click && live.current.tool === 'paste') {
         const done = clipboard ? pasteAt(st.layout, clipboard, tx, ty) : null;
-        if (done) { commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null; }
+        if (done) {
+          commit(done.layout); setTool('select'); setSelection(done.ids.length > 1 ? { machines: done.ids } : { machine: done.ids[0]! }); live.current.ghost = null;
+          const r = pendingReport.current; pendingReport.current = null;
+          if (r) {
+            const to = new Map(r.order.map((id, i) => [id, done.ids[i] ?? id]));
+            afterImport(r.total, r.dropped.map((d) => ({ ...d, machineId: to.get(d.machineId) ?? d.machineId })), r.unset);
+          }
+        }
         else toast.warning('No room to paste here');
       } else if (click && (live.current.tool === 'set' || live.current.tool === 'toll')) {
         /* on the belt that is there, or with a belt of its own */
@@ -513,8 +561,10 @@ function Floor() {
         if (done) { commit(done.layout); setTool('select'); setSelection({ machine: done.id }); live.current.ghost = null; }
         else toast.warning('A gantry goes on a belt, or on bare floor');
       } else if (click) {
-        const spec = specFor(live.current.tool, tx, ty, live.current.dir), next = spec ? place(st.layout, spec) : null;
+        const spec = specFor(live.current.tool, tx, ty, handDir(st.layout, live.current.tool, tx, ty)), next = spec ? place(st.layout, spec) : null;
         commit(next);
+        /* the next arm in hand reads its way from where it goes again */
+        if (next && spec?.kind === 'arm') live.current.turned = false;
         if (next && spec && spec.kind !== 'arm' && spec.kind !== 'bridge') { setTool('select'); setSelection({ machine: spec.id }); live.current.ghost = null; }
       }
     } else if (pr?.kind === 'ticket') {
@@ -552,6 +602,8 @@ function Floor() {
     const m = hit && 'machineId' in hit && (!live.current.building || live.current.tool === 'select') ? v.machine(hit.machineId) : null;
     /* a desk opens its form out of build mode, which is what it is for; its settings are Edit */
     if (m?.kind === 'desk' && !live.current.building) { setDeskForm({ desk: m }); return; }
+    /* an exit opens on what left by it; its settings are a button away there, and in build mode */
+    if (m?.kind === 'exit' && !live.current.building) { setExitLog({ machineId: m.id }); return; }
     if (m && hasPopup(m)) { setOpenMachine(m.id); return; }
     /* in build mode, an area opens where nothing stands on it */
     if (!hit && live.current.building && live.current.tool === 'select') {
@@ -572,6 +624,11 @@ function Floor() {
   }, [selection, snapshot]);
   const group = useMemo(() => (selTickets.length > 0 && layout ? groupOf(selTickets, layout.machines) : null), [selTickets, layout]);
   const [confirmGive, setConfirmGive] = useState(false);
+  /* messages over the floor while one looks at the floor; a window opened over it (a ticket, a machine, a list) gets
+     Fleex's usual cards, which sit over it, and the lines come back once it is closed */
+  const windowOpen = !!(transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem
+    || floorOpen || limitsOpen || listOpen || planOpen || importing || importReport || confirmGive);
+  useToastSkin(windowOpen ? null : talkOpen ? 'quiet' : 'floor', chromeStyle as Record<string, string | number> | undefined);
   const closeMachine = useCallback(() => setOpenMachine(null), []);
   /* from one machine's popup to another's (a station's arm): the floor's selection follows */
   const openMachineOn = useCallback((id: string) => { setSelection({ machine: id }); setOpenMachine(id); }, []);
@@ -594,6 +651,36 @@ function Floor() {
   /* what waits for someone: listed top-left, and walked with the left and right arrows */
   const needs = useMemo(() => (snapshot && layout ? needsOf(snapshot.tickets, layout.machines, snapshot.serverTime) : []), [snapshot, layout]);
   const pickNeed = useCallback((ticketId: string) => { goTo(ticketId); setPeekOpen(true); }, [goTo]);
+  /* who the line talks to besides the assistant: the ticket selected, else the first ticket that needs you */
+  /* a ticket as the line names it: its number and title, where it stands, the station it is at */
+  const describeTicket = useCallback((ticketId: string): TalkTicket | null => {
+    const s = useFactoryStore.getState(), t = s.snapshot?.tickets.find((x) => x.ticketId === ticketId);
+    if (!t || t.item) return null;
+    const m = t.machineId ? s.layout?.machines.find((q) => q.id === t.machineId) : null;
+    const title = t.info?.title ?? '';
+    return { ticketId, label: `#${t.info?.displayId ?? '?'}${title ? ` ${title.length > 28 ? `${title.slice(0, 27)}…` : title}` : ''}`, phase: t.phase, note: t.note, station: m && 'name' in m ? m.name || undefined : undefined,
+      released: t.released, favorite: t.info ? t.info.favorite : null, canAside: canSetAside(t, m ?? undefined) };
+  }, []);
+  /* who the line talks to besides the assistant: the ticket selected, else the last one that wrote to you, else the first that needs you */
+  const talkTicket = useMemo((): TalkTicket | null => {
+    const id = selTicket && !selTicket.item ? selTicket.ticketId
+      : (talkLog.lastSpoke && snapshot?.tickets.some((t) => t.ticketId === talkLog.lastSpoke!.ticketId) ? talkLog.lastSpoke.ticketId : null)
+        ?? needs.find((n) => !n.ticket.item)?.ticket.ticketId ?? null;
+    return id ? describeTicket(id) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selTicket?.ticketId, talkOpen, describeTicket]);
+  useTicketVoices(snapshot?.tickets ?? NO_TICKETS, describeTicket, setOpenTicket);
+  /* the other tickets Tab reaches in the line: every ticket that needs you (items have no thread) */
+  const needIds = needs.filter((n) => !n.ticket.item).map((n) => n.ticket.ticketId).join(',');
+  const talkOthers = useMemo(() => (needIds ? needIds.split(',').map(describeTicket).filter((t): t is TalkTicket => !!t) : []), [needIds, describeTicket]);
+  useTalkReplies(setOpenTicket);
+  /* the stations that cannot run yet (no persona, skill or panel, or one this instance does not have; a script with nothing to run) */
+  const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
+  const unset = useMemo(() => {
+    const known = { personas: personas.map((p) => p.name), skills: skills.map((k) => k.commandName), panels: panels.map((p) => p.name) };
+    return (layout?.machines ?? []).flatMap((m) => { const gap = setupGap(m, known); return gap ? [{ id: m.id, name: ('name' in m && m.name) || 'Station', gap }] : []; });
+  }, [layout, personas, skills, panels]);
+  live.current.unset = unset.length ? new Set(unset.map((u) => u.id)) : null;
   /* to the next ticket that waits for someone, or the one before, round and round */
   const stepWaiting = useCallback((dir: 1 | -1) => {
     const sel = live.current.selection, next = stepNeed(needs, sel && 'ticket' in sel ? sel.ticket : null, dir);
@@ -629,7 +716,7 @@ function Floor() {
     const ids = sel && 'machines' in sel ? sel.machines : sel && 'machine' in sel ? [sel.machine] : [];
     const clip = l && ids.length ? copyOf(l, new Set(ids)) : null;
     if (!l || !clip) { toast.info('Select one or several machines first'); return; }
-    clipboard = clip; setHasClip(true);
+    clipboard = clip; setHasClip(true); pendingReport.current = null;
     if (cut) { commit(eraseMany(l, new Set(ids))); setSelection(null); }
     toast.info(`${clip.machines.length} machine${clip.machines.length === 1 ? '' : 's'} ${cut ? 'cut' : 'copied'}: ${MOD}V, then click where to put ${clip.machines.length === 1 ? 'it' : 'them'}`);
   }, [commit]);
@@ -639,23 +726,78 @@ function Floor() {
   }, []);
 
   /** A plan is put down like anything copied: it follows the pointer until a click says where. */
-  const placePlan = useCallback((clip: Clip, name: string) => {
-    clipboard = clip; setHasClip(true); setPlanOpen(false); setSelection(null); setTool('paste');
+  const placePlan = useCallback((clip: Clip, name: string, say?: string) => {
+    clipboard = clip; setHasClip(true); pendingReport.current = null; setPlanOpen(false); setSelection(null); setTool('paste');
     /* a plan is often wider than what is on screen: step back until it can be seen whole while it is carried */
     const v = viewRef.current;
     if (v) v.cam.z = Math.max(5, Math.min(v.cam.z, 0.7 * Math.min(v.w / clip.w, v.h / clip.h)));
-    toast.info(`Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
+    toast.info(say ?? `Plan “${name}”: click on the floor where it should go. Escape puts it down; ${MOD}V picks it up again.`);
   }, []);
+
+  // ---------- export and import (build mode) ----------
+  const downloadFloor = useCallback(() => {
+    const l = useFactoryStore.getState().layout; if (!l) return;
+    const sel = live.current.selection, ids = sel && 'machines' in sel ? sel.machines : sel && 'machine' in sel ? [sel.machine] : [];
+    const file = floorToFile(l, useTicketStore.getState().boards, ids.length ? new Set(ids) : null);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = floorFileName(); a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const n = file.layout.machines.length;
+    toast.success(`${n} machine${n === 1 ? '' : 's'} exported`);
+  }, []);
+  /** What this instance has, by name: loaded first when it is not yet, since what is missing is taken off the machines. */
+  const knownHere = useCallback(async (): Promise<Known | null> => {
+    const P = useAgentPersonaStore.getState(), S = useSkillStore.getState(), Q = usePanelStore.getState();
+    await Promise.all([P.loaded || P.loadPersonas(), S.loaded || S.loadSkills(), Q.loaded || Q.loadPanels()]);
+    if (!useAgentPersonaStore.getState().loaded || !useSkillStore.getState().loaded || !usePanelStore.getState().loaded) return null;
+    const models = await loadModels();
+    return {
+      personas: useAgentPersonaStore.getState().personas.map((p) => p.name), skills: useSkillStore.getState().skills.map((k) => k.commandName),
+      panels: usePanelStore.getState().panels.map((p) => p.name), models: models.fallback ? null : models.models.map((m) => m.id),
+      boards: useTicketStore.getState().boards.map((b) => ({ id: b.id, name: b.name })),
+    };
+  }, []);
+  const afterImport = useCallback((total: number, dropped: Dropped[], unsetCount: number) => {
+    if (dropped.length || unsetCount) setImportReport({ total, dropped, unset: unsetCount });
+    else toast.success(`Floor imported: ${total} machine${total === 1 ? '' : 's'}`);
+  }, []);
+  const importReplace = useCallback((read: Extract<ReadFloor, { ok: true }>) => {
+    const l = useFactoryStore.getState().layout; if (!l) return;
+    setImporting(null); setSelection(null); setTool('select');
+    commit({ ...l, machines: read.machines });
+    window.setTimeout(fit, 0);
+    afterImport(read.machines.length, read.dropped, read.machines.filter((m) => setupGap(m)).length);
+  }, [commit, fit, afterImport]);
+  const importInHand = useCallback((read: Extract<ReadFloor, { ok: true }>) => {
+    setImporting(null);
+    const ms = read.machines, x0 = Math.min(...ms.map((m) => m.x)), y0 = Math.min(...ms.map((m) => m.y));
+    const clip: Clip = { w: Math.max(...ms.map((m) => m.x + m.w)) - x0, h: Math.max(...ms.map((m) => m.y + m.h)) - y0, machines: ms.map((m) => ({ ...m, x: m.x - x0, y: m.y - y0 }) as MachineSpec) };
+    placePlan(clip, 'imported', `${ms.length} machine${ms.length === 1 ? '' : 's'} imported: click on the floor where they should go. Escape puts them down; ${MOD}V picks them up again.`);
+    pendingReport.current = { order: ms.map((m) => m.id), total: ms.length, dropped: read.dropped, unset: ms.filter((m) => setupGap(m)).length };
+  }, [placePlan]);
+  const onImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    const l = useFactoryStore.getState().layout;
+    if (!f || !l) return;
+    const known = await knownHere().catch(() => null);
+    if (!known) { toast.error('Could not read the personas, skills and panels of this instance: nothing was imported'); return; }
+    const read = readFloor(await f.text(), l.version ?? 1, known);
+    if (!read.ok) { toast.error(read.error); return; }
+    if (!read.machines.length) { toast.info('This floor has no machines'); return; }
+    /* an empty floor (its Inbound zone at most) is replaced without asking */
+    if (l.machines.every((m) => m.kind === 'zone' && m.inbound)) importReplace(read);
+    else setImporting({ name: f.name, read });
+  }, [knownHere, importReplace]);
 
   // The command card: the menu that fits what is selected and the mode, and the sub-menus opened in it.
   const [path, setPath] = useState<string[]>([]);
   const zoneNext = selMachine?.kind === 'zone' ? snapshot?.tickets.filter((t) => t.machineId === selMachine.id && !t.released).sort((a, b) => a.since.localeCompare(b.since))[0] ?? null : null;
   const gate = selTicket ? layout?.machines.find((q) => q.id === selTicket.machineId) : null;
-  /* what the belts of the selection can be made: fast when one of them is not yet, plain when all are */
+  /* what the belts and arms of the selection can be made: fast when one of them is not yet, plain when all are */
   const beltSpeed = useMemo<'up' | 'down' | null>(() => {
     const ids = selMany.length > 1 ? new Set(selMany) : selMachine ? new Set([selMachine.id]) : null;
-    const belts = ids && layout ? layout.machines.filter((m) => m.kind === 'belt' && ids.has(m.id)) : [];
-    return belts.length === 0 ? null : belts.some((m) => m.kind === 'belt' && !m.fast) ? 'up' : 'down';
+    const movers = ids && layout ? layout.machines.filter((m) => (m.kind === 'belt' || m.kind === 'arm') && ids.has(m.id)) : [];
+    return movers.length === 0 ? null : movers.some((m) => (m.kind === 'belt' || m.kind === 'arm') && !m.fast) ? 'up' : 'down';
   }, [selMany, selMachine, layout]);
   const root = useMemo(() => factoryMenu({
     building, tool, dir, mod: MOD, many: selMany.length, undoable: store.undoable > 0, redoable: store.redoable > 0, hasClip,
@@ -670,10 +812,11 @@ function Floor() {
       newTicket: () => setDeskForm({ desk: selMachine?.kind === 'desk' ? selMachine : layout?.machines.find((m): m is DeskSpec => m.kind === 'desk') ?? null }),
       tickets: () => setListOpen(true),
       fit, plan: () => setPlanOpen(true), paste,
+      exportFloor: downloadFloor, importFloor: () => fileRef.current?.click(),
       tool: (t) => setTool((cur) => (cur === t ? 'select' : t)),
       select: () => setTool('select'),
       back: () => { setPath((p) => p.slice(0, -1)); setTool('select'); },
-      face: () => setDir((d) => ((d + 1) % 4) as Dir),
+      face: turnInHand,
       undo: () => void store.undo(), redo: () => void store.redo(),
       copy: () => copy(false), cut: () => copy(true),
       turn: () => { const l = useFactoryStore.getState().layout; if (l && selMachine) commit(rotate(l, selMachine.id)); },
@@ -706,11 +849,15 @@ function Floor() {
       power: () => { if (selMachine?.kind === 'station') void store.power(selMachine.id, !!selMachine.off); },
       floor: () => setFloorOpen(true),
       limits: () => setLimitsOpen(true),
+      viewExit: () => { if (selMachine?.kind === 'exit') setExitLog({ machineId: selMachine.id }); },
+      exits: () => setExitLog({ machineId: null }),
+      archived: () => setArchived({ intakeId: null }),
+      archivedHere: () => { if (selMachine?.kind === 'intake') setArchived({ intakeId: selMachine.id }); },
       next: () => stepWaiting(1),
       speed: () => { const l = useFactoryStore.getState().layout; if (l && beltSpeed) commit(setSpeed(l, new Set(selMany.length > 1 ? selMany : selMachine ? [selMachine.id] : []), beltSpeed === 'up')); },
       releaseNext: () => { if (zoneNext) void store.release(zoneNext.ticketId); },
     },
-  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed, group, selTickets, layout]);
+  }), [building, tool, dir, selMany, selTicket, selMachine, gate, zoneNext, hasClip, store, fit, paste, copy, commit, removeMachine, needs.length, stepWaiting, beltSpeed, group, selTickets, layout, downloadFloor]);
   const card = useMemo(() => menuAt(root, path), [root, path]);
   /* a sub-menu belongs to what was on screen when it was opened: selecting something, or leaving build mode, closes it */
   const selKind = selection ? Object.keys(selection)[0] : '';
@@ -749,7 +896,7 @@ function Floor() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
       /* a dialog is open (a ticket, a machine, the instructions editor…): the floor's keys are not for it */
-      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || floorOpen || limitsOpen || document.querySelector('[data-overlay-top]')) return;
+      if (transferOpen || deskForm || openItem || newItemAt || openTicket || openMachine || exitLog || archived || archivedItem || floorOpen || limitsOpen || talkOpen || document.querySelector('[data-overlay-top]')) return;
       /* Tab opens the list of the tickets on the floor; in the list, Tab closes it */
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setListOpen(true); return; }
       /* Ctrl/Cmd+Z takes back the last change to the floor, with Shift it puts it back: in build mode only */
@@ -759,7 +906,7 @@ function Floor() {
         if (chord === 'v') paste(); else copy(chord === 'x');
         return;
       }
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); findRef.current?.focus(); findRef.current?.select(); return; }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setFiltersOpen(true); window.setTimeout(() => { findRef.current?.focus(); findRef.current?.select(); }, 0); return; }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z' && live.current.building) {
         e.preventDefault(); setSelection(null);
         void (e.shiftKey ? useFactoryStore.getState().redo() : useFactoryStore.getState().undo());
@@ -771,7 +918,10 @@ function Floor() {
       /* U puts the console away and brings it back, in any mode */
       if (e.code === 'KeyU') { e.preventDefault(); flipHud(); return; }
       if (e.code === 'KeyN' && !live.current.building) { e.preventDefault(); stepWaiting(e.shiftKey ? -1 : 1); return; }
-      if (e.key === 'Enter' && selTicket && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      /* Enter talks: to the ticket selected, or, with nothing selected, to whoever was talked to last; an item opens */
+      if (e.key === 'Enter' && selTicket?.item && !live.current.building) { e.preventDefault(); setOpenTicket(selTicket.ticketId); return; }
+      if (e.key === 'Enter' && !live.current.building && (selTicket || !selMachine)) { e.preventDefault(); setTalkOpen(true); return; }
+      if (e.key === 'Enter' && selMachine?.kind === 'exit' && !building) { e.preventDefault(); setExitLog({ machineId: selMachine.id }); return; }
       if (e.key === 'Enter' && selMachine && hasPopup(selMachine)) { e.preventDefault(); setOpenMachine(selMachine.id); return; }
       if (e.key === 'Escape' && peekFor.current) { e.preventDefault(); setPeekOpen(false); return; }
       const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -789,9 +939,8 @@ function Floor() {
     const onBlur = () => { live.current.space = false; };
     window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
-  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting]);
+  }, [card, runCommand, fit, selection, transferOpen, deskForm, openItem, newItemAt, openTicket, openMachine, exitLog, archived, archivedItem, building, floorOpen, limitsOpen, flipHud, onGroup, copy, paste, selTicket, selMachine, stepWaiting, talkOpen]);
 
-  const waiting = snapshot ? snapshot.tickets.filter((t) => needsHuman(t)).length : 0;
   /* another skin chosen while the page is open, or its decor switched: the floor is painted with it from the next frame */
   const skinShown = useRef(skinKey);
   useEffect(() => { if (skinShown.current !== skinKey) { skinShown.current = skinKey; viewRef.current?.setSkin(makeSkin()); } }, [skinKey, makeSkin]);
@@ -801,16 +950,6 @@ function Floor() {
   return (
     <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]" data-skin={skin.id} style={chromeStyle}>
       <style>{EDGE_CSS}</style>
-      <div className="flex w-full items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
-        <span className="text-sm text-[var(--theme-text-primary)]">Factory</span>
-        <span className="rounded border border-[var(--theme-border-input)] px-1.5 text-[10px] uppercase tracking-wider text-[var(--theme-text-muted)]">experimental</span>
-        {snapshot && <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} />}
-        <span className="flex-1" />
-        {snapshot && (halted
-          ? <Button size="sm" variant="primary" onClick={() => void store.halt(false)} title="Belts, arms and stations carry on from where they stood; the runs that were cut start again">Restart the floor</Button>
-          : <Button size="sm" variant="danger" onClick={() => void store.halt(true)} title="Stops every belt, arm and station at once, and cuts the runs in progress. They start again when the floor is restarted">Emergency stop</Button>)}
-        {snapshot && <span className="hidden min-w-0 truncate font-mono text-xs text-[var(--theme-text-muted)] 2xl:inline">{snapshot.tickets.length} tickets · {snapshot.running}/{snapshot.floor.settings.maxConcurrentRuns} running · {snapshot.runsLastHour}/{snapshot.floor.settings.maxRunsPerHour} runs this hour{waiting ? ` · ${waiting} waiting for you` : ''}</span>}
-      </div>
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
           <canvas
@@ -821,10 +960,15 @@ function Floor() {
           {/* the console casts a shadow on the floor along its contour; the build tape lies over it */}
           {!hudHidden && <FactoryHudShadow hud={HUD} light={chrome ? chrome.light : undefined} />}
           {/* build mode says so all round the view: tape, and a plate in its corner */}
-          {building && <FactoryBuildFrame halted={halted} hud={hudHidden ? null : HUD} />}
+          {(building || halted) && <FactoryBuildFrame halted={halted} building={building} hud={hudHidden ? null : HUD} />}
+          {snapshot && <FactoryCounters c={{
+            tickets: snapshot.tickets.filter((t) => !t.item).length, items: snapshot.tickets.filter((t) => t.item).length,
+            running: snapshot.running, maxRunning: snapshot.floor.settings.maxConcurrentRuns, runsHour: snapshot.runsLastHour, maxRunsHour: snapshot.floor.settings.maxRunsPerHour,
+            waiting: needs.length + unset.length,
+          }} />}
           <FactoryTicketTip ref={tipRef} />
           <FactoryLampTip ref={lampTipRef} />
-          {!building && needs.length > 0 && <FactoryNeeds needs={needs} selected={selTicket?.ticketId ?? null} onPick={pickNeed} onOpen={setOpenTicket} />}
+          {!building && needs.length + unset.length > 0 && <FactoryNeeds needs={needs} unset={unset} selected={selTicket?.ticketId ?? selMachine?.id ?? null} onPick={pickNeed} onOpen={setOpenTicket} onPickMachine={(id) => (selMachine?.id === id ? setOpenMachine(id) : showMachine(id))} />}
           {peekFor.current && selTicket?.item && <FactoryItemPeek ref={peekRef} key={peekFor.current} itemId={peekFor.current} onOpen={() => setOpenItem(peekFor.current)} onClose={() => setPeekOpen(false)} />}
           {peekFor.current && !selTicket?.item && <FactoryPeek ref={peekRef} key={peekFor.current} ticketId={peekFor.current} onOpen={() => setOpenTicket(peekFor.current)} onClose={() => setPeekOpen(false)} onPopOut={(executionId, title) => setRunLog({ executionId, title })} />}
           {runLog && <FloatingExecutionPanel key={runLog.executionId} executionId={runLog.executionId} title={runLog.title} onClose={() => setRunLog(null)} />}
@@ -841,7 +985,7 @@ function Floor() {
             </div>
           )}
           {layer && !building && (
-            <div className={cn('absolute top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg', needs.length ? 'left-[292px]' : 'left-3')} role="status">
+            <div className={cn('absolute top-3 flex max-w-[min(560px,calc(100%-24px))] items-center gap-2 rounded-lg border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 shadow-lg', needs.length + unset.length ? 'left-[292px]' : 'left-3')} role="status">
               <span className="flex-none text-xs font-semibold text-[var(--theme-text-primary)]">{LENS_LABEL[layer.kind]}</span>
               <span className="min-w-0 flex-1 text-[11px] text-[var(--theme-text-secondary)]">{layer.legend}{layer.kind !== 'load' && stats && layer.values.size === 0 ? ' — nothing to show yet.' : ''}</span>
               <Button size="sm" variant="ghost" onClick={() => setLens('none')}>Off</Button>
@@ -858,15 +1002,35 @@ function Floor() {
           )}
         </div>
       </div>
-      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} onHide={flipHud} building={building}
+      <FactoryConsole view={view} snapshot={snapshot} layout={layout} selection={selection} onSelect={setSelection} menu={card.menu} trail={trail} onRun={runCommand} groups={groups} onGroup={onGroup} miniRef={miniRef} lens={lens} onLens={setLens} onFit={fit} show={show} onShow={flipShow} hidden={hudHidden} building={building}
+        tab={snapshot && <FiltersTab finder={finder} found={found} total={snapshot.tickets.length} open={filtersOpen} onToggle={() => setFiltersOpen((o) => !o)} tabRef={filters.refs.setReference} tabProps={filters.getReferenceProps()} />}
+        strip={<ConsoleStrip halted={halted} onHalt={(on) => void store.halt(on)} hidden={hudHidden} onHide={flipHud} />}
         title={building ? 'Build' : 'Factory floor'}
         hint={toolHint ?? (building ? 'Pick a machine to place, or double-click one to set it up. Drag on empty floor to select several, Shift adds to the selection; then drag one of them to move them all. Space+drag, the arrow keys or the edges of the page move the view.' : 'Click to select, drag a ticket to move it, double-click a ticket or a machine to open it, drag on the floor to select several tickets, Shift adds to the selection. Space+drag, the arrow keys or the edges of the page move the view. Tab lists the tickets, hovering one shows what it is, / finds one.')} />
       {/* a ticket opened from a machine's window covers it: closing the ticket brings the window back */}
       {openMachine && !openTicket && view && <FactoryMachinePopup machineId={openMachine} view={view} onClose={closeMachine} onPatch={patchMachine} onRemove={removeMachine} onOpenTicket={setOpenTicket} onOpenMachine={openMachineOn} onNewItem={setNewItemAt} />}
+      {exitLog && !openTicket && <FactoryExitLog machineId={exitLog.machineId} onClose={() => setExitLog(null)} onOpenTicket={setOpenTicket}
+        onSettings={exitLog.machineId ? () => { const id = exitLog.machineId!; setExitLog(null); setOpenMachine(id); } : undefined} />}
+      {archived && !archivedItem && <FactoryArchivedItems intakeId={archived.intakeId} onClose={() => setArchived(null)} onOpenItem={setArchivedItem} />}
+      {archivedItem && <FactoryArchivedItemPopup itemId={archivedItem} onClose={() => setArchivedItem(null)} />}
       {floorOpen && <FactoryFloorPopup onClose={() => setFloorOpen(false)} onGoTo={showMachine} />}
       {limitsOpen && <FactoryLimitsPopup onClose={() => setLimitsOpen(false)} />}
       {openTicket && <FactoryWorkbench ticketId={openTicket} needs={needs} tickets={snapshot?.tickets ?? []} onNavigate={openOn} onClose={closeTicket} />}
+      {talkOpen && <FactoryTalk ticket={talkTicket} others={talkOthers} onClose={() => setTalkOpen(false)} onOpenTicket={(id) => { setTalkOpen(false); setOpenTicket(id); }}
+        style={hudHidden ? { left: '50%', bottom: 44, width: 'min(640px, calc(100% - 32px))', transform: 'translateX(-50%)', position: 'fixed' } : { left: '50%', bottom: HUD.mid + 30, width: `min(640px, calc(100% - ${HUD.left + HUD.right + 32}px))`, transform: 'translateX(-50%)', position: 'fixed' }} />}
+      {filtersOpen && snapshot && (
+        <FloatingPortal>
+          <div ref={filters.refs.setFloating} style={filters.floatingStyles} {...filters.getFloatingProps()} aria-label="Filters"
+            className="z-[60] rounded-xl border border-[var(--theme-border-input)] bg-[color-mix(in_srgb,var(--theme-bg-surface)_94%,transparent)] p-3 shadow-2xl backdrop-blur-md">
+            <FactoryFinder finder={finder} onChange={setFinder} tickets={snapshot.tickets} found={found} onJump={jump} inputRef={findRef} onClose={() => setFiltersOpen(false)} />
+          </div>
+        </FloatingPortal>
+      )}
       {planOpen && <FactoryPlanModal onPlace={placePlan} onClose={() => setPlanOpen(false)} />}
+      <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Floor file to import" onChange={(e) => void onImportFile(e)} />
+      {importing && <FloorImportChoice name={importing.name} incoming={importing.read.machines.length} here={layout?.machines.length ?? 0}
+        onReplace={() => importReplace(importing.read)} onHand={() => importInHand(importing.read)} onClose={() => setImporting(null)} />}
+      {importReport && <FloorImportReport {...importReport} onGo={(id) => { setImportReport(null); showMachine(id); }} onClose={() => setImportReport(null)} />}
       {listOpen && !openTicket && <FactoryTicketsModal finder={finder} onFinder={setFinder} onClose={() => setListOpen(false)}
         onGoTo={(id) => { setListOpen(false); setBuilding(false); goTo(id); }} onDetail={(id) => { setListOpen(false); setOpenTicket(id); }} />}
       <ConfirmModal open={confirmGive} title={`Give ${selTickets.length} tickets back?`} confirmLabel="Give back" danger={false}

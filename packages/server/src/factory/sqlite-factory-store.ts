@@ -1,6 +1,6 @@
 import type { SqliteConnection } from '../infrastructure/adapters/sqlite/connection.js';
 import type { FactoryStorePort } from './factory-store.port.js';
-import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus } from './types.js';
+import type { FactoryFloorRow, FactoryItemRow, FactoryRunRow, FactoryTicketRow, ItemSource, RunExecutor, FactoryRunStatus, IntakePullRow, ItemBody } from './types.js';
 
 interface FloorRow { id: string; name: string; layout: string; settings: string; created_at: string; updated_at: string }
 interface TicketRow { ticket_id: string; floor_id: string; machine_id: string | null; state: string; created_at: string; updated_at: string }
@@ -33,6 +33,10 @@ export function itemToRow(i: FactoryItemRow, json: (v: unknown) => unknown): Ite
     state: i.state == null ? null : json(i.state), archived_at: i.archivedAt, archived_reason: i.archivedReason, created_at: i.createdAt, updated_at: i.updatedAt,
   };
 }
+
+export interface IntakePullDbRow { intake_id: string; floor_id: string; last_pulled_at: string | null; error: string | null; updated_at: string }
+export const pullFromRow = (r: IntakePullDbRow): IntakePullRow => ({ intakeId: r.intake_id, floorId: r.floor_id, lastPulledAt: iso(r.last_pulled_at), error: r.error, updatedAt: iso(r.updated_at)! });
+export const pullToRow = (r: IntakePullRow): IntakePullDbRow => ({ intake_id: r.intakeId, floor_id: r.floorId, last_pulled_at: r.lastPulledAt, error: r.error, updated_at: r.updatedAt });
 
 export function runFromRow(r: RunRow & { item_id?: string; reply?: string | null; deliverable_id?: string | null }): FactoryRunRow {
   return {
@@ -99,9 +103,49 @@ export class SqliteFactoryStore implements FactoryStorePort {
     `).run(itemToRow(i, (v) => JSON.stringify(v)) as unknown as Record<string, unknown>);
   }
 
+  async listExitItems(floorId: string, machineId: string | null, sinceIso: string): Promise<FactoryItemRow[]> {
+    const rows = machineId
+      ? this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id = ? AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, machineId, sinceIso)
+      : this.conn.db.prepare("SELECT * FROM factory_items WHERE floor_id = ? AND machine_id IS NOT NULL AND archived_reason = 'exit' AND archived_at >= ? ORDER BY archived_at DESC LIMIT 1000").all(floorId, sinceIso);
+    return (rows as ItemDbRow[]).map(itemFromRow);
+  }
+
+  async saveItemBody(itemId: string, b: ItemBody): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO factory_item_bodies (item_id, text, html, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(item_id) DO UPDATE SET text = excluded.text, html = excluded.html, updated_at = excluded.updated_at
+    `).run(itemId, b.text, b.html, new Date().toISOString());
+  }
+
+  async getItemBody(itemId: string): Promise<ItemBody | null> {
+    const r = this.conn.db.prepare('SELECT text, html FROM factory_item_bodies WHERE item_id = ?').get(itemId) as { text: string; html: string | null } | undefined;
+    return r ? { text: r.text, html: r.html } : null;
+  }
+
+  async getItem(id: string): Promise<FactoryItemRow | null> {
+    const r = this.conn.db.prepare('SELECT * FROM factory_items WHERE id = ?').get(id) as ItemDbRow | undefined;
+    return r ? itemFromRow(r) : null;
+  }
+
+  async listArchivedItems(floorId: string, sinceIso: string): Promise<FactoryItemRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_items WHERE floor_id = ? AND archived_at IS NOT NULL AND archived_at >= ? ORDER BY archived_at DESC LIMIT 2000').all(floorId, sinceIso) as ItemDbRow[]).map(itemFromRow);
+  }
+
   async countDropped(floorId: string, sinceIso: string): Promise<Record<string, number>> {
     const rows = this.conn.db.prepare("SELECT intake_id, COUNT(*) AS n FROM factory_items WHERE floor_id = ? AND archived_reason = 'dropped' AND archived_at >= ? GROUP BY intake_id").all(floorId, sinceIso) as { intake_id: string | null; n: number }[];
     return Object.fromEntries(rows.filter((r) => r.intake_id).map((r) => [r.intake_id!, r.n]));
+  }
+
+  async listIntakePulls(floorId: string): Promise<IntakePullRow[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM factory_intake_pulls WHERE floor_id = ?').all(floorId) as IntakePullDbRow[];
+    return rows.map(pullFromRow);
+  }
+
+  async saveIntakePull(r: IntakePullRow): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO factory_intake_pulls (intake_id, floor_id, last_pulled_at, error, updated_at) VALUES (@intake_id, @floor_id, @last_pulled_at, @error, @updated_at)
+      ON CONFLICT(intake_id) DO UPDATE SET floor_id = excluded.floor_id, last_pulled_at = excluded.last_pulled_at, error = excluded.error, updated_at = excluded.updated_at
+    `).run(pullToRow(r) as unknown as Record<string, unknown>);
   }
 
   async saveRun(r: FactoryRunRow): Promise<void> {
@@ -129,6 +173,17 @@ export class SqliteFactoryStore implements FactoryStorePort {
 
   async listItemRuns(itemId: string): Promise<FactoryRunRow[]> {
     return (this.conn.db.prepare('SELECT * FROM factory_item_runs WHERE item_id = ? ORDER BY started_at ASC').all(itemId) as (RunRow & { item_id: string })[]).map(runFromRow);
+  }
+
+  async listRecentItemRuns(floorId: string, limit: number, machineId?: string): Promise<FactoryRunRow[]> {
+    const sql = `SELECT r.*, i.title AS item_title, i.source AS item_source FROM factory_item_runs r LEFT JOIN factory_items i ON i.id = r.item_id
+      WHERE r.floor_id = ?${machineId ? ' AND r.machine_id = ?' : ''} ORDER BY r.started_at DESC LIMIT ?`;
+    const rows = (machineId ? this.conn.db.prepare(sql).all(floorId, machineId, limit) : this.conn.db.prepare(sql).all(floorId, limit)) as (RunRow & { item_id: string; item_title: string | null; item_source: string | null })[];
+    return rows.map((r) => ({ ...runFromRow(r), item: r.item_title !== null ? { title: r.item_title, source: r.item_source as ItemSource } : null }));
+  }
+
+  async listItemRunsSince(floorId: string, sinceIso: string): Promise<FactoryRunRow[]> {
+    return (this.conn.db.prepare('SELECT * FROM factory_item_runs WHERE floor_id = ? AND (started_at >= ? OR finished_at >= ?) ORDER BY started_at ASC LIMIT 10000').all(floorId, sinceIso, sinceIso) as (RunRow & { item_id: string })[]).map(runFromRow);
   }
 
   async listRunsByTicket(ticketId: string): Promise<FactoryRunRow[]> {

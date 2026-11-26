@@ -41,7 +41,7 @@ export interface FactoryStats {
     avgLeadMs: number | null;
     humanMs: number;
   };
-  /** How many tickets left by each exit, by machine id: what an exit shows on the floor. */
+  /** How many left by each exit, by machine id (the tickets it shipped and the items archived there): what an exit shows on the floor. */
   exits: Record<string, number>;
 }
 
@@ -60,7 +60,7 @@ const ms = (a: string, b: string): number => Math.max(0, new Date(b).getTime() -
  *   persona and only its synthesis is linked to the run, so a panel run also
  *   takes the ticket's other executions started while it ran.
  */
-export function computeStats(input: { runs: FactoryRunRow[]; executions: ExecutionCost[]; layout: FactoryLayout; since: string; until: string; days: number }): FactoryStats {
+export function computeStats(input: { runs: FactoryRunRow[]; executions: ExecutionCost[]; layout: FactoryLayout; since: string; until: string; days: number; /** Items archived at an exit over the period. */ exitItems?: { machineId: string | null }[] }): FactoryStats {
   const { runs, executions, layout, since, until, days } = input;
   const onFloor = new Map(layout.machines.map((m) => [m.id, m]));
   const execById = new Map(executions.map((e) => [e.id, e]));
@@ -81,6 +81,7 @@ export function computeStats(input: { runs: FactoryRunRow[]; executions: Executi
   };
 
   const exits: Record<string, number> = {};
+  for (const i of input.exitItems ?? []) if (i.machineId) exits[i.machineId] = (exits[i.machineId] ?? 0) + 1;
   for (const r of runs) {
     if (r.executor === 'exit') { totals.shipped++; exits[r.machineId] = (exits[r.machineId] ?? 0) + 1; if (r.finishedAt) leadMs += ms(r.startedAt, r.finishedAt); continue; }
     let m = machines.get(r.machineId);

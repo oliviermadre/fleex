@@ -28,19 +28,20 @@ export function tapeShape(hud: HudShape | null, t = TAPE): string {
 }
 
 /**
- * Build mode, said by the page itself: hazard tape all round the view, as round a work site, and a plate in its
+ * Build mode (and the emergency stop, without the plate), said by the page itself: hazard tape all round the view, as round a work site, and a plate in its
  * corner. Going from the floor to build mode otherwise changes little to the eye. The tape follows the console's
  * contour while the console is shown (`hud`), and is a plain frame when it is put away. Nothing here takes the
  * pointer: the floor under it is worked on as before, edges included.
  */
-export function FactoryBuildFrame({ halted, hud = null }: { halted: boolean; hud?: HudShape | null }) {
+export function FactoryBuildFrame({ halted, building = true, hud = null }: { halted: boolean; building?: boolean; hud?: HudShape | null }) {
+  /* the emergency stop out of build mode: the tape alone, its notice is at the top of the floor */
   return (
-    <div className="pointer-events-none absolute inset-0" role="status" aria-label="Build mode">
+    <div className="pointer-events-none absolute inset-0" role="status" aria-label={building ? 'Build mode' : 'Floor stopped'}>
       <div className="absolute inset-0" data-tape={hud ? 'contour' : 'frame'} style={{ background: STRIPES, clipPath: tapeShape(hud) }} />
-      <div className="absolute flex items-center gap-2 rounded px-2 py-1 text-[11px] shadow-lg" style={{ left: TAPE + 8, top: TAPE + 8, background: HAZARD, color: HAZARD_INK }}>
+      {building && <div className="absolute flex items-center gap-2 rounded px-2 py-1 text-[11px] shadow-lg" style={{ left: TAPE + 8, top: TAPE + 8, background: HAZARD, color: HAZARD_INK }}>
         <b className="font-mono tracking-wider">BUILD MODE</b>
         <span className="font-medium opacity-80">{halted ? 'the floor is stopped' : 'the floor keeps running'}</span>
-      </div>
+      </div>}
     </div>
   );
 }

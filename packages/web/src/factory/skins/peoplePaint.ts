@@ -12,11 +12,16 @@ const INK = '#2b2833';
 /** Shirts, skin tones and hair, chosen by a person's number: no two neighbours alike, nothing kept. */
 export const SHIRTS = ['#e0614f', '#4f8fe0', '#5fb35f', '#e0b14f', '#9b6fe0', '#4fc4c4', '#f2b01e'];
 const SKIN = ['#f2c79e', '#d9a07a', '#a8714a', '#7a4f33'], HAIR = ['#3a2a1e', '#f2b01e', '#8a4b2a', '#1d1b26', '#c0c0c0'];
+/**
+ * The one of a list a number picks, whatever the number: a station left of or above the floor's origin has a negative
+ * one (its worker's is drawn from where it stands), and `-7 % 4` is -3, which picked nothing.
+ */
+export const pick = <T,>(list: readonly T[], n: number): T => list[(((Math.trunc(n) || 0) % list.length) + list.length) % list.length]!;
 
 /** A person in pixel art, feet at the middle of the bottom of their tile; `light`: the day workshop. */
 export function pixelPerson(ctx: CanvasRenderingContext2D, p: Person, light: boolean): void {
   const X = Math.round((p.x + 0.5) * ART), Y = Math.round((p.y + 0.85) * ART), walking = p.stride > 0, step = walking ? Math.floor(p.stride) % 2 : -1;
-  const shirt = SHIRTS[p.shirt % SHIRTS.length]!, skin = SKIN[p.id % SKIN.length]!, hair = HAIR[(p.id * 3) % HAIR.length]!, legs = light ? '#3d4a7a' : '#2e3860';
+  const shirt = pick(SHIRTS, p.shirt), skin = pick(SKIN, p.id), hair = pick(HAIR, p.id * 3), legs = light ? '#3d4a7a' : '#2e3860';
   const r = (dx: number, dy: number, w: number, h: number, c: string) => box(ctx, X + dx, Y + dy, w, h, c);
   const a0 = ctx.globalAlpha;
   ctx.globalAlpha = a0 * (light ? 0.25 : 0.45); r(-4, -1, 8, 2, '#000000'); ctx.globalAlpha = a0;
@@ -37,7 +42,7 @@ export function pixelPerson(ctx: CanvasRenderingContext2D, p: Person, light: boo
 /** A person seen from above, as a plan draws one: shoulders, a head turned the way they go. Neon: in light, with a trail. */
 export function flatPerson(ctx: CanvasRenderingContext2D, p: Person, pal: Palette, neon: boolean): void {
   const cx = p.x + 0.5, cy = p.y + 0.5, dx = [1, 0, -1, 0][p.dir]!, dy = [0, 1, 0, -1][p.dir]!, sway = p.stride > 0 ? Math.sin(p.stride * Math.PI) * 0.05 : 0;
-  const shirt = SHIRTS[p.shirt % SHIRTS.length]!, skin = SKIN[p.id % SKIN.length]!;
+  const shirt = pick(SHIRTS, p.shirt), skin = pick(SKIN, p.id);
   const a0 = ctx.globalAlpha;
   if (neon) {
     for (let k = 1; k <= 3; k++) if (p.stride > 0) { ctx.globalAlpha = (a0 * 0.4) / k; ctx.beginPath(); ctx.arc(cx - dx * k * 0.2, cy - dy * k * 0.2, 0.07, 0, 6.3); ctx.fillStyle = shirt; ctx.fill(); }
@@ -51,7 +56,7 @@ export function flatPerson(ctx: CanvasRenderingContext2D, p: Person, pal: Palett
   else { ctx.fillStyle = mix(shirt, pal.floor, pal.light ? 0.05 : 0.1); ctx.fill(); ctx.strokeStyle = mix(shirt, '#000000', 0.35); ctx.lineWidth = 0.03; ctx.stroke(); }
   ctx.beginPath(); ctx.arc(cx + dx * 0.06, cy + dy * 0.06, 0.15, 0, 6.3);
   if (neon) { ctx.fillStyle = '#0b0a16'; ctx.fill(); ctx.strokeStyle = pal.text; ctx.lineWidth = 0.045; ctx.stroke(); }
-  else { ctx.fillStyle = skin; ctx.fill(); ctx.strokeStyle = mix(skin, '#000000', 0.4); ctx.lineWidth = 0.025; ctx.stroke(); ctx.beginPath(); ctx.arc(cx - dx * 0.02, cy - dy * 0.02, 0.11, 0, 6.3); ctx.fillStyle = HAIR[(p.id * 3) % HAIR.length]!; ctx.fill(); }
+  else { ctx.fillStyle = skin; ctx.fill(); ctx.strokeStyle = mix(skin, '#000000', 0.4); ctx.lineWidth = 0.025; ctx.stroke(); ctx.beginPath(); ctx.arc(cx - dx * 0.02, cy - dy * 0.02, 0.11, 0, 6.3); ctx.fillStyle = pick(HAIR, p.id * 3); ctx.fill(); }
   if (p.role === 'reviewer') { const bx = cx + dx * 0.24 + ax * 0.12, by = cy + dy * 0.24 + ay * 0.12; ctx.fillStyle = neon ? '#0b0a16' : '#fafafa'; ctx.strokeStyle = neon ? '#ffd23f' : mix('#c8955a', '#000000', 0.3); ctx.lineWidth = 0.03; ctx.fillRect(bx - 0.09, by - 0.11, 0.18, 0.22); ctx.strokeRect(bx - 0.09, by - 0.11, 0.18, 0.22); }
 }
 
@@ -64,7 +69,7 @@ export const zees = (t: number): { k: number; size: number }[] => [0, 1, 2].map(
  * waiting (hands at the sides, breathing), asleep (the head fallen to a side; the "z"s are the skin's to write).
  */
 export function flatWorker(ctx: CanvasRenderingContext2D, cx: number, cy: number, state: WorkerState, t: number, pal: Palette, neon: boolean, id: number, shirtIx: number): void {
-  const shirt = SHIRTS[shirtIx % SHIRTS.length]!, skin = SKIN[id % SKIN.length]!, hair = HAIR[(id * 3) % HAIR.length]!;
+  const shirt = pick(SHIRTS, shirtIx), skin = pick(SKIN, id), hair = pick(HAIR, id * 3);
   const breathe = state === 'wait' || state === 'sleep' ? Math.sin(t * (state === 'sleep' ? 1.6 : 2.4)) * 0.012 : 0;
   const fill = (c: string) => (neon ? '#0b0a16' : c), edge = (c: string) => (neon ? c : mix(c, '#000000', 0.35));
   if (!neon) { ctx.beginPath(); ctx.ellipse(cx + 0.05, cy + 0.08, 0.36, 0.24, 0, 0, 6.3); ctx.fillStyle = pal.light ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.35)'; ctx.fill(); }

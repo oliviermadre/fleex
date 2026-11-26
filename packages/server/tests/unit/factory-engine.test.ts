@@ -9,7 +9,7 @@ import type { SetOp, TicketChange } from '../../src/factory/set-ops.js';
 import { LAYOUT_VERSION, upgradeLayout, versionOf } from '../../src/factory/layout-versions.js';
 import type { FactoryStorePort } from '../../src/factory/factory-store.port.js';
 import type { ItemRunTarget, StationRunResult } from '../../src/factory/station-runner.js';
-import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
+import type { ArmCondition, FactoryFloorRow, FactoryItemRow, FactoryLayout, FactoryRunRow, FactoryTicketInfo, FactoryTicketRow, IntakePullRow, MachineSpec, StationSpec } from '../../src/factory/types.js';
 
 class MemoryStore implements FactoryStorePort {
   floors = new Map<string, FactoryFloorRow>();
@@ -27,6 +27,15 @@ class MemoryStore implements FactoryStorePort {
   async getItemByKey(source: string, key: string) { const i = [...this.items.values()].find((x) => x.source === source && x.sourceKey === key); return i ? structuredClone(i) : null; }
   async saveItem(i: FactoryItemRow) { this.items.set(i.id, structuredClone(i)); }
   async countDropped() { const out: Record<string, number> = {}; for (const i of this.items.values()) if (i.archivedReason === 'dropped' && i.intakeId) out[i.intakeId] = (out[i.intakeId] ?? 0) + 1; return out; }
+  async listExitItems(_f: string, machineId: string, since: string) { return [...this.items.values()].filter((i) => i.archivedReason === 'exit' && i.machineId === machineId && (i.archivedAt ?? '') >= since); }
+  async getItem(id: string) { const i = this.items.get(id); return i ? structuredClone(i) : null; }
+  async listArchivedItems() { return [...this.items.values()].filter((i) => i.archivedAt).map((i) => structuredClone(i)); }
+  bodies = new Map<string, { text: string; html: string | null }>();
+  async saveItemBody(id: string, b: { text: string; html: string | null }) { this.bodies.set(id, structuredClone(b)); }
+  async getItemBody(id: string) { return this.bodies.get(id) ?? null; }
+  pulls = new Map<string, IntakePullRow>();
+  async listIntakePulls() { return [...this.pulls.values()].map((r) => structuredClone(r)); }
+  async saveIntakePull(r: IntakePullRow) { this.pulls.set(r.intakeId, structuredClone(r)); }
   async saveRun(r: FactoryRunRow) { this.runs.set(r.id, structuredClone(r)); }
   itemRuns = new Map<string, FactoryRunRow>();
   async saveItemRun(r: FactoryRunRow) { this.itemRuns.set(r.id, structuredClone(r)); }
@@ -152,7 +161,7 @@ describe('FactoryEngine', () => {
       const { itemId } = await engine.ingest(msg('k'));
       await run(5);
       expect(where(itemId!)).toBe('gone');
-      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'exit', machineId: null });
+      expect(store.items.get(itemId!)).toMatchObject({ archivedReason: 'exit', machineId: 'x' });          // the exit it left by
       expect(statuses).toEqual([]);
       expect(await engine.ingest(msg('k'))).toEqual({ itemId, status: 'back' });
       expect(where(itemId!)).toBe('in:zone');
@@ -244,6 +253,121 @@ describe('FactoryEngine', () => {
       expect(where(b.itemId!)).toBe('dms:zone');
     });
 
+    describe('pulled intakes (Gmail)', () => {
+      const gmail = (id: string, x: number, y: number, over: Record<string, unknown> = {}) => intake(id, x, y, { source: 'gmail', ...over });
+      const mail = (key: string, at: string, over: Record<string, unknown> = {}) => ({ source: 'gmail' as const, key, title: `re ${key}`, author: 'ana@acme.com', at, ...over });
+      const iso = (msAgo: number) => new Date(clock - msAgo).toISOString(), NOW = '2026-11-15T10:00:00.000Z';
+
+      it('keeps a query and an interval, no rules, and numbers the intakes of a source in the order they are served', async () => {
+        await boot([gmail('late', 1, 1, { query: '  from:@acme.com ', rules: [{ field: 'to', op: 'is', value: 'x' }], everySec: 5 }), gmail('urgent', 1, 4, { priority: 1 }), intake('ops', 1, 7, { priority: 4, query: 'x' })]);
+        const ms = engine.snapshot().floor.layout.machines as unknown as Record<string, unknown>[];
+        expect(ms[0]).toMatchObject({ id: 'late', query: 'from:@acme.com', rules: [], everySec: 60, priority: 2 });
+        expect(ms[1]).toMatchObject({ id: 'urgent', query: '', everySec: 300, priority: 1 });
+        expect(ms[2]).toMatchObject({ id: 'ops', priority: 1 });
+        expect(ms[2]).not.toHaveProperty('query');
+        expect(engine.snapshot().intakes).toEqual({ late: { dropped: 0, pulledAt: null, pullError: null }, urgent: { dropped: 0, pulledAt: null, pullError: null }, ops: { dropped: 0 } });
+        await engine.recordPull('late', NOW, 'quota');
+        expect(engine.snapshot().intakes!['late']).toEqual({ dropped: 0, pulledAt: NOW, pullError: 'quota' });
+        expect(store.pulls.get('late')).toMatchObject({ lastPulledAt: NOW, error: 'quota' });
+        expect(engine.pulledIntakes().map((x) => x.spec.id)).toEqual(['late', 'urgent']);
+      });
+
+      it('keeps the whole of a message apart, when it brings one, and its next one over it', async () => {
+        await boot([gmail('a', 1, 1)]);
+        const t = await engine.ingest({ ...mail('t1', iso(5_000)), excerpt: 'Hi', body: { text: 'Hi Ana, the whole text', html: '<p>Hi Ana</p>' } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'Hi Ana, the whole text', html: '<p>Hi Ana</p>' });
+        await engine.ingest({ ...mail('t1', iso(5_000)), body: { text: 'seen again' } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)!.text).toBe('Hi Ana, the whole text');      // nothing new
+        await engine.ingest({ ...mail('t1', iso(1_000)), body: { text: 'a reply', html: null } }, { intakeId: 'a' });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'a reply', html: null });
+        const bare = await engine.ingest(mail('t2', iso(0)), { intakeId: 'a' });
+        expect(store.bodies.has(bare.itemId!)).toBe(false);
+      });
+
+      it('an item kept before its message was kept whole is asked again from its source, and kept then', async () => {
+        await boot([gmail('a', 1, 1)]);
+        const t = await engine.ingest({ ...mail('t1', iso(5_000)), excerpt: '<div>cut</div><p>at</p><br>' }, { intakeId: 'a' });
+        /* no source to ask: the first lines, read as text */
+        expect(await engine.itemBody(t.itemId!)).toEqual({ text: 'cut\n\nat', html: '<div>cut</div><p>at</p><br>', kept: false });
+        const asked: string[] = [];
+        (engine as unknown as { deps: { readItem: unknown } }).deps.readItem = async (item: { sourceKey: string }) => { asked.push(item.sourceKey); return { body: { text: 'the whole mail', html: '<p>the whole mail</p>' }, conversation: [] }; };
+        expect(await engine.itemBody(t.itemId!)).toEqual({ text: 'the whole mail', html: '<p>the whole mail</p>', kept: true });
+        expect(store.bodies.get(t.itemId!)).toEqual({ text: 'the whole mail', html: '<p>the whole mail</p>' });
+        expect(await engine.itemBody(t.itemId!)).toMatchObject({ kept: true });
+        expect(asked).toEqual(['t1']);                                                     // kept: not asked again
+        expect(await engine.itemBody('nope')).toBeNull();
+      });
+
+      it('goes to the intake that saw it, and a message seen again is nothing new', async () => {
+        await boot([gmail('a', 1, 1), gmail('b', 1, 4)]);
+        const first = await engine.ingest(mail('t1', iso(5_000)), { intakeId: 'b' });
+        expect(first.status).toBe('new');
+        expect(where(first.itemId!)).toBe('b:zone');
+        expect(await engine.ingest(mail('t1', iso(5_000)), { intakeId: 'b' })).toEqual({ itemId: first.itemId, status: 'seen' });
+        expect(await engine.ingest(mail('t1', iso(1_000), { title: 'and more' }), { intakeId: 'b' })).toEqual({ itemId: first.itemId, status: 'updated' });
+        expect(engine.snapshot().tickets.find((t) => t.ticketId === first.itemId)!.item).toMatchObject({ messages: 2 });
+        await expect(engine.ingest(mail('t2', iso(0)), { intakeId: 'nope' })).rejects.toThrow('No gmail intake nope');
+      });
+
+      it('one mail is one item: an intake served first takes it over while it waits on a dock, not once it is on a lane', async () => {
+        await boot([gmail('internal', 1, 1, { priority: 2, quietSec: 60 }), gmail('urgent', 1, 4, { priority: 1, quietSec: 60 }), arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
+        const t = await engine.ingest(mail('t1', iso(0)), { intakeId: 'internal' });
+        expect(await engine.ingest(mail('t1', iso(0)), { intakeId: 'urgent' })).toEqual({ itemId: t.itemId, status: 'moved' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+        expect(store.items.size).toBe(1);
+        /* served later: it stays where it is */
+        expect(await engine.ingest(mail('t1', iso(0)), { intakeId: 'internal' })).toEqual({ itemId: t.itemId, status: 'seen' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+
+        const sent = iso(0), u = await engine.ingest(mail('t2', sent), { intakeId: 'internal' });
+        await run(70);
+        expect(where(u.itemId!)).toBe('z:zone');
+        expect(await engine.ingest(mail('t2', sent), { intakeId: 'urgent' })).toMatchObject({ status: 'seen' });
+        expect(where(u.itemId!)).toBe('z:zone');
+      });
+
+      it('an archived mail stays archived until a new message comes, then comes back where it came in, or to a better intake that saw it', async () => {
+        await boot([gmail('internal', 1, 1, { priority: 2 }), gmail('urgent', 1, 4, { priority: 1 })]);
+        const t = await engine.ingest(mail('t1', iso(60_000)), { intakeId: 'internal' });
+        await engine.archiveItem(t.itemId!);
+        expect(await engine.ingest(mail('t1', iso(60_000)), { intakeId: 'internal' })).toEqual({ itemId: null, status: 'seen' });
+        expect(await engine.ingest(mail('t1', iso(30_000)), { intakeId: 'internal' })).toMatchObject({ status: 'back' });
+        expect(where(t.itemId!)).toBe('internal:zone');
+        await engine.archiveItem(t.itemId!);
+        expect(await engine.ingest(mail('t1', iso(10_000)), { intakeId: 'urgent' })).toMatchObject({ status: 'back' });
+        expect(where(t.itemId!)).toBe('urgent:zone');
+      });
+    });
+
+    it('brings an archived item back to the intake it came in by, past the rules, with what it had', async () => {
+      await boot([intake('ops', 1, 1, { rules: [{ field: 'bot', op: 'is', value: 'yes' }] })]);
+      const a = await engine.ingest({ ...msg('a'), tags: ['finance'] });
+      await engine.archiveItem(a.itemId!);
+      await engine.flush();
+      expect(store.items.get(a.itemId!)).toMatchObject({ archivedReason: 'junk' });
+      expect((await engine.findItem(a.itemId!))!.archivedReason).toBe('junk');
+      await engine.bringBack(a.itemId!);
+      expect(where(a.itemId!)).toBe('ops:zone');
+      expect(engine.snapshot().tickets.find((t) => t.ticketId === a.itemId)!.info!.tags).toContain('finance');
+      await engine.flush();
+      expect(store.items.get(a.itemId!)).toMatchObject({ archivedAt: null, archivedReason: null, machineId: 'ops' });
+      await expect(engine.bringBack(a.itemId!)).rejects.toThrow('already on the floor');
+      /* dropped by a rule: back past it */
+      const d = await engine.ingest({ ...msg('d'), fields: { bot: true } });
+      expect(d.status).toBe('dropped');
+      const dropped = [...store.items.values()].find((i) => i.sourceKey === 'd')!;
+      await engine.bringBack(dropped.id);
+      expect(where(dropped.id)).toBe('ops:zone');
+      await expect(engine.bringBack('nope')).rejects.toThrow('No archived item');
+    });
+
+    it('a dock keeps 3 by 2 when it was built so, and is 3 by 3 otherwise; a station is 5 by 5 unless it says', async () => {
+      await boot([{ id: 'd2', kind: 'desk', x: 0, y: 0, w: 3, h: 2 } as unknown as MachineSpec, intake('i', 0, 4, { h: 7 }),
+        { id: 's', kind: 'station', x: 10, y: 0, w: 0, h: 0, exec: 'agent', outcomes: ['ok'], cap: 2 } as unknown as MachineSpec, station('old', 20, 0)]);
+      const size = (id: string) => { const m = engine.snapshot().floor.layout.machines.find((q) => q.id === id)!; return [m.w, m.h]; };
+      expect([size('d2'), size('i'), size('s')]).toEqual([[3, 2], [3, 3], [5, 5]]);
+    });
+
     it('refuses an item with no intake for its source, or with no key', async () => {
       await boot([intake('in', 1, 1)]);
       await expect(engine.ingest(msg('k', { source: 'gmail' }))).rejects.toThrow('No gmail intake on the floor');
@@ -255,7 +379,7 @@ describe('FactoryEngine', () => {
   it('a desk holds the ticket created at it until an arm takes it out, and takes nothing from the floor', async () => {
     const desk = { id: 'desk', kind: 'desk', x: 1, y: 1, w: 9, h: 9, name: '  Bug desk ', defaults: { boardId: 'b1', type: 'fix', priority: 7, junk: 'x' } } as unknown as MachineSpec;
     await boot([desk, arm('a1', 4, 1, 0), belt('b1', 5, 1), zone('z', 6, 1)]);
-    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 2, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });
+    expect(engine.snapshot().floor.layout.machines[0]).toEqual({ id: 'desk', kind: 'desk', x: 1, y: 1, w: 3, h: 3, name: 'Bug desk', defaults: { boardId: 'b1', type: 'fix' } });     // a dock of 3 by 3
     await engine.transfer('a', { machineId: 'desk' });
     await engine.transfer('b', { machineId: 'desk' });     // several can be created in a row: a desk has no capacity
     expect(where('a')).toBe('desk:zone');
@@ -299,6 +423,9 @@ describe('FactoryEngine', () => {
     expect([inbound.x + inbound.w / 2, inbound.y + inbound.h / 2]).toEqual([150, 75]);
     const two = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), inbound: true } as MachineSpec, { ...zone('z2', 6, 1), inbound: true } as MachineSpec] });
     expect(two.machines.map((m) => (m.kind === 'zone' ? m.inbound : null))).toEqual([true, false]);
+    /* a zone whose tickets wait for someone keeps saying so; anything but true is dropped */
+    const marked = normaliseLayout({ w: 20, h: 20, machines: [{ ...zone('z1', 1, 1), needsYou: true } as MachineSpec, { ...zone('z2', 6, 1), needsYou: 'yes' } as unknown as MachineSpec] });
+    expect(marked.machines.map((m) => 'needsYou' in m)).toEqual([true, false]);
   });
 
   it('a bridge lets two lines cross: each ticket goes straight across', async () => {
@@ -350,6 +477,21 @@ describe('FactoryEngine', () => {
     await engine.transfer('b', { machineId: 's1' });
     await run(6);
     expect([where('a'), where('b')]).toEqual(['west:zone', 'north:zone']);
+  });
+
+  it('a fast arm swings twice as fast; anything but true is no fast arm', async () => {
+    await boot([
+      zone('in1', 0, 0, { release: 'auto' }), arm('slow', 2, 0, 0), zone('out1', 3, 0),
+      zone('in2', 0, 4, { release: 'auto' }), { ...arm('quick', 2, 4, 0), fast: true } as MachineSpec, zone('out2', 3, 4),
+    ], 30, 12, { armSwing: 1, stationRestMs: 0, teleportRestMs: 0 });
+    await engine.transfer('a', { machineId: 'in1' });
+    await engine.transfer('b', { machineId: 'in2' });
+    await run(0.75);
+    expect(where('b')).toBe('out2:zone');                 // the fast arm has dropped its ticket
+    expect(where('a')).not.toBe('out1:zone');             // the plain one is still on its way
+    await run(0.5);
+    expect(where('a')).toBe('out1:zone');
+    expect(normaliseLayout({ w: 9, h: 9, machines: [{ ...arm('x', 1, 1, 0), fast: 'yes' } as unknown as MachineSpec] }).machines[0]).not.toHaveProperty('fast');
   });
 
   it('an arm can drop on a bridge: the ticket crosses the way the arm points', async () => {
@@ -994,6 +1136,20 @@ describe('a station has a switch', () => {
     await run(0.3);
     expect(where('a')).toBe('s:running');
     expect((store.floor!.layout.machines[0] as StationSpec).off).toBeUndefined();
+  });
+
+  it('not set up (no persona, or a script with nothing to run), it takes tickets in and starts nothing until it is', async () => {
+    await boot([station('s', 1, 1, { ref: '' }), station('k', 6, 1, { exec: 'script', ref: undefined, script: { lines: [], missing: 'ignore', onFail: 'all' } })]);
+    await engine.transfer('a', { machineId: 's' });
+    await engine.transfer('b', { machineId: 'k' });
+    await run(1);
+    expect(where('a')).toBe('s:wait');
+    expect(note('a')).toBe('s is not set up (no persona): it starts nothing until it is');
+    expect(note('b')).toContain('not set up (nothing to run)');
+    expect(pending).toHaveLength(0);
+    await engine.setLayout({ ...store.floor!.layout, machines: store.floor!.layout.machines.map((m) => (m.id === 's' ? { ...m, ref: 'builder' } : m)) });
+    await run(0.3);
+    expect(where('a')).toBe('s:running');
   });
 
   it('lets what already runs finish', async () => {

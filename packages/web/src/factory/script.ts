@@ -13,7 +13,22 @@ export const blankScript = (): ScriptSpec => ({ lines: [], missing: 'ignore', on
 export const scriptOf = (s: ScriptSpec | undefined): ScriptSpec => ({ ...blankScript(), ...(s ?? {}), lines: s?.lines ?? [] });
 /** The ways out of a script station: "unconfigured" only when it is asked for. */
 export const scriptOutcomes = (s: ScriptSpec): string[] => (s.missing === 'own' ? ['ok', 'ko', 'unconfigured'] : ['ok', 'ko']);
-export const targetName = (t: string): string => (t === ANY_REPO ? 'any repository' : t === WORKSPACE ? 'ticket workspace' : t);
+export const targetName = (t: string): string => (t === ANY_REPO ? 'any repository' : t === WORKSPACE ? 'workspace' : t);
+/** Where a line runs, in the words of its selector. */
+export const targetLabel = (t: string): string => (t === ANY_REPO ? 'Every repository of the ticket' : t === WORKSPACE ? "Workspace: the ticket's, or the item's folder" : `${t} only`);
+
+/**
+ * What runs, in words, on a ticket and on an item: the lines that have a command, where (the station's summary). An
+ * item has no repository: only the workspace lines run for it. Empty: nothing runs, and the station leaves by "ko".
+ */
+export function whatRuns(s: ScriptSpec | undefined): { ticket: string[]; item: string[] } {
+  const spec = scriptOf(s), lines = spec.lines.filter((l) => !incompleteLine(l));
+  const what = (l: ScriptLine) => (l.kind === 'action' ? `the action "${l.value}"` : l.value);
+  const ticket = lines.map((l) => (l.target === WORKSPACE ? `in its workspace: ${what(l)}` : l.target === ANY_REPO ? `in each repository: ${what(l)}` : `in ${l.target}: ${what(l)}`));
+  if (spec.action) ticket.push(`in every other repository: the action "${spec.action}"`);
+  const item = lines.filter((l) => l.target === WORKSPACE).map((l) => `in its folder: ${what(l)}`);
+  return { ticket, item };
+}
 /** A line that has nothing to run yet: the floor is saved without it. */
 export const incompleteLine = (l: ScriptLine): boolean => !l.value.trim();
 

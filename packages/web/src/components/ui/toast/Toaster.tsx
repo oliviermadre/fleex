@@ -32,6 +32,18 @@ export function Toaster({ linksEnabled = true }: {
   const toasts = useToastStore((s) => s.toasts);
   const offset = useToastStore((s) => s.offsets.at(-1)?.value ?? 0);
   const anchoredTop = useToastStore((s) => s.anchors.length > 0);
+  const skin = useToastStore((s) => s.skins.at(-1)?.value ?? null), skinStyle = useToastStore((s) => s.skinStyle);
+
+  if (skin === 'quiet') return null;
+  /* the floor skin: lines over the page, the latest at the bottom; only the lines take the pointer */
+  if (skin === 'floor') {
+    return (
+      <div aria-live="polite" data-skin="floor" className="fleex-toaster pointer-events-none fixed left-1/2 z-[60] flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col items-start gap-[3px]"
+        style={{ ...skinStyle, bottom: `calc(${offset}px + 0.5rem)` }}>
+        {toasts.map((t) => <FloorLine key={`${t.id}:${t.version}`} toast={t} linksEnabled={linksEnabled} live />)}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -47,6 +59,69 @@ export function Toaster({ linksEnabled = true }: {
       {[...toasts].reverse().map((t) => (
         <ToastCard key={`${t.id}:${t.version}`} toast={t} linksEnabled={linksEnabled} />
       ))}
+    </div>
+  );
+}
+
+/** The sign at the head of a floor line, by tone: what a card says with its coloured dot. */
+const floorSign: Record<ToastTone, string> = { info: '·', success: '✓', warning: '!', error: '✕', action: '●' };
+const floorInk: Record<ToastTone, string> = {
+  info: 'text-[var(--tint-blue-solid)]', success: 'text-[var(--tint-green-solid)]', warning: 'text-[var(--tint-yellow-solid)]',
+  error: 'text-[var(--tint-red-solid)]', action: 'text-[var(--tint-purple-solid)]',
+};
+const clock = (at: number) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+/**
+ * One toast as a line of text, for the floor skin and for a page that shows the toasts again (the Factory's log):
+ * the time, the tone's sign (or the toast's icon), the title and the message, the action as a link. `live`: it fades
+ * over its duration and pauses under the pointer, as the card's countdown does; otherwise it stays.
+ */
+export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toast: ToastItem; linksEnabled?: boolean; live?: boolean }) {
+  const navigate = useNavigate();
+  const { dismiss, pause, resume } = useToastStore.getState();
+  const link = linksEnabled ? t.link : undefined;
+  const open = link ? () => { navigate(link); if (live) dismiss(t.id, 'click'); } : undefined;
+  return (
+    <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={!live || t.durationMs === null}
+      className="fleex-floor-line flex max-w-full items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]"
+      style={live && t.durationMs !== null ? { animationDuration: `200ms, ${t.durationMs}ms` } : undefined}>
+      <span className={cn('pointer-events-auto flex min-w-0 max-w-full items-baseline gap-1.5', !live && 'w-full')} onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
+        <span className="flex-none font-mono text-[10.5px] text-[var(--theme-text-muted)]">{clock(t.createdAt)}</span>
+        <span className={cn('flex-none font-bold', floorInk[t.tone])} aria-hidden>{t.icon ?? floorSign[t.tone]}</span>
+        {live ? (
+          /* over the floor: one line, cut; the whole message and its choices are in the log (Enter) */
+          <>
+            <span className={cn('min-w-0 truncate', open && 'cursor-pointer hover:underline')} onClick={open} title={t.message}>
+              {t.title && <b className="font-semibold">{t.title} </b>}{t.message.replace(/\s+/g, ' ')}
+            </span>
+            {!!t.choices?.length && <span className="flex-none text-[11px] text-[var(--theme-text-muted)]">· Enter to answer</span>}
+            {t.action && (
+              <button type="button" className="flex-none font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
+                onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+            )}
+          </>
+        ) : (
+          /* in a log: the whole message, its lines kept; its choices and its action under it, wrapping */
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className={cn('whitespace-pre-line break-words', open && 'cursor-pointer hover:underline')} onClick={open}>
+              {t.title && <b className="font-semibold">{t.title} </b>}{t.message}
+              {t.detail && <span className="ml-1 font-mono text-[10.5px] text-[var(--theme-text-muted)]">{t.detail}</span>}
+            </span>
+            {(!!t.choices?.length || t.action) && (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {t.choices?.map((c) => (
+                  <button key={c.label} type="button" className="max-w-full rounded-full border border-[var(--tint-blue-solid)] px-2 py-px text-left font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] hover:bg-[color-mix(in_srgb,var(--tint-blue-solid)_18%,transparent)]"
+                    onClick={() => { c.onClick(); dismiss(t.id, 'action'); }}>{c.label}</button>
+                ))}
+                {t.action && (
+                  <button type="button" className="font-mono text-[11px] font-semibold text-[var(--tint-blue-solid)] underline"
+                    onClick={() => { t.action!.onClick(); dismiss(t.id, 'action'); }}>{t.action.label}</button>
+                )}
+              </span>
+            )}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
@@ -107,6 +182,10 @@ function ToastCard({ toast: t, linksEnabled }: { toast: ToastItem; linksEnabled:
         )}
       </div>
 
+      {t.choices?.map((c) => (
+        <button key={c.label} type="button" onClick={(e) => { e.stopPropagation(); c.onClick(); dismiss(t.id, 'action'); }}
+          className="shrink-0 rounded-full border border-[var(--theme-border-input)] px-2 py-0.5 text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]">{c.label}</button>
+      ))}
       {t.action && (
         <button
           type="button"

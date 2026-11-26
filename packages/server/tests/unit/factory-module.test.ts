@@ -19,7 +19,7 @@ function memoryStore(): FactoryStorePort {
     saveTicket: async (t) => { tickets.set(t.ticketId, structuredClone(t)); },
     removeTicket: async (id) => { tickets.delete(id); },
     listManagedTicketIds: async () => [...tickets.keys()],
-    listItems: async () => [], getItemByKey: async () => null, saveItem: async () => {}, countDropped: async () => ({}), saveItemRun: async () => {}, listItemRuns: async () => [],
+    listItems: async () => [], getItemByKey: async () => null, saveItem: async () => {}, countDropped: async () => ({}), listIntakePulls: async () => [], listExitItems: async () => [], saveItemBody: async () => {}, getItemBody: async () => null, saveIntakePull: async () => {}, saveItemRun: async () => {}, listItemRuns: async () => [],
     saveRun: async () => {},
     listRunsByTicket: async () => [], listRecentRuns: async () => [], listRunsSince: async () => [], countRunsSince: async () => 0,
     interruptRunningRuns: async () => [],
@@ -144,5 +144,63 @@ describe('FactoryModule: what it reads, and when', () => {
       expect(reads).toHaveBeenCalledTimes(2);
       await broken.stop();
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('FactoryModule: what left by an exit', () => {
+  it('lists the tickets an exit shipped over the period, as they are now, the latest first, and the items archived there', async () => {
+    const day = 86_400_000, ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    const run = (ticketId: string, shipped: string, machineId = 'out', executor = 'exit') => ({ id: `r-${ticketId}-${machineId}`, ticketId, floorId: 'default', machineId, machineName: 'Out', executor, status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: ago(3 * day), finishedAt: shipped });
+    const runs = [run('a', ago(2 * day)), run('gone', ago(day)), run('a', ago(10 * day)), run('a', ago(day), 'dev', 'agent')];
+    const store = factory.store as unknown as Record<string, unknown>;
+    store['listRecentRuns'] = async (_f: string, _n: number, machineId: string) => runs.filter((r) => r.machineId === machineId);
+    store['listExitItems'] = async (_f: string, machineId: string, since: string) => (machineId === 'out' && since < ago(day) ? [{ id: 'i1', machineId: 'out', source: 'gmail', title: 'Invoice', author: 'Ana', url: null, tags: [], createdAt: ago(2 * day), archivedAt: ago(day / 2) }] : []);
+    const log = await factory.exitLog('out', 7);
+    expect(log.days).toBe(7);
+    expect(log.tickets.map((t) => [t.ticketId, t.displayId, t.title, t.status])).toEqual([['gone', null, 'A ticket deleted since', null], ['a', 1, 'A', 'todo']]);
+    expect(log.items).toMatchObject([{ itemId: 'i1', source: 'gmail', title: 'Invoice' }]);
+    expect((await factory.exitLog('out', 1)).tickets).toEqual([]);
+    expect(log.exits).toEqual([{ machineId: 'out', name: 'Out', onFloor: false }]);
+    expect(log.tickets[0]!.machineId).toBe('out');
+  });
+
+  it('gathers every exit of the floor, each named, with those the runs only remember', async () => {
+    const day = 86_400_000, ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    const run = (ticketId: string, machineId: string, machineName: string) => ({ id: `r-${ticketId}-${machineId}`, ticketId, floorId: 'default', machineId, machineName, executor: 'exit', status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: ago(3 * day), finishedAt: ago(day) });
+    const store = factory.store as unknown as Record<string, unknown>;
+    let asked: unknown = 'not asked';
+    store['listRunsSince'] = async () => [{ ...run('a', 'x1', 'Delivery'), finishedAt: ago(day / 2) }, run('a', 'old', 'Old exit'), { ...run('a', 'dev', 'Dev'), executor: 'agent' }];
+    store['listExitItems'] = async (_f: string, machineId: string | null) => { asked = machineId; return []; };
+    await factory.engine.setLayout({ version: 2, w: 0, h: 0, machines: [{ id: 'x1', kind: 'exit', x: 0, y: 0, w: 3, h: 3, name: 'Delivery' }, { id: 'x2', kind: 'exit', x: 5, y: 0, w: 3, h: 3, name: '' }] } as never);
+    const log = await factory.exitLog(null, 7);
+    expect(asked).toBeNull();
+    expect(log.machineId).toBeNull();
+    expect(log.exits).toEqual([{ machineId: 'x1', name: 'Delivery', onFloor: true }, { machineId: 'x2', name: 'Exit', onFloor: true }, { machineId: 'old', name: 'Old exit', onFloor: false }]);
+    expect(log.tickets.map((t) => t.machineId)).toEqual(['x1', 'old']);
+  });
+});
+
+describe('FactoryModule: a script station on an item', () => {
+  it('runs its workspace lines in a folder of the item\'s own, the item in the environment, and answers with what they printed', async () => {
+    const ran: { command: string; cwd: string }[] = [];
+    const shell = async (command: string, o: { cwd: string }) => { ran.push({ command, cwd: o.cwd }); return { stdout: command.includes('archive') ? 'Archived 1 message\n' : '', stderr: '', exitCode: 0 }; };
+    const m = createFactoryModule({
+      store: memoryStore(), eventBus: new EventBus(), config: { get: () => ({ factoryEnabled: true }) } as never,
+      ticketStore: { getTicketById: async () => null } as never, skillStore: {} as never, personaStore: {} as never, agentEventStore: {} as never, executeAgent: {} as never, runPanel: {} as never,
+      applyTicketMutation: { execute: async () => {} } as never, submitDeliverable: {} as never, postComment: {} as never, logger: { warn: () => {}, info: () => {} },
+      host: { shell, exists: async () => true, workspacePath: (id: string) => `/ws/${id}`, workspaceRepoPath: (id: string, n: string) => `/ws/${id}/${n}` },
+    })!;
+    const station = { id: 's', kind: 'station', x: 0, y: 0, w: 5, h: 4, name: 'Archiver', exec: 'script', outcomes: ['ok', 'ko'], cap: 2,
+      script: { lines: [{ target: 'workspace', kind: 'command', value: 'gog gmail archive "$FLEEX_ITEM_KEY"' }, { target: 'org/api', kind: 'command', value: 'make test' }], missing: 'ignore', onFail: 'all' } };
+    const item = { id: 'i1', floorId: 'default', source: 'gmail', sourceKey: '1a20cdcfb877b396', title: 'Re: devis', author: 'Ana', excerpt: '', url: null, tags: [], fields: { labels: ['INBOX'] }, messages: 1, lastActivityAt: '', intakeId: null, machineId: null, state: null, archivedAt: null, archivedReason: null, createdAt: '', updatedAt: '' };
+    const res = await (m as unknown as { runScript: (s: unknown, id: string, i: unknown) => Promise<{ outcome: string; reply?: string }> }).runScript(station, 'i1', item);
+    expect(res.outcome).toBe('ok');
+    expect(ran[0]).toEqual({ command: "mkdir -p '/ws/factory-item-i1'", cwd: '/' });
+    expect(ran).toHaveLength(2);                                                 // the repository line has nothing to run for
+    expect(ran[1]!.cwd).toBe('/ws/factory-item-i1');
+    expect(ran[1]!.command).toContain("export FLEEX_ITEM_KEY='1a20cdcfb877b396'");
+    expect(ran[1]!.command).toContain("export FLEEX_ITEM_FIELD_LABELS='INBOX'");
+    expect(ran[1]!.command.endsWith('gog gmail archive "$FLEEX_ITEM_KEY"')).toBe(true);
+    expect(res.reply).toContain('Archived 1 message');
   });
 });

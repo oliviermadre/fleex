@@ -26,8 +26,13 @@ the previous session's opinion and can be overturned.
 - **Done: intake settings in two parts** (every source, then its source's own fields), keep-only rules, several
   intakes per source (`fields`, 049). Stopped before the Slack connector, as asked: it will fill Slack's `fields` (channel, kind,
   bot) and call `POST /api/factory/items`.
-- **Next**: the Slack connector, Triage (step 4), Make a ticket (6), then the sources' connectors, each calling
-  `POST /api/factory/items` (Slack first: polling `conversations.history` with the user token, or the events API).
+- **Done: the Gmail connector** (owner, 2026-11-21: Gmail before Slack). Read through gogcli behind a
+  `MailSourcePort`, so the tool can change; a Gmail intake keeps a query (the filter: no rules) and an interval, and
+  its cursor in `factory_intake_pulls` (050). Owner's decisions: **one mail is one item, never duplicated**; the
+  intakes of a source are **served in order**, and the quiet delay is when it is settled who keeps it; **a triage
+  agent will sort anyway**, so a judgement (urgent?) is a station's, not an intake's. See "Gmail: a pulled intake" in
+  the README.
+- **Next**: the Slack connector, Triage (step 4), Make a ticket (6), then GitHub.
 - **Naming to settle**: the command card's **Intake** (hand tickets over to Inbound) will clash with the intake
   machines. Rename one of them before step 7.
 

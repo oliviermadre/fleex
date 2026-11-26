@@ -49,6 +49,8 @@ export interface ArmSpec extends MachineBase {
   color?: string;
   /** How floors saved before `when` wrote a single condition. Still read; rewritten as `when` at the next save. */
   filter?: { field: string; values: string[] } | null;
+  /** A fast arm: it swings twice as fast, there and back, as a fast belt carries twice as fast. */
+  fast?: boolean;
 }
 export interface StationSpec extends MachineBase {
   kind: 'station';
@@ -78,6 +80,8 @@ export interface ZoneSpec extends MachineBase {
   kind: 'zone'; status?: TicketStatus | ''; release: 'manual' | 'auto'; limit?: number;
   /** Where a ticket lands when it is handed over without saying where. One per floor. */
   inbound?: boolean;
+  /** Its tickets wait for someone (a zone of work done by hand): the page lists them under Needs you while they are in it. */
+  needsYou?: boolean;
 }
 /** Sets the ticket to `done` and hands it back to plain Fleex. */
 export interface ExitSpec extends MachineBase { kind: 'exit' }
@@ -131,6 +135,15 @@ export interface IntakeSpec extends MachineBase {
   kind: 'intake'; source: ItemSource;
   /** Seconds a conversation must have been quiet before its item leaves. 0: at once. */
   quietSec?: number;
+  /**
+   * Which intake of its source is served first when several want the same item (1 first). Kept dense, 1 to n per
+   * source, by the save. An item that waits on the dock of an intake served later is taken over by one served first
+   * that sees it too: once an arm took it out, it stays on its lane.
+   */
+  priority?: number;
+  /** A source that is pulled (Gmail): its own search, run every `everySec`, for what came since the last pull. */
+  query?: string;
+  everySec?: number;
   rules?: ItemRule[];
   /** Floors saved before `rules`: read, and rewritten as drop rules. */
   drop?: DropRule[];
@@ -217,6 +230,8 @@ export interface FactoryRunRow {
    * answered, since an item has no thread, and the deliverable it produced.
    */
   reply?: string | null; deliverableId?: string | null;
+  /** On a visit to an item, as a station's latest runs list it: which item, by its title and source. */
+  item?: { title: string; source: ItemSource } | null;
 }
 
 /**
@@ -248,11 +263,38 @@ export interface ItemInput {
   messages?: number;
   /** What its source says of it beyond that: the fields of `item-sources.ts` for that source. */
   fields?: ItemFields;
+  /** The whole of the message, beyond `excerpt` (its first lines): its text, and its HTML part for a mail. */
+  body?: { text?: string; html?: string | null };
+  /**
+   * When the message came, as its source says (never later than now). Without it, now. A message no later than the
+   * last one known of its conversation is nothing new: a pulled source sees the same message more than once.
+   */
+  at?: string;
 }
+/** The whole of an item's latest message: its text, and its HTML part when it came with one (a mail). */
+export interface ItemBody { text: string; html: string | null }
+/** One message of an item's conversation, as a station is told it. */
+export interface ConversationEntry { from: string; at: string; text: string }
+/** What an item's source says of it when asked again: its latest message whole, and the whole conversation. */
+export interface ItemReading { body: ItemBody; conversation: ConversationEntry[] }
+/** Where a pulled intake stands: its last pull, and what went wrong with it if anything did. */
+export interface IntakePullRow { intakeId: string; floorId: string; lastPulledAt: string | null; error: string | null; updatedAt: string }
 
 /** What the engine needs to know about a ticket to route it and to show it. */
 export interface FactoryTicketInfo {
   id: string; displayId: number; title: string; type: string; priority: string; status: TicketStatus; tags: string[];
   /** What the page needs to tell tickets apart and to filter them; the engine routes on none of it. */
   boardId: string; complexity: string | null; favorite: boolean; blocked: boolean;
+}
+
+/**
+ * What left the floor by one exit over a period: the tickets it shipped (from their `exit` runs: handed over at
+ * `handedAt`, out at `shippedAt`, with what the ticket is now), and the items archived there. The latest first.
+ */
+export interface ExitLog {
+  /** The exit asked for, or null for every exit of the floor; `exits` names each one that appears (one removed since keeps the name it had). */
+  machineId: string | null; days: number; since: string;
+  exits: { machineId: string; name: string; onFloor: boolean }[];
+  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
 }

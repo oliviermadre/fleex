@@ -1,0 +1,278 @@
+<title>Floor messages</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one Factory screen where messages keep arriving, drawn in the placement picked; then the picks. Single dark look: the floor's own. */
+  :root {
+    --bg: #0c0b14; --surface: #15131f; --ink: #ecebf5; --muted: #9894b0; --line: #2a2740; --accent: #a78bfa; --accent-soft: #2a2148;
+    --floor: #17142a; --dot: #2c2848; --hud: #1d1a2e; --hud-edge: #3a3557;
+    --ok: #4ade80; --warn: #facc15; --bad: #f87171; --info: #c4b5fd; --link: #7dd3fc;
+    --display: 'Space Grotesk', 'Inter', system-ui, sans-serif; --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; margin: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 110px; }
+  .page { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 36px; }
+  h1 { font-family: var(--display); font-size: 1.9rem; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 1.3rem; font-weight: 600; margin: 0; }
+  h3 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lede, .brief { color: var(--muted); max-width: 78ch; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 14px; }
+  .card { display: flex; flex-direction: column; gap: 8px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .card-head { display: flex; align-items: baseline; gap: 8px; }
+  .card p { font-size: 0.86rem; color: var(--muted); }
+  .letter { font-family: var(--mono); font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+  .mine { margin-left: auto; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  button { font: inherit; font-size: 0.86rem; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #140f24; }
+  .card > button { align-self: flex-start; margin-top: auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* ---------- the screen ---------- */
+  .scroll { overflow-x: auto; border-radius: 12px; border: 1px solid var(--line); }
+  .screen { position: relative; width: 1180px; height: 680px; background: var(--floor); background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px); background-size: 28px 28px; overflow: hidden; font-size: 12px; }
+  .m { position: absolute; border-radius: 8px; border: 2px solid #6d5bd0; background: #221d3d; }
+  .belt { position: absolute; height: 6px; background: repeating-linear-gradient(90deg, #4c4580 0 8px, transparent 8px 14px); }
+  .needs { position: absolute; top: 10px; left: 10px; width: 236px; display: flex; flex-direction: column; gap: 5px; }
+  .needs h5 { margin: 0 0 2px; font: 700 10px var(--mono); letter-spacing: 0.1em; color: #b9b5d6; text-shadow: 0 1px 2px #000; }
+  .need { border: 1px solid var(--hud-edge); border-radius: 7px; padding: 5px 8px; background: rgba(20, 17, 34, 0.78); }
+  .need b { display: block; font-size: 11.5px; } .need span { font-size: 10.5px; color: #a5a1c2; } .need em { font-style: normal; color: var(--warn); }
+  .counters { position: absolute; top: 10px; right: 14px; display: flex; gap: 16px; font: 700 13px var(--mono); color: #f4f3ff; text-shadow: 0 1px 3px #000; }
+  .plate { box-sizing: border-box; position: absolute; bottom: 0; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; }
+  .mini { left: 0; width: 250px; height: 170px; border-radius: 0 14px 0 0; }
+  .mini .map { position: absolute; left: 12px; right: 44px; top: 34px; bottom: 12px; border: 1px solid #4a4470; background: #120f22; }
+  .info { left: 262px; right: 312px; height: 122px; border-radius: 12px 12px 0 0; padding: 10px 14px; font-family: var(--mono); }
+  .info b { font-size: 13px; } .info p { color: #a5a1c2; font-size: 11px; margin-top: 4px; }
+  .cmd { right: 0; width: 300px; height: 170px; border-radius: 14px 0 0 0; }
+  .groups { position: absolute; bottom: 124px; left: 280px; display: flex; gap: 4px; }
+  .groups i { width: 46px; height: 18px; border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 5px 5px 0 0; background: var(--hud); font: 600 9px var(--mono); color: #8f8aae; display: flex; align-items: center; justify-content: center; font-style: normal; }
+  .ftab { position: absolute; left: 12px; bottom: 170px; font: 600 11px var(--body); background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 4px 10px; }
+  .strip { position: absolute; right: 0; bottom: 170px; display: flex; gap: 6px; padding: 5px 8px; background: var(--hud); border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 10px 0 0 0; font: 600 11px var(--mono); }
+  .strip span { border: 1px solid #423c6a; border-radius: 6px; padding: 3px 8px; } .strip .s { color: #fca5a5; }
+
+  /* the messages: lines with no plate, a dark halo behind the letters so they read over anything */
+  .feed { position: absolute; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+  .ln { pointer-events: auto; display: flex; align-items: baseline; gap: 6px; font-size: 12.5px; line-height: 1.35; color: #ecebf5; text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,.85); animation: life 8s linear forwards; max-width: 100%; }
+  .ln.keep { animation: none; }
+  .ln .t { font: 500 10.5px var(--mono); color: #8f8aae; flex: none; }
+  .ln.tn-ok .k { color: var(--ok); } .ln.tn-warn .k { color: var(--warn); } .ln.tn-bad .k { color: var(--bad); } .ln.tn-info .k { color: var(--info); } .ln.tn-note .k { color: var(--link); }
+  .ln .k { font-weight: 700; flex: none; }
+  .ln .act { font: 600 11px var(--mono); color: var(--link); text-decoration: underline; cursor: pointer; flex: none; }
+  .ln .msg { min-width: 0; }
+  @keyframes life { 0% { opacity: 0; transform: translateY(4px); } 4% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
+  /* A: bottom left, over the minimap and its Filters tab, the latest at the bottom */
+  .feed.bl { left: 14px; bottom: 206px; width: 430px; justify-content: flex-end; }
+  /* C: under the list of what needs you, the latest at the top, sliding down */
+  .feed.tl { left: 12px; width: 300px; }
+  .feed.tl .ln { animation-duration: 7s; }
+  /* B: in the notch over the middle, above the saved selections, the latest at the bottom */
+  .feed.mid { left: 280px; bottom: 150px; width: 560px; justify-content: flex-end; }
+  .log { position: absolute; left: 270px; bottom: 148px; width: 600px; display: none; flex-direction: column; gap: 6px; }
+  .screen.chat .log { display: flex; }
+  .screen.chat .feed.mid, .screen.chat .hint { display: none; }
+  .log .hist { max-height: 250px; background-color: rgba(10,8,20,.5); overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; background: linear-gradient(to bottom, rgba(10,8,20,0), rgba(10,8,20,.55) 30%); border-radius: 8px; }
+  .log .hist .ln { animation: none; }
+  .say { display: flex; align-items: center; gap: 0; background: rgba(10, 8, 20, 0.6); border: 1px solid #5b5390; border-radius: 6px; padding: 0 0 0 8px; }
+  .say .to { font: 700 12px var(--mono); white-space: nowrap; }
+  .say .to.as { color: #86efac; } .say .to.tk { color: var(--link); }
+  .log .tab { font: 500 10px var(--mono); color: #8f8aae; text-shadow: 0 1px 2px #000; }
+  .ln .who { font-weight: 700; flex: none; } .ln .who.as { color: #86efac; } .ln .who.tk { color: var(--link); } .ln .who.me { color: #e9d5ff; }
+  .log input { flex: 1; border: 0 !important; background: transparent !important; outline: none; font: 500 12.5px var(--body); color: var(--ink); background: rgba(10, 8, 20, 0.6); border: 1px solid #5b5390; border-radius: 6px; padding: 6px 10px; }
+  .hint { position: absolute; font: 600 10px var(--mono); color: #8f8aae; text-shadow: 0 1px 2px #000; }
+
+  .bar { position: fixed; inset: auto 0 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line); padding-block: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bar-in { max-width: 1240px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .picks { min-width: 0; flex: 1 1 240px; font-family: var(--mono); font-size: 0.86rem; overflow-wrap: anywhere; }
+  .picks b { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .feed .ln { animation: none; } }
+</style>
+
+<div class="page">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Messages on the floor</h1>
+    <p class="lede">On the Factory, notifications stop being cards in the middle of the screen. They become lines of text over the floor, with no plate behind them. Each one fades by itself, and a click on the floor goes through to the floor. This is still Fleex's one <code>toast()</code>: the Factory page asks the Toaster to draw its stack this way, so every message keeps its tone, its action (Undo) and its link. Errors stay longer, and a message that waits for something ("Build running…") stays until it is done.</p>
+  </header>
+
+  <section>
+    <div class="row">
+      <h2 style="flex:1 1 auto">The floor, messages arriving</h2>
+      <button type="button" id="chatBtn" aria-pressed="false">Open the log and talk (Enter)</button>
+    </div>
+    <div class="scroll"><div class="screen" id="screen">
+      <div class="m" style="left:380px;top:170px;width:66px;height:66px"></div><div class="belt" style="left:448px;top:200px;width:70px"></div>
+      <div class="m" style="left:520px;top:170px;width:66px;height:66px"></div><div class="belt" style="left:588px;top:200px;width:70px"></div>
+      <div class="m" style="left:660px;top:170px;width:66px;height:66px"></div>
+      <div class="m" style="left:450px;top:300px;width:66px;height:66px;border-color:#2b6c9a"></div><div class="belt" style="left:518px;top:330px;width:120px"></div>
+      <div class="needs" id="needs"><h5>NEEDS YOU · 2</h5>
+        <div class="need"><b>TECH-11 — KPIs de tickets</b><span>Gate · <em>decision</em></span></div>
+        <div class="need"><b>#788 unipile</b><span>Doing · <em>waiting for you</em></span></div>
+      </div>
+      <div class="counters"><span>🎫 60</span><span>✉ 14</span><span>▶ 1/10</span><span>⚡ 23/100</span><span style="color:var(--warn)">● 2</span></div>
+      <div class="ftab">Filters</div>
+      <div class="plate mini"><div class="map"></div></div>
+      <div class="groups"><i>1</i><i>2</i><i>3</i><i>4</i></div>
+      <div class="plate info"><b>Factory floor</b><p>Click to select, drag a ticket to move it…</p></div>
+      <div class="strip"><span class="s">⏻ Stop hold</span><span>U hide</span></div>
+      <div class="plate cmd"></div>
+
+      <div class="feed" id="feed" aria-live="polite"></div>
+      <div class="log" id="log"><div class="hist" id="hist"></div><div class="say"><span class="to" id="to"></span><input id="logq" placeholder="" aria-label="Message"></div><span class="tab">Tab · who you talk to &nbsp; Enter · send &nbsp; Esc · close</span></div>
+      <span class="hint" id="hint"></span>
+    </div></div>
+    <p class="brief" id="explain"></p>
+  </section>
+
+  <section data-pick="p1">
+    <h2>1 · Where the messages are</h2>
+    <div class="grid">
+      <div class="card" data-v="bl"><div class="card-head"><span class="letter">A</span><h3>Bottom left, as chat in an RPG</h3></div><p>Above the minimap, the latest at the bottom, fading after a few seconds. Out of the way, but far from the list of what needs you, and the lines get long over the floor.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="mid"><div class="card-head"><span class="letter">B</span><h3>In the middle, over the console, with a log</h3><span class="mine">recommended</span></div><p>In the notch over the saved selections, where nothing else is, as chat is in a strategy game. They fade by themselves. Enter (with nothing selected) opens the log there: the last messages, to scroll and to search.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="tl"><div class="card-head"><span class="letter">C</span><h3>Under what needs you</h3></div><p>The latest at the top, pushing the others down as they fade. Everything about you is in one corner, but a long list of needs pushes them down the screen.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Enter: talk to the floor</h2>
+    <p class="brief">Enter opens a line over the console, as chat does in a strategy game. Who you talk to is written at its start, and Tab changes it: <b style="color:#86efac">[Assistant]</b>, or <b style="color:var(--link)">[#788 unipile]</b>, the ticket selected (or the first one that needs you). Replies come back as lines of the log, fading like the rest. Try it on the screen above: open the log, type, Tab, Enter.</p>
+    <div class="grid">
+      <div class="card" style="gap:6px"><h3 style="color:#86efac">To the assistant</h3><p>A question about the floor or anything else: "why is #788 stuck?", "what failed today?". It is the Assistant of Fleex, with the floor in view; its answer comes back in the log, and opens whole in the Assistant page.</p></div>
+      <div class="card" style="gap:6px"><h3 style="color:var(--link)">To a ticket</h3><p>A comment in its thread, as you. When the ticket waits on a question, it is the answer: the station that asked runs again. An @persona in it starts that agent, as anywhere in Fleex. Its agents' replies come back in the log.</p></div>
+    </div>
+  </section>
+
+  <section data-pick="p3">
+    <h2>3 · Who you can talk to</h2>
+    <div class="grid">
+      <div class="card" data-v="both"><div class="card-head"><span class="letter">A</span><h3>Both, Tab switches</h3><span class="mine">recommended</span></div><p>The assistant and the tickets. Tab goes from one to the other; with a ticket selected, it goes through the assistant and that ticket.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="tickets"><div class="card-head"><span class="letter">B</span><h3>Tickets only</h3></div><p>A way to answer and comment without opening the ticket. The assistant stays on its page.</p><button type="button">Pick B</button></div>
+      <div class="card" data-v="assistant"><div class="card-head"><span class="letter">C</span><h3>The assistant only</h3></div><p>A console to ask about the floor. Answering a ticket still opens it.</p><button type="button">Pick C</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p4">
+    <h2>4 · Who the line opens on</h2>
+    <div class="grid">
+      <div class="card" data-v="selected"><div class="card-head"><span class="letter">A</span><h3>The ticket selected, else the last one talked to</h3><span class="mine">recommended</span></div><p>Select a ticket, Enter, type: you answer it. Nothing selected: whoever you talked to last. Enter with a ticket selected then means "talk to it", and its thread opens with V or a double-click.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="assist"><div class="card-head"><span class="letter">B</span><h3>Always the assistant</h3></div><p>Enter keeps opening a ticket when one is selected; with nothing selected, it opens the line on the assistant. Tab to reach a ticket.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+
+  <section data-pick="p2">
+    <h2>2 · Getting back to a message gone</h2>
+    <div class="grid">
+      <div class="card" data-v="log"><div class="card-head"><span class="letter">A</span><h3>A log of the last 50</h3><span class="mine">recommended</span></div><p>Enter opens it in B. In A or C, hovering the place where messages appear brings the last ones back. It lasts as long as the page stays open.</p><button type="button">Pick A</button></div>
+      <div class="card" data-v="none"><div class="card-head"><span class="letter">B</span><h3>Nothing: gone is gone</h3></div><p>The Notifs page still keeps the notifications. The floor's own messages ("No room to paste here") are lost.</p><button type="button">Pick B</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="bar"><div class="bar-in"><div class="picks" id="picks"></div><button type="button" id="copy">Copy the picks</button></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'factory-floor-messages-picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { picks = {}; }
+  const DEF = { p1: 'mid', p2: 'log', p3: 'both', p4: 'selected' };
+  for (const k in DEF) picks[k] = picks[k] || DEF[k];
+  const NAMES = ['Where', 'Talk to', 'Opens on', 'Back'];
+  const letter = (sec, v) => String.fromCharCode(65 + [...sec.querySelectorAll('.card[data-v]')].findIndex((c) => c.dataset.v === v));
+  const text = () => [...document.querySelectorAll('section[data-pick]')].map((s, i) => `${NAMES[i]} ${letter(s, picks[s.dataset.pick])}`).join(', ');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /* what the floor and Fleex really say, in turn */
+  const SAMPLES = [
+    { tone: 'ok', k: '✓', msg: 'Floor imported: 12 machines' },
+    { tone: 'note', k: '🔔', msg: 'Odys AI finished #788 unipile', act: 'Open' },
+    { tone: 'warn', k: '!', msg: 'No room to paste here' },
+    { tone: 'info', k: '·', msg: '"Build" deleted', act: 'Undo' },
+    { tone: 'bad', k: '✕', msg: 'Retry on 502: the run failed (exit 1)', act: 'Logs' },
+    { tone: 'info', k: '·', msg: '3 machines copied: ⌘V, then click where to put them' },
+    { tone: 'ok', k: '✓', msg: 'Spec station set up: it starts the 2 tickets it holds' },
+  ];
+  const history = [];
+  let n = 0;
+  const clock = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const line = (m, keep) => `<div class="ln tn-${m.tone}${keep ? ' keep' : ''}"><span class="t">${m.t}</span>${m.who ? `<span class="who ${m.whoCls}">${esc(m.who)}</span>` : `<span class="k">${esc(m.k)}</span>`}<span class="msg">${esc(m.msg)}</span>${m.act ? `<span class="act">${esc(m.act)}</span>` : ''}</div>`;
+  function push() {
+    const m = { ...SAMPLES[n++ % SAMPLES.length], t: clock() };
+    history.push(m); if (history.length > 50) history.shift();
+    const feed = $('feed'), html = line(m, false);
+    if (picks.p1 === 'tl') feed.insertAdjacentHTML('afterbegin', html); else feed.insertAdjacentHTML('beforeend', html);
+    const el = picks.p1 === 'tl' ? feed.firstElementChild : feed.lastElementChild;
+    el?.addEventListener('animationend', () => el.remove());
+    while (feed.children.length > 6) (picks.p1 === 'tl' ? feed.lastElementChild : feed.firstElementChild).remove();
+    if ($('screen').classList.contains('chat')) renderLog();
+  }
+  function renderLog() {
+    $('hist').innerHTML = history.map((m) => line(m, true)).join('');
+    $('hist').scrollTop = $('hist').scrollHeight;
+  }
+  /* who the line talks to: Tab goes round them */
+  const TARGETS = { both: ['assistant', 'ticket'], tickets: ['ticket'], assistant: ['assistant'] };
+  let target = 0;
+  const targets = () => (picks.p4 === 'assist' ? ['assistant', 'ticket'] : ['ticket', 'assistant']).filter((t) => TARGETS[picks.p3].includes(t));
+  function showTarget() {
+    const t = targets()[target % targets().length], el = $('to');
+    el.className = `to ${t === 'assistant' ? 'as' : 'tk'}`;
+    el.textContent = t === 'assistant' ? '[Assistant]\u00a0' : '[#788 unipile]\u00a0';
+    $('logq').placeholder = t === 'assistant' ? 'Ask the assistant' : 'Comment, or answer its question';
+  }
+  const REPLY = {
+    assistant: 'It waits in Doing for you since 21 h: its run asked which API key to use. Answer it with Tab, or open it.',
+    ticket: 'Odys AI: thanks, I use the staging key and run again.',
+  };
+  function say(textIn) {
+    const t = targets()[target % targets().length], who = t === 'assistant' ? 'Assistant' : '#788';
+    history.push({ tone: 'info', k: '', who: `To ${who}`, whoCls: 'me', msg: textIn, t: clock() });
+    renderLog();
+    setTimeout(() => { history.push({ tone: 'info', k: '', who: t === 'assistant' ? '[Assistant]' : '[#788]', whoCls: t === 'assistant' ? 'as' : 'tk', msg: REPLY[t], t: clock() }); renderLog(); }, 900);
+  }
+  function place() {
+    const feed = $('feed');
+    feed.className = `feed ${picks.p1}`;
+    if (picks.p1 === 'tl') feed.style.top = `${$('needs').offsetTop + $('needs').offsetHeight + 12}px`; else feed.style.top = '';
+    feed.innerHTML = '';
+    $('screen').classList.remove('chat'); $('chatBtn').setAttribute('aria-pressed', 'false');
+    $('chatBtn').hidden = picks.p1 !== 'mid';
+    const hint = $('hint');
+    hint.textContent = picks.p2 === 'log' ? (picks.p1 === 'mid' ? 'Enter · log' : 'hover · last messages') : '';
+    Object.assign(hint.style, picks.p1 === 'mid' ? { left: '520px', bottom: '128px', top: '' } : picks.p1 === 'bl' ? { left: '120px', bottom: '176px', top: '' } : { left: '14px', top: `${$('needs').offsetTop + $('needs').offsetHeight - 2}px`, bottom: '' });
+    $('explain').textContent = {
+      bl: 'A: lines above the minimap, the latest at the bottom. Each one fades after about six seconds (errors stay longer).',
+      mid: 'B: lines over the saved selections, in the middle. Enter (here, "Open the log") opens the last 50 there with a line to talk: Tab changes who to, Enter sends, Escape closes.',
+      tl: 'C: lines under the list of what needs you, the latest at the top. They follow the list as it grows.',
+    }[picks.p1];
+  }
+  function paint() {
+    document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v]').forEach((c) => {
+      const on = c.dataset.v === picks[s.dataset.pick];
+      c.classList.toggle('picked', on);
+      const b = c.querySelector(':scope > button'); if (b) b.setAttribute('aria-pressed', String(on));
+    }));
+    $('picks').innerHTML = text().replace(/ ([A-D])/g, ' <b>$1</b>');
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); } catch { /* none */ }
+    place();
+  }
+  document.querySelectorAll('section[data-pick]').forEach((s) => s.querySelectorAll('.card[data-v] > button').forEach((b) => b.addEventListener('click', () => { picks[s.dataset.pick] = b.closest('.card').dataset.v; paint(); })));
+  $('chatBtn').addEventListener('click', () => {
+    const on = !$('screen').classList.contains('chat');
+    $('screen').classList.toggle('chat', on); $('chatBtn').setAttribute('aria-pressed', String(on));
+    if (on) { target = 0; showTarget(); renderLog(); $('logq').focus(); }
+  });
+  $('logq').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('chatBtn').click();
+    else if (e.key === 'Tab') { e.preventDefault(); target++; showTarget(); }
+    else if (e.key === 'Enter' && $('logq').value.trim()) { e.preventDefault(); say($('logq').value.trim()); $('logq').value = ''; }
+  });
+  $('copy').addEventListener('click', async (e) => { try { await navigator.clipboard.writeText(text()); e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy the picks'; }, 1500); } catch { /* none */ } });
+  paint();
+  push(); setTimeout(push, 700); setTimeout(push, 1400);
+  setInterval(push, 2600);
+})();
+</script>

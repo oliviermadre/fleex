@@ -4,7 +4,7 @@ import type { SubmitDeliverableUseCase } from '../application/use-cases/submit-d
 import type { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import type { AgentEventStorePort } from '../application/ports/agent-event-store.port.js';
 import type { EventBus } from '../application/event-bus.js';
-import type { FactoryItemRow, FactoryRunRow, StationSpec } from './types.js';
+import type { ConversationEntry, FactoryItemRow, FactoryRunRow, ItemBody, StationSpec } from './types.js';
 import { itemBrief, itemHeading } from './item-brief.js';
 
 export interface StationRunResult {
@@ -17,7 +17,7 @@ export interface StationRunResult {
   deliverableId?: string | null;
 }
 /** An item a station runs on, and what stations said about it before. */
-export interface ItemRunTarget { item: FactoryItemRow; earlier: FactoryRunRow[] }
+export interface ItemRunTarget { item: FactoryItemRow; earlier: FactoryRunRow[]; /** The whole of its latest message, when one was kept. */ body?: ItemBody | null; /** Its whole conversation, when its source was asked again. */ conversation?: ConversationEntry[] }
 
 export interface StationRunnerPort {
   /** On an item, `ticketId` is the item's id and `item` says what it is: the run has no ticket, the item is its brief. */
@@ -39,8 +39,8 @@ export interface StationRunnerPort {
 export class StationRunner implements StationRunnerPort {
   constructor(private readonly deps: {
     executors: Partial<Record<'agent' | 'skill' | 'panel', StepExecutor>>;
-    /** Runs a script station: shell commands, no agent. */
-    script?: (station: StationSpec, ticketId: string) => Promise<StationRunResult>;
+    /** Runs a script station: shell commands, no agent; on an item, in a folder of its own, the item in the environment. */
+    script?: (station: StationSpec, ticketId: string, item?: FactoryItemRow) => Promise<StationRunResult>;
     submitDeliverable: SubmitDeliverableUseCase;
     postComment: PostCommentUseCase;
     agentEventStore: AgentEventStorePort;
@@ -48,10 +48,9 @@ export class StationRunner implements StationRunnerPort {
   }) {}
 
   async run(station: StationSpec, ticketId: string, runId: string, targets: Record<string, string>, onExecutionStarted: (executionId: string) => void, item?: ItemRunTarget): Promise<StationRunResult> {
-    if (station.exec === 'script' && item) return { status: 'failed', outcome: '', executionId: null, error: 'A script station runs in a ticket\'s worktrees: it cannot run on an item' };
     if (station.exec === 'script') {
       if (!this.deps.script) return { status: 'failed', outcome: '', executionId: null, error: 'Script stations cannot run here' };
-      try { return await this.deps.script(station, ticketId); }
+      try { return await this.deps.script(station, ticketId, item?.item); }
       catch (err) { return { status: 'failed', outcome: '', executionId: null, error: err instanceof Error ? err.message : String(err) }; }
     }
     const executor = this.deps.executors[station.exec as 'agent' | 'skill' | 'panel'];
@@ -69,7 +68,7 @@ export class StationRunner implements StationRunnerPort {
     };
     const input: StepExecutionInput = {
       ticketId: item ? null : ticketId, routineId: null,
-      subject: item ? { repos: [], brief: itemBrief(item.item, item.earlier), heading: itemHeading(item.item) } : null,
+      subject: item ? { repos: [], brief: itemBrief(item.item, item.earlier, item.body ?? null, item.conversation ?? []), heading: itemHeading(item.item) } : null,
       workflowRunId: runId, stepRunId: runId, step,
       modelOverride: station.exec === 'agent' || station.exec === 'skill' ? station.model || null : null,
       workflowContext: {
@@ -78,6 +77,8 @@ export class StationRunner implements StationRunnerPort {
           ? outcomes.map((o) => ({ id: `${station.id}:${o}`, label: o, condition: { field: 'outcome', operator: 'eq' as const, value: o }, targetName: targets[o] ?? 'the next machine' }))
           : [],
         previousOutputs: {},
+        /* the run id is the Factory's, no workflow run's: a long artifact goes to the ticket, an item has none */
+        attachTo: item ? null : { ticketId, agentName: `Factory → ${name}` },
       },
       onExecutionStarted,
     };
@@ -134,7 +135,8 @@ export class StationRunner implements StationRunnerPort {
       });
     }
     if (output.comment && output.comment.trim().length > 0) {
-      const { comment } = await this.deps.postComment.execute({ ticketId, authorType: 'agent', authorName: author, body: output.comment });
+      /* with the closed choices the agent declared: the floor's log offers them as answers */
+      const { comment } = await this.deps.postComment.execute({ ticketId, authorType: 'agent', authorName: author, body: output.comment, questions: output.questions ?? null });
       commentId = comment.id;
       // No created mentions, as for a workflow step: the floor routes the ticket, a comment must not start agents.
       this.deps.eventBus.emit({ type: 'comment.posted', commentId: comment.id, ticketId, authorType: 'agent', authorName: author, createdMentions: [], occurredAt: now });

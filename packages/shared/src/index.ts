@@ -38,6 +38,7 @@ export {
 export type { ComplexitySum } from './ticket-complexity.js';
 
 export { buildTicketWorkspaceId } from './utils/workspace.js';
+export { htmlToText, looksLikeHtml } from './utils/html-text.js';
 
 export {
   sanitizeForStorage,

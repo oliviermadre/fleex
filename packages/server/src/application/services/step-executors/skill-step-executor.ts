@@ -34,6 +34,7 @@ export class SkillStepExecutor implements StepExecutor {
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,
       runHistory: input.workflowContext.runHistory,
+      attachTo: input.workflowContext.attachTo,
     });
 
     // Routine run: `executeForSkill` is built around a ticket thread (announce
