@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FloorScene, type ExitView, type StationView } from './scene';
+import { FloorScene, LINGER_S, type ExitView, type StationView } from './scene';
 import type { ViewState } from './renderer';
 import type { FactoryLayout, FactoryTicket, MachineSpec } from './types';
 
@@ -55,5 +55,46 @@ describe('the scene', () => {
     sc.build(state(L, []), 0.5);
     sc.build(state(L, [], { halted: true }), 0.5);
     expect(sc.clock).toBe(0.5);
+  });
+
+  it('says nothing moves on a floor where tickets only stand, and its belts stand still', () => {
+    const sc = new FloorScene(), L = layout(agent, belt('b', 0, 1)), st = state(L, [ticket('t', 's', 'wait')]);
+    sc.build(st, 1 / 60);
+    let S = sc.build(st, 1 / 60);
+    for (let k = 0; k < 5; k++) S = sc.build(st, 0.5);
+    expect(S.moving).toBe(false);
+    const turn = S.turn;
+    expect(sc.build(st, 0.5).turn).toBe(turn);
+  });
+
+  it('says the floor moves while a ticket rides a belt, and a moment after: its belts turn', () => {
+    const sc = new FloorScene(), L = layout(belt('a', 0, 0), belt('b', 1, 0)), at = (id: string, p: number) => state(L, [ticket('t', id, 'belt', { p })]);
+    sc.build(at('a', 0.1), 1 / 60);
+    const S = sc.build(at('b', 0.5), 1 / 30);
+    expect(S.moving).toBe(true);
+    expect(S.turn).toBeGreaterThan(0);
+    /* it has stopped at the end of the line: the floor still counts as moving for a moment, then no longer */
+    let last = S;
+    for (let k = 0; k < 200; k++) last = sc.build(at('b', 0.5), 1 / 30);
+    expect(last.moving).toBe(false);
+    expect(LINGER_S).toBeGreaterThan(0.5);
+  });
+
+  it('says the floor moves while an arm swings, and while a ticket slides to where it now is', () => {
+    const arm: MachineSpec = { id: 'arm', kind: 'arm', x: 7, y: 1, w: 1, h: 1, dir: 0 } as MachineSpec;
+    const sc = new FloorScene(), L = layout(agent, arm);
+    sc.build(state(L, []), 1 / 30);
+    expect(sc.build(state(L, [], { arms: new Map([['arm', { p: 0.2, state: 'carry' }]]), armAge: 0.1, armSwing: 1.1 }), 1 / 30).moving).toBe(true);
+    const other = new FloorScene();
+    other.build(state(L, [ticket('t', 's', 'wait')]), 1 / 30);
+    expect(other.build(state(L, [ticket('t', null, 'loose', { x: 40, y: 30 })]), 1 / 30).moving).toBe(true);
+  });
+
+  it('keeps the belts still on a floor that is stopped, whatever is moved by hand on it', () => {
+    const sc = new FloorScene(), L = layout(agent);
+    sc.build(state(L, [ticket('t', 's', 'wait')], { halted: true }), 1 / 30);
+    const S = sc.build(state(L, [ticket('t', null, 'loose', { x: 40, y: 30 })], { halted: true }), 1 / 30);
+    expect(S.moving).toBe(true);
+    expect(S.turn).toBe(0);
   });
 });

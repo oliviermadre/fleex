@@ -100,6 +100,12 @@ export interface Skin {
    * tiles, its front face fills the gap. What is under the pointer is then what is seen there. None: flat.
    */
   liftOf?(m: MachineSpec, st: ViewState): number;
+  /**
+   * Something it painted in the last frame moves by itself with the floor's clock, belts aside (they follow
+   * `Scene.turn`): a pulse, a blink, a worker, someone walking. The floor is then drawn often enough for it
+   * (`frameRate.ts`); a skin that does not say is taken to hold nothing of the kind.
+   */
+  readonly animated?: boolean;
   /** What lies under everything: the floor, its light, what stands casts on it. Leaves the canvas in the floor's units. */
   ground(on: Surface, S: Scene, st: ViewState): void;
   /** The pieces of the scene. */

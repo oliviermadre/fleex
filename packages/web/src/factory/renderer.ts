@@ -293,7 +293,18 @@ export class FactoryView {
     this.skin.top(S, st);
     this.fastArms(S);
     this.unsetMarks(st);
+    let trailing = false;
+    for (const t of this.trails.values()) if (t.length > 1) { trailing = true; break; }
+    this.moving = S.moving || trailing || !this.resting;
+    this.ambient = !st.halted && !!this.skin.animated;
   }
+  /**
+   * What the last frame drawn showed, for the draw loop to pace itself on (`frameRate.ts`). `moving`: something moves
+   * on the floor (a ticket, an arm, a fast arm's trail fading, the zoom gliding to a step). `ambient`: nothing moves,
+   * but something painted pulses, blinks or walks with the floor's clock.
+   */
+  moving = false;
+  ambient = false;
 
   /** Where the cup of each fast arm was over the last frames: its trail. */
   private readonly trails = new Map<string, { x: number; y: number }[]>();

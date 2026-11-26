@@ -26,7 +26,7 @@ import { factoryMenu } from './factoryMenu';
 import { byKey, menuAt, type Command } from './menu';
 import { slotOfCode } from './keys';
 import { FactoryView, type DragState, type Ghost, type ViewState } from './renderer';
-import { frameGap } from './frameRate';
+import { MAX_STEP_S, frameGap } from './frameRate';
 import { armFacing, canPaste, canPlace, clipAt, copyOf, erase, eraseMany, machineAt, machinesIn, moveMany, newId, paintBelts, pasteAt, place, rotate, setBelt, setSpeed, specFor, update, type Clip, type Tool, gantryAt } from './layoutOps';
 import { areaAt, areasOf, fits, handleAt, laidArea, moved as movedArea, nameAt, resize, shapedArea, spanOf, type Handle } from './areas';
 import { find, NO_FINDER, type Finder } from './finder';
@@ -66,6 +66,8 @@ const POLL_BACKGROUND_MS = 3000;
 /** What says someone is at the page: the floor is drawn at its full rate for a moment after each. */
 const WAKE_EVENTS = ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize'] as const;
 const STATS_EVERY_MS = 60_000;
+/** A wait up to this long is spent in animation frames; a longer one in a timer (see the draw loop). */
+const SOON_MS = 40;
 /** Saved selections: keys 1 to 9, then 0. */
 const GROUPS = 10;
 /** The pointer over an edge of the page, where the view glides: an arrowhead towards that edge. */
@@ -279,14 +281,22 @@ function Floor() {
   // Is the window the one in front, and when was someone last at the page: the draw loop and the poll pace themselves on it.
   const focused = useRef(typeof document === 'undefined' || document.hasFocus());
   const wokeAt = useRef(performance.now());
+  /* a frame is owed now, whatever the pace: something changed that the loop would otherwise see at its next turn only */
+  const owed = useRef(true);
+  /* the draw loop's own: come back now instead of at the end of its wait (set by the loop) */
+  const hurry = useRef<() => void>(() => {});
   useEffect(() => {
-    const wake = () => { wokeAt.current = performance.now(); };
+    const wake = () => { wokeAt.current = performance.now(); hurry.current(); };
     const onFocus = () => { focused.current = true; wake(); }, onBlur = () => { focused.current = false; };
     for (const e of WAKE_EVENTS) window.addEventListener(e, wake, { passive: true, capture: true });
     window.addEventListener('focus', onFocus); window.addEventListener('blur', onBlur);
-    /* a stopped floor is drawn twice a second: what changes on it is drawn at once. A running one is drawn often enough. */
+    /*
+     * A floor where nothing moves is drawn twice a second: what changes on it is drawn at once, and that frame says
+     * whether something moves now. One frame, not a moment at full rate: when the floor is polled, a snapshot comes
+     * every 600 ms whether or not anything changed.
+     */
     const unsub = useFactoryStore.subscribe((s, was) => {
-      if ((s.snapshot !== was.snapshot || s.layout !== was.layout) && s.snapshot?.floor.settings.halted) wake();
+      if (s.snapshot !== was.snapshot || s.layout !== was.layout || s.stats !== was.stats) { owed.current = true; hurry.current(); }
     });
     return () => {
       for (const e of WAKE_EVENTS) window.removeEventListener(e, wake, { capture: true });
@@ -331,13 +341,25 @@ function Floor() {
   useEffect(() => {
     const cv = canvasRef.current; if (!cv) return;
     const v = new FactoryView(cv, skinRef.current()); viewRef.current = v; setView(v);
-    let raf = 0, last = performance.now(), miniAt = 0;
+    let raf = 0, timer = 0, last = performance.now(), miniAt = 0;
+    owed.current = true;
+    /*
+     * The next look at the floor: at the next animation frame while frames follow one another closely; after a wait
+     * when the next one is far (a floor at rest), so that the page is not woken at every refresh of the screen, 120
+     * times a second, to find each time that it is too early.
+     */
+    const again = (wait: number) => {
+      if (wait <= SOON_MS) { raf = requestAnimationFrame(frame); return; }
+      timer = window.setTimeout(() => { timer = 0; raf = requestAnimationFrame(frame); }, wait - SOON_MS / 2);
+    };
+    hurry.current = () => { if (!timer) return; window.clearTimeout(timer); timer = 0; raf = requestAnimationFrame(frame); };
     const frame = (ts: number) => {
-      raf = requestAnimationFrame(frame);
       /* drawn only as often as what is going on calls for (frameRate.ts): never more than 60 a second */
-      const snap = useFactoryStore.getState().snapshot, running = !!snap && snap.floor.settings.halted !== true;
-      if (ts - last < frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, running })) return;
-      const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000)); last = ts;
+      const gap = () => frameGap({ sinceWake: performance.now() - wokeAt.current, focused: focused.current, moving: v.moving, ambient: v.ambient });
+      const wait = gap() - (ts - last);
+      if (wait > 0 && !owed.current) { again(wait); return; }
+      owed.current = false;
+      const dt = Math.min(MAX_STEP_S, Math.max(0, (ts - last) / 1000)); last = ts;
       const st = viewState();
       if (st) {
         if (!fitted.current) { v.fit(st.layout, false); fitted.current = true; }
@@ -345,9 +367,11 @@ function Floor() {
         if (peekFor.current) { const r = v.anchorOf(peekFor.current, st); if (r) peekRef.current?.place(r); }
         if (ts - miniAt > MINIMAP_EVERY_MS && miniRef.current) { miniAt = ts; v.minimap(miniRef.current, st); }
       }
+      /* what was just drawn says how soon the next one is due */
+      again(gap());
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(timer); hurry.current = () => {}; };
   }, [viewState]);
 
   const commit = useCallback((next: FactoryLayout | null) => { if (next) void useFactoryStore.getState().setLayout(next); else toast.warning('No room here'); }, []);
