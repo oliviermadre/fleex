@@ -11,6 +11,16 @@ describe('gliding the view by the edges of the page', () => {
     expect(edgePush(700, 20, page)).toEqual({ vx: 0, vy: 0 });                  // over the top bar
   });
 
+  it('only glides from a thin band along each edge, so heading for the navigation or the bar does not move the view', () => {
+    // #836: a 50 px band slid the view while the pointer was merely on its way to the nav, the bar or the console.
+    expect(edgePush(64 + 11, 400, page)).toEqual({ vx: 0, vy: 0 });             // 11 px from the navigation
+    expect(edgePush(64 + 30, 400, page)).toEqual({ vx: 0, vy: 0 });
+    expect(edgePush(700, 44 + 11, page)).toEqual({ vx: 0, vy: 0 });             // 11 px under the top bar
+    expect(edgePush(1440 - 11, 400, page)).toEqual({ vx: 0, vy: 0 });           // 11 px from the right of the window
+    expect(edgePush(700, 860 - 11, page)).toEqual({ vx: 0, vy: 0 });            // 11 px from the bottom of the window
+    expect(edgePush(64 + 5, 400, page).vx).toBeLessThan(0);                     // well inside the band it still glides
+  });
+
   it('starts barely moving at the start of the zone and is fastest against the edge', () => {
     const start = edgePush(64 + EDGE_ZONE - 1, 400, page).vx, mid = edgePush(64 + EDGE_ZONE / 2, 400, page).vx, edge = edgePush(64, 400, page).vx;
     expect(start).toBeLessThan(0);                                                // towards the left edge
