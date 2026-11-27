@@ -22,7 +22,7 @@ import type { LaneFlow } from '../bridges';
 import { isLight, mix, readable, toHex } from '../floorLook';
 import type { LensLayer } from '../lens';
 import { bodyOf, type Lamp, type Rect, type RunKind } from '../machineArt';
-import { DX, DY, humanCall, type AreaSpec, type FactoryLayout, type MachineSpec, type StationSpec } from '../types';
+import { DX, DY, exitStatus, humanCall, type AreaSpec, type FactoryLayout, type MachineSpec, type StationSpec } from '../types';
 import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, Placed, PortView, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
 import type { ViewState } from '../renderer';
 import type { TokenLook } from '../ticketToken';
@@ -646,7 +646,7 @@ export class PixelSkin extends FleexSkin {
   /** An exit: a frame of light, its glow stepped round it and pooled inside, a few of its pixels flaring. */
   protected override exit(v: ExitView, pal: Palette): void {
     if (!this.sprites) { super.exit(v, pal); return; }
-    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok, i = x * ART, j = y * ART, W = w * ART, H = h * ART;
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled', ok = cancels ? pal.text3 : pal.ok, i = x * ART, j = y * ART, W = w * ART, H = h * ART;
     this.faint(0.14, () => frame(ctx, i - 1, j - 1, W + 2, H + 2, 1, ok, undefined, 4));
     this.faint(0.3, () => frame(ctx, i, j, W, H, 1, ok, undefined, 3));
     box(ctx, i + 1, j + 1, W - 2, H - 2, mix(pal.floor, '#000000', pal.light ? 0.06 : 0.3), 3);
@@ -663,7 +663,7 @@ export class PixelSkin extends FleexSkin {
       this.faint(0.8, () => box(ctx, px, py, 1, 1, mix(ok, '#ffffff', 0.65)));
     }
     const plate = { mono: true, weight: 700, min: 9, max: 12 } as const;
-    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6) });
+    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, cancels ? '#18181b' : '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6) });
     if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
     if (v.count == null) return;
     const count = `${v.count} · ${v.days} d`, o = { ...plate, plate: 'rgba(9,9,11,0.92)' };

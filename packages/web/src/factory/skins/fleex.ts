@@ -17,7 +17,7 @@ import { portColor } from '../teleport';
 import { modelTag } from '../stationModel';
 import { tokenSprite, type TokenLook } from '../ticketToken';
 import type { ArmView, ArmWay, BeltView, BridgeView, DockView, ExitView, LabelView, PortView, Placed, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
-import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
+import { DX, DY, exitStatus, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
 import { builtBox, hallOf, propsIn, wallThings, type DecorOptions } from '../decor';
@@ -1254,7 +1254,9 @@ export class FleexSkin implements Skin {
    * by it over the period the floor's figures cover.
    */
   protected exit(v: ExitView, pal: Palette): void {
-    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled';
+    /* an exit that cancels is neutral, one that ships glows as a success */
+    const ok = cancels ? pal.text3 : pal.ok, ink = cancels ? '#18181b' : '#052e16';
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
     ctx.globalAlpha = 1;
@@ -1266,7 +1268,7 @@ export class FleexSkin implements Skin {
     const count = v.count == null ? null : `${v.count} · ${v.days} d`, beside = count !== null && w * z >= 125;
     /* the name stops short of the count beside it (a monospace plate: about 0.62 of its size a character, and its padding) */
     const px = Math.min(12, Math.max(9, 0.24 * z)), countW = beside ? (count!.length * 0.62 * px + 10) / z + 0.15 : 0;
-    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6 - countW) });
+    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, ink, { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6 - countW) });
     if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
     if (count === null) return;
     const o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
@@ -1530,7 +1532,7 @@ export class FleexSkin implements Skin {
       if (m.kind === 'label' || m.kind === 'area') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? (exitStatus(m) === 'cancelled' ? pal.text3 : pal.ok) : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;

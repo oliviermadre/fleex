@@ -57,6 +57,24 @@ describe('which machines open in a popup', () => {
 });
 
 describe('<FactoryMachinePopup/>', () => {
+  it('an exit says what it sets its tickets to, done unless set to cancel them, and the hint follows', () => {
+    const out: MachineSpec = { id: 'out', kind: 'exit', x: 20, y: 1, w: 3, h: 3, name: 'Rejected' };
+    seed([], [...machines, out]);
+    let on = open('out');
+    const pick = () => screen.getByLabelText('Sets tickets to') as HTMLSelectElement;
+    expect(pick().value).toBe('done');                                   // an exit built before the option: done
+    expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('is set to done and handed back to plain Fleex.');
+    fireEvent.change(pick(), { target: { value: 'cancelled' } });
+    expect(on.onPatch).toHaveBeenCalledWith('out', { status: 'cancelled' });
+    cleanup();
+    seed([], [...machines, { ...out, status: 'cancelled' } as MachineSpec]);
+    on = open('out');
+    expect(pick().value).toBe('cancelled');
+    expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('is set to cancelled and handed back to plain Fleex. Items are archived either way.');
+    fireEvent.change(pick(), { target: { value: 'done' } });
+    expect(on.onPatch).toHaveBeenCalledWith('out', { status: 'done' });
+  });
+
   it('shows a station whole: its settings, the tickets it holds with what each needs, and what it did', async () => {
     const acts = seed([ticket('t1', 'dev', 'running'), ticket('t2', 'dev', 'failed', { note: 'boom' })]);
     const on = open('dev');

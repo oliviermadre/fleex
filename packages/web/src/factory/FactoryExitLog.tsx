@@ -17,14 +17,16 @@ import { ITEM_SOURCES, refOf, SOURCE_LABEL, sourceType } from './items';
 import type { ExitLog, FactoryTicketInfo } from './types';
 import { KindChoice, showsKind, useKinds } from './KindChoice';
 
-/** What a line is now: a ticket still done, set back to work since it left, archived, deleted since; an item (archived). */
-export type ExitNow = 'done' | 'reopened' | 'archived' | 'deleted';
-const NOW_LABEL: Record<ExitNow, string> = { done: 'Done', reopened: 'Reopened since', archived: 'Archived', deleted: 'Deleted since' };
+/** What a line is now: a ticket still done or cancelled (as its exit set it), set back to work since it left, archived, deleted since; an item (archived). */
+export type ExitNow = 'done' | 'cancelled' | 'reopened' | 'archived' | 'deleted';
+const NOW_LABEL: Record<ExitNow, string> = { done: 'Done', cancelled: 'Cancelled', reopened: 'Reopened since', archived: 'Archived', deleted: 'Deleted since' };
 
 /** One line of the list: a ticket an exit shipped, or an item archived there. */
 export interface ExitRow {
   key: string; machineId: string; ticketId: string | null; url: string | null; info: FactoryTicketInfo; source: string | null;
   lead: number; shippedAt: string;
+  /** How a ticket left (shipped: set to done; cancelled), null for an item. */
+  outcome: 'shipped' | 'cancelled' | null;
   /** What it is now, in words (`reopened · doing`), and as a filter knows it. */
   now: string; state: ExitNow; reopened: boolean;
 }
@@ -33,16 +35,18 @@ export interface ExitRow {
 export function exitRows(log: ExitLog): ExitRow[] {
   const lead = (a: string, b: string) => Math.max(0, Date.parse(b) - Date.parse(a));
   const tickets: ExitRow[] = log.tickets.map((t) => {
-    const reopened = !!t.status && t.status !== 'done' && !t.archived;
-    const state: ExitNow = t.displayId === null ? 'deleted' : t.archived ? 'archived' : reopened ? 'reopened' : 'done';
+    /* reopened: no longer what its exit set it to */
+    const outcome = t.outcome === 'cancelled' ? 'cancelled' : 'shipped', expected = outcome === 'cancelled' ? 'cancelled' : 'done';
+    const reopened = !!t.status && t.status !== expected && !t.archived;
+    const state: ExitNow = t.displayId === null ? 'deleted' : t.archived ? 'archived' : reopened ? 'reopened' : expected;
     return {
-      key: `t:${t.ticketId}:${t.shippedAt}`, machineId: t.machineId, ticketId: t.displayId === null ? null : t.ticketId, url: null, source: null, lead: lead(t.handedAt, t.shippedAt), shippedAt: t.shippedAt,
-      info: { id: t.ticketId, displayId: t.displayId ?? 0, title: t.title, type: t.type, priority: t.priority, status: (t.status ?? 'done') as FactoryTicketInfo['status'], tags: t.tags, boardId: t.boardId ?? '', complexity: null, favorite: false, blocked: false },
-      now: state === 'deleted' ? 'deleted since' : state === 'archived' ? 'archived' : reopened ? `reopened · ${t.status}` : t.status ?? 'done', state, reopened,
+      key: `t:${t.ticketId}:${t.shippedAt}`, machineId: t.machineId, ticketId: t.displayId === null ? null : t.ticketId, url: null, source: null, lead: lead(t.handedAt, t.shippedAt), shippedAt: t.shippedAt, outcome,
+      info: { id: t.ticketId, displayId: t.displayId ?? 0, title: t.title, type: t.type, priority: t.priority, status: (t.status ?? expected) as FactoryTicketInfo['status'], tags: t.tags, boardId: t.boardId ?? '', complexity: null, favorite: false, blocked: false },
+      now: state === 'deleted' ? 'deleted since' : state === 'archived' ? 'archived' : reopened ? `reopened · ${t.status}` : t.status ?? expected, state, reopened,
     };
   });
   const items: ExitRow[] = log.items.map((i) => ({
-    key: `i:${i.itemId}:${i.shippedAt}`, machineId: i.machineId, ticketId: null, url: i.url, source: SOURCE_LABEL[i.source] ?? i.source, lead: lead(i.handedAt, i.shippedAt), shippedAt: i.shippedAt,
+    key: `i:${i.itemId}:${i.shippedAt}`, machineId: i.machineId, ticketId: null, url: i.url, source: SOURCE_LABEL[i.source] ?? i.source, lead: lead(i.handedAt, i.shippedAt), shippedAt: i.shippedAt, outcome: null,
     info: { id: i.itemId, displayId: 0, title: i.title, type: sourceType(i.source), priority: '', status: 'done', tags: i.tags, boardId: '', complexity: null, favorite: false, blocked: false },
     now: 'archived', state: 'archived', reopened: false,
   }));
@@ -68,13 +72,13 @@ export function filterExitRows(rows: readonly ExitRow[], f: ExitFilter): ExitRow
   });
 }
 
-/** How many left each day of the period, oldest first, the last one today (local days). */
-export function perDay(rows: readonly ExitRow[], days: number, now: Date = new Date()): { day: Date; n: number }[] {
+/** How many tickets left each day of the period, shipped and cancelled, oldest first, the last one today (local days). */
+export function perDay(rows: readonly ExitRow[], days: number, now: Date = new Date()): { day: Date; shipped: number; cancelled: number }[] {
   const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const today = start(now), out = Array.from({ length: days }, (_, i) => ({ day: new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1 - i)), n: 0 }));
+  const today = start(now), out = Array.from({ length: days }, (_, i) => ({ day: new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1 - i)), shipped: 0, cancelled: 0 }));
   for (const r of rows) {
     const k = Math.round((today.getTime() - start(new Date(r.shippedAt)).getTime()) / 86_400_000);
-    if (k >= 0 && k < days) out[days - 1 - k]!.n++;
+    if (k >= 0 && k < days) out[days - 1 - k]![r.outcome === 'cancelled' ? 'cancelled' : 'shipped']++;
   }
   return out;
 }
@@ -89,20 +93,33 @@ export function shippedWhen(iso: string, now: Date = new Date()): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+/** A group's count: `3 shipped · 2 cancelled`, a part at 0 left out, nothing for a group of items only. */
+export function groupCount(rows: readonly ExitRow[]): string {
+  const t = rows.filter((r) => !r.source), c = t.filter((r) => r.outcome === 'cancelled').length;
+  return [t.length - c ? `${t.length - c} shipped` : '', c ? `${c} cancelled` : ''].filter(Boolean).join(' · ');
+}
+
 const median = (xs: number[]): number | null => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2); return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2; };
 
-/** Tickets shipped each day of the period, as bars: one series, in the accent, the day and its count on hover. */
-function Throughput({ days }: { days: { day: Date; n: number }[] }) {
-  const max = Math.max(1, ...days.map((d) => d.n)), W = 220, H = 40, gap = 2, bw = Math.max(1, (W - gap * (days.length - 1)) / days.length);
+/** What a day's bar says on hover: `3 shipped · 1 cancelled`, a part at 0 left out, `0 left` for none. */
+export function dayCount(d: { shipped: number; cancelled: number }): string {
+  return [d.shipped ? `${d.shipped} shipped` : '', d.cancelled ? `${d.cancelled} cancelled` : ''].filter(Boolean).join(' · ') || '0 left';
+}
+
+/** Tickets that left each day of the period, as stacked bars: shipped (accent) below, cancelled (neutral) above, the day and its counts on hover. */
+function Throughput({ days }: { days: { day: Date; shipped: number; cancelled: number }[] }) {
+  const max = Math.max(1, ...days.map((d) => d.shipped + d.cancelled)), W = 220, H = 40, gap = 2, bw = Math.max(1, (W - gap * (days.length - 1)) / days.length);
   return (
-    <svg width={W} height={H + 12} viewBox={`0 0 ${W} ${H + 12}`} role="img" aria-label="Tickets shipped per day" className="flex-none">
+    <svg width={W} height={H + 12} viewBox={`0 0 ${W} ${H + 12}`} role="img" aria-label="Tickets left per day" className="flex-none">
       <line x1={0} x2={W} y1={H + 0.5} y2={H + 0.5} stroke="var(--theme-border)" strokeWidth={1} />
       {days.map((d, i) => {
-        const h = d.n ? Math.max(3, (d.n / max) * (H - 2)) : 0, x = i * (bw + gap), label = `${d.day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.n} shipped`;
+        const n = d.shipped + d.cancelled, h = n ? Math.max(3, (n / max) * (H - 2)) : 0, hs = n ? (h * d.shipped) / n : 0, x = i * (bw + gap);
+        const label = `${d.day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${dayCount(d)}`;
         return (
           <g key={i}>
             <rect x={x} y={0} width={bw} height={H} fill="transparent"><title>{label}</title></rect>
-            {h > 0 && <rect x={x} y={H - h} width={bw} height={h} rx={Math.min(2, bw / 2)} fill="var(--theme-accent)" pointerEvents="none" />}
+            {hs > 0 && <rect x={x} y={H - hs} width={bw} height={hs} rx={Math.min(2, bw / 2)} fill="var(--theme-accent)" pointerEvents="none" />}
+            {h - hs > 0 && <rect x={x} y={H - h} width={bw} height={h - hs} rx={Math.min(2, bw / 2)} fill="var(--theme-text-muted)" pointerEvents="none" />}
           </g>
         );
       })}
@@ -139,9 +156,11 @@ export function FactoryExitLog({ machineId, onSettings, onOpenTicket, onClose }:
   const name = machineId ? exitName(machineId) : 'Exits';
   const set = (patch: Partial<ExitFilter>) => setF((cur) => ({ ...cur, ...patch }));
 
-  const shipped = shown.filter((r) => !r.source), items = shown.length - shipped.length, lead = median(shipped.map((r) => r.lead)), reopened = shipped.filter((r) => r.reopened).length;
-  const daily = useMemo(() => perDay(shipped, Math.min(days, 90)), [shipped, days]);
-  const rate = shipped.length / Math.max(1, days);
+  /* tickets that left: the throughput counts them all, the lead time the shipped ones only */
+  const left = shown.filter((r) => !r.source), shipped = left.filter((r) => r.outcome !== 'cancelled'), cancelled = left.length - shipped.length;
+  const items = shown.length - left.length, lead = median(shipped.map((r) => r.lead)), reopened = left.filter((r) => r.reopened).length;
+  const daily = useMemo(() => perDay(left, Math.min(days, 90)), [left, days]);
+  const rate = left.length / Math.max(1, days);
 
   /* what each criterion can be set to, from what left */
   const count = (key: (r: ExitRow) => string | null) => { const n = new Map<string, number>(); for (const r of rows) { const k = key(r); if (k) n.set(k, (n.get(k) ?? 0) + 1); } return n; };
@@ -183,12 +202,13 @@ export function FactoryExitLog({ machineId, onSettings, onOpenTicket, onClose }:
 
         <div className="flex flex-none flex-wrap items-end gap-2">
           {tile(shipped.length, 'tickets shipped')}
+          {cancelled > 0 && tile(cancelled, 'cancelled', 'text-[var(--theme-text-secondary)]')}
           {tile(`${rate < 10 ? rate.toFixed(1) : Math.round(rate)} / day`, 'throughput')}
           {tile(lead === null ? '–' : span(lead), 'median lead time')}
           {tile(reopened, 'reopened since', reopened ? 'text-[var(--theme-warning)]' : undefined)}
           {items > 0 && tile(items, 'items archived')}
           <div className="ml-auto flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Shipped per day</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Left per day</span>
             <Throughput days={daily} />
           </div>
         </div>
@@ -218,7 +238,7 @@ export function FactoryExitLog({ machineId, onSettings, onOpenTicket, onClose }:
                   <div key={g.id} role="rowgroup" aria-label={exitName(g.id)}>
                     {!machineId && (
                       <div className="flex items-baseline gap-2 border-b border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-1 text-[11px] font-semibold text-[var(--theme-text-secondary)]">
-                        {exitName(g.id)}<span className="font-normal text-[var(--theme-text-muted)]">{g.rows.filter((r) => !r.source).length} shipped{exits.find((e) => e.machineId === g.id)?.onFloor === false ? ' · no longer on the floor' : ''}</span>
+                        {exitName(g.id)}<span className="font-normal text-[var(--theme-text-muted)]">{groupCount(g.rows)}{exits.find((e) => e.machineId === g.id)?.onFloor === false ? ' · no longer on the floor' : ''}</span>
                       </div>
                     )}
                     {g.rows.map((r) => (

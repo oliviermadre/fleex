@@ -83,7 +83,12 @@ export function computeStats(input: { runs: FactoryRunRow[]; executions: Executi
   const exits: Record<string, number> = {};
   for (const i of input.exitItems ?? []) if (i.machineId) exits[i.machineId] = (exits[i.machineId] ?? 0) + 1;
   for (const r of runs) {
-    if (r.executor === 'exit') { totals.shipped++; exits[r.machineId] = (exits[r.machineId] ?? 0) + 1; if (r.finishedAt) leadMs += ms(r.startedAt, r.finishedAt); continue; }
+    if (r.executor === 'exit') {
+      /* the exit counts all that left by it; shipped and lead time leave out what was cancelled (an older run, of no outcome, shipped) */
+      exits[r.machineId] = (exits[r.machineId] ?? 0) + 1;
+      if (r.outcome !== 'cancelled') { totals.shipped++; if (r.finishedAt) leadMs += ms(r.startedAt, r.finishedAt); }
+      continue;
+    }
     let m = machines.get(r.machineId);
     if (!m) {
       const spec = onFloor.get(r.machineId);

@@ -382,7 +382,10 @@ gates are drawn in amber there. Nothing changes on a dark theme.
 ## Reading the floor
 
 Every station visit is a row in `factory_runs`; a ticket reaching an exit leaves one too (executor `exit`, from
-hand-over to exit, which is the lead time). `GET /api/factory/stats?days=7` turns those rows into figures per machine
+hand-over to exit, which is the lead time). An exit sets the ticket to `done`, or to `cancelled` when set so
+(**Sets tickets to** on its card, `ExitSpec.status`, absent for done); its run's outcome is then `cancelled` instead of
+`shipped`, kept out of Shipped, the lead time and the cost per ticket shipped, still counted on the exit's counter and
+in its log (where a ticket is "reopened" once it is no longer what its exit set it to). Items are archived either way. `GET /api/factory/stats?days=7` turns those rows into figures per machine
 (`stats.ts`, a pure function): runs, failures, questions, outcomes, average run time, time spent waiting for a human
 (a gate's decision; a question until the ticket's next run) and cost. A run is priced by the agent execution it
 started; a panel starts one execution per persona and links only its synthesis, so a panel run also takes the

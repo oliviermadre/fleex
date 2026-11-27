@@ -276,6 +276,7 @@ export class FactoryModule {
         return {
           machineId: r.machineId, ticketId: r.ticketId, displayId: t?.displayId ?? null, title: t?.title ?? 'A ticket deleted since', type: t?.type ?? '', priority: t?.priority ?? '', boardId: t?.boardId ?? null,
           status: t?.status ?? null, archived: !!t?.archivedAt, tags: t?.tags ?? [], handedAt: r.startedAt, shippedAt: r.finishedAt!,
+          outcome: r.outcome === 'cancelled' ? 'cancelled' as const : 'shipped' as const,
         };
       }));
       tickets.push(...batch);
