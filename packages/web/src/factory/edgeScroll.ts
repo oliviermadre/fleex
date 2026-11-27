@@ -6,7 +6,7 @@
 import { useEffect, type RefObject } from 'react';
 
 /** How far from an edge the glide starts, in pixels. */
-export const EDGE_ZONE = 50;
+export const EDGE_ZONE = 10;
 /** The glide's speed at the start of the zone and against the edge, in pixels of screen per second. */
 export const EDGE_SLOW = 45, EDGE_FAST = 520;
 /** How long the glide takes to reach its speed once the pointer is in the zone: crossing it on the way elsewhere moves nothing to speak of. */

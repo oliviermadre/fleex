@@ -34,7 +34,7 @@ where the floor fills it nor move beyond the floor's edge (`FactoryView.constrai
 leaves the minimap.
 
 Moving the view is the same in build mode and out of it: Space and a drag (or a drag with the right button), the arrow
-keys, the minimap, and the edges of the page (`edgeScroll.ts`). Within 50 px of an edge (against the app's navigation,
+keys, the minimap, and the edges of the page (`edgeScroll.ts`). Within 10 px of an edge (against the app's navigation,
 under the top bar, at the right and at the bottom of the window, under the console) the view glides that way, faster
 the closer the pointer is, and the pointer turns into an arrowhead towards the edge; not while it is over a control.
 A plain drag never moves the view: it is for tickets and machines.
