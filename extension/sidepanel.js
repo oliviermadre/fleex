@@ -55,6 +55,7 @@ let currentTurn      = null;   // .blocks div of the active assistant turn
 let currentTextBlock = null;   // .block-text div being streamed into
 let currentText      = '';     // accumulated markdown for currentTextBlock
 let currentToolCard  = null;   // .tool-card div awaiting result
+const toolCards = new Map();   // tool_use id → .tool-card (several can run at once)
 let thinkingBlock    = null;   // .thinking div (removed on first event)
 
 // Selections
@@ -137,23 +138,53 @@ function handleStream(ev) {
       if (thinkingBlock) { thinkingBlock.remove(); thinkingBlock = null; }
       finalizeTextBlock();
       if (!currentTurn) currentTurn = startAssistantTurn();
-      currentToolCard = toolCardEl(ev.name || (ev.argv && ev.argv[0]), ev.argv);
+      currentToolCard = toolCardEl(ev);
+      if (ev.id) toolCards.set(ev.id, currentToolCard);
       currentTurn.appendChild(currentToolCard);
       thread.scrollTop = thread.scrollHeight;
       break;
     }
-    case 'tool_result':
-      if (currentToolCard) { updateToolCard(currentToolCard, ev.ok, ev.text, false); currentToolCard = null; }
+    case 'tool_result': {
+      const card = (ev.id && toolCards.get(ev.id)) || currentToolCard;
+      if (card) updateToolCard(card, ev.status || (ev.ok ? 'ok' : 'fail'), ev.text, ev);
+      if (ev.id) toolCards.delete(ev.id);
+      currentToolCard = null;
       break;
+    }
     case 'tool_denied':
-      if (currentToolCard) { updateToolCard(currentToolCard, false, 'declined by user', true); currentToolCard = null; }
+      if (currentToolCard) { updateToolCard(currentToolCard, 'denied', 'declined by user'); currentToolCard = null; }
       break;
+    case 'artifact': {
+      finalizeTextBlock();
+      if (!currentTurn) currentTurn = startAssistantTurn();
+      const key = `${ev.turnId}:${ev.card.path}`;
+      const prev = thread.querySelector(`[data-artifact="${CSS.escape(key)}"]`);
+      const el = artifactEl(ev.card, key);
+      if (prev) prev.replaceWith(el); else currentTurn.appendChild(el);
+      thread.scrollTop = thread.scrollHeight;
+      break;
+    }
+    case 'notice':
+    case 'max_turns':
+      finalizeTextBlock();
+      thread.appendChild(noticeEl(ev.type === 'max_turns' ? 'max_turns' : ev.notice, ev.limit));
+      thread.scrollTop = thread.scrollHeight;
+      break;
+    case 'auth_missing': {
+      const errDiv = document.createElement('div');
+      errDiv.className = 'turn-error';
+      errDiv.textContent = 'No Claude authentication: log Claude Code in on this machine (claude, then /login) or add ANTHROPIC_API_KEY to ~/.fleex/config.';
+      thread.appendChild(errDiv);
+      break;
+    }
     case 'done':
       finalizeTextBlock();
       currentTurn = null;
       currentToolCard = null;
+      toolCards.clear();
       if (thinkingBlock) { thinkingBlock.remove(); thinkingBlock = null; }
       delete pendingConfirm[ev.sessionId];
+      thread.querySelectorAll('.turn-confirm .actions').forEach((a) => a.remove());
       generating = false;
       refreshComposer();
       break;
@@ -211,7 +242,15 @@ function thinkingEl() {
   return el;
 }
 
-function toolCardEl(name, argv) {
+const ACCESS_LABEL = { read: 'lecture', write: 'écriture', destructive: 'destructif' };
+
+/** "tool · target" of a line; pre-SDK lines carried the fleex argv instead. */
+function toolLabelOf(t) {
+  if (t.argv) return `fleex ${t.argv.join(' ')}`;
+  return t.target ? `${t.name} · ${t.target}` : (t.name || 'tool');
+}
+
+function toolCardEl(t) {
   const card = document.createElement('div');
   card.className = 'tool-card';
 
@@ -223,7 +262,22 @@ function toolCardEl(name, argv) {
 
   const nameEl = document.createElement('span');
   nameEl.className = 'tool-card-name';
-  nameEl.textContent = (name || 'tool').replace(/_/g, ' ');
+  nameEl.textContent = toolLabelOf(t);
+
+  head.append(ic, nameEl);
+  if (t.outsideWorkDir) {
+    const b = document.createElement('span');
+    b.className = 'tool-card-badge badge-write';
+    b.textContent = 'hors du dossier';
+    head.appendChild(b);
+  }
+  if (t.access && ACCESS_LABEL[t.access]) {
+    // Display only: nothing is blocked on it.
+    const b = document.createElement('span');
+    b.className = `tool-card-badge badge-${t.access}`;
+    b.textContent = ACCESS_LABEL[t.access];
+    head.appendChild(b);
+  }
 
   const statusEl = document.createElement('span');
   statusEl.className = 'tool-card-status';
@@ -232,35 +286,28 @@ function toolCardEl(name, argv) {
   const chevron = iconEl('chevron');
   chevron.classList.add('tool-card-chevron');
 
-  head.append(ic, nameEl, statusEl, chevron);
+  head.append(statusEl, chevron);
   head.onclick = () => card.classList.toggle('expanded');
 
   const body = document.createElement('div');
   body.className = 'tool-card-body';
-
-  const sec = document.createElement('div');
-  sec.className = 'tool-card-section';
-  const label = document.createElement('div');
-  label.className = 'tool-card-label';
-  label.textContent = 'Command';
-  const pre = document.createElement('pre');
-  pre.className = 'tool-card-pre';
-  pre.textContent = `fleex ${(argv || []).join(' ')}`;
-  sec.append(label, pre);
-  body.appendChild(sec);
-
   card.append(head, body);
   return card;
 }
 
-function updateToolCard(card, ok, text, denied) {
+const STATUS_TEXT = { ok: 'done', fail: 'failed', denied: 'refusé', stopped: 'arrêté', interrupted: 'interrompu' };
+
+function updateToolCard(card, status, text, meta = {}) {
+  const ok = status === 'ok';
+  const soft = status === 'denied' || status === 'stopped' || status === 'interrupted';
   const oldIc = card.querySelector('.tool-card-icon');
-  const newIc = iconEl(ok ? 'check' : denied ? 'ban' : 'x');
-  newIc.classList.add('tool-card-icon', ok ? 'ok' : denied ? 'denied' : 'fail');
+  const newIc = iconEl(ok ? 'check' : soft ? 'ban' : 'x');
+  newIc.classList.add('tool-card-icon', ok ? 'ok' : soft ? 'denied' : 'fail');
   oldIc.replaceWith(newIc);
 
   const st = card.querySelector('.tool-card-status');
-  st.textContent = ok ? 'done' : denied ? 'declined' : 'failed';
+  st.textContent = (meta.outsideAutoAllowed ? '⚡ ' : '') + (STATUS_TEXT[status] || status)
+    + (status === 'fail' && meta.exitCode !== undefined ? ` (exit ${meta.exitCode})` : '');
 
   if (text && text.trim()) {
     const body = card.querySelector('.tool-card-body');
@@ -271,10 +318,66 @@ function updateToolCard(card, ok, text, denied) {
     lbl.textContent = ok ? 'Result' : 'Error';
     const pre = document.createElement('pre');
     pre.className = 'tool-card-pre';
-    pre.textContent = truncate(text, 600);
+    // The last lines: where results and errors are.
+    const lines = text.split('\n');
+    pre.textContent = lines.length > 20 ? `… ${lines.length - 20} lines above\n` + lines.slice(-20).join('\n') : truncate(text, 4000);
     sec.append(lbl, pre);
     body.appendChild(sec);
   }
+}
+
+function formatBytes(n) {
+  return n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+}
+
+/** A file the conversation produced in its folder. */
+function artifactEl(card, key) {
+  const el = document.createElement('div');
+  el.className = 'tool-card artifact-card';
+  el.dataset.artifact = key;
+  const head = document.createElement('div');
+  head.className = 'tool-card-head';
+  const name = document.createElement('span');
+  name.className = 'tool-card-name';
+  name.textContent = `📄 ${card.relPath}`;
+  const size = document.createElement('span');
+  size.className = 'tool-card-status';
+  size.textContent = formatBytes(card.sizeBytes) + (card.attachments.length ? ` · attaché à #${card.attachments.map((a) => a.displayId).join(', #')}` : '');
+  const open = document.createElement('button');
+  open.className = 'sugg-btn';
+  open.textContent = 'Ouvrir';
+  open.onclick = () => sendMsg({ type: 'open_path', sessionId: activeId, path: card.path });
+  head.append(name, size, open);
+  el.appendChild(head);
+  const p = card.preview;
+  if (card.kind === 'full' && p && (p.type === 'text' || p.type === 'markdown' || p.type === 'csv')) {
+    const pre = document.createElement('pre');
+    pre.className = 'tool-card-pre';
+    pre.textContent = p.type === 'csv' ? p.rows.map((r) => r.join(' | ')).join('\n') : p.text;
+    el.appendChild(pre);
+  }
+  return el;
+}
+
+function noticeEl(kind, limit) {
+  const el = document.createElement('div');
+  el.className = 'turn-notice';
+  if (kind === 'max_turns') {
+    el.textContent = `Limite de ${limit ?? '?'} tours atteinte. `;
+    const btn = document.createElement('button');
+    btn.className = 'sugg-btn';
+    btn.textContent = 'Continuer';
+    btn.onclick = () => {
+      btn.disabled = true;
+      sendMsg({ type: 'continue', sessionId: activeId });
+      generating = true;
+      refreshComposer();
+    };
+    el.appendChild(btn);
+  } else {
+    el.textContent = { continued: '↻ continué', legacy_resumed: 'Reprise avec le nouvel assistant', context_reloaded: "Contexte rechargé depuis l'historique" }[kind] || '';
+  }
+  return el;
 }
 
 function renderEmpty() {
@@ -287,7 +390,7 @@ function renderEmpty() {
   p.textContent = 'What do you want to do\nwith your workspaces?';
   const suggs = document.createElement('div');
   suggs.className = 'suggestions';
-  ["What's on my board?", 'Create a ticket for this page', 'List my open tickets'].forEach((text) => {
+  ["What's on my board?", 'Write a script that exports my blocked tickets to CSV and run it', 'Create a ticket for this page'].forEach((text) => {
     const btn = document.createElement('button');
     btn.className = 'sugg-btn';
     btn.textContent = text;
@@ -302,14 +405,22 @@ function renderEmpty() {
   return el;
 }
 
+/** The one confirmation left: a file write outside the conversation folder. */
 function renderConfirm(ev) {
   const card = document.createElement('div');
   card.className = 'turn-confirm';
   const title = document.createElement('div');
   title.className = 'confirm-title';
-  title.textContent = `Run this ${ev.name.replace(/_/g, ' ')}?`;
+  title.textContent = `${ev.tool} outside the conversation folder?`;
   const code = document.createElement('code');
-  code.textContent = `fleex ${ev.argv.join(' ')}`;
+  code.textContent = ev.path;
+  const diff = document.createElement('details');
+  const sum = document.createElement('summary');
+  sum.textContent = ev.isNewFile ? 'New file' : 'Diff';
+  const pre = document.createElement('pre');
+  pre.className = 'tool-card-pre';
+  pre.textContent = ev.diff || '';
+  diff.append(sum, pre);
   const actions = document.createElement('div');
   actions.className = 'actions';
   const yes = document.createElement('button');
@@ -318,28 +429,22 @@ function renderConfirm(ev) {
   const no = document.createElement('button');
   no.className = 'confirm-decline';
   no.textContent = 'Decline';
-  // Standing approval for this command name in this conversation only. The
-  // server resolves which session/tool it covers from its own pending entry —
-  // we only send the scope.
-  const label = ev.name.replace(/^fleex_/, '').replace(/_/g, ' ');
+  // "Always" covers later outside writes of this conversation only; the server
+  // applies it to the pending call's own conversation.
   const always = document.createElement('button');
   always.className = 'confirm-always';
-  always.textContent = `⚡ Always allow "${label}"`;
-  always.title = `Every "${label}" command in this conversation`;
-  const decide = (approved, alwaysScope) => {
-    sendMsg({ type: 'confirm', sessionId: ev.sessionId, id: ev.id, approved, ...(alwaysScope ? { always: alwaysScope } : {}) });
+  always.textContent = '⚡ Always allow in this conversation';
+  const decide = (decision) => {
+    sendMsg({ type: 'confirm', sessionId: ev.sessionId, id: ev.id, decision });
     delete pendingConfirm[ev.sessionId];
-    yes.disabled = no.disabled = always.disabled = true;
-    title.textContent = alwaysScope
-      ? `Always allowed — ${label}`
-      : approved ? `Approved — ${ev.name.replace(/_/g, ' ')}` : `Declined — ${ev.name.replace(/_/g, ' ')}`;
+    title.textContent = decision === 'always' ? `Always allowed — ${ev.path}` : decision === 'allow' ? `Approved — ${ev.path}` : `Declined — ${ev.path}`;
     actions.remove();
   };
-  yes.onclick = () => decide(true);
-  no.onclick = () => decide(false);
-  always.onclick = () => decide(true, 'tool');
+  yes.onclick = () => decide('allow');
+  no.onclick = () => decide('deny');
+  always.onclick = () => decide('always');
   actions.append(yes, no, always);
-  card.append(title, code, actions);
+  card.append(title, code, diff, actions);
   thread.appendChild(card);
   thread.scrollTop = thread.scrollHeight;
 }
@@ -475,7 +580,7 @@ function setActive(id) {
 function renderTranscript(items) {
   thread.innerHTML = '';
   currentTurn = null; currentTextBlock = null; currentText = '';
-  currentToolCard = null; thinkingBlock = null;
+  currentToolCard = null; toolCards.clear(); thinkingBlock = null;
 
   if (items.length === 0) { thread.appendChild(renderEmpty()); return; }
 
@@ -499,12 +604,15 @@ function renderTranscript(items) {
       asBlocks.appendChild(blk);
     } else if (it.tool) {
       if (!asBlocks) asBlocks = startAssistantTurn();
-      const card = toolCardEl(it.tool.name || (it.tool.argv && it.tool.argv[0]), it.tool.argv);
-      const st = it.tool.status;
-      if (st === 'ok')     updateToolCard(card, true,  it.tool.text || '', false);
-      else if (st === 'fail')   updateToolCard(card, false, it.tool.text || '', false);
-      else if (st === 'denied') updateToolCard(card, false, 'declined by user', true);
+      const card = toolCardEl(it.tool);
+      if (it.tool.status !== 'running') updateToolCard(card, it.tool.status, it.tool.text || '', it.tool);
       asBlocks.appendChild(card);
+    } else if (it.artifact) {
+      if (!asBlocks) asBlocks = startAssistantTurn();
+      asBlocks.appendChild(artifactEl(it.artifact, `${it.artifact.turnId}:${it.artifact.path}`));
+    } else if (it.notice) {
+      thread.appendChild(noticeEl(it.notice, it.limit));
+      asBlocks = null;
     }
   }
 
@@ -536,7 +644,11 @@ function refreshComposer() {
 
 // ── Sending ────────────────────────────────────────────────────────────────
 function submit() {
-  if (generating) return; // Stop button: no interrupt protocol yet
+  if (generating) {
+    // Stop: the companion interrupts the turn (a pending confirmation is refused).
+    if (activeId) sendMsg({ type: 'stop', sessionId: activeId });
+    return;
+  }
   const text = input.value.trim();
   if (!text || !online) return;
   if (!activeId) return;
