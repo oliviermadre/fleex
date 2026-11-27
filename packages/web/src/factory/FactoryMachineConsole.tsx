@@ -152,8 +152,11 @@ function SizeField({ m, onPatch }: { m: MachineSpec; onPatch: Patch }) {
   if (!list) return null;
   const now = `${m.w}x${m.h}`, known = list.some(([w, h]) => `${w}x${h}` === now);
   return (
-    <Select id="f-size" label="Size" value={now} onChange={(e) => { const [w, h] = e.target.value.split('x').map(Number); onPatch({ w, h } as Partial<MachineSpec>); }}
-      options={[...list.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` })), ...(known ? [] : [{ value: now, label: `${m.w} × ${m.h} (as built)` }])]} />
+    <div className="flex flex-col gap-1">
+      <Select id="f-size" label="Size" value={now} onChange={(e) => { const [w, h] = e.target.value.split('x').map(Number); onPatch({ w, h } as Partial<MachineSpec>); }}
+        options={[...list.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` })), ...(known ? [] : [{ value: now, label: `${m.w} × ${m.h} (as built)` }])]} />
+      <Hint>Odd, so that what comes in and goes out lines up on its middle. It grows down and right; where there is no room, it says so.</Hint>
+    </div>
   );
 }
 
@@ -410,6 +413,7 @@ function SetupGate({ m, tickets, takers, view, onPatch, onOpenMachine }: { m: St
         <SectionHead icon="gate">Setup</SectionHead>
         <CommitInput id="f-name" label="Name" value={m.name ?? ''} onCommit={(v) => onPatch({ name: v })} />
         <Places m={m} tickets={tickets} onPatch={onPatch} />
+        <SizeField m={m} onPatch={onPatch} />
         <Takers m={m} takers={takers} onOpenMachine={onOpenMachine} />
       </Card>
       <Card><Doors m={m} takers={takers} view={view} onPatch={onPatch} onOpenMachine={onOpenMachine} /></Card>
@@ -655,7 +659,7 @@ export function FactoryMachineConsole({ m, view, onClose, onPatch, onRemove, onO
         {tab === 'routing' && station && (
           <Columns wide="left">
             <Card><Doors m={station} takers={takers} view={view} onPatch={onPatch} onOpenMachine={onOpenMachine} /></Card>
-            <Card><Places m={station} tickets={tickets} onPatch={onPatch} /></Card>
+            <Card><Places m={station} tickets={tickets} onPatch={onPatch} />{takers.length > 0 && <Takers m={station} takers={takers} onOpenMachine={onOpenMachine} />}</Card>
           </Columns>
         )}
         {tab === 'activity' && station && <ActivityTab m={station} onOpenTicket={onOpenTicket} />}

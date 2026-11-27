@@ -102,6 +102,27 @@ describe('the doors out of a station', () => {
   });
 });
 
+describe('nothing a popup had is lost (RG1)', () => {
+  it('a gate can still be resized from its popup, with the hint on why sizes are odd', () => {
+    seed();
+    open('rv');
+    tab('Setup');
+    const size = screen.getByLabelText('Size') as HTMLSelectElement;
+    expect(size.id).toBe('f-size');
+    expect(screen.getByRole('tabpanel').textContent).toContain('Odd, so that what comes in and goes out lines up on its middle');
+  });
+
+  it('a station lists every arm it leaves through, each one opening, even one no door names', () => {
+    seed();
+    const on = open('mq');
+    tab('Routing');
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.textContent).toContain('Leaves through 1 arm');
+    fireEvent.click(within(panel).getAllByTitle('Open this arm').at(-1)!);
+    expect(on.onOpenMachine).toHaveBeenCalledWith('a-ok');
+  });
+});
+
 describe('places', () => {
   it('one more or one fewer, saved at once, within the bounds a station always had', () => {
     seed();
