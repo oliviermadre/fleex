@@ -11,6 +11,7 @@ interface Options { worktree?: string; removeFromFile?: boolean; json?: boolean 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unshare',
+  access: 'write',
   description: 'Garder pour moi: copy shared worktree settings into your personal Fleex settings',
   extraHelp: `\n${KEYS_HELP}\n\nWithout --remove-from-file the team's copy stays in .fleex/worktree.json; yours masks it.\n`,
   setup(cmd) {

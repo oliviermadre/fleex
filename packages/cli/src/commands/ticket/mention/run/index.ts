@@ -6,6 +6,7 @@ import { getMention, mentionLabel } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'run',
+  access: 'write',
   description: 'Run (or re-run) a mention now (run <ticket> <mention>)',
   setup(cmd) {
     cmd.argument('<ticket>', 'Ticket display ID or UUID');

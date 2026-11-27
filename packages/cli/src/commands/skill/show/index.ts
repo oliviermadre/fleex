@@ -13,6 +13,7 @@ interface ShowOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show one skill (by command name or UUID)',
   setup(cmd) {
     cmd.argument('<id|name>', 'Skill command name (@skill: handle) or UUID');

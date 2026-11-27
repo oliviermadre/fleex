@@ -14,6 +14,7 @@ interface KeepOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'keep',
+  access: 'write',
   description: 'Keep a moment of an execution as a memory note, ranked above ordinary run output',
   setup(cmd) {
     cmd.argument('<executionId>', 'Execution to keep something from');

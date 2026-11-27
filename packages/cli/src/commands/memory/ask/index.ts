@@ -19,6 +19,7 @@ interface AskResponse {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'ask',
+  access: 'read',
   aliases: ['a'],
   description: 'Ask a question of this workspace\'s memory and get a cited answer (one LLM call)',
   setup(cmd) {

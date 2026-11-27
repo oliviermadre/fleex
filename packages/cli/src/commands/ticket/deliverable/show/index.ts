@@ -9,6 +9,7 @@ interface ShowOptions { board?: string; contentOnly?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view', 'get'],
   description: 'Show a single deliverable on a ticket',
   setup(cmd) {

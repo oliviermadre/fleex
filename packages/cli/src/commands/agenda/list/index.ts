@@ -11,6 +11,7 @@ interface ListOptions extends ItemFilterOptions { from?: string; to?: string; ca
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description:
     'Read the agenda over a window (≤ 42 days): Google meetings, free events, ticket created/done/due, routine runs and slots, ' +

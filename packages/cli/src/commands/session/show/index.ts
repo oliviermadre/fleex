@@ -5,6 +5,7 @@ import { resolveSession } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view'],
   description: 'Show details of one session',
   setup(cmd) {

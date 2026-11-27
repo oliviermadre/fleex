@@ -7,6 +7,7 @@ const tool: GeneratedTool = {
   commandPath: ['ticket', 'list'],
   description: 'List tickets',
   inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+  access: 'read',
   mutating: false,
   workspaceAware: false,
   arguments: [],

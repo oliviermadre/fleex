@@ -6,6 +6,7 @@ import { resolveEpic, type Epic } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'archive',
+  access: 'write',
   description: 'Archive an epic (hides it from the active list)',
   setup(cmd) {
     cmd.argument('<id>', 'Epic UUID or 8-char prefix');

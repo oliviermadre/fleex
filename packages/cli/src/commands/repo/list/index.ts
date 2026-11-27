@@ -18,6 +18,7 @@ interface ListOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List configured repositories with their GitHub summary',
   setup(cmd) {

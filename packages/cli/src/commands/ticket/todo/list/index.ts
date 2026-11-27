@@ -12,6 +12,7 @@ interface ListOptions { board?: string; state?: string; mine?: boolean; assignee
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: "List the ticket's shared todo list (open, then done, then cancelled). Read it before starting multi-step work on a ticket; never act on items assigned to the human.",
   setup(cmd) {

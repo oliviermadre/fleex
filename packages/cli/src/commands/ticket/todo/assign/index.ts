@@ -11,6 +11,7 @@ interface Options { board?: string; as?: string; reason?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'assign',
+  access: 'write',
   description:
     'Say who todo items are for: me, user (the human), agent (any agent), none (anyone) or a persona slug. '
     + 'Hand to the human (user) what only they can do. Take over items assigned to the human only when the human '

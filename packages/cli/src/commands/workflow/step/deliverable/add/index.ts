@@ -22,6 +22,7 @@ interface AddOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add',
+  access: 'write',
   aliases: ['create', 'new'],
   description: 'Attach a deliverable to a step run (add <runId> <stepRunId>)',
   setup(cmd) {

@@ -6,6 +6,7 @@ import type { ListedDeliverable } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view', 'get'],
   description: 'Read one deliverable by id, whatever it belongs to (ticket or routine run): metadata and full content',
   setup(cmd) {

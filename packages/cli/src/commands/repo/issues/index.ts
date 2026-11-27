@@ -9,6 +9,7 @@ interface Options { repo?: string; json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'issues',
+  access: 'read',
   description: 'List open GitHub issues of a repository',
   setup(cmd) {
     cmd.argument('[org/name]', 'Repository reference (or use --repo)');

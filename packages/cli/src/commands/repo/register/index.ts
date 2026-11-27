@@ -5,6 +5,7 @@ import { getConfig, parseRepo, putConfig } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'register',
+  access: 'write',
   aliases: ['add'],
   description: 'Register a repository in the workspace config (the server clones it)',
   setup(cmd) {

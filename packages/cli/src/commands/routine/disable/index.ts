@@ -7,6 +7,7 @@ import { resolveRoutine } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'disable',
+  access: 'write',
   description: 'Pause a routine without deleting it — the schedule stops firing',
   setup(cmd) {
     cmd.argument('<slug>', 'Routine slug, name, or UUID');

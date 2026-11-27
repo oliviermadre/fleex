@@ -17,6 +17,7 @@ interface NoteLinks {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'links',
+  access: 'read',
   description: 'Show which notes link to a note, and which ones resemble it',
   setup(cmd) {
     cmd.argument('<note>', 'Note key: "global" or "owner/name"');

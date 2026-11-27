@@ -6,6 +6,7 @@ import { resolveRoutine } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'run',
+  access: 'write',
   description: 'Launch a routine now, regardless of its schedule',
   setup(cmd) {
     cmd.argument('<slug>', 'Routine slug, name, or UUID');

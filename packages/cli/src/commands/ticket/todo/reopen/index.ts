@@ -7,6 +7,7 @@ interface Options { board?: string; as?: string; reason?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'reopen',
+  access: 'write',
   aliases: ['undo', 'uncheck'],
   description: "Reopen done or cancelled todo items (back to open).",
   setup(cmd) {

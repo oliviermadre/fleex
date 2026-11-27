@@ -24,6 +24,7 @@ interface BenchResult {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'bench',
+  access: 'read',
   description: 'Measure how well retrieval finds things on this corpus (recall@K, MRR, latency)',
   setup(cmd) {
     cmd.option('-n, --cases <n>', 'Queries to run (default 30)');

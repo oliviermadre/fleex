@@ -5,6 +5,7 @@ import { setPin } from '../pin/_pin.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unpin',
+  access: 'write',
   description: 'Unpin a worktree command',
   setup(cmd) {
     cmd.argument('<id>', 'Command id (see fleex repo actions)');

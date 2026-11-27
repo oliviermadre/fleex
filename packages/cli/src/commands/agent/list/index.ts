@@ -14,6 +14,7 @@ interface ListOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List agents with their @agent: handle, model and live status',
   setup(cmd) {

@@ -14,6 +14,7 @@ interface ShowOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show one panel (by name or UUID), including its members',
   setup(cmd) {
     cmd.argument('<id|name>', 'Panel name (@panel: handle) or UUID');

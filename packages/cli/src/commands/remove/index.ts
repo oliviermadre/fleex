@@ -27,6 +27,7 @@ function instanceIsRunning(runDir: string): boolean {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'remove',
+  access: 'destructive',
   description: 'Remove a stopped instance (its .run and .logs directories)',
   setup(cmd) {
     cmd.argument('[instance]', 'Instance slug to remove. Defaults to the current worktree.');

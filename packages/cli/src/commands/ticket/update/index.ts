@@ -37,6 +37,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['edit'],
   description: 'Update a ticket (PATCH, only provided fields are sent)',
   setup(cmd) {

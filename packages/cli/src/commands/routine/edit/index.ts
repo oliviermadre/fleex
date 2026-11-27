@@ -24,6 +24,7 @@ interface EditOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'edit',
+  access: 'write',
   aliases: ['update'],
   description: 'Edit a routine — only the flags you pass change; enable/disable have their own commands',
   setup(cmd) {

@@ -33,6 +33,7 @@ async function runHubStop(): Promise<void> {
 
 const def: CommandDef = {
   name: 'stop',
+  access: 'write',
   description: 'Stop the running event hub process',
   action: async () => {
     await runHubStop();

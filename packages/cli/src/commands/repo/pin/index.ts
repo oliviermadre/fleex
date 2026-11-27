@@ -5,6 +5,7 @@ import { setPin } from './_pin.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'pin',
+  access: 'write',
   description: 'Pin a worktree command (★ group at the top of its menu) — personal',
   setup(cmd) {
     cmd.argument('<id>', 'Command id (see fleex repo actions)');

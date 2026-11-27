@@ -8,6 +8,7 @@ interface UpdateOptions { name?: string; emoji?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['rename'],
   description: 'Update a board name and/or emoji (update <board> [--name] [--emoji])',
   setup(cmd) {

@@ -4,6 +4,7 @@ import { listBoardsWithCounts } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List boards with ticket counts per status',
   action: async () => {

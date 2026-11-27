@@ -73,6 +73,7 @@ async function loadExisting(manifestPath: string): Promise<MarketplaceManifest |
 const def: CommandDef = {
   workspaceAware: true,
   name: 'export',
+  access: 'write',
   description: 'Export agentic primitives (personas, skills, panels, workflows) into a marketplace repo',
   setup(cmd: Command) {
     cmd.option('--out <dir>', 'target marketplace directory (its git working copy)');

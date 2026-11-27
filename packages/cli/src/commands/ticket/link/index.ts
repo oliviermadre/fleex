@@ -18,6 +18,7 @@ interface Repository {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'link',
+  access: 'write',
   description: 'Link repositories / PRs / issues to a ticket — --pr and --issue accept a full GitHub URL or org/name#N (link <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

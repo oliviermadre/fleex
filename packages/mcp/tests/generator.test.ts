@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { generateTools } from '../src/generator.ts';
 import { buildArgv, suggestField } from '../src/argv.ts';
 import type { GeneratedTool } from '../src/types.ts';
+import { recordCommandAccess } from '@fleex/cli/access';
 
 /** Build a small fleex-like tree mirroring real command shapes. */
 function fakeProgram(): Command {
@@ -49,6 +50,14 @@ function fakeProgram(): Command {
   // Infra command outside the allowlist — must be excluded.
   root.command('start').description('Start services');
 
+  // What the CLI bootstrap records from each `CommandDef.access`.
+  recordCommandAccess(create, 'write');
+  recordCommandAccess(list, 'read');
+  recordCommandAccess(move, 'write');
+  recordCommandAccess(update, 'write');
+  recordCommandAccess(del, 'destructive');
+  recordCommandAccess(add, 'write');
+
   return root;
 }
 
@@ -85,10 +94,20 @@ describe('generateTools', () => {
     expect(byName(tools, 'fleex_ticket_list').mutating).toBe(false);
   });
 
-  it('marks `workflow apply` as mutating: it creates or replaces a whole template', () => {
+  it('reads mutability from the declared access, not from the verb', () => {
+    // `done` is no write verb: under the old verb list it was announced read-only.
     const root = new Command('fleex');
-    root.command('workflow').command('apply').description('Create or replace a workflow').option('--file <path|->', 'Document');
-    expect(byName(generateTools(root), 'fleex_workflow_apply').mutating).toBe(true);
+    const done = root.command('ticket').command('todo').command('done').description('Tick an item');
+    recordCommandAccess(done, 'write');
+    const tool = byName(generateTools(root), 'fleex_ticket_todo_done');
+    expect(tool.access).toBe('write');
+    expect(tool.mutating).toBe(true);
+  });
+
+  it('treats a command with no declared access as writing, never as read-only', () => {
+    const root = new Command('fleex');
+    root.command('ticket').command('peek').description('Undeclared');
+    expect(byName(generateTools(root), 'fleex_ticket_peek').mutating).toBe(true);
   });
 
   it('builds an input schema with required fields and hides --workspace', () => {

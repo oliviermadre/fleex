@@ -4,6 +4,7 @@ import { readRegistry, loadManifest } from '../../../core/registry.ts';
 
 const def: CommandDef = {
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List registered marketplaces',
   action() {

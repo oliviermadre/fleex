@@ -10,6 +10,7 @@ interface Options { board?: string; as?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'delete',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Delete a todo item you created (it leaves the list; its history stays). Agents cannot delete an item a human created — cancel it instead.',
   setup(cmd) {

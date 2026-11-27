@@ -19,6 +19,15 @@ import { Command, type Option, type Argument } from 'commander';
 import type { CommandDef } from '../../core/types.ts';
 import { walkCommands, getRootProgram, getExtraHelp } from '../../core/help.ts';
 import { stripAnsi } from '../../core/colors.ts';
+import { getCommandAccess } from '../../core/access.ts';
+import type { CommandAccess } from '../../core/types.ts';
+
+/** Label shown next to a command path in the markdown and text references. */
+export const ACCESS_LABEL: Record<CommandAccess, string> = {
+  read: 'lecture',
+  write: 'écriture',
+  destructive: 'destructif',
+};
 
 type Format = 'markdown' | 'json' | 'text';
 
@@ -33,10 +42,13 @@ export interface CommandDoc {
   subcommands: string[];   // names of direct children (excluding "help")
   /** ANSI-stripped `CommandDef.extraHelp` (Examples, notes) when the command declares one. */
   notes?: string;
+  /** What the command does to the world (`CommandDef.access`). Absent on parent groups. */
+  access?: CommandAccess;
 }
 
 const def: CommandDef = {
   name: 'documentation',
+  access: 'read',
   aliases: ['docs'],
   description: 'Print the exhaustive CLI reference (every command, option, alias) — built for LLM discovery',
   setup(cmd) {
@@ -113,6 +125,7 @@ export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc 
   const argList: Argument[] = (args.registeredArguments ?? args._args ?? []) as Argument[];
   const rawNotes = getExtraHelp(cmd);
   const notes = rawNotes ? stripAnsi(rawNotes).trim() : undefined;
+  const access = getCommandAccess(cmd);
   return {
     path: breadcrumb.join(' '),
     name: cmd.name(),
@@ -134,6 +147,7 @@ export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc 
     })),
     subcommands: cmd.commands.filter((c) => c.name() !== 'help').map((c) => c.name()),
     ...(notes ? { notes } : {}),
+    ...(access ? { access } : {}),
   };
 }
 
@@ -159,7 +173,7 @@ export function renderMarkdown(root: Command, docs: CommandDoc[]): string {
   lines.push('');
 
   for (const d of docs) {
-    lines.push(`## \`${d.path}\``);
+    lines.push(`## \`${d.path}\`${d.access ? ` [${ACCESS_LABEL[d.access]}]` : ''}`);
     if (d.aliases.length) lines.push(`**Aliases:** ${d.aliases.map((a) => `\`${a}\``).join(', ')}`);
     if (d.description) lines.push(d.description);
     lines.push('', '```');
@@ -204,7 +218,7 @@ export function renderText(root: Command, docs: CommandDoc[]): string {
   for (const r of AGENT_RULES) lines.push(`  - ${r.replace(/`/g, '')}`);
   lines.push('');
   for (const d of docs) {
-    lines.push(`${d.path}${d.aliases.length ? ' (' + d.aliases.join(', ') + ')' : ''}`);
+    lines.push(`${d.path}${d.aliases.length ? ' (' + d.aliases.join(', ') + ')' : ''}${d.access ? ` [${ACCESS_LABEL[d.access]}]` : ''}`);
     lines.push(`  ${d.description}`);
     lines.push(`  usage: ${d.path} ${d.usage}`.trim());
     for (const a of d.arguments) {

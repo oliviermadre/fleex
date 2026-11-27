@@ -8,6 +8,7 @@ import { resolveEventId } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'delete',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Delete a free agenda event (the whole series for a repeating one).',
   setup(cmd) {

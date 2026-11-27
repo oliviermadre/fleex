@@ -9,8 +9,6 @@ import { execFleex, type ExecOptions, type ExecResult } from './executor.ts';
 import { formatExecFailure } from './format-failure.ts';
 import type { GeneratedTool } from './types.ts';
 
-const DESTRUCTIVE_LEAVES = new Set(['delete', 'rm', 'remove', 'unlink']);
-
 export interface McpToolDef {
   name: string;
   description: string;
@@ -28,15 +26,14 @@ export interface McpToolResult {
 }
 
 export function toMcpTool(tool: GeneratedTool): McpToolDef {
-  const leaf = tool.commandPath[tool.commandPath.length - 1] ?? '';
   return {
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
     annotations: {
       title: `fleex ${tool.commandPath.join(' ')}`,
-      readOnlyHint: !tool.mutating,
-      destructiveHint: tool.mutating && DESTRUCTIVE_LEAVES.has(leaf),
+      readOnlyHint: tool.access === 'read',
+      destructiveHint: tool.access === 'destructive',
     },
   };
 }

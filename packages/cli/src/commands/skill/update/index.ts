@@ -44,6 +44,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   description:
     'Update a skill. PATCH semantics: ONLY the fields whose flags you pass are changed; omitted flags leave fields untouched. The skill prompt (--prompt/--prompt-file) is REPLACED in full, never merged.',
   setup(cmd) {

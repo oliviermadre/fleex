@@ -8,6 +8,7 @@ interface ListOptions { enabled?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List routines with their schedule, next run and current state',
   setup(cmd) {

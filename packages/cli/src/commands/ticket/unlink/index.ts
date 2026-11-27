@@ -17,6 +17,7 @@ interface TicketWithLinks {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unlink',
+  access: 'destructive',
   description: 'Unlink repositories / PRs / issues from a ticket — --pr and --issue accept a full GitHub URL or org/name#N (unlink <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

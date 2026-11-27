@@ -11,6 +11,7 @@ const DIM = chalk.dim;
 const def: CommandDef = {
   workspaceAware: true,
   name: 'actions',
+  access: 'read',
   description: "List a worktree's commands (repo actions, launch.json, npm, make, composer) and its server state",
   extraHelp: `\n${chalk.bold.yellow('Examples:')}
   ${DIM('$')} fleex repo actions                          ${DIM('# the worktree of the current directory')}

@@ -15,6 +15,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['edit'],
   description: 'Update a deliverable (partial PATCH — only provided fields change)',
   setup(cmd) {

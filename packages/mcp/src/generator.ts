@@ -7,6 +7,8 @@
  * command tree means new CLI commands become tools with zero extra wiring.
  */
 import type { Command, Option, Argument } from 'commander';
+import { getCommandAccess } from '@fleex/cli/access';
+import type { CommandAccess } from '@fleex/cli/access';
 import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaProp, OptSpec } from './types.ts';
 
 /**
@@ -32,31 +34,6 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * decision; silently dropping an option is a bug.
  */
 export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory', 'agenda', 'deliverable'] as const;
-
-/**
- * Leaf command names that mutate state. The host gates these (e.g. asks the
- * user to confirm) since the assistant ingests untrusted page content.
- */
-const MUTATING_LEAVES = new Set([
-  'create', 'new', 'update', 'move', 'delete', 'rm', 'remove',
-  'add', 'link', 'unlink', 'import', 'comment', 'edit', 'archive', 'unarchive',
-  // routine / workflow-run verbs — they all write through the API
-  'run', 'enable', 'disable', 'resolve', 'retry', 'route', 'cancel',
-  // rebuilds the memory index: heavy, and worth confirming before it starts
-  'reindex',
-  // memory writes: `keep` indexes a note, `coach --apply` rewrites an agent's
-  // memory document — which is prepended to every future run of that agent
-  'keep', 'coach', 'forget',
-  // indexes corrections and spends model calls — same reasoning as reindex
-  'consolidate',
-  // changes which engine feeds every future prompt, and which features are on
-  'engine',
-  // `workflow apply` creates or replaces a whole template (its --documentation
-  // mode is read-only, but the leaf is classed by its writing mode)
-  'apply',
-  // `agenda respond` answers a Google invitation — the one write to Google
-  'respond',
-]);
 
 /** Options we never expose as tool params (handled specially or noise). */
 const HIDDEN_OPTION_LONGS = new Set(['--help', '--workspace', '--json']);
@@ -239,6 +216,17 @@ function isWorkspaceAware(cmd: Command): boolean {
 }
 
 /**
+ * The command's declared `access` (`CommandDef.access`, recorded at bootstrap).
+ *
+ * A command built outside the fleex bootstrap has no declaration: it is treated
+ * as `write`, so the surface never announces as read-only something nobody
+ * said was read-only.
+ */
+function commandAccess(cmd: Command): CommandAccess {
+  return getCommandAccess(cmd) ?? 'write';
+}
+
+/**
  * Generate the full set of MCP tools from a built fleex Commander root.
  */
 export function generateTools(root: Command, opts: GenerateOptions = {}): GeneratedTool[] {
@@ -252,13 +240,15 @@ export function generateTools(root: Command, opts: GenerateOptions = {}): Genera
 
     const args = readArguments(cmd);
     const options = readOptions(cmd);
+    const access = commandAccess(cmd);
     const confirmFlag = options.find((o) => o.key === 'force' || o.key === 'yes')?.flag;
     tools.push({
       name: ['fleex', ...rel].join('_').replace(/-/g, '_'),
       commandPath: rel,
       description: cmd.description() || rel.join(' '),
       inputSchema: buildSchema(cmd, args, options),
-      mutating: MUTATING_LEAVES.has(cmd.name()),
+      access,
+      mutating: access !== 'read',
       workspaceAware: isWorkspaceAware(cmd),
       ...(confirmFlag ? { confirmFlag } : {}),
       arguments: args,

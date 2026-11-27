@@ -28,6 +28,7 @@ interface MemoryStatusResponse {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'status',
+  access: 'read',
   aliases: ['st'],
   description: 'Report which context engine is active and what the memory index holds',
   action: async () => {

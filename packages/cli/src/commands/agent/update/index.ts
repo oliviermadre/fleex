@@ -51,6 +51,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   description:
     'Update an agent persona. PATCH semantics: ONLY the fields whose flags you pass are changed — every omitted flag leaves its field untouched. Text fields (soul/identity/memory) are REPLACED in full unless you use --memory-append.',
   setup(cmd) {

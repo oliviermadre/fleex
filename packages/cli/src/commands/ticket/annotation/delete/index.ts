@@ -9,6 +9,7 @@ interface DeleteOptions { board?: string; force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'delete',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Delete an annotation (prompts unless -f is given)',
   setup(cmd) {

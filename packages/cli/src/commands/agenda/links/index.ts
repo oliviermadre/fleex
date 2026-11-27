@@ -8,6 +8,7 @@ import { calendarsToRead, resolveItem } from '../_read.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'links',
+  access: 'read',
   description:
     'List deliverable ↔ meeting links: those of one meeting or event (--item), those of one deliverable (--deliverable), or all of them',
   setup(cmd) {

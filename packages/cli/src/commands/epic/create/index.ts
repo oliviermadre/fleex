@@ -16,6 +16,7 @@ interface CreateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   aliases: ['new'],
   description: 'Create an epic (create --name "Q3 Launch" [--timeframe now] [--board <id>])',
   setup(cmd) {

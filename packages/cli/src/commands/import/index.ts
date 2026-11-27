@@ -150,6 +150,7 @@ interface ImportOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'import',
+  access: 'write',
   description: 'Install primitives from a registered marketplace into this instance',
   setup(cmd: Command) {
     cmd.option('--marketplace <name>', 'marketplace to install from');

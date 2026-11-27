@@ -8,6 +8,7 @@ interface ArchiveResult { displayId: number; title: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'archive',
+  access: 'write',
   description: 'Archive a ticket (archive <id>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

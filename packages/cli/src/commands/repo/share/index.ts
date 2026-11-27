@@ -10,6 +10,7 @@ import { KEYS_HELP, toConfigKey } from '../_keys.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'share',
+  access: 'write',
   description: 'Partager: move personal worktree settings into the repo\'s .fleex/worktree.json (to commit)',
   extraHelp: `\n${KEYS_HELP}\n\n${chalk.dim('$')} fleex repo share action:lint hooks.setup\n`,
   setup(cmd) {

@@ -8,6 +8,7 @@ interface Options { all?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'refresh',
+  access: 'write',
   description: 'Trigger a background refresh of GitHub data (one repo or --all)',
   setup(cmd) {
     cmd.argument('[org/name]', 'Repository reference to refresh');

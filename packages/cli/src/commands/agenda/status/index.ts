@@ -8,6 +8,7 @@ import { calendarsToRead } from '../_read.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'status',
+  access: 'read',
   description: 'Google Calendar connection: whether gogcli is installed and authorized, the account, the calendars it can read and the ones the agenda reads',
   setup(cmd) {
     cmd.option('--refresh', 'Ask gogcli again instead of the cached answer');

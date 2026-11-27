@@ -6,6 +6,7 @@ import { getMarketplace, removeMarketplace } from '../../../core/registry.ts';
 
 const def: CommandDef = {
   name: 'remove',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Unregister a marketplace and delete its local cache',
   setup(cmd: Command) {

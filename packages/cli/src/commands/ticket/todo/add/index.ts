@@ -11,6 +11,7 @@ interface AddOptions { board?: string; note?: string; after?: string; file?: str
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add',
+  access: 'write',
   aliases: ['create', 'new'],
   description: "Add one or more items to the ticket's shared todo list. Use it to lay out a multi-step plan the human and the next agents can follow. Assign to the human (--to user) what only they can do: manual QA, decisions, credentials.",
   setup(cmd) {

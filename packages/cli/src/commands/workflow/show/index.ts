@@ -14,6 +14,7 @@ interface ShowOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show one workflow template (by slug or UUID), including its steps',
   setup(cmd) {
     cmd.argument('<id|slug>', 'Workflow slug (@workflow: handle) or UUID');

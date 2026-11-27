@@ -39,6 +39,7 @@ function parseRef(token: string): PrimitiveRef | null {
 
 const def: CommandDef = {
   name: 'unexport',
+  access: 'destructive',
   description: 'Remove primitives from a marketplace repo, keeping the manifest referentially consistent',
   setup(cmd: Command) {
     cmd.option('--out <dir>', 'target marketplace directory (its git working copy)');

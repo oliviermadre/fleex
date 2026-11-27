@@ -31,6 +31,7 @@ function heading(candidate: AutomationCandidate): string {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'suggest',
+  access: 'read',
   description: 'Find work you repeat by hand on a cadence a routine could fire on',
   setup(cmd) {
     cmd.option('--min <n>', 'Minimum occurrences to count as a habit (default 4)');

@@ -9,6 +9,7 @@ interface RemoveTicketOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'remove-ticket',
+  access: 'write',
   aliases: ['rm-ticket'],
   description: 'Remove a ticket from an epic (remove-ticket <epic> <ticket>)',
   setup(cmd) {

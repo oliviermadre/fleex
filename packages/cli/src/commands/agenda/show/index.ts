@@ -26,6 +26,7 @@ async function deliverablesOf(item: AgendaItem): Promise<{ ticket: DeliverableRo
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view', 'get'],
   description:
     'Show one agenda item in full: when, status, ticket, routine; for a Google meeting the organizer, guests and their answers, my answer, the Meet link and notes; ' +

@@ -15,6 +15,7 @@ interface ShowOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show one agent (by name or UUID)',
   setup(cmd) {
     cmd.argument('<id|name>', 'Agent name (@agent: handle) or UUID');

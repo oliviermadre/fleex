@@ -6,6 +6,7 @@ import { resolveSession, type Session } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'rename',
+  access: 'write',
   description: 'Rename a session (rename <id> <new name>)',
   setup(cmd) {
     cmd.argument('<id>', 'Session UUID, 8-char prefix, or display name');

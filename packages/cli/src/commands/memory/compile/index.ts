@@ -17,6 +17,7 @@ interface SynthesisResult {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'compile',
+  access: 'write',
   description: 'Compile everything this workspace knows about a subject into a sourced document',
   setup(cmd) {
     cmd.argument('<subject...>', 'What to compile a reference about');

@@ -9,6 +9,7 @@ interface DeleteOptions { force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'delete',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Delete an epic (its tickets are kept; prompts unless -f is given)',
   setup(cmd) {

@@ -58,7 +58,9 @@ export interface GeneratedTool {
   commandPath: string[];
   description: string;
   inputSchema: JsonSchema;
-  /** True for create/update/move/delete/... — the host should gate these. */
+  /** The command's declared access (`CommandDef.access` in the CLI). */
+  access: 'read' | 'write' | 'destructive';
+  /** `access !== 'read'` — the host should gate these. */
   mutating: boolean;
   /** True when the command accepts `--workspace`; injected by the host. */
   workspaceAware: boolean;

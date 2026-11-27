@@ -9,6 +9,7 @@ interface ListOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List the Timeline annotations of a ticket (oldest instant first)',
   setup(cmd) {

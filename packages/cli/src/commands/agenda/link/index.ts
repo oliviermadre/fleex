@@ -59,6 +59,7 @@ async function linkItem(item: AgendaItem, deliverableId: string) {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'link',
+  access: 'write',
   description:
     'Link a deliverable to a meeting — a Google Calendar meeting or a free Fleex event (one occurrence of a repeating one). ' +
     'Designate it by its agenda ref (--item, from `agenda list` / `search`), by Google event id, or by title on a day. Linking twice is a no-op.',

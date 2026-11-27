@@ -6,6 +6,7 @@ import { memoryApi } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'reindex',
+  access: 'write',
   description: 'Walk the whole corpus and index it — safe to re-run, resumes where it left off',
   action: async () => {
     const res = await apiPost<{ started: boolean }>(memoryApi('/reindex'), {});

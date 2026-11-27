@@ -65,6 +65,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   description:
     'Update a panel. PATCH semantics: ONLY the fields whose flags you pass are changed. Member edits are incremental (--add-member/--rm-member/--set-member-model) — you never resend the full member list except with --member-order.',
   setup(cmd) {

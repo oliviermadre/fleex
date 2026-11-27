@@ -25,6 +25,7 @@ interface SimilarOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'similar',
+  access: 'read',
   description: 'Find existing tickets that look like the same thing as a title',
   setup(cmd) {
     cmd.argument('<title...>', 'The ticket title to check');

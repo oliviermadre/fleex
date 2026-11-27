@@ -7,6 +7,7 @@ import { resolveRoutine } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'enable',
+  access: 'write',
   description: 'Resume a paused routine — re-armed from now, not from the slot it missed',
   setup(cmd) {
     cmd.argument('<slug>', 'Routine slug, name, or UUID');

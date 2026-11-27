@@ -25,6 +25,7 @@ interface StopResult {
 
 const def: CommandDef = {
   name: 'stop',
+  access: 'write',
   aliases: ['down', 'off'],
   description: 'Stop exposing on tailscale (turn serve off for the managed ports)',
   setup(cmd: Command) {

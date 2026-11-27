@@ -7,6 +7,7 @@ interface Options { board?: string; as?: string; reason?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'cancel',
+  access: 'write',
   description: "Cancel todo items you will not do, with a reason. Use this — not delete — for items you did not create.",
   setup(cmd) {
     cmd.argument('<ticket-id>', 'Ticket display ID or UUID');

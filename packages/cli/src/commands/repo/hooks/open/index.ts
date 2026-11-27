@@ -7,6 +7,7 @@ import { WORKTREE_OPTION, fetchWorktrees, singleWorktree, worktreeTarget } from 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'open',
+  access: 'write',
   description: "Open the repo's hooks folder (overlays/<org>/<repo>/hooks) — created if missing",
   setup(cmd) {
     cmd.option(...WORKTREE_OPTION);

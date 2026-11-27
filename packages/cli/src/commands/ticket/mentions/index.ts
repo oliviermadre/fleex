@@ -19,6 +19,7 @@ interface MentionsOptions { board?: string; status?: string; json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'mentions',
+  access: 'read',
   description: 'List the mentions on a ticket (mentions <id> [--status])',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

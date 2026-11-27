@@ -22,6 +22,7 @@ async function runClientRevoke(name: string): Promise<void> {
 
 const def: CommandDef = {
   name: 'revoke',
+  access: 'destructive',
   description: 'Revoke an authorized client (closes any active connection)',
   setup(cmd) {
     cmd.argument('<name>', 'Client name to revoke');

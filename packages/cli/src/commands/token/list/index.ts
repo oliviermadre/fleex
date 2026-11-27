@@ -6,6 +6,7 @@ import type { Token } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List agent API tokens (prefix only — the secret is never stored)',
   action: async () => {

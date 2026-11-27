@@ -10,6 +10,7 @@ interface Options { board?: string; as?: string; after?: string; first?: boolean
 const def: CommandDef = {
   workspaceAware: true,
   name: 'move',
+  access: 'write',
   aliases: ['mv'],
   description: 'Reorder a todo item: right after another one, or first.',
   setup(cmd) {

@@ -9,6 +9,7 @@ interface CreatedToken extends Token { secret: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   aliases: ['new'],
   description: 'Create an agent API token (the secret is shown only once)',
   setup(cmd) {

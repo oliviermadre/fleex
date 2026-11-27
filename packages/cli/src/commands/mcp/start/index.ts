@@ -7,6 +7,7 @@ const DIM = chalk.dim;
 
 const def: CommandDef = {
   name: 'start',
+  access: 'write',
   description: 'Start the stdio MCP server (foreground; launched by an MCP client)',
   setup(cmd) {
     cmd.option(

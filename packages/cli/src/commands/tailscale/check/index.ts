@@ -20,6 +20,7 @@ interface CheckOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'check',
+  access: 'read',
   description: 'Verify that exposing an instance on tailscale is possible (no changes)',
   setup(cmd: Command) {
     cmd.argument('[instance]', 'Instance slug to check (defaults to the resolved instance, e.g. default@main)');

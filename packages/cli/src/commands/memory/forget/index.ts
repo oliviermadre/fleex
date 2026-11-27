@@ -13,6 +13,7 @@ import { memoryApi } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'forget',
+  access: 'write',
   description: 'Remove a kept memory note by id',
   setup(cmd) {
     cmd.argument('<noteId>', 'Note id printed by `fleex memory keep`');

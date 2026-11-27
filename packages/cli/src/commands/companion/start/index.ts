@@ -6,6 +6,7 @@ const SECTION = chalk.bold.yellow;
 
 const def: CommandDef = {
   name: 'start',
+  access: 'write',
   description: 'Start the side-panel companion (idempotent; reused if already running)',
   extraHelp: `\n${SECTION('Idempotent:')}
   A healthy companion on the fixed port is reused, never duplicated. The same

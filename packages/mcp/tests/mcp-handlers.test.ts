@@ -3,13 +3,15 @@ import { Command } from 'commander';
 import { generateTools } from '../src/generator.ts';
 import { listTools, callToolResult, toMcpTool } from '../src/mcp-handlers.ts';
 import type { ExecResult } from '../src/executor.ts';
+import { recordCommandAccess } from '@fleex/cli/access';
 
 function fakeProgram(): Command {
   const root = new Command('fleex');
   const ticket = root.command('ticket').description('Manage tickets');
-  ticket.command('list').description('List tickets').option('--status <s>', 'status');
-  ticket.command('create').description('Create a ticket').requiredOption('--title <t>', 'title');
-  ticket.command('delete').description('Delete a ticket').argument('<id>', 'id');
+  // Declared the way the CLI bootstrap records `CommandDef.access`.
+  recordCommandAccess(ticket.command('list').description('List tickets').option('--status <s>', 'status'), 'read');
+  recordCommandAccess(ticket.command('create').description('Create a ticket').requiredOption('--title <t>', 'title'), 'write');
+  recordCommandAccess(ticket.command('delete').description('Delete a ticket').argument('<id>', 'id'), 'destructive');
   return root;
 }
 

@@ -9,6 +9,7 @@ import { WORKTREE_OPTION, fetchWorktrees, singleWorktree, worktreeTarget } from 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: "Show a worktree's Setup / Teardown hooks, its file hooks and where each comes from",
   setup(cmd) {
     cmd.option(...WORKTREE_OPTION);

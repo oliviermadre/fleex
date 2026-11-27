@@ -8,6 +8,7 @@ interface RetryOptions { ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'retry',
+  access: 'write',
   description: 'Retry a failed step run (retry <runId> <stepRunId>)',
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');

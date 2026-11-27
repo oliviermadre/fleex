@@ -9,6 +9,7 @@ interface ListOptions { ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List deliverables attached to a step run (list <runId> <stepRunId>)',
   setup(cmd) {
