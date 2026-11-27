@@ -8,6 +8,12 @@ import type { SkinChrome } from './skins';
 import type { Lamp, TabId } from './stationConsole';
 
 /** The skin the floor is painted in, for what the Factory opens over it (a portal, out of `.factory-page`). */
+/**
+ * A status colour made readable as small text on a tint of itself: a quarter of the theme's text colour is mixed
+ * in, so warning and danger pills keep their hue and clear 4.5:1 in every skin, light or dark.
+ */
+export const legible = (tone: string) => `color-mix(in srgb, ${tone} 75%, var(--theme-text-primary))`;
+
 export const FactorySkinContext = createContext<{ id: string; chrome: SkinChrome | null }>({ id: 'fleex', chrome: null });
 
 const HEIGHT: Record<PopupSize, string> = {
@@ -107,7 +113,7 @@ export function Plate({ icon, name, kind, lamp, needs, counters, actions, small 
           <span className="min-w-0 truncate">{kind}</span>
           {lamp && <LampPill lamp={lamp} />}
           {!!needs && (
-            <span className="fx-display inline-flex flex-none items-center rounded-full bg-[color-mix(in_srgb,var(--theme-warning)_22%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--theme-warning)]">
+            <span className="fx-display inline-flex flex-none items-center rounded-full bg-[color-mix(in_srgb,var(--theme-warning)_22%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: legible('var(--theme-warning)') }}>
               {needs} need{needs === 1 ? 's' : ''} you
             </span>
           )}

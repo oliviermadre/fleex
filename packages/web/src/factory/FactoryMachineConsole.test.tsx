@@ -90,6 +90,27 @@ describe('the doors out of a station', () => {
     expect(screen.queryByRole('button', { name: /^Remove done/ })).toBeNull();
   });
 
+  it('a door always shows the whole name of its outcome, even the way forward with its star and its cross', () => {
+    seed();
+    useFactoryStore.setState((st) => ({ layout: { ...st.layout!, machines: st.layout!.machines.map((x) => (x.id === 'mq' ? { ...x, outcomes: ['ready-for-production', 'need-respecification'] } as MachineSpec : x)) } }));
+    open('mq');
+    tab('Routing');
+    for (const o of ['ready-for-production', 'need-respecification']) {
+      const name = within(screen.getByRole('tabpanel')).getByTitle(o);
+      expect(name.textContent).toBe(o);
+      expect(name.className).not.toContain('truncate');                                 // it wraps, it is never cut to « re… »
+    }
+  });
+
+  it('warning and danger pills are mixed with the text colour, so they stay legible on their own tint (CA30)', () => {
+    seed([ticket('t1', 'mq', 'review'), ticket('t2', 'mq', 'failed')]);
+    open('mq');
+    const needs = screen.getByText(/need you$/i);
+    expect(needs.getAttribute('style')).toContain('var(--theme-text-primary)');
+    const failed = screen.getByText('run failed');
+    expect(failed.getAttribute('style')).toContain('var(--theme-text-primary)');
+  });
+
   it("a script's doors are what its script gives: nothing to edit by hand", () => {
     seed();
     open('cs');

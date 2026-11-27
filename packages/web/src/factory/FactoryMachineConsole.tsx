@@ -14,7 +14,7 @@ import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
 import type { FactoryView } from './renderer';
 import { armTag, takesQuestions } from './armRules';
-import { CloseButton, ConsoleTabs, EmptyState, FactoryConsolePopup, Plate, SectionHead, Skeleton, type Counter, type TabSpec } from './FactoryConsolePopup';
+import { CloseButton, ConsoleTabs, EmptyState, FactoryConsolePopup, legible, Plate, SectionHead, Skeleton, type Counter, type TabSpec } from './FactoryConsolePopup';
 import { CommitInput, DX, DY, machineIcon, machineKind, PHASE, ScriptSettings, sizesOf, STATUS_OPTIONS, when } from './FactoryMachinePopup';
 import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { PeriodSelect, periodLabel } from './FactoryStatsBits';
@@ -85,7 +85,7 @@ function PhasePill({ t }: { t: FactoryTicket }) {
   const text = t.phase === 'zone' && t.released ? 'released, waits for an arm' : t.phase === 'review' ? 'waits for your decision' : t.phase === 'question' ? 'asked a question' : PHASE[t.phase];
   const tone = t.phase === 'running' ? 'var(--theme-success)' : t.phase === 'failed' ? 'var(--theme-danger)' : t.phase === 'review' || t.phase === 'question' ? 'var(--theme-warning)' : 'var(--theme-text-muted)';
   return (
-    <span className="fx-display flex-none rounded-full border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider" style={{ color: tone, borderColor: `color-mix(in srgb, ${tone} 50%, transparent)` }}>{text}</span>
+    <span className="fx-display flex-none rounded-full border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider" style={{ color: legible(tone), borderColor: `color-mix(in srgb, ${tone} 50%, transparent)` }}>{text}</span>
   );
 }
 
@@ -329,7 +329,7 @@ function Doors({ m, takers, view, onPatch, onOpenMachine }: { m: StationSpec; ta
     return (
       <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-[var(--theme-border)] px-2 py-1.5 text-xs">
         {d && <span className="text-[var(--theme-text-secondary)]"><FIcon name={machineIcon(d)} size={14} /></span>}
-        <span className="truncate">{d ? ('name' in d && d.name) || machineKind(d) : 'the next tile'}</span>
+        {(() => { const label = d ? ('name' in d && d.name) || machineKind(d) : 'the next tile'; return <span className="truncate" title={label}>{label}</span>; })()}
       </div>
     );
   };
@@ -337,7 +337,7 @@ function Doors({ m, takers, view, onPatch, onOpenMachine }: { m: StationSpec; ta
     <div className="flex flex-col gap-2.5">
       <SectionHead icon="exit">Outcomes: the doors out of this station</SectionHead>
       {takers.length === 0 && <Hint tone="danger">No arm takes from here: tickets will pile up. Put an arm against one of its sides.</Hint>}
-      <div className="grid grid-cols-[minmax(0,92px)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 @max-[700px]:grid-cols-[28px_minmax(0,1fr)_24px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,92px)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 @max-[700px]:grid-cols-[28px_minmax(0,1fr)_24px_minmax(0,1fr)]">
         <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-[var(--mc)] bg-[color-mix(in_srgb,var(--mc)_10%,transparent)] p-2 text-[var(--mc)]"
           style={{ gridRow: `1 / span ${rows.length}` }}>
           <FIcon name={machineIcon(m)} size={22} />
@@ -346,24 +346,26 @@ function Doors({ m, takers, view, onPatch, onOpenMachine }: { m: StationSpec; ta
         {rows.map(({ o, arm, question }, i) => {
           const orphan = !arm && !question;
           return [
-            <div key={`${o}-door`} className={cn('flex min-w-0 items-center gap-1 rounded-lg border px-2 py-1.5',
+            <div key={`${o}-door`} className={cn('flex min-w-0 flex-col gap-0.5 rounded-lg border px-2 py-1.5',
               question ? 'border-dashed border-[var(--theme-warning)]' : orphan ? 'border-[var(--theme-warning)]' : i === 0 ? 'border-[var(--theme-success)]' : 'border-[var(--theme-border)]')}>
-              {!question && !fixed && (i === 0
-                ? <span className="text-[var(--theme-success)]" title="The way forward" aria-label="The way forward">★</span>
-                : <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-success)]" title="Make it the way forward" aria-label={`Make ${o} the way forward`}
-                    onClick={() => save([o, ...m.outcomes.filter((x) => x !== o)])}>☆</button>)}
-              <span className="min-w-0 flex-1 truncate font-mono text-xs">{o}</span>
-              {i === 0 && !question && <span className="fx-display text-[9px] font-semibold uppercase tracking-wider text-[var(--theme-success)] @max-[700px]:hidden">way forward</span>}
+              <div className="flex min-w-0 items-start gap-1">
+                {!question && !fixed && (i === 0
+                  ? <span className="text-[var(--theme-success)]" title="The way forward" aria-label="The way forward">★</span>
+                  : <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-success)]" title="Make it the way forward" aria-label={`Make ${o} the way forward`}
+                      onClick={() => save([o, ...m.outcomes.filter((x) => x !== o)])}>☆</button>)}
+                <span className="min-w-0 flex-1 font-mono text-xs leading-5 [overflow-wrap:anywhere]" title={o}>{o}</span>
+                {!question && !fixed && m.outcomes.length > 1 && (
+                  <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-danger)]" title="Take this outcome off" aria-label={`Remove ${o}`} onClick={() => save(m.outcomes.filter((x) => x !== o))}>×</button>
+                )}
+              </div>
+              {i === 0 && !question && <span className="fx-display text-[9px] font-semibold uppercase tracking-wider text-[var(--theme-success)]">way forward</span>}
               {question && <span className="fx-display text-[9px] font-semibold uppercase tracking-wider text-[var(--theme-warning)]">built in</span>}
-              {!question && !fixed && m.outcomes.length > 1 && (
-                <button type="button" className="text-[var(--theme-text-muted)] hover:text-[var(--theme-danger)]" title="Take this outcome off" aria-label={`Remove ${o}`} onClick={() => save(m.outcomes.filter((x) => x !== o))}>×</button>
-              )}
             </div>,
             arm ? (
               <button key={`${o}-wire`} type="button" title="Open this arm" onClick={() => onOpenMachine(arm.id)}
                 className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]">
                 <span aria-hidden className="h-0.5 min-w-3 flex-1 bg-[var(--theme-text-muted)]" /><FIcon name="arm" size={13} />
-                <span className="truncate @max-[700px]:hidden">arm · {armTag(arm, takers) || 'anything'}</span>
+                <span className="truncate @max-[700px]:hidden" title={`arm · ${armTag(arm, takers) || 'anything'}`}>arm · {armTag(arm, takers) || 'anything'}</span>
                 <span aria-hidden className="h-0.5 min-w-3 flex-1 bg-[var(--theme-text-muted)]" />
               </button>
             ) : (
@@ -479,10 +481,10 @@ const Gauge = ({ label, value, sub, children }: { label: string; value: ReactNod
   </div>
 );
 const LampTile = ({ label, value, on, tone }: { label: string; value: ReactNode; on: boolean; tone: string }) => (
-  <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5" style={on ? { borderColor: `color-mix(in srgb, ${tone} 50%, transparent)` } : undefined}>
+  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5" style={on ? { borderColor: `color-mix(in srgb, ${tone} 50%, transparent)` } : undefined}>
     <span aria-hidden className="h-2.5 w-2.5 flex-none rounded-full" style={on ? { background: tone, boxShadow: `0 0 6px ${tone}` } : { background: 'var(--theme-bg-overlay)' }} />
-    <span className="fx-display min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{label}</span>
-    <span className="font-mono text-sm tabular-nums" style={on ? { color: tone } : undefined}>{value}</span>
+    <span className="fx-display flex-none whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{label}</span>
+    <span className="ml-auto font-mono text-sm tabular-nums" style={on ? { color: tone } : undefined}>{value}</span>
   </div>
 );
 
