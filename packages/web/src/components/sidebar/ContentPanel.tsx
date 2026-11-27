@@ -614,6 +614,9 @@ function CollapsedRoutinesPanel() {
                   {routine.awaitingAttention && (
                     <span className={cn('absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full', tintSolid('yellow'))} />
                   )}
+                  {routine.lastRunFailed && (
+                    <span className={cn('absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full', tintSolid('red'))} />
+                  )}
                 </span>
               }
             />

@@ -31,7 +31,7 @@ const def: CommandDef = {
         // The active run is what makes "waiting" actionable from a terminal:
         // a routine blocked on a human gate is otherwise indistinguishable from
         // one that simply has not fired yet.
-        r.awaitingAttention ? 'waiting' : (r.activeRunStatus ?? '-'),
+        r.awaitingAttention ? 'waiting' : r.lastRunFailed ? 'failed' : (r.activeRunStatus ?? '-'),
       ]);
       renderTable(['SLUG', 'NAME', 'TRIGGER', 'NEXT RUN', 'ENABLED', 'RUN'], rows);
       info(`${routines.length} routine(s)`);

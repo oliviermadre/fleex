@@ -78,6 +78,6 @@ SmartSessionButton. Replié par défaut ; l'état est mémorisé (préférence l
 
 ## Hors périmètre de cette version
 
-- Les routines en échec (sans ticket) : elles restent signalées par le badge Routines.
+- Les routines en échec (sans ticket) : elles restent signalées par le badge Routines (pastille « failed » tant qu'aucun run plus récent ne remplace l'échec) et par un toast au moment de l'échec.
 - Filtrer « à moi » sur un board partagé (assignee, auteur ou personne mentionnée) : à trancher.
 - Le message d'erreur précis d'une étape en échec : il n'est pas persisté, la popup renvoie vers les logs.

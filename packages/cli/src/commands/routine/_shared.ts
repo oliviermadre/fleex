@@ -7,6 +7,8 @@ export interface RoutineListItem extends Routine {
   activeRunId: string | null;
   activeRunStatus: string | null;
   awaitingAttention: boolean;
+  /** No run is active and the latest one failed. */
+  lastRunFailed: boolean;
 }
 
 export function fetchRoutines(): Promise<RoutineListItem[]> {

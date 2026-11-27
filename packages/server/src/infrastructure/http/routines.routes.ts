@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type {
-  CreateRoutineInput, UpdateRoutineInput, RoutineTrigger, RoutineOverlapPolicy, RoutineTarget,
+  CreateRoutineInput, UpdateRoutineInput, RoutineTrigger, RoutineOverlapPolicy, RoutineTarget, WorkflowRunStatus,
 } from '@fleex/shared';
 import { normalizeRunSubject, normalizeRoutineTarget } from '@fleex/shared';
 import {
@@ -119,6 +119,21 @@ function clampLimit(raw: string | undefined, fallback: number, max: number): num
   return Math.min(parsed, max);
 }
 
+/**
+ * What a routine asks of its owner, from its active run and (when none is
+ * active) its latest one. A routine run has no ticket, so this is the only
+ * place a failure can surface: it stays raised until the next run replaces it.
+ */
+export function routineAttention(
+  activeStatus: WorkflowRunStatus | null,
+  lastStatus: WorkflowRunStatus | null,
+): { awaitingAttention: boolean; lastRunFailed: boolean } {
+  return {
+    awaitingAttention: activeStatus === 'blocked' || activeStatus === 'needs_review',
+    lastRunFailed: activeStatus === null && lastStatus === 'failed',
+  };
+}
+
 export function routineRoutes(deps: RoutineRouteDeps) {
   return async function (app: FastifyInstance) {
     // GET /api/routines — list view. The active run's status is joined in
@@ -129,11 +144,14 @@ export function routineRoutes(deps: RoutineRouteDeps) {
       const routines = await deps.routineStore.getAll();
       return Promise.all(routines.map(async (r) => {
         const active = await deps.runStore.getActiveByRoutine(r.id);
+        // A failed run is no longer active, so the lookup above cannot see it.
+        // Only fetched when nothing is active: a newer run supersedes the failure.
+        const last = !active && r.lastRunId ? await deps.runStore.getById(r.lastRunId) : null;
         return {
           ...r.toDTO(),
           activeRunId: active?.id ?? null,
           activeRunStatus: active?.status ?? null,
-          awaitingAttention: active?.status === 'blocked' || active?.status === 'needs_review',
+          ...routineAttention(active?.status ?? null, last?.status ?? null),
         };
       }));
     });

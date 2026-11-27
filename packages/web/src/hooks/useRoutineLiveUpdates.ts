@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { appWs } from '../services/websocket';
 import { useRoutineStore } from '../stores/routineStore';
+import { toast } from '../lib/toast';
 
 /**
  * Which routine, if any, a `tickets`-channel message concerns.
@@ -15,6 +16,18 @@ export function routineIdForMessage(raw: { type: string; data: unknown }): strin
   const routineId = (raw.data as { routineId?: string | null } | null)?.routineId;
   // No routine anchor ⇒ a ticket run. The ticket views own that one.
   return routineId ?? null;
+}
+
+/**
+ * The routine whose run just failed, if that is what this message says.
+ *
+ * A scheduled run fails while nobody is on /routines, and has no ticket to
+ * carry the news anywhere else: without a toast the only trace is a badge.
+ */
+export function failedRoutineId(raw: { type: string; data: unknown }): string | null {
+  if (raw.type !== 'routine:run_completed') return null;
+  const data = raw.data as { routineId?: string | null; status?: string } | null;
+  return data?.status === 'failed' ? data.routineId ?? null : null;
 }
 
 /**
@@ -59,6 +72,11 @@ export function useRoutineLiveUpdates(): void {
       if (!routineId) return;
 
       scheduleList();
+      if (failedRoutineId(raw)) {
+        const name = useRoutineStore.getState().routines.find((r) => r.id === routineId)?.name ?? 'A routine';
+        // One toast per routine, kept until closed: it fires at night.
+        toast.error(`${name}: run failed`, { id: `routine-failed:${routineId}`, link: '/routines', durationMs: null });
+      }
       if (useRoutineStore.getState().selectedId === routineId) scheduleRuns();
     });
 

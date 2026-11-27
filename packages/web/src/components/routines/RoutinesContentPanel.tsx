@@ -172,6 +172,11 @@ function RoutineRow({ routine, selected, onClick, onEdit, onDelete }: {
           waiting
         </span>
       )}
+      {routine.lastRunFailed && (
+        <span className={cn('flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium group-hover:hidden', tint('red'))}>
+          failed
+        </span>
+      )}
       {/* Hover-revealed actions — same affordances as the Agentic Catalog rows. */}
       <span
         role="button"

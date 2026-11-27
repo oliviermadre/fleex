@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNotificationStore } from '../stores/notificationStore';
-import { useRoutineStore } from '../stores/routineStore';
+import { useRoutineStore, routinesNeedingYou } from '../stores/routineStore';
 import { RepositoriesIcon } from '../components/sidebar/icons';
 import { RoutineIcon } from '../lib/primitives';
 import { cn } from '../lib/cn';
@@ -77,7 +77,7 @@ export function MobileMoreSheet() {
   const setOpen = useMobileNavStore((s) => s.setMoreSheetOpen);
   const openMorePage = useMobileNavStore((s) => s.openMorePage);
   const unseen = useNotificationStore((s) => s.unseenCount);
-  const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
+  const routinesAwaiting = useRoutineStore((s) => routinesNeedingYou(s.routines));
 
   useEffect(() => {
     void useRoutineStore.getState().load();

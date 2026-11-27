@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useRoutineStore } from '../../stores/routineStore';
+import { useRoutineStore, routinesNeedingYou } from '../../stores/routineStore';
 import { useRoutineLiveUpdates } from '../../hooks/useRoutineLiveUpdates';
 import { useFactoryStore } from '../../factory/factoryStore';
 import { FactoryIcon } from '../../factory/FactoryIcon';
@@ -42,7 +42,7 @@ export function NavSidebar() {
   const activePanel = useUIStore((s) => s.activePanel);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
-  const routinesAwaiting = useRoutineStore((s) => s.routines.filter((r) => r.awaitingAttention).length);
+  const routinesAwaiting = useRoutineStore((s) => routinesNeedingYou(s.routines));
   const loadRoutines = useRoutineStore((s) => s.load);
   const focusCount = useFocusCount();
   // The badge must be right before the user ever opens /routines, so the nav —

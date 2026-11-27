@@ -101,7 +101,7 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     const routine = await api.createRoutine(input);
     // The list item shape carries active-run fields the POST response has not
     // computed yet — a fresh routine has no run, so the defaults are exact.
-    set({ routines: [...get().routines, { ...routine, activeRunId: null, activeRunStatus: null, awaitingAttention: false }] });
+    set({ routines: [...get().routines, { ...routine, activeRunId: null, activeRunStatus: null, awaitingAttention: false, lastRunFailed: false }] });
     return routine;
   },
 
@@ -124,3 +124,8 @@ export const useRoutineStore = create<RoutineStore>((set, get) => ({
     if (get().selectedId === id) await get().refreshRuns();
   },
 }));
+
+/** The nav badge's count: routines waiting on a decision, or whose latest run failed. */
+export function routinesNeedingYou(routines: Array<{ awaitingAttention: boolean; lastRunFailed: boolean }>): number {
+  return routines.filter((r) => r.awaitingAttention || r.lastRunFailed).length;
+}

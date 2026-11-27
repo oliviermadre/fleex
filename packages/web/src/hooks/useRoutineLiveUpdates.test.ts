@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { routineIdForMessage } from './useRoutineLiveUpdates';
+import { routineIdForMessage, failedRoutineId } from './useRoutineLiveUpdates';
 
 // The Routines screen has no polling and no refresh button worth using: if this
 // predicate says "not mine", the row, the badge and the DAG stay frozen until
@@ -47,5 +47,21 @@ describe('routineIdForMessage', () => {
     // tear down the subscription and freeze the screen for good.
     expect(routineIdForMessage({ type: 'workflow:run_completed', data: null })).toBeNull();
     expect(routineIdForMessage({ type: 'workflow:run_completed', data: undefined })).toBeNull();
+  });
+});
+
+describe('failedRoutineId', () => {
+  it('names the routine whose run failed', () => {
+    expect(failedRoutineId({
+      type: 'routine:run_completed',
+      data: { routineId: 'r-1', workflowRunId: 'w1', status: 'failed' },
+    })).toBe('r-1');
+  });
+
+  it('stays quiet for a run that completed or was cancelled, and for other events', () => {
+    expect(failedRoutineId({ type: 'routine:run_completed', data: { routineId: 'r-1', status: 'completed' } })).toBeNull();
+    expect(failedRoutineId({ type: 'routine:run_completed', data: { routineId: 'r-1', status: 'cancelled' } })).toBeNull();
+    // A failed step is not a failed run: the run may still be retried.
+    expect(failedRoutineId({ type: 'workflow:step_failed', data: { routineId: 'r-1', status: 'failed' } })).toBeNull();
   });
 });

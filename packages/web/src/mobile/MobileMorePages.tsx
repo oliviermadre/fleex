@@ -155,8 +155,8 @@ export function MobileRoutinesPage() {
           <p className="text-[12px] text-[var(--theme-text-muted)]">{describeTrigger(r.trigger)} · {r.target.kind} {r.target.ref}</p>
           <p className="text-[12px] text-[var(--theme-text-muted)]">
             Dernier : {r.lastRunAt ? formatRelativeTime(r.lastRunAt) : '—'} ·{' '}
-            <span className={r.awaitingAttention ? tintClasses('yellow').text : undefined}>
-              {r.awaitingAttention ? 'attend ta décision' : r.nextRunAt ? `Prochain : ${new Date(r.nextRunAt).toLocaleString()}` : 'Prochain : —'}
+            <span className={r.awaitingAttention ? tintClasses('yellow').text : r.lastRunFailed ? tintClasses('red').text : undefined}>
+              {r.awaitingAttention ? 'attend ta décision' : r.lastRunFailed ? 'dernier run en échec' : r.nextRunAt ? `Prochain : ${new Date(r.nextRunAt).toLocaleString()}` : 'Prochain : —'}
             </span>
           </p>
           <div className="flex flex-wrap gap-2">
