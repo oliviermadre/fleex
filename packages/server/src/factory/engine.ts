@@ -272,7 +272,11 @@ export function normaliseLayout(input: FactoryLayout): FactoryLayout {
       m.release = m.release === 'auto' ? 'auto' : 'manual';
       m.inbound = m.inbound === true && !machines.some((o) => o.kind === 'zone' && o.inbound);
       if (m.needsYou === true) m.needsYou = true; else delete m.needsYou;
-    } else if (m.kind === 'exit') { m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3))); }
+    } else if (m.kind === 'exit') {
+      m.w = Math.max(1, Math.min(60, Math.floor(m.w || 3))); m.h = Math.max(1, Math.min(60, Math.floor(m.h || 3)));
+      /* done is the default, and is kept as no field at all: an exit set before this option was stays as it was saved */
+      if (m.status === 'cancelled') m.status = 'cancelled'; else delete m.status;
+    }
     else if (m.kind === 'desk') {
       /* a desk is a dock three tiles wide, three high (two for one built before docks were) */
       m.w = 3; m.h = m.h === 2 ? 2 : 3;
@@ -557,11 +561,12 @@ export class FactoryEngine {
       this.archive(t, 'exit');
     }
     else if (spec.kind === 'exit') {
-      this.applyStatus(t, 'done');
-      /* a row for the shipment: from hand-over to exit, which is the lead time the stats report */
+      const target = spec.status === 'cancelled' ? 'cancelled' : 'done';
+      this.applyStatus(t, target);
+      /* a row for what left: from hand-over to exit, which is the lead time the stats report (of the shipped ones only) */
       this.saveRun({
         id: randomUUID(), ticketId: t.ticketId, floorId: this.floor.id, machineId: spec.id, machineName: spec.name || 'Exit', executor: 'exit',
-        status: 'completed', outcome: 'shipped', executionId: null, error: null, startedAt: t.createdAt, finishedAt: t.s.since,
+        status: 'completed', outcome: target === 'cancelled' ? 'cancelled' : 'shipped', executionId: null, error: null, startedAt: t.createdAt, finishedAt: t.s.since,
       });
       this.tickets.delete(t.ticketId); this.dirty.delete(t.ticketId);
       void this.deps.store.removeTicket(t.ticketId).catch((err) => this.deps.logger.warn('Factory: could not release a shipped ticket', { ticketId: t.ticketId, error: String(err) }));

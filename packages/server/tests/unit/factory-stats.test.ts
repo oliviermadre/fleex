@@ -111,4 +111,15 @@ describe('computeStats', () => {
     expect(s.totals.shipped).toBe(3);
     expect(stats([run('r1')]).exits).toEqual({});
   });
+
+  it('leaves what an exit cancelled out of Shipped and the lead time, but counts it on its exit (an older run, no outcome, shipped)', () => {
+    const left = (id: string, machineId: string, outcome: string | null, from: string, to: string) => run(id, { ticketId: id, machineId, machineName: 'Exit', executor: 'exit', outcome, startedAt: at(from), finishedAt: at(to) });
+    const s = stats([
+      left('x1', 'out', 'shipped', '08:00', '10:00'), left('x2', 'out', null, '08:00', '12:00'), left('x3', 'out', 'shipped', '08:00', '11:00'),
+      left('c1', 'bin', 'cancelled', '00:00', '12:00'), left('c2', 'out', 'cancelled', '00:00', '12:00'),
+    ]);
+    expect(s.totals).toMatchObject({ shipped: 3, avgLeadMs: 3 * 3_600_000 });
+    expect(s.exits).toEqual({ out: 4, bin: 1 });
+    expect(s.machines).toEqual([]);
+  });
 });

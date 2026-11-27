@@ -124,6 +124,12 @@ describe('the command card', () => {
     expect(menuAt(build, ['move']).titles).toEqual(['Build', 'Move']);
   });
 
+  it('the Exit button says it can set done or cancelled, since an Exit may cancel', () => {
+    const place = menuAt(factoryMenu(ctx({ building: true })), ['place']).menu;
+    expect(place.slots[1]!.title).toContain('Hands the ticket back to Fleex, set to done or cancelled');
+    expect(place.slots[1]!.title).not.toContain('Sets the ticket to done');
+  });
+
   it('exports the floor and imports one from the build card; with machines selected, Export takes only them', () => {
     const c = ctx({ building: true }), build = factoryMenu(c);
     build.slots[6]!.run!(); build.slots[7]!.run!();

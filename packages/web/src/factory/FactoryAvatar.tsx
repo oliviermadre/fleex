@@ -7,7 +7,7 @@ import { refOf, SOURCE_COLORS } from './items';
 import { armColor } from './armRules';
 import { PORT_COLOR } from './teleport';
 import { TYPE_COLORS } from './renderer';
-import type { FactoryTicketInfo, MachineSpec } from './types';
+import { exitStatus, type FactoryTicketInfo, type MachineSpec } from './types';
 
 /** What the avatar stands for: the floor, build mode, a ticket, a machine, or several things at once. */
 export type AvatarOf =
@@ -95,7 +95,7 @@ function hueOf(m: MachineSpec): string {
   if (m.kind === 'belt') return m.set !== undefined ? '#f472b6' : '#a1a1aa';
   if (m.kind === 'desk') return DESK_COLOR;
   if (m.kind === 'intake') return SOURCE_COLORS[m.source];
-  return m.kind === 'zone' ? (m.inbound ? 'var(--theme-accent)' : '#60a5fa') : m.kind === 'exit' ? 'var(--theme-success)' : '#a1a1aa';
+  return m.kind === 'zone' ? (m.inbound ? 'var(--theme-accent)' : '#60a5fa') : m.kind === 'exit' ? (exitStatus(m) === 'cancelled' ? '#a1a1aa' : 'var(--theme-success)') : '#a1a1aa';
 }
 
 /**

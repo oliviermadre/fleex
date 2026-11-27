@@ -162,6 +162,9 @@ describe('FactoryModule: what left by an exit', () => {
     expect((await factory.exitLog('out', 1)).tickets).toEqual([]);
     expect(log.exits).toEqual([{ machineId: 'out', name: 'Out', onFloor: false }]);
     expect(log.tickets[0]!.machineId).toBe('out');
+    expect(log.tickets.map((t) => t.outcome)).toEqual(['shipped', 'shipped']);
+    runs[0] = { ...runs[0]!, outcome: 'cancelled' };
+    expect((await factory.exitLog('out', 7)).tickets.map((t) => [t.ticketId, t.outcome])).toEqual([['gone', 'shipped'], ['a', 'cancelled']]);
   });
 
   it('gathers every exit of the floor, each named, with those the runs only remember', async () => {

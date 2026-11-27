@@ -157,7 +157,7 @@ describe('FactoryEngine', () => {
     });
 
     it('an item reaching an exit, or archived by hand, is archived; a new message brings it back to its intake', async () => {
-      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), exit('x', 5, 1)]);
+      await boot([intake('in', 1, 1, { quietSec: 0 }), arm('a1', 4, 1, 0), { ...exit('x', 5, 1), status: 'cancelled' } as MachineSpec]);   // an exit that cancels: an item has no status, it is archived all the same
       const { itemId } = await engine.ingest(msg('k'));
       await run(5);
       expect(where(itemId!)).toBe('gone');
@@ -712,6 +712,38 @@ describe('FactoryEngine', () => {
     expect(statuses).toEqual([['a', 'done']]);
     expect(store.tickets.has('a')).toBe(false);
     expect(engine.isManaged('a')).toBe(false);
+  });
+
+  it('an exit set to cancel sets cancelled once, and its run says cancelled: the ticket is dropped, not delivered', async () => {
+    await boot([belt('b1', 1, 1), { ...exit('out', 2, 1), status: 'cancelled' } as MachineSpec]);
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(1);
+    expect(where('a')).toBe('gone');
+    expect(statuses).toEqual([['a', 'cancelled']]);
+    expect([...store.runs.values()]).toMatchObject([{ ticketId: 'a', machineId: 'out', executor: 'exit', status: 'completed', outcome: 'cancelled' }]);
+    expect(store.tickets.has('a')).toBe(false);
+  });
+
+  it('an exit that cancels still lets go of a ticket Fleex refused to cancel, warned of, its run saying what was meant', async () => {
+    const warned: unknown[] = [];
+    engine = new FactoryEngine({
+      store, now: () => clock, logger: { warn: (_m: string, ctx?: unknown) => { warned.push(ctx); }, info: () => {} }, timing: BRISK, loadTicket: async (id) => infos.get(id) ?? null,
+      setStatus: async () => { throw new Error('Fleex is away'); }, runner: { run: () => new Promise<StationRunResult>(() => {}) },
+    });
+    await engine.init();
+    await engine.setLayout({ w: 30, h: 12, machines: [belt('b1', 1, 1), { ...exit('out', 2, 1), status: 'cancelled' } as MachineSpec] });
+    await engine.transfer('a', { machineId: 'b1' });
+    await run(1);
+    await Promise.resolve();
+    expect(where('a')).toBe('gone');
+    expect(warned).toContainEqual(expect.objectContaining({ ticketId: 'a', status: 'cancelled' }));
+    expect([...store.runs.values()][0]).toMatchObject({ outcome: 'cancelled' });
+  });
+
+  it('an exit keeps cancelled only when asked for exactly; anything else is done, kept as no field', () => {
+    const of = (status: unknown) => normaliseLayout({ w: 9, h: 9, machines: [{ ...exit('x', 1, 1), status } as unknown as MachineSpec] }).machines[0]!;
+    expect(of('cancelled')).toMatchObject({ status: 'cancelled' });
+    for (const v of ['done', undefined, 'todo', 42, null]) expect(of(v)).not.toHaveProperty('status');
   });
 
   it('shows what the page needs to tell tickets apart, and re-reads one on demand', async () => {

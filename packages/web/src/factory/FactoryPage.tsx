@@ -56,7 +56,7 @@ import { FactoryExitLog } from './FactoryExitLog';
 import { FactoryArchivedItemPopup, FactoryArchivedItems } from './FactoryArchivedItems';
 import { loadConsoleHidden, loadShow, saveConsoleHidden, saveShow, type Show } from './viewToggles';
 import { LENS_LABEL, lensLayer, type LensLayer } from './lens';
-import { canSetAside, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
+import { canSetAside, exitStatus, hasPopup, humanCall, needsHuman, RUNS, type AreaSpec, type DeskSpec, type Dir, type FactoryLayout, type Lens, type MachineSpec, type Selection, type StationSpec, type Target } from './types';
 
 const MINIMAP_EVERY_MS = 150, MINIMAP_KEPT_MS = 1000;
 /** No machine selected: the same list at every frame, for the view to see that nothing changed. */
@@ -98,7 +98,7 @@ const TOOLS: [Tool, string, string, string][] = [
   ['gate', 'G', 'Gate', 'Waits for your decision; each outcome leaves by its own arm'],
   ['native', 'T', 'Status', 'Sets a status on the ticket and lets it through'],
   ['zone', 'D', 'Zone', 'Tickets wait here until released'],
-  ['exit', 'O', 'Exit', 'Sets the ticket to done and hands it back to Fleex'],
+  ['exit', 'O', 'Exit', 'Hands the ticket back to Fleex, set to done or cancelled'],
   ['label', 'L', 'Label', 'A name on the floor'],
   ['area', '', 'Area', 'Drag a rectangle on the floor: an area, a part of it with a name and a colour. Areas nest or keep apart, never cross'],
   ['intake', 'I', 'Intake', 'Where items of one source come in: they wait while the conversation moves, what its rules recognise is dropped'],
@@ -419,7 +419,7 @@ function Floor() {
       return { target: drop.ok ? { machineId: m.id } : {}, ok: drop.ok, can: drop.ok, text: drop.text };
     }
     const dest = m.kind === 'belt' ? v.leadsTo(m) : null;
-    return { target: { machineId: m.id }, ok: true, can: true, text: m.kind === 'belt' ? `Belt ${ARROW[m.dir]}${dest ? ` towards ${dest.name ?? dest.kind}` : ': leads nowhere'}` : m.kind === 'exit' ? 'Ship: sets it to done' : `Drop in ${m.name ?? m.kind}` };
+    return { target: { machineId: m.id }, ok: true, can: true, text: m.kind === 'belt' ? `Belt ${ARROW[m.dir]}${dest ? ` towards ${dest.name ?? dest.kind}` : ': leads nowhere'}` : m.kind === 'exit' ? (exitStatus(m) === 'cancelled' ? 'Cancel: sets it to cancelled' : 'Ship: sets it to done') : `Drop in ${m.name ?? m.kind}` };
   };
 
   // ---------- pointer ----------

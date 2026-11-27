@@ -240,7 +240,7 @@ export function factoryMenu(c: MenuContext): Menu {
   }, previous);
   const where = frame('Place', {
     0: place('zone', 'Zone', 'area', 'Tickets wait here until released'),
-    1: place('exit', 'Exit', 'area', 'Sets the ticket to done and hands it back to Fleex'),
+    1: place('exit', 'Exit', 'area', 'Hands the ticket back to Fleex, set to done or cancelled'),
     2: place('label', 'Label', 'area', 'A name on the floor'),
     3: place('area', 'Area', 'area', 'Drag a rectangle on the floor: a part of it with a name and a colour, a line or a team. Machines stand on it; nothing runs on it'),
     4: place('desk', 'Desk', 'area', 'Where tickets are born: New ticket opens the creation form on it, with its board, type and priority, and an arm takes the ticket out'),

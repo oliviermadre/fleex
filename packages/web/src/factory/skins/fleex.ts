@@ -17,7 +17,7 @@ import { portColor } from '../teleport';
 import { modelTag } from '../stationModel';
 import { tokenSprite, type TokenLook } from '../ticketToken';
 import type { ArmView, ArmWay, BeltView, BridgeView, DockView, ExitView, LabelView, PortView, Placed, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
-import { DX, DY, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
+import { DX, DY, exitStatus, humanCall, type AreaLabel, type AreaSpec, type FactoryLayout, type FactoryTicket, type MachineSpec, type StationSpec } from '../types';
 import type { ViewState } from '../renderer';
 import type { MiniFrame, Piece, SceneLookup, Skin, Surface } from './skin';
 import { builtBox, hallOf, propsIn, wallThings, type DecorOptions } from '../decor';
@@ -46,6 +46,12 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 export interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
+
+/** An exit's hue, for its frame and for what leaves by it: one that cancels is neutral, one that ships glows as a success. */
+export function exitHue(m: MachineSpec, pal: Palette): string {
+  return m.kind === 'exit' && exitStatus(m) === 'cancelled' ? pal.text3 : pal.ok;
+}
+
 export type LabelOpts = Label[5];
 type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number; /** It is written on something dark whatever the theme (a veil over the floor): its ink is left as it is. */ dark?: boolean }];
 
@@ -1254,7 +1260,8 @@ export class FleexSkin implements Skin {
    * by it over the period the floor's figures cover.
    */
   protected exit(v: ExitView, pal: Palette): void {
-    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, ok = pal.ok;
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled';
+    const ok = exitHue(m, pal), ink = cancels ? '#18181b' : '#052e16';
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
     ctx.globalAlpha = 1;
@@ -1266,7 +1273,7 @@ export class FleexSkin implements Skin {
     const count = v.count == null ? null : `${v.count} · ${v.days} d`, beside = count !== null && w * z >= 125;
     /* the name stops short of the count beside it (a monospace plate: about 0.62 of its size a character, and its padding) */
     const px = Math.min(12, Math.max(9, 0.24 * z)), countW = beside ? (count!.length * 0.62 * px + 10) / z + 0.15 : 0;
-    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, '#052e16', { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6 - countW) });
+    this.label((m.name || 'Exit').toUpperCase(), x + 0.3, y + 0.06, 0.24, ink, { ...plate, plate: ok, fit: Math.max(1.2, w - 0.6 - countW) });
     if (w >= 3 && h >= 2) this.label('handed back to Fleex', x + w / 2, y + h - 0.3, 0.17, pal.text3, { mono: true, align: 'center', fit: w - 0.3 });
     if (count === null) return;
     const o = { ...plate, plate: 'rgba(9,9,11,0.92)' };
@@ -1387,11 +1394,11 @@ export class FleexSkin implements Skin {
         else { rr(ctx, px - 0.23, py - 0.23, 0.46, 0.46, 0.1); ctx.fillStyle = TYPE_COLORS[l.type] ?? NO_TYPE; ctx.fill(); }
         continue;
       }
-      const { k, x: px, y: py, edge, a0, a1 } = l;
+      const { k, x: px, y: py, edge, a0, a1 } = l, ok = exitHue(l.m, pal);
       ctx.globalAlpha = 1 - k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       /* the side lights up where it passed, no further than the side goes */
-      ctx.strokeStyle = mix(pal.ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
-      ctx.strokeStyle = pal.ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
+      ctx.strokeStyle = mix(ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
+      ctx.strokeStyle = ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
       ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(px - 0.09, py); ctx.lineTo(px - 0.02, py + 0.07); ctx.lineTo(px + 0.1, py - 0.07); ctx.stroke();
       ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     }
@@ -1530,7 +1537,7 @@ export class FleexSkin implements Skin {
       if (m.kind === 'label' || m.kind === 'area') continue;
       const hot = lens && (m.kind === 'station' || m.kind === 'zone') ? heat(m.id) : null;
       c.globalAlpha = lens && !hot ? 0.45 : 1;
-      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? pal.ok : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
+      c.fillStyle = hot ?? (lens ? pal.edge : m.kind === 'belt' && m.fast ? pal.fast : m.kind === 'belt' || m.kind === 'bridge' ? pal.edge : m.kind === 'arm' ? armColor(m, { plain: pal.text2, sorts: pal.text2 }) : m.kind === 'exit' ? (exitStatus(m) === 'cancelled' ? pal.text3 : pal.ok) : m.kind === 'zone' ? (m.inbound ? pal.accent : pal.text3) : m.kind === 'teleporter' ? portColor(m, (id) => scene.machine(id) ?? undefined) : m.kind === 'desk' ? DESK_COLOR : m.kind === 'intake' ? SOURCE_COLORS[m.source] : m.exec === 'human_gate' ? pal.warn : kindOf(m) ? mix(KIND_LOOK[kindOf(m)!].hue, pal.body, 0.35) : pal.text2);
       c.fillRect(ox + m.x * s, oy + m.y * s, Math.max(1, m.w * s), Math.max(1, m.h * s));
     }
     c.globalAlpha = 1;

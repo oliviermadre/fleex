@@ -31,7 +31,7 @@ import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
 import { COMMON_FIELDS, opsFor, PULLED_SOURCES, SOURCE_FIELDS, type SourceField } from './itemSources';
 import { FactoryMailSetup, useMailStatus } from './FactoryMailSetup';
 import { toast } from '../lib/toast';
-import { canSetAside, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, exitStatus, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
 
 const REFRESH_MS = 4000;
 const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
@@ -662,7 +662,13 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
           {m.release === 'auto' && m.status === 'todo' && <CommitInput id="f-limit" label="Stop releasing above this many tickets in doing or reviewing" value={String(m.limit ?? 12)} onCommit={(v) => onPatch({ limit: Math.max(1, Number(v) || 12) })} />}
         </>
       )}
-      {m.kind === 'exit' && <Hint>A ticket that arrives here is set to done and handed back to plain Fleex.</Hint>}
+      {m.kind === 'exit' && (
+        <>
+          <Select id="f-exit-status" label="Sets tickets to" value={exitStatus(m)} onChange={(e) => onPatch({ status: e.target.value as 'done' | 'cancelled' })}
+            options={[{ value: 'done', label: 'done' }, { value: 'cancelled', label: 'cancelled' }]} />
+          <Hint>{exitStatus(m) === 'cancelled' ? 'A ticket that arrives here is set to cancelled and handed back to plain Fleex. Items are archived either way.' : 'A ticket that arrives here is set to done and handed back to plain Fleex.'}</Hint>
+        </>
+      )}
       {sizesOf(m) && (() => {
         const list = sizesOf(m)!, now = `${m.w}x${m.h}`, known = list.some(([w, h]) => `${w}x${h}` === now);
         return (

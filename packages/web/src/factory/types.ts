@@ -54,7 +54,8 @@ export interface ZoneSpec extends MachineBase {
   /** Its tickets wait for someone: they are listed under Needs you while they are in it. */
   needsYou?: boolean;
 }
-export interface ExitSpec extends MachineBase { kind: 'exit' }
+/** Sets the ticket to its `status` (done when unset, read through `exitStatus`) and hands it back to plain Fleex. */
+export interface ExitSpec extends MachineBase { kind: 'exit'; status?: 'done' | 'cancelled' }
 export interface LabelSpec extends MachineBase { kind: 'label'; text: string; color?: string }
 /** Where two belts cross: a ticket that enters keeps going straight. */
 export interface BridgeSpec extends MachineBase { kind: 'bridge' }
@@ -216,6 +217,11 @@ export function humanCall(t: FactoryTicket): HumanCall | null {
   return null;
 }
 
+/** What an exit sets its tickets to: done unless it is set to cancel them. Read it so, never `m.status` itself. */
+export function exitStatus(m: ExitSpec): 'done' | 'cancelled' {
+  return m.status === 'cancelled' ? 'cancelled' : 'done';
+}
+
 /** A ticket that waits for a human, and why. */
 export function needsHuman(t: FactoryTicket): string | null {
   const call = humanCall(t);
@@ -257,7 +263,7 @@ export interface ExitLog {
   /** The exit asked for, or null for every exit of the floor; `exits` names each one that appears. */
   machineId: string | null; days: number; since: string;
   exits: { machineId: string; name: string; onFloor: boolean }[];
-  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string }[];
+  tickets: { machineId: string; ticketId: string; displayId: number | null; title: string; type: string; priority: string; boardId: string | null; status: string | null; archived: boolean; tags: string[]; handedAt: string; shippedAt: string; outcome: 'shipped' | 'cancelled' }[];
   items: { machineId: string; itemId: string; source: ItemSource; title: string; author: string; url: string | null; tags: string[]; handedAt: string; shippedAt: string }[];
 }
 
