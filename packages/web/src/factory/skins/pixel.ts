@@ -26,7 +26,7 @@ import { DX, DY, exitStatus, humanCall, type AreaSpec, type FactoryLayout, type 
 import type { ArmView, ArmWay, BeltView, BridgeView, ExitView, Placed, PortView, Quay, Scene, StationView, StatusView, ZoneView } from '../scene';
 import type { ViewState } from '../renderer';
 import type { TokenLook } from '../ticketToken';
-import { CHEVRON_FAST, CHEVRON_PACE, CHEVRON_PAIR, clamp, FleexSkin, GHOST, HAZARD, NO_TYPE, PAINT, PICK, PRIORITY_PIP, STAR, TYPE_COLORS, WAY, ZONE_PAINT, type Palette } from './fleex';
+import { CHEVRON_FAST, CHEVRON_PACE, CHEVRON_PAIR, clamp, exitHue, FleexSkin, GHOST, HAZARD, NO_TYPE, PAINT, PICK, PRIORITY_PIP, STAR, TYPE_COLORS, WAY, ZONE_PAINT, type Palette } from './fleex';
 import { ART, box, disc, figures, fillWhere, frame, hash, poly, ring, seg, sprite } from './pixelArt';
 import { builtBox, hallOf, propsIn, type DecorOptions } from '../decor';
 import { prop, props, walls, yard, type DecorPaint } from './pixelDecor';
@@ -646,7 +646,7 @@ export class PixelSkin extends FleexSkin {
   /** An exit: a frame of light, its glow stepped round it and pooled inside, a few of its pixels flaring. */
   protected override exit(v: ExitView, pal: Palette): void {
     if (!this.sprites) { super.exit(v, pal); return; }
-    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled', ok = cancels ? pal.text3 : pal.ok, i = x * ART, j = y * ART, W = w * ART, H = h * ART;
+    const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled', ok = exitHue(m, pal), i = x * ART, j = y * ART, W = w * ART, H = h * ART;
     this.faint(0.14, () => frame(ctx, i - 1, j - 1, W + 2, H + 2, 1, ok, undefined, 4));
     this.faint(0.3, () => frame(ctx, i, j, W, H, 1, ok, undefined, 3));
     box(ctx, i + 1, j + 1, W - 2, H - 2, mix(pal.floor, '#000000', pal.light ? 0.06 : 0.3), 3);
@@ -678,11 +678,11 @@ export class PixelSkin extends FleexSkin {
     const ctx = this.ctx;
     for (const l of S.leaving) {
       if (l.travel) { this.token('solid', l.type, TYPE_COLORS[l.type] ?? NO_TYPE, l.x, l.y, 0.53, 1); continue; }
-      const { k, x: px, y: py, edge, a0, a1 } = l, cx = Math.round(px * ART), cy = Math.round(py * ART);
+      const { k, x: px, y: py, edge, a0, a1 } = l, cx = Math.round(px * ART), cy = Math.round(py * ART), ok = exitHue(l.m, pal);
       this.faint(1 - k, () => {
-        seg(ctx, (edge.x + edge.ax * a0) * ART, (edge.y + edge.ay * a0) * ART, (edge.x + edge.ax * a1) * ART, (edge.y + edge.ay * a1) * ART, 2, mix(pal.ok, '#ffffff', 0.7));
-        frame(ctx, cx - 4, cy - 4, 8, 8, 1, pal.ok, undefined, 1);
-        sprite(ctx, TICK, cx - 2, cy - 2, { X: pal.ok });
+        seg(ctx, (edge.x + edge.ax * a0) * ART, (edge.y + edge.ay * a0) * ART, (edge.x + edge.ax * a1) * ART, (edge.y + edge.ay * a1) * ART, 2, mix(ok, '#ffffff', 0.7));
+        frame(ctx, cx - 4, cy - 4, 8, 8, 1, ok, undefined, 1);
+        sprite(ctx, TICK, cx - 2, cy - 2, { X: ok });
       });
     }
   }

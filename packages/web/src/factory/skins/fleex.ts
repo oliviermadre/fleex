@@ -46,6 +46,12 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 export interface Palette { bg: string; floor: string; grid: string; belt: string; edge: string; chev: string; /** Fast belts and fast lanes of bridges: their chevrons and their rails. */ fast: string; body: string; text: string; text2: string; text3: string; ok: string; warn: string; danger: string; accent: string; /** A light theme: the floor is light, and what is written on it is dark. */ light: boolean; /** The amber of gates and of what waits for someone, as paint: a theme's warning colour is a text colour, brown on a light theme. */ amber: string }
+
+/** An exit's hue, for its frame and for what leaves by it: one that cancels is neutral, one that ships glows as a success. */
+export function exitHue(m: MachineSpec, pal: Palette): string {
+  return m.kind === 'exit' && exitStatus(m) === 'cancelled' ? pal.text3 : pal.ok;
+}
+
 export type LabelOpts = Label[5];
 type Label = [text: string, wx: number, wy: number, size: number, color: string, opts: { align?: CanvasTextAlign; weight?: number; mono?: boolean; plate?: string; min?: number; max?: number; fit?: number; /** Room between letters, as a share of the letter's size: a word in capitals reads as a marking. */ spacing?: number; /** Pixels down from where it is anchored: lines of one plate keep their distance at any zoom. */ dy?: number; /** It is written on something dark whatever the theme (a veil over the floor): its ink is left as it is. */ dark?: boolean }];
 
@@ -1255,8 +1261,7 @@ export class FleexSkin implements Skin {
    */
   protected exit(v: ExitView, pal: Palette): void {
     const ctx = this.ctx, { m } = v, { x, y, w, h } = m, z = this.cam.z, cancels = m.kind === 'exit' && exitStatus(m) === 'cancelled';
-    /* an exit that cancels is neutral, one that ships glows as a success */
-    const ok = cancels ? pal.text3 : pal.ok, ink = cancels ? '#18181b' : '#052e16';
+    const ok = exitHue(m, pal), ink = cancels ? '#18181b' : '#052e16';
     ctx.strokeStyle = ok;
     for (const [lw, a] of [[0.32, 0.07], [0.18, 0.14]] as const) { ctx.globalAlpha = a; ctx.lineWidth = lw; rr(ctx, x + 0.06, y + 0.06, w - 0.12, h - 0.12, 0.2); ctx.stroke(); }
     ctx.globalAlpha = 1;
@@ -1389,11 +1394,11 @@ export class FleexSkin implements Skin {
         else { rr(ctx, px - 0.23, py - 0.23, 0.46, 0.46, 0.1); ctx.fillStyle = TYPE_COLORS[l.type] ?? NO_TYPE; ctx.fill(); }
         continue;
       }
-      const { k, x: px, y: py, edge, a0, a1 } = l;
+      const { k, x: px, y: py, edge, a0, a1 } = l, ok = exitHue(l.m, pal);
       ctx.globalAlpha = 1 - k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       /* the side lights up where it passed, no further than the side goes */
-      ctx.strokeStyle = mix(pal.ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
-      ctx.strokeStyle = pal.ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
+      ctx.strokeStyle = mix(ok, '#ffffff', 0.7); ctx.lineWidth = 0.1; ctx.beginPath(); ctx.moveTo(edge.x + edge.ax * a0, edge.y + edge.ay * a0); ctx.lineTo(edge.x + edge.ax * a1, edge.y + edge.ay * a1); ctx.stroke();
+      ctx.strokeStyle = ok; ctx.lineWidth = 0.045; rr(ctx, px - 0.2, py - 0.2, 0.4, 0.4, 0.11); ctx.stroke();
       ctx.lineWidth = 0.05; ctx.beginPath(); ctx.moveTo(px - 0.09, py); ctx.lineTo(px - 0.02, py + 0.07); ctx.lineTo(px + 0.1, py - 0.07); ctx.stroke();
       ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     }

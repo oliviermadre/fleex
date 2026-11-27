@@ -217,12 +217,12 @@ export function humanCall(t: FactoryTicket): HumanCall | null {
   return null;
 }
 
-/** A ticket that waits for a human, and why. */
 /** What an exit sets its tickets to: done unless it is set to cancel them. Read it so, never `m.status` itself. */
 export function exitStatus(m: ExitSpec): 'done' | 'cancelled' {
   return m.status === 'cancelled' ? 'cancelled' : 'done';
 }
 
+/** A ticket that waits for a human, and why. */
 export function needsHuman(t: FactoryTicket): string | null {
   const call = humanCall(t);
   if (call === 'decision') return 'Waiting for your decision';
