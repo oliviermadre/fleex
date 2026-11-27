@@ -30,8 +30,9 @@ asked it (see "In the Work view").
 
 The floor grows with what is built: it is what is built plus a margin, so there is always room to extend it. In the
 page it is the map, as in a strategy game: it takes the shape of the view, the view cannot zoom out past the point
-where the floor fills it nor move beyond the floor's edge (`FactoryView.constrain`), and the minimap's frame never
-leaves the minimap.
+where the floor fills it nor move beyond the floor's edge (`FactoryView.constrain`). The minimap frames the layout
+alone, never the view (#837): out of build mode it holds still and only the view's rectangle moves on it, leaving
+it when zoomed far out; in build mode it follows the map as it grows.
 
 Moving the view is the same in build mode and out of it: Space and a drag (or a drag with the right button), the arrow
 keys, the minimap, and the edges of the page (`edgeScroll.ts`). Within 10 px of an edge (against the app's navigation,
@@ -338,8 +339,8 @@ is a little lighter at the top on a dark theme.
 
 - **The block of the minimap is one instrument** (picked on `docs/factory/minimap.html`): the map is a framed
   screen, the four toggles are tabs on its top edge, the five layers a column of buttons on its right edge (each
-  with its name in a tooltip), the zoom a small group in its bottom corner. The map frames what is built and the
-  view's rectangle, not the floor's margins, on a faint quadrille of terrain; under a layer, stations and zones take
+  with its name in a tooltip), the zoom a small group in its bottom corner. The map frames what is built and its
+  margin, never the view, on a faint quadrille of terrain; under a layer, stations and zones take
   the colour of their reading and the rest goes grey, and the layer's name is written in a corner of the screen.
 - **Over the minimap**, the time it is, to the second.
 - **In the notch**, the saved selections (`Groups` in `FactoryHudBits.tsx`): ten places that never move, Shift+1 to

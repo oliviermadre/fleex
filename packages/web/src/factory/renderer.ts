@@ -99,13 +99,6 @@ const FRAME_MIN_W = 40, FRAME_MIN_H = 24;
  * (`aspect`, its width over its height), it is widened or heightened to that shape, so that seen whole it fills the
  * view: the floor is the map, and nothing shows beyond it. Its sides stay on whole tiles.
  */
-/** What is built on the floor, with a tile of room round it: what the minimap frames. Null on an empty floor. */
-export function builtRect(layout: FactoryLayout): { x: number; y: number; w: number; h: number } | null {
-  if (!layout.machines.length) return null;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const m of layout.machines) { x0 = Math.min(x0, m.x); y0 = Math.min(y0, m.y); x1 = Math.max(x1, m.x + m.w); y1 = Math.max(y1, m.y + m.h); }
-  return { x: x0 - 1, y: y0 - 1, w: x1 - x0 + 2, h: y1 - y0 + 2 };
-}
 export function floorRect(layout: FactoryLayout, aspect = 0): { x: number; y: number; w: number; h: number } {
   return around(layout, FLOOR_MIN_W, FLOOR_MIN_H, aspect);
 }
@@ -585,11 +578,10 @@ export class FactoryView {
     if (!w || !h) return;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
     const c = cv.getContext('2d'); if (!c) return;
-    /* what is built fills the screen (the floor's margins do not); around it is terrain, a faint quadrille */
-    /* and so does the view's own rectangle, kept on the floor: zoomed out, the view is never off the screen */
-    const F = this.floorOf(L), hw0 = this.w / 2 / this.cam.z, hh0 = this.h / 2 / this.cam.z;
-    const V = { x0: Math.max(F.x, this.cam.x - hw0), y0: Math.max(F.y, this.cam.y - hh0), x1: Math.min(F.x + F.w, this.cam.x + hw0), y1: Math.min(F.y + F.h, this.cam.y + hh0) };
-    const b0 = builtRect(L) ?? F, bx0 = Math.min(b0.x, V.x0), by0 = Math.min(b0.y, V.y0), B = { x: bx0, y: by0, w: Math.max(b0.x + b0.w, V.x1) - bx0, h: Math.max(b0.y + b0.h, V.y1) - by0 }, room = 6, s = Math.min((w - room * 2) / B.w, (h - room * 2) / B.h), ox = (w - B.w * s) / 2 - B.x * s, oy = (h - B.h * s) / 2 - B.y * s;
+    /* what is built and its margin fill the screen (the rest of the floor does not); around it is terrain, a faint quadrille */
+    /* the frame is the layout's alone, never the view's (#837): out of build mode the map holds still and only the view's
+       rectangle moves on it, leaving it when zoomed far out; in build mode it follows the map as it grows */
+    const F = this.floorOf(L), B = around(L, 0, 0), room = 6, s = Math.min((w - room * 2) / B.w, (h - room * 2) / B.h), ox = (w - B.w * s) / 2 - B.x * s, oy = (h - B.h * s) / 2 - B.y * s;
     this.mini = { s, ox, oy };
     this.skin.minimap(c, { w, h, dpr: d, s, ox, oy, floor: F }, st, this.scene, this);
   }
