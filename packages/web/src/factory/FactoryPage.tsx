@@ -15,6 +15,7 @@ import { useFactoryStore } from './factoryStore';
 import { watchFactory } from './factoryLive';
 import { stationModel } from './stationModel';
 import { FactoryMachinePopup } from './FactoryMachinePopup';
+import { FactorySkinContext } from './FactoryConsolePopup';
 import { FactoryBuildFrame } from './FactoryBuildFrame';
 import { HUD } from './hudShape';
 import { FactoryHudShadow } from './FactoryHudShadow';
@@ -983,9 +984,11 @@ function Floor() {
   const skinShown = useRef(skinKey);
   useEffect(() => { if (skinShown.current !== skinKey) { skinShown.current = skinKey; viewRef.current?.setSkin(makeSkin()); } }, [skinKey, makeSkin]);
 
+  const skinCtx = useMemo(() => ({ id: skin.id, chrome }), [skin.id, chrome]);
   const halted = snapshot?.floor.settings.halted === true;
   const toolHint = building && tool !== 'select' ? TOOLS.find((t) => t[0] === tool)?.[3] : null;
   return (
+    <FactorySkinContext.Provider value={skinCtx}>
     <div ref={rootRef} className="factory-page flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]" data-skin={skin.id} style={chromeStyle}>
       <style>{EDGE_CSS}</style>
       <div className="flex min-h-0 flex-1">
@@ -1080,5 +1083,6 @@ function Floor() {
       {newItemAt && <FactoryNewItem intakeId={newItemAt} onClose={() => setNewItemAt(null)} />}
       {deskForm && <FactoryDeskForm desk={deskForm.desk} onClose={() => setDeskForm(undefined)} onOpenTicket={setOpenTicket} />}
     </div>
+    </FactorySkinContext.Provider>
   );
 }

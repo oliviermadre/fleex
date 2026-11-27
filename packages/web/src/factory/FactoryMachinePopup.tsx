@@ -3,50 +3,42 @@ import { TICKET_PRIORITIES, TICKET_TYPE_LABELS, TICKET_TYPES, type TicketStatus 
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
-import { ModelSelect } from '../components/agents/ModelSelect';
-import { useAgentPersonaStore } from '../stores/agentPersonaStore';
-import { useSkillStore } from '../stores/skillStore';
-import { usePanelStore } from '../stores/panelStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { cn } from '../lib/cn';
-import { factoryApi } from './factoryApi';
 import { useFactoryStore } from './factoryStore';
 import type { FactoryView } from './renderer';
-import { acceptsOutcome, armTag, isConditional, takesQuestions } from './armRules';
+import { acceptsOutcome, armTag, isConditional } from './armRules';
 import { bridgeFlow, flowLabel } from './bridges';
 import { FactoryArmForm } from './FactoryArmForm';
 import { blankOp, choicesFor, incompleteOp, SET_FIELD_LABEL, SET_FIELDS, TAG_OP_HINT, TAG_OP_LABEL, type AnyField, type SetOp } from './setOps';
 import { TAG_OPS, type TagOp } from './tags';
-import { ANY_REPO, incompleteLine, scriptOf, scriptOutcomes, targetLabel, WORKSPACE, whatRuns, type ScriptLine, type ScriptSpec } from './script';
+import { ANY_REPO, incompleteLine, scriptOf, targetLabel, WORKSPACE, whatRuns, type ScriptLine, type ScriptSpec } from './script';
 import { useSettingsStore } from '../stores/settingsStore';
 import { arrivalOf, arrivalsOn, departuresOf, portName, portOwnColor } from './teleport';
-import { FactoryPromptEditor } from './FactoryPromptEditor';
 import { FactoryPopup } from './FactoryPopup';
-import { MachineFigures, PeriodSelect } from './FactoryStatsBits';
+import { FactoryMachineConsole } from './FactoryMachineConsole';
+import { isConsole } from './stationConsole';
 import { TicketGlyphs, TicketToken } from './FactoryTicketMeta';
 import { since, span } from './format';
 import { FIcon } from './icons';
-import { MAX_PLACES } from './layoutOps';
 import { ITEM_SOURCES, refOf, SOURCE_LABEL } from './items';
 import { COMMON_FIELDS, opsFor, PULLED_SOURCES, SOURCE_FIELDS, type SourceField } from './itemSources';
 import { FactoryMailSetup, useMailStatus } from './FactoryMailSetup';
 import { toast } from '../lib/toast';
-import { canSetAside, exitStatus, LABEL_COLORS, needsHuman, PALETTE, QUESTION_OUTCOME, RUNS, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryRun, type FactoryTicket, type MachineSpec, type StationExec, type StationSpec, type TeleporterSpec } from './types';
+import { canSetAside, exitStatus, LABEL_COLORS, needsHuman, PALETTE, SET_ASIDE, type AreaLabel, type ArmSpec, type DeskSpec, type Dir, type IntakeSpec, type ItemFields, type ItemRule, type FactoryTicket, type MachineSpec, type StationSpec, type TeleporterSpec, type ZoneSpec } from './types';
 
-const REFRESH_MS = 4000;
-const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
-const PHASE: Record<FactoryTicket['phase'], string> = {
+export const STATUS_OPTIONS = [{ value: '', label: 'none' }, ...(['backlog', 'todo', 'doing', 'reviewing'] as TicketStatus[]).map((s) => ({ value: s, label: s }))];
+export const PHASE: Record<FactoryTicket['phase'], string> = {
   loose: 'on the floor', belt: 'on a belt', arm: 'in an arm', wait: 'waiting to run', running: 'running', review: 'waiting for your decision',
   question: 'the agent asked a question', failed: 'run failed', aside: 'set aside by you', out: 'done, waiting for an arm', zone: 'waiting', port: 'in the teleporter',
 };
-const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1], SIDE = ['East', 'South', 'West', 'North'];
+export const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1], SIDE = ['East', 'South', 'West', 'North'];
 /** Where an area's name can be written. */
 const AREA_LABEL_OPTIONS: { value: AreaLabel; label: string }[] = [
   { value: 'tl', label: 'Top left, inside' }, { value: 'tr', label: 'Top right, inside' }, { value: 'bl', label: 'Bottom left, inside' }, { value: 'br', label: 'Bottom right, inside' },
   { value: 'above', label: 'Above it' }, { value: 'below', label: 'Below it' },
 ];
-const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
-const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
+export const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 
 /** What a machine is, in a word or two. */
 export function machineKind(m: MachineSpec): string {
@@ -158,7 +150,7 @@ function GantrySettings({ ops, toll, onChange, onRemove, children }: { ops: SetO
  * The sizes a machine of a fixed size can be given, odd so that what comes in and goes out lines up on its middle: a
  * station (but a status one), a desk, an intake. One built before keeps its size until it is given another.
  */
-const sizesOf = (m: MachineSpec): [number, number][] | null =>
+export const sizesOf = (m: MachineSpec): [number, number][] | null =>
   m.kind === 'station' ? (m.exec === 'native' ? null : [[5, 5], [5, 3], [7, 5]])
     : m.kind === 'desk' || m.kind === 'intake' ? [[3, 3]] : null;
 
@@ -172,7 +164,7 @@ const TICKET_VARS = ['FLEEX_TICKET_NUMBER', 'FLEEX_TICKET_TITLE', 'FLEEX_TICKET_
  * one, quoted, in the command last edited. What only a ticket's repositories need, and what to do when something goes
  * wrong, are folded away.
  */
-function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; onChange: (s: ScriptSpec) => void }) {
+export function ScriptSettings({ script, onChange }: { script: ScriptSpec | undefined; onChange: (s: ScriptSpec) => void }) {
   const named = useSettingsStore((s) => s.settings.namedActions) ?? [], repos = useSettingsStore((s) => s.settings.resolvedRepositories ?? s.settings.repositories) ?? [];
   const saved = scriptOf(script), savedKey = JSON.stringify(saved.lines);
   const [rows, setRows] = useState<ScriptLine[]>(saved.lines), [focus, setFocus] = useState(0), [vars, setVars] = useState<'item' | 'ticket'>('item');
@@ -514,15 +506,7 @@ const Column = ({ children, className }: { children: React.ReactNode; className?
 /** Everything that is set on a machine. The same fields whatever opens them; they save as they are left. */
 function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; view: FactoryView; onPatch: (patch: Partial<MachineSpec>) => void; onSelect: (machineId: string) => void; onNewItem?: (intakeId: string) => void }) {
   const layout = useFactoryStore((s) => s.layout)!;
-  const [editing, setEditing] = useState(false);
-  const personas = useAgentPersonaStore((s) => s.personas), skills = useSkillStore((s) => s.skills), panels = usePanelStore((s) => s.panels);
   const takers = view.takersOf(m);
-  /* whose model the station runs on unless it chooses one: an agent's persona, or the persona a skill belongs to */
-  const skill = m.kind === 'station' && m.exec === 'skill' ? skills.find((s) => s.commandName === m.ref) ?? null : null;
-  const persona = m.kind === 'station' && m.exec === 'agent' ? personas.find((p) => p.name === m.ref) ?? null
-    : skill ? personas.find((p) => p.id === skill.personaId) ?? null : null;
-  /* what the station runs stays listed even when its persona, skill or panel is not (yet) known here: the field never shows "choose" over a station that is set */
-  const refs = (exec: StationExec, mine: string) => [...new Set([mine, ...(exec === 'agent' ? personas.map((p) => p.name) : exec === 'skill' ? skills.map((s) => s.commandName) : exec === 'panel' ? panels.map((p) => p.name) : [])])].filter(Boolean);
   const beyond = (a: MachineSpec & { kind: 'arm' }) => view.leadsTo(view.at(a.x + DX[a.dir]!, a.y + DY[a.dir]!));
   return (
     <>
@@ -589,79 +573,19 @@ function Settings({ m, view, onPatch, onSelect, onNewItem }: { m: MachineSpec; v
 
       {m.kind === 'station' && (
         <>
-          {m.exec === 'script' && <ScriptSettings key={m.id} script={m.script} onChange={(script) => onPatch({ script, outcomes: scriptOutcomes(script) } as Partial<StationSpec>)} />}
-          {RUNS.includes(m.exec) && m.exec !== 'script' && (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Select id="f-exec" label="Runs" value={m.exec} onChange={(e) => onPatch({ exec: e.target.value as StationExec, ref: '' } as Partial<StationSpec>)}
-                  options={[{ value: 'agent', label: 'an agent (persona)' }, { value: 'skill', label: 'a skill' }, { value: 'panel', label: 'a panel' }]} />
-                <Select id="f-ref" label={m.exec === 'agent' ? 'Persona' : m.exec === 'skill' ? 'Skill' : 'Panel'} value={m.ref ?? ''} onChange={(e) => onPatch({ ref: e.target.value } as Partial<StationSpec>)}
-                  options={[{ value: '', label: 'choose' }, ...refs(m.exec, m.ref ?? '').map((r) => ({ value: r, label: r }))]} />
-              </div>
-              {!m.ref && <div className="text-xs text-[var(--theme-danger)]">Choose what this station runs: until then it takes tickets in and starts nothing.</div>}
-              {(m.exec === 'agent' || m.exec === 'skill') && (
-                <div className="grid grid-cols-2 gap-2">
-                  {m.exec === 'agent' && <Select id="f-mode" label="Mode" value={m.mode ?? 'edit'} onChange={(e) => onPatch({ mode: e.target.value as 'talk' | 'plan' | 'edit' } as Partial<StationSpec>)}
-                    options={[{ value: 'edit', label: 'edit (can change code)' }, { value: 'plan', label: 'plan' }, { value: 'talk', label: 'talk (no workspace)' }]} />}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Model</span>
-                    <ModelSelect id="f-model" ariaLabel="Model this station runs on" value={m.model ?? ''} onChange={(v) => onPatch({ model: v || undefined } as Partial<StationSpec>)}
-                      leadingOption={{ value: '', label: persona?.model ? `The persona's own (${persona.model})` : "The persona's own" }} />
-                  </div>
-                </div>
-              )}
-              {(m.exec === 'agent' || m.exec === 'skill') && m.model && <Hint>Runs on this model here, whatever {persona?.name || (m.exec === 'agent' && m.ref) || 'the persona'} is set to elsewhere.</Hint>}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Instructions for this station</span>
-                <button type="button" onClick={() => setEditing(true)} title="Open the editor"
-                  className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-left text-sm hover:border-[var(--theme-accent)]">
-                  {m.prompt?.trim()
-                    ? <span className="line-clamp-[10] whitespace-pre-wrap text-[var(--theme-text-primary)]">{m.prompt}</span>
-                    : <span className="text-[var(--theme-text-muted)]">What the agent should do here</span>}
-                </button>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-[var(--theme-text-muted)]">{m.prompt?.trim() ? `${m.prompt.split('\n').length} lines · ${m.prompt.length.toLocaleString('en-US')} characters` : 'None yet'}</span>
-                  <Button size="sm" onClick={() => setEditing(true)}>Edit in a large window</Button>
-                </div>
-                {editing && <FactoryPromptEditor title={m.name || 'Station'} value={m.prompt ?? ''} onSave={(v) => onPatch({ prompt: v } as Partial<StationSpec>)} onClose={() => setEditing(false)} />}
-              </div>
-            </>
-          )}
-          {m.exec === 'native' && <Select id="f-sets" label="Sets the ticket status to" value={m.sets ?? 'doing'} onChange={(e) => onPatch({ sets: e.target.value as TicketStatus } as Partial<StationSpec>)} options={STATUS_OPTIONS.slice(1)} />}
-          {m.exec !== 'native' && m.exec !== 'script' && <CommitInput id="f-outcomes" label="Outcomes, comma separated (the first is the way forward)" value={m.outcomes.join(', ')} onCommit={(v) => onPatch({ outcomes: list(v).length ? list(v) : ['ok'] } as Partial<StationSpec>)} />}
-          <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(RUNS.includes(m.exec) ? MAX_PLACES : 50, Number(v) || 2)) } as Partial<StationSpec>)} />
+          <Select id="f-sets" label="Sets the ticket status to" value={m.sets ?? 'doing'} onChange={(e) => onPatch({ sets: e.target.value as TicketStatus } as Partial<StationSpec>)} options={STATUS_OPTIONS.slice(1)} />
+          <CommitInput id="f-cap" label="Places (tickets worked on at once)" value={String(m.cap)} onCommit={(v) => onPatch({ cap: Math.max(1, Math.min(50, Number(v) || 2)) } as Partial<StationSpec>)} />
           <Head>Where each outcome leaves</Head>
           <div className="flex flex-col gap-1">
             {m.outcomes.map((o) => {
               const arm = takers.find((a) => acceptsOutcome(a, o)) ?? takers.find((a) => !isConditional(a)), dest = arm ? beyond(arm) : null;
               return <div key={o} className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-text-primary)]">{o}</span><span className={arm ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-danger)]'}>{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'no arm takes it'}</span></div>;
             })}
-            {m.exec !== 'human_gate' && m.exec !== 'native' && m.exec !== 'script' && (() => {
-              const arm = takers.find((a) => takesQuestions(a)), dest = arm ? beyond(arm) : null;
-              return <div className="flex justify-between gap-2 text-xs"><span className="font-mono text-[var(--theme-warning)]">{QUESTION_OUTCOME}</span><span className="text-[var(--theme-text-secondary)]">{arm ? `→ ${dest?.name ?? dest?.kind ?? 'the next tile'}` : 'stays here until answered'}</span></div>;
-            })()}
           </div>
           <Hint>An outcome leaves through the arm that asks for it (a condition on the outcome); an arm with no condition takes the rest.</Hint>
         </>
       )}
 
-      {m.kind === 'zone' && (
-        <>
-          <Hint>{m.inbound ? 'Inbound: every ticket you hand over lands here and waits. Drag it onto a belt or a machine to start it.' : 'Tickets wait here. An arm only takes a ticket that has been released.'}</Hint>
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--theme-text-primary)]">
-            <input type="checkbox" checked={m.inbound === true} onChange={(e) => onPatch({ inbound: e.target.checked })} className="accent-[var(--theme-accent)]" />
-            Tickets handed over land here (Inbound)
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 text-xs text-[var(--theme-text-primary)]">
-            <input type="checkbox" checked={m.needsYou === true} onChange={(e) => onPatch({ needsYou: e.target.checked || undefined })} className="mt-0.5 accent-[var(--theme-accent)]" />
-            <span>Its tickets wait for me<span className="block text-[var(--theme-text-muted)]">They are listed under Needs you, top left, for as long as they stay here. N goes to them.</span></span>
-          </label>
-          <Select id="f-status" label="Sets the ticket status to" value={m.status ?? ''} onChange={(e) => onPatch({ status: e.target.value as TicketStatus | '' })} options={STATUS_OPTIONS} />
-          <Select id="f-release" label="Tickets leave" value={m.release} onChange={(e) => onPatch({ release: e.target.value as 'manual' | 'auto' })}
-            options={[{ value: 'manual', label: 'when you release them' }, { value: 'auto', label: 'automatically, one at a time' }]} />
-          {m.release === 'auto' && m.status === 'todo' && <CommitInput id="f-limit" label="Stop releasing above this many tickets in doing or reviewing" value={String(m.limit ?? 12)} onCommit={(v) => onPatch({ limit: Math.max(1, Number(v) || 12) })} />}
-        </>
-      )}
       {m.kind === 'exit' && (
         <>
           <Select id="f-exit-status" label="Sets tickets to" value={exitStatus(m)} onChange={(e) => onPatch({ status: e.target.value as 'done' | 'cancelled' })}
@@ -743,50 +667,6 @@ function Inside({ m, onOpenTicket }: { m: MachineSpec; onOpenTicket: (ticketId: 
   );
 }
 
-/** What a station did over the period, and its latest runs (or decisions, for a gate). */
-function Did({ m, onOpenTicket }: { m: StationSpec; onOpenTicket: (ticketId: string) => void }) {
-  const stats = useFactoryStore((s) => s.stats), snapshot = useFactoryStore((s) => s.snapshot);
-  const known = useTicketStore((s) => s.tickets);
-  const [runs, setRuns] = useState<FactoryRun[] | null>(null);
-  const gate = m.exec === 'human_gate', now = snapshot?.serverTime ?? new Date().toISOString();
-  useEffect(() => {
-    let live = true;
-    const load = () => { factoryApi.machineRuns(m.id).then((r) => { if (live) setRuns(r); }).catch(() => { if (live) setRuns((cur) => cur ?? []); }); };
-    setRuns(null); load();
-    const id = window.setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
-    return () => { live = false; window.clearInterval(id); };
-  }, [m.id]);
-  useEffect(() => { if (!useFactoryStore.getState().stats) void useFactoryStore.getState().loadStats(); }, []);
-  const titles = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const t of known) out.set(t.id, `#${t.displayId} ${t.title}`);
-    for (const t of snapshot?.tickets ?? []) if (t.info) out.set(t.ticketId, `${refOf(t.info)} ${t.info.title}`);
-    return out;
-  }, [known, snapshot]);
-  return (
-    <>
-      <Head right={<PeriodSelect id="factory-machine-period" />}>What it did</Head>
-      {stats ? <MachineFigures m={stats.machines.find((q) => q.machineId === m.id) ?? null} gate={gate} /> : <Hint>Loading</Hint>}
-      <Head>Latest {gate ? 'decisions' : 'runs'}</Head>
-      {runs === null ? <Hint>Loading</Hint> : runs.length === 0 ? <Hint>None yet.</Hint> : (
-        <ol className="flex flex-col">
-          {runs.map((r) => (
-            <li key={r.id} className="border-t border-[var(--theme-border)] py-1.5 first:border-t-0">
-              <button type="button" onClick={() => onOpenTicket(r.ticketId)} className="flex w-full items-baseline gap-2 text-left text-xs">
-                <span className={cn('h-2 w-2 flex-none rounded-full', r.status === 'failed' || r.status === 'interrupted' ? 'bg-[var(--theme-danger)]' : r.status === 'running' ? 'bg-[var(--theme-success)]' : r.status === 'completed' ? 'bg-[var(--theme-text-muted)]' : 'bg-[var(--theme-warning)]')} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[var(--theme-text-primary)] hover:underline">{titles.get(r.ticketId) ?? (r.item ? `${SOURCE_LABEL[r.item.source] ?? r.item.source} · ${r.item.title}` : r.ticketId.slice(0, 8))}</span>
-                <span className="flex-none font-mono text-[var(--theme-text-secondary)]">{r.outcome ?? (r.status === 'needs_review' ? 'waiting' : r.status)}</span>
-                <span className="flex-none font-mono text-[var(--theme-text-muted)]">{span(since(r.startedAt, r.finishedAt ?? now))}</span>
-              </button>
-              <div className="pl-4 text-[11px] text-[var(--theme-text-muted)]">{when(r.startedAt)}{r.error ? <span className="text-[var(--theme-danger)]"> · {r.error}</span> : null}</div>
-            </li>
-          ))}
-        </ol>
-      )}
-    </>
-  );
-}
-
 /**
  * A machine, opened from the floor (a double-click, Enter, or Edit on the command card): a popup over the floor, as
  * for a ticket. A station shows its settings, the tickets it holds and what it did; a zone its settings and its
@@ -799,14 +679,17 @@ export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemov
   /** An intake's popup opens the one that makes an item by hand. */
   onNewItem?: (intakeId: string) => void;
 }) {
-  const layout = useFactoryStore((s) => s.layout), power = useFactoryStore((s) => s.power);
+  const layout = useFactoryStore((s) => s.layout);
   const m = layout?.machines.find((q) => q.id === machineId) ?? null;
   useEffect(() => { if (!m) onClose(); }, [m, onClose]);
   if (!m || !layout) return null;
   /* the page gets a fresh copy of the layout at every poll: the view must read this one before it is asked about it */
   view.use(layout);
-  const box = m.kind === 'station' || m.kind === 'zone', station = m.kind === 'station' && m.exec !== 'native' ? m : null;
-  const switchable = m.kind === 'station' && RUNS.includes(m.exec);
+  if (isConsole(m)) {
+    return <FactoryMachineConsole key={m.id} m={m as StationSpec | ZoneSpec} view={view} onClose={onClose} onPatch={(p) => onPatch(m.id, p)} onRemove={() => onRemove(m.id)} onOpenTicket={onOpenTicket} onOpenMachine={onOpenMachine} />;
+  }
+  /* what is left here: the machines with settings only, and a status station (lot B of the console) */
+  const box = m.kind === 'station';
   const title = ('name' in m && m.name) || (m.kind === 'label' ? m.text : machineKind(m));
   const bar = (
     <>
@@ -815,24 +698,16 @@ export function FactoryMachinePopup({ machineId, view, onClose, onPatch, onRemov
         <b className="text-[var(--theme-text-primary)]">{title}</b>
         {title !== machineKind(m) && <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{machineKind(m)}</span>}
       </span>
-      {switchable && m.kind === 'station' && (
-        <>
-          <span className={cn('flex-none text-xs font-semibold', m.off ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]')} title={m.off ? 'It takes tickets in and starts nothing on them.' : 'It runs on what comes in.'}>{m.off ? 'Stopped' : 'Running'}</span>
-          <Button size="sm" variant={m.off ? 'primary' : 'secondary'} onClick={() => void power(m.id, !!m.off)} title={m.off ? 'It starts on the tickets it holds' : 'It keeps taking tickets in and starts nothing on them; what runs finishes'}>{m.off ? 'Start' : 'Stop'}</Button>
-        </>
-      )}
       <Button size="sm" variant="ghost" onClick={() => { onRemove(m.id); onClose(); }} title={m.kind === 'area' ? 'Remove this area: the machines on it stay' : 'Remove this machine from the floor'}>Remove</Button>
     </>
   );
   const settings = <Settings m={m} view={view} onPatch={(p) => onPatch(m.id, p)} onSelect={onOpenMachine} onNewItem={onNewItem} />;
   if (!box) return <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="fit" maxWidth="max-w-2xl"><Column>{settings}</Column></FactoryPopup>;
   return (
-    <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="large" maxWidth={station ? 'max-w-[1400px]' : 'max-w-5xl'}>
-      <div className={cn('grid min-h-0 flex-1 grid-cols-1 divide-y divide-[var(--theme-border)] overflow-y-auto lg:divide-x lg:divide-y-0 lg:overflow-hidden',
-        station ? 'lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)_minmax(300px,400px)]' : 'lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]')}>
+    <FactoryPopup label="Machine" onClose={onClose} bar={bar} size="large" maxWidth="max-w-5xl">
+      <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-[var(--theme-border)] overflow-y-auto lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] lg:divide-x lg:divide-y-0 lg:overflow-hidden">
         <Column className="max-lg:overflow-visible"><Head>Settings</Head>{settings}</Column>
         <Column className="max-lg:overflow-visible"><Inside m={m} onOpenTicket={onOpenTicket} /></Column>
-        {station && <Column className="max-lg:overflow-visible"><Did m={station} onOpenTicket={onOpenTicket} /></Column>}
       </div>
     </FactoryPopup>
   );
