@@ -189,3 +189,24 @@ vue Work comme lieu de travail manuel quand les tickets sont dans la Factory. Ve
 
 Ce que la maquette ne montre pas : le mode build, les calques et les réglages du HUD (dessinés, inertes), et les panneaux de
 Work autres que Context, Diff, Docs et Todo. Le floor est une seule ligne, sans déplacement de caméra.
+
+## Mobile : le poste de garde
+
+Troisième maquette, [`mobile.html`](./mobile.html) (un seul fichier, données simulées, même enveloppe que `workbench.html`).
+Elle répond à une question : que devient la Factory sur un téléphone. Elle ne rétrécit pas la page du bureau : elle garde ce
+qui se fait en trois minutes sous un pouce, et laisse la construction au bureau.
+
+- **Needs, l'accueil.** Une carte par ticket qui attend quelqu'un (la liste de `needs.ts`, la plus ancienne d'abord), le plan
+  entier en bandeau au-dessus, et les issues d'un gate, les réponses fermées d'un agent ou « Run again » en boutons au-dessus
+  de la barre. Chaque geste s'annule pendant cinq secondes.
+- **Floor.** Le plan, lu plus que manipulé : un doigt déplace, deux doigts zooment ; de loin une station est sa couleur, son
+  feu et un compte, de près ses places et ses tickets. « Next » emmène la vue au ticket suivant, toucher une machine ouvre sa
+  feuille (console et popup réunis). « Lines » montre le même plan en liste.
+- **Déplacer un ticket** ne se fait pas en glissant : « Send to… », les machines qui peuvent le prendre s'allument, un toucher
+  choisit, un autre confirme.
+- **✦** est la ligne « Entrée » du bureau, ses commandes slash en pastilles. **Pulse** donne ce qui s'est passé depuis la
+  dernière visite, les limites, où ça bouche, et l'arrêt d'urgence tenu une seconde.
+
+Trois choix restent à trancher sur la page (ce qu'on voit en ouvrant, ce que fait un balayage sur une carte, où vit la
+Factory dans l'app mobile) ; ils changent le téléphone de la maquette. Ce qu'elle ne montre pas : le mode build, les réglages
+complets d'une station, le paysage, les notifications.
