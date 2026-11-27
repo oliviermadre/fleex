@@ -25,6 +25,7 @@ describe('VersionBanner', () => {
       title: 'Fleex is 12 commits behind origin/main',
       detail: 'Worktree: self-update only affects ~/.fleex/repo',
       durationMs: null,
+      persist: 'until-closed',
     });
   });
 
