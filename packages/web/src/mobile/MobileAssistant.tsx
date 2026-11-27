@@ -8,6 +8,7 @@ import { AssistantMessage, AssistantOutsideWriteCard, useFoldedItems } from '../
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 import { useFileUpload } from '../hooks/useFileUpload';
 import { MobilePageHeader } from './MobilePageHeader';
+import { AssistantSuggestions, ASSISTANT_INTRO } from '../components/assistant/AssistantSuggestions';
 import { AssistantIcon } from './MobileIcons';
 
 /**
@@ -163,9 +164,7 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {!activeId ? (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-sm text-[var(--theme-text-muted)]">
-              L'assistant pilote tes boards, tickets, epics et deliverables via le CLI fleex.
-            </p>
+            <p className="text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
             <button
               onClick={() => createSession()}
               className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)]"
@@ -175,6 +174,12 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            {items.length === 0 && !busy && (
+              <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <p className="text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
+                <AssistantSuggestions onPick={sendUser} className="flex w-full flex-col gap-1.5 text-xs" />
+              </div>
+            )}
             {folded.map((item, i) =>
               item.kind === 'more' ? (
                 <p key={`more-${item.turnId}`} className="text-xs text-[var(--theme-text-faint)]">

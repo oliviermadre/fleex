@@ -48,3 +48,16 @@ export function resolveTodoActor(headers: HeaderBag, human: string): TodoActor {
   const type: TodoActorType = 'user';
   return { type, name: rawType === 'user' && rawName ? rawName : human, source };
 }
+
+/**
+ * Who authors a comment posted on the web route (`POST /api/tickets/:id/comments`).
+ *
+ * An agent driving the CLI (persona run, the companion Assistant, `--as`) declares
+ * itself with the same `x-fleex-actor-*` headers as the todo routes: its comment is
+ * signed with its name, as an agent. Everything else — the browser, the human's own
+ * CLI — is the configured human, as before.
+ */
+export function resolveCommentAuthor(headers: HeaderBag, human: string): { authorType: 'user' | 'agent'; authorName: string } {
+  const actor = resolveTodoActor(headers, human);
+  return actor.type === 'agent' ? { authorType: 'agent', authorName: actor.name } : { authorType: 'user', authorName: human };
+}

@@ -230,6 +230,9 @@ export class Runner {
     let resumeLost = false;
     let produced = false;
     let lastError = '';
+    // After an `error_max_turns` result the SDK iterator also throws; the
+    // "Continue?" card already says it all, so that error is not surfaced (QA F2).
+    let maxTurnsHit = false;
     const lines = new Map<string, ToolLine>();
     const started = new Map<string, number>();
     const denied = new Set<string>();
@@ -336,6 +339,7 @@ export class Runner {
           break;
         }
         case 'max_turns':
+          maxTurnsHit = true;
           flush();
           session.transcript.push({ notice: 'max_turns', limit: e.limit });
           emit(sessionId, e);
@@ -374,7 +378,7 @@ export class Runner {
       const msg = e instanceof Error ? e.message : String(e);
       if (run.resume && !produced && RESUME_LOST.test(msg)) resumeLost = true;
       else if (/invalid api key|please run \/login|not logged in|authentication/i.test(msg)) authFailed = true;
-      else if (!this.stopping.has(sessionId)) throw e;
+      else if (!this.stopping.has(sessionId) && !maxTurnsHit) throw e;
     } finally {
       flush();
     }

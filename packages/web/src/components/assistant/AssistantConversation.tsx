@@ -5,6 +5,7 @@ import { useAssistantStore, type AssistantChatItem, type AssistantMcpServer } fr
 import { AssistantStatusDot } from './AssistantSidebar';
 import { AssistantTranscript, AssistantOutsideWriteCard } from './AssistantTranscript';
 import { AssistantComposer } from './AssistantComposer';
+import { AssistantSuggestions, ASSISTANT_INTRO } from './AssistantSuggestions';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 
@@ -35,6 +36,7 @@ export function AssistantConversation() {
   const setOutsideWrites = useAssistantStore((s) => s.setOutsideWrites);
   const revealFolder = useAssistantStore((s) => s.revealFolder);
   const setModel = useAssistantStore((s) => s.setModel);
+  const sendUser = useAssistantStore((s) => s.sendUser);
 
   const [mcpOpen, setMcpOpen] = useState(false);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
@@ -81,15 +83,8 @@ export function AssistantConversation() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-[var(--theme-bg-primary)] px-8 text-center">
         <p className="text-3xl">✦</p>
-        <p className="max-w-md text-sm text-[var(--theme-text-muted)]">
-          L'assistant a les outils de tes agents : toute la CLI fleex, des scripts qu'il écrit et lance, tes fichiers,
-          tes MCP et tes skills.
-        </p>
-        <ul className="max-w-md text-xs text-[var(--theme-text-faint)]">
-          <li>«&nbsp;Écris un script qui exporte en CSV les tickets bloqués depuis plus de 5 jours et lance-le&nbsp;»</li>
-          <li>«&nbsp;Lis le README de ~/projects/fleex et résume-le&nbsp;»</li>
-          <li>«&nbsp;Cherche dans Notion la spec de l'onboarding&nbsp;»</li>
-        </ul>
+        <p className="max-w-md text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
+        <AssistantSuggestions />
         <button
           onClick={() => newSession()}
           className="rounded-md bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
@@ -176,6 +171,13 @@ export function AssistantConversation() {
 
       {/* Transcript */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        {/* `vide`: a fresh conversation shows what the assistant can now do. */}
+        {items.length === 0 && !busy && (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p className="max-w-md text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
+            <AssistantSuggestions onPick={sendUser} />
+          </div>
+        )}
         <AssistantTranscript
           sessionId={session.id}
           items={items}

@@ -564,6 +564,7 @@ function setActive(id) {
   currentTextBlock = null;
   currentText = '';
   currentToolCard = null;
+  toolCards.clear();
   thinkingBlock = null;
   generating = false;
   thread.innerHTML = '';
@@ -606,6 +607,9 @@ function renderTranscript(items) {
       if (!asBlocks) asBlocks = startAssistantTurn();
       const card = toolCardEl(it.tool);
       if (it.tool.status !== 'running') updateToolCard(card, it.tool.status, it.tool.text || '', it.tool);
+      // Still running when the conversation was (re)opened mid-turn: its result
+      // (ok, refusé after a Decline…) arrives live and must find this card.
+      else if (it.tool.id) toolCards.set(it.tool.id, card);
       asBlocks.appendChild(card);
     } else if (it.artifact) {
       if (!asBlocks) asBlocks = startAssistantTurn();

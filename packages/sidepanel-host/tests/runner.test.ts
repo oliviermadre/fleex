@@ -217,13 +217,21 @@ describe('writes outside the folder', () => {
 describe('limits and fallbacks', () => {
   it('reports the turn budget and continues with a technical turn (D9, P21)', async () => {
     const { query, calls } = scripted(
-      async function* () { yield init(); yield result('error_max_turns'); },
+      async function* () {
+        yield init();
+        yield result('error_max_turns');
+        // What the real SDK does after the result: the iterator throws (QA F2).
+        throw new Error('Claude Code returned an error result: Reached maximum number of turns (3)');
+      },
       async function* () { yield init(); yield result(); },
     );
     const s = store.create();
     const r = runner(query);
     await r.handleUserTurn(s.id, 'long task');
     expect(events.find((e) => e.type === 'max_turns')).toMatchObject({ limit: 3 });
+    // The "Continue?" card is the whole message: no raw SDK error banner next to it.
+    expect(events.filter((e) => e.type === 'error')).toEqual([]);
+    expect(store.get(s.id)!.status).toBe('idle');
     await r.handleUserTurn(s.id, 'Continue.', { continued: true });
     expect(calls[1]!.options.resume).toBe('sdk-1');
     const users = store.get(s.id)!.transcript.filter((i) => 'role' in i && i.role === 'user');
