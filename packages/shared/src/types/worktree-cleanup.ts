@@ -36,7 +36,8 @@ export const WORKTREE_CLEANUP_REASONS = [
 export type WorktreeCleanupReason = (typeof WORKTREE_CLEANUP_REASONS)[number];
 
 /** `routine_workspace`: a routine run's folder (`{ routineId }` manifest) — not a ticket's, out of scope. */
-export type WorktreeCleanupUnknownReason = 'no_manifest' | 'manifest_invalid' | 'ticket_not_found' | 'routine_workspace';
+/** `assistant_workspace`: an Assistant conversation's folder (`{ kind: 'assistant' }` manifest), deleted with its conversation. */
+export type WorktreeCleanupUnknownReason = 'no_manifest' | 'manifest_invalid' | 'ticket_not_found' | 'routine_workspace' | 'assistant_workspace';
 
 export type WorktreeCleanupBranchAction = 'delete_local_merged' | 'keep_local_unmerged' | 'none_detached';
 

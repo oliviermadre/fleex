@@ -573,13 +573,15 @@ export class WorktreeCleanupUseCase {
     return ticket.id;
   }
 
-  private async readManifest(dir: string): Promise<{ kind: 'ok'; ticketId: string } | { kind: 'no_manifest' | 'manifest_invalid' | 'routine_workspace' }> {
+  private async readManifest(dir: string): Promise<{ kind: 'ok'; ticketId: string } | { kind: 'no_manifest' | 'manifest_invalid' | 'routine_workspace' | 'assistant_workspace' }> {
     const path = join(dir, MANIFEST);
     if (!(await this.deps.hostFs.exists(path))) return { kind: 'no_manifest' };
     try {
-      const parsed = JSON.parse(await this.deps.hostFs.readFile(path)) as { ticketId?: unknown; routineId?: unknown };
+      const parsed = JSON.parse(await this.deps.hostFs.readFile(path)) as { ticketId?: unknown; routineId?: unknown; kind?: unknown };
       if (typeof parsed.ticketId === 'string' && parsed.ticketId) return { kind: 'ok', ticketId: parsed.ticketId };
       if (typeof parsed.routineId === 'string' && parsed.routineId) return { kind: 'routine_workspace' };
+      // An Assistant conversation's folder: deleted with its conversation, never here.
+      if (parsed.kind === 'assistant') return { kind: 'assistant_workspace' };
     } catch {
       // fall through
     }

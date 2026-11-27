@@ -157,6 +157,16 @@ describe('fleex worktree cleanup — text report', () => {
     expect(strip(renderPlan(report(), { verbose: true }))).toMatch(/BELOW THRESHOLD[\s\S]*#598 +fix i18n header/);
   });
 
+  it('sums Assistant conversation folders on one line, like routine runs', () => {
+    const unknown = [
+      { path: '/p/workspaces/assistant-3f9a12c4', reason: 'assistant_workspace' as const, ticketId: null, sizeBytes: 1024 },
+      { path: '/p/workspaces/assistant-aa11bb22', reason: 'assistant_workspace' as const, ticketId: null, sizeBytes: 1024 },
+    ];
+    const text = strip(renderPlan(report({ unknown })));
+    expect(text).toMatch(/2 assistant conversation folders +assistant_workspace +2\.0 KB/);
+    expect(text).not.toContain('assistant-3f9a12c4');
+  });
+
   it('reason details name the PRs and processes involved', () => {
     expect(reasonText(wt({ reasons: ['pr_open', 'process_running'], details: { ...wt().details, prs: [{ number: 298, state: 'OPEN' }], processes: [{ pid: 48213, command: 'node' }] } })))
       .toBe('pr_open (#298), process_running (node 48213)');
