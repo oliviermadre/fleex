@@ -47,7 +47,8 @@ const open = (machineId: string) => {
 };
 
 afterEach(() => { cleanup(); });
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => { vi.clearAllMocks(); window.localStorage.clear(); });
+const tab = (name: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`) }));
 
 describe('which machines open in a popup', () => {
   it('everything that has something to set or to show, so not a belt nor a bridge', () => {
@@ -75,26 +76,31 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).toHaveBeenCalledWith('out', { status: 'done' });
   });
 
-  it('shows a station whole: its settings, the tickets it holds with what each needs, and what it did', async () => {
+  it('shows a station in tabs: the tickets it holds with what each needs, its settings, and what it did', async () => {
     const acts = seed([ticket('t1', 'dev', 'running'), ticket('t2', 'dev', 'failed', { note: 'boom' })]);
     const on = open('dev');
     const popup = screen.getByRole('region', { name: 'Machine' });
     expect(popup.textContent).toContain('Agent station');
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Dev');
-    expect((screen.getByLabelText('Persona') as HTMLSelectElement).value).toBe('builder');
-    expect(screen.getByLabelText('Model this station runs on').textContent).toBe('some-model');
+    /* a failed run waits on you: the popup opens on what is inside, and says so */
+    expect(screen.getByRole('tab', { selected: true }).textContent).toContain('Inside');
+    expect(popup.textContent).toContain('1 needs you');
     expect(popup.textContent).toContain('2 tickets inside of 2');
-    expect(popup.textContent).toContain('What it did');
-    expect(await screen.findByText(/boom/, { selector: 'span' })).toBeTruthy();      // the latest runs, with why one failed
     fireEvent.click(screen.getByRole('button', { name: 'Set aside' }));
     expect(acts.setAside).toHaveBeenCalledWith('t1');
     fireEvent.click(screen.getByRole('button', { name: 'Run again' }));
     expect(acts.putBack).toHaveBeenCalledWith('t2');
     fireEvent.click(screen.getByText('Ticket t1'));
     expect(on.onOpenTicket).toHaveBeenCalledWith('t1');
+    tab('Setup');
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Dev');
+    expect((screen.getByLabelText('Persona') as HTMLSelectElement).value).toBe('builder');
+    expect(screen.getByLabelText('Model this station runs on').textContent).toBe('some-model');
+    tab('Activity');
+    expect(popup.textContent).toContain('What it did');
+    expect(await screen.findByText('boom')).toBeTruthy();      // the latest runs, with why one failed
   });
 
-  it('saves a setting when its field is left, and stops or starts the station from its bar', () => {
+  it('saves a setting when its field is left, or when another tab is opened, and stops or starts the station from its plate', () => {
     const acts = seed([]);
     const on = open('dev');
     const name = screen.getByLabelText('Name');
@@ -102,23 +108,30 @@ describe('<FactoryMachinePopup/>', () => {
     expect(on.onPatch).not.toHaveBeenCalled();
     fireEvent.blur(name);
     expect(on.onPatch).toHaveBeenCalledWith('dev', { name: 'Build' });
-    fireEvent.change(screen.getByLabelText('Mode'), { target: { value: 'plan' } });
+    fireEvent.click(screen.getByRole('radio', { name: /plan/ }));
     expect(on.onPatch).toHaveBeenLastCalledWith('dev', { mode: 'plan' });
+    /* typed, not left: opening another tab keeps it */
+    const again = screen.getByLabelText('Name');
+    again.focus();
+    fireEvent.change(again, { target: { value: 'Builder' } });
+    tab('Inside');
+    expect(on.onPatch).toHaveBeenLastCalledWith('dev', { name: 'Builder' });
     expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('Running');
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(acts.power).toHaveBeenCalledWith('dev', false);
     cleanup();
-    const again = seed([], [{ ...dev, off: true } as MachineSpec, gate, zone, arm, belt]);
+    const stopped = seed([], [{ ...dev, off: true } as MachineSpec, gate, zone, arm, belt]);
     open('dev');
     expect(screen.getByRole('region', { name: 'Machine' }).textContent).toContain('Stopped');
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-    expect(again.power).toHaveBeenCalledWith('dev', true);
+    expect(stopped.power).toHaveBeenCalledWith('dev', true);
   });
 
-  it('leads from a station to the arm that takes from it, and removes a machine', () => {
+  it('leads from a station to the arm that takes each outcome, and removes a machine', () => {
     seed([]);
     const on = open('dev');
-    fireEvent.click(screen.getByTitle('Open this arm'));
+    tab('Routing');
+    fireEvent.click(screen.getAllByTitle('Open this arm')[0]!);
     expect(on.onOpenMachine).toHaveBeenCalledWith('a1');
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(on.onRemove).toHaveBeenCalledWith('dev');
@@ -129,12 +142,17 @@ describe('<FactoryMachinePopup/>', () => {
     const acts = seed([ticket('t1', 'qa', 'review'), ticket('t2', 'parked', 'zone')]);
     open('qa');
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
-    expect(screen.queryByLabelText('Persona')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();                                  // no lamp
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Inside1', 'Setup!', 'Activity']);
     fireEvent.click(screen.getByRole('button', { name: 'reject' }));
     expect(acts.resolve).toHaveBeenCalledWith('t1', 'reject');
+    tab('Setup');
+    expect(screen.queryByLabelText('Persona')).toBeNull();
     cleanup();
     open('parked');
-    expect(screen.getByRole('region', { name: 'Machine' }).textContent).not.toContain('What it did');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Inside', 'Setup']);
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Setup');        // nothing waits on you there
+    tab('Inside');
     fireEvent.click(screen.getByRole('button', { name: 'Release' }));
     expect(acts.release).toHaveBeenCalledWith('t2');
     cleanup();

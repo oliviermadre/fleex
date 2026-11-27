@@ -695,3 +695,11 @@ html, body {
   border-left: 2px solid var(--theme-border-input);
   color: var(--theme-text-secondary);
 }
+
+/* Factory console popups (FactoryConsolePopup): the skin's font on what is display only, square corners in pixel, the outcome belt. */
+.fx-console .fx-display { font-family: var(--fx-font, inherit); }
+.fx-console[data-skin^="pixel"], .fx-console[data-skin^="pixel"] * { border-radius: 0 !important; }
+@keyframes fx-belt { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.fx-belt-run { animation: fx-belt 24s linear infinite; }
+.fx-belt-stripes { background-image: repeating-linear-gradient(90deg, transparent 0 14px, color-mix(in srgb, var(--theme-text-muted) 22%, transparent) 14px 16px); }
+@media (prefers-reduced-motion: reduce) { .fx-belt-run { animation: none; } }

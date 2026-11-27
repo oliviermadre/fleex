@@ -28,6 +28,10 @@ interface ModalProps {
    * field stays in the field, and Escape does nothing while another overlay is opened over this dialog.
    */
   guardEscape?: boolean;
+  /** Set on the backdrop, so that what the dialog holds inherits it (e.g. the CSS variables of a skin). */
+  backdropStyle?: React.CSSProperties;
+  /** Set on the dialog, after what its variant sets (e.g. the frame of a skin). */
+  dialogStyle?: React.CSSProperties;
 }
 
 /** What the glass variant adds to the dialog: its surface, lit along its top edge, and a deeper shadow. Nothing is blurred (see `variant`). */
@@ -37,7 +41,7 @@ const GLASS: React.CSSProperties = {
 };
 const inField = (el: HTMLElement | null): boolean => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 
-export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg', zIndexClass = 'z-50', underlay, variant = 'solid', flush = false, guardEscape = false }: ModalProps) {
+export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg', zIndexClass = 'z-50', underlay, variant = 'solid', flush = false, guardEscape = false, backdropStyle, dialogStyle }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   // Selecting the text of a dialog and releasing past its edge used to close it.
   const dismiss = useBackdropDismiss(backdropRef, onClose);
@@ -83,7 +87,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
         underlay != null && 'relative',
         className
       )}
-      style={glass ? GLASS : undefined}
+      style={glass || dialogStyle ? { ...(glass ? GLASS : null), ...dialogStyle } : undefined}
     >
       {children}
     </div>
@@ -94,6 +98,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
       ref={backdropRef}
       data-overlay-top
       className={cn('fixed inset-0 flex items-center justify-center', glass ? 'bg-black/35' : 'bg-black/60 backdrop-blur-sm', zIndexClass)}
+      style={backdropStyle}
       {...dismiss}
     >
       {underlay != null ? <div className={cn('relative w-full', maxWidth)}>{underlay}{dialog}</div> : dialog}
