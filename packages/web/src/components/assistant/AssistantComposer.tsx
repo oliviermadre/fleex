@@ -275,13 +275,25 @@ export function AssistantComposer({ sessionId, busy, onSent }: AssistantComposer
               className: 'border-transparent bg-transparent leading-relaxed text-[var(--theme-text-primary)]',
             }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!draft.trim() || busy || isUploading}
-            className="shrink-0 rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)] disabled:opacity-50"
-          >
-            {isUploading ? '…' : '➤'}
-          </button>
+          {busy ? (
+            // Stop interrupts the turn; a pending confirmation counts as refused (RG9).
+            <button
+              onClick={() => useAssistantStore.getState().stop(sessionId)}
+              title="Arrêter"
+              aria-label="Arrêter"
+              className="shrink-0 rounded-lg border border-[var(--theme-border)] px-4 py-2 text-sm font-semibold text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+            >
+              ■
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!draft.trim() || isUploading}
+              className="shrink-0 rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)] disabled:opacity-50"
+            >
+              {isUploading ? '…' : '➤'}
+            </button>
+          )}
         </div>
         {isUploading && <p className="mt-1 text-[10px] text-[var(--theme-text-faint)]">Upload en cours…</p>}
       </div>

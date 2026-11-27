@@ -80,7 +80,6 @@ function seedStores() {
     },
     confirmReqs: [],
     errorMsg: null,
-    autoApproveNotice: null,
     ensureConnected: () => {},
     sendUser: vi.fn(),
   });
@@ -183,14 +182,14 @@ describe('AssistantTranscript — markdown is parsed from content only (#518)', 
     ];
 
     const { rerender } = render(
-      <AssistantTranscript items={build()} busy={false} statusLabel="Réflexion…" errorMsg={null} />,
+      <AssistantTranscript sessionId="s1" items={build()} busy={false} statusLabel="Réflexion…" errorMsg={null} />,
     );
     expect(markdownRenders).toHaveBeenCalledTimes(2);
     markdownRenders.mockClear();
 
     // Same texts, brand-new objects and a new array — plus an unrelated prop
     // change so the transcript itself genuinely re-renders.
-    rerender(<AssistantTranscript items={build()} busy statusLabel="Réflexion…" errorMsg={null} />);
+    rerender(<AssistantTranscript sessionId="s1" items={build()} busy statusLabel="Réflexion…" errorMsg={null} />);
 
     expect(markdownRenders).not.toHaveBeenCalled();
   });
@@ -198,6 +197,7 @@ describe('AssistantTranscript — markdown is parsed from content only (#518)', 
   it('does re-parse a message whose text actually changed (streaming still works)', () => {
     const { rerender } = render(
       <AssistantTranscript
+          sessionId="s1"
         items={[{ kind: 'assistant', text: 'Une ré' }]}
         busy
         statusLabel="Réflexion…"
@@ -208,6 +208,7 @@ describe('AssistantTranscript — markdown is parsed from content only (#518)', 
 
     rerender(
       <AssistantTranscript
+          sessionId="s1"
         items={[{ kind: 'assistant', text: 'Une réponse' }]}
         busy
         statusLabel="Réflexion…"
