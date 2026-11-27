@@ -7,7 +7,8 @@ const TOAST_ID = 'version-behind';
 /**
  * "Fleex is behind origin/main" — a persistent toast, not a surface of its own.
  * Renders nothing: it only drives `toast()`. Closing the toast (✕) remembers
- * the dismissal for this commit, as before.
+ * the dismissal for this commit, as before. On the Factory floor (no ✕) it fades
+ * like any line and stays in the log; that is not a dismissal.
  */
 export function VersionBanner() {
   const { versionInfo, showBanner, dismiss } = useVersionCheck();
@@ -25,6 +26,7 @@ export function VersionBanner() {
       message: 'Run fleex self-update to update.',
       detail: versionInfo.isWorktree ? 'Worktree: self-update only affects ~/.fleex/repo' : undefined,
       durationMs: null,
+      persist: 'until-closed',
       onDismiss: (reason) => {
         if (reason === 'close') dismiss();
       },

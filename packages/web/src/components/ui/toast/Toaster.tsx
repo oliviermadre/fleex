@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useToastStore, type ToastItem, type ToastTone } from '../../../stores/toastStore';
+import { effectiveDuration, useToastStore, type ToastItem, type ToastTone } from '../../../stores/toastStore';
 import { cn } from '../../../lib/cn';
 import './toast.css';
 
@@ -81,10 +81,11 @@ export function FloorLine({ toast: t, linksEnabled = true, live = false }: { toa
   const { dismiss, pause, resume } = useToastStore.getState();
   const link = linksEnabled ? t.link : undefined;
   const open = link ? () => { navigate(link); if (live) dismiss(t.id, 'click'); } : undefined;
+  const durationMs = live ? effectiveDuration(t, 'floor') : null;
   return (
-    <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={!live || t.durationMs === null}
+    <div role={t.tone === 'error' ? 'alert' : 'status'} data-paused={live ? t.paused : undefined} data-keep={durationMs === null}
       className="fleex-floor-line flex max-w-full items-baseline gap-1.5 text-[12.5px] leading-[1.35] text-[var(--theme-text-primary)]"
-      style={live && t.durationMs !== null ? { animationDuration: `200ms, ${t.durationMs}ms` } : undefined}>
+      style={durationMs !== null ? { animationDuration: `200ms, ${durationMs}ms` } : undefined}>
       <span className={cn('pointer-events-auto flex min-w-0 max-w-full items-baseline gap-1.5', !live && 'w-full')} onMouseEnter={live ? () => pause(t.id) : undefined} onMouseLeave={live ? () => resume(t.id) : undefined}>
         <span className="flex-none font-mono text-[10.5px] text-[var(--theme-text-muted)]">{clock(t.createdAt)}</span>
         <span className={cn('flex-none font-bold', floorInk[t.tone])} aria-hidden>{t.icon ?? floorSign[t.tone]}</span>

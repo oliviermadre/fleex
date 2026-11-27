@@ -118,3 +118,62 @@ describe('<Toaster/> on the floor skin', () => {
     expect(host.style.getPropertyValue('--theme-bg-base')).toBe('#0b0b10');
   });
 });
+
+/* A toast that waits for the user (`persist: 'until-closed'`, the "behind origin/main" one) has its ✕ on a card. A floor
+   line has no ✕: there, it must fade like any line (it stays in the log), or nothing can ever take it off the floor. */
+describe('<Toaster/> a toast kept until closed, on the floor skin', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const showUntilClosed = (reasons: string[]) => act(() => void toast.show({
+    id: 'version-behind', title: 'Fleex is 2 commits behind origin/main', message: 'Run fleex self-update to update.',
+    durationMs: null, persist: 'until-closed', onDismiss: (r) => reasons.push(r),
+  }));
+
+  it('shown on a card, then the floor comes: the line fades and leaves (a timeout, not a close), and stays in the log', () => {
+    const reasons: string[] = [];
+    renderToaster();
+    showUntilClosed(reasons);                                            // shown before the Factory opens: a card
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(useToastStore.getState().toasts.map((t) => t.id)).toEqual(['version-behind']);
+    act(() => void useToastStore.getState().pushSkin('floor'));
+    const line = document.querySelector<HTMLElement>('[data-skin="floor"] .fleex-floor-line')!;
+    expect(line.getAttribute('data-keep')).toBe('false');                 // it fades
+    expect(line.style.animationDuration).toBe('200ms, 5000ms');
+    act(() => void vi.advanceTimersByTime(5_000));
+    expect(useToastStore.getState().toasts).toEqual([]);
+    expect(reasons).toEqual(['timeout']);                                  // not 'close': the dismissal is not remembered
+    expect(useToastStore.getState().history.map((h) => h.id)).toEqual(['version-behind']);
+  });
+
+  it('shown on the floor, it fades too', () => {
+    const reasons: string[] = [];
+    useToastStore.getState().pushSkin('floor');
+    renderToaster();
+    showUntilClosed(reasons);
+    act(() => void vi.advanceTimersByTime(5_000));
+    expect(useToastStore.getState().toasts).toEqual([]);
+    expect(reasons).toEqual(['timeout']);
+  });
+
+  it('a window opens before it is gone: back to a card that stays, with its ✕', () => {
+    const reasons: string[] = [];
+    const key = useToastStore.getState().pushSkin('floor');
+    renderToaster();
+    showUntilClosed(reasons);
+    act(() => { vi.advanceTimersByTime(2_000); useToastStore.getState().popLayout(key); });
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(reasons).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(reasons).toEqual(['close']);
+  });
+
+  it('a toast that waits for something else (no `persist`) still stays on the floor', () => {
+    useToastStore.getState().pushSkin('floor');
+    renderToaster();
+    act(() => void toast.show({ id: 'build', message: 'Build running…', durationMs: null }));
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(document.querySelector('[data-skin="floor"] .fleex-floor-line')!.getAttribute('data-keep')).toBe('true');
+    expect(useToastStore.getState().toasts.map((t) => t.id)).toEqual(['build']);
+  });
+});

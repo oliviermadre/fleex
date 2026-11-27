@@ -35,6 +35,12 @@ export interface ToastInput {
   link?: string;
   /** Auto-dismiss delay. `null` = persistent until closed. Default depends on the tone (see DEFAULT_DURATION_MS). */
   durationMs?: number | null;
+  /**
+   * What a persistent toast (`durationMs: null`) waits for. Default: something to end (a build), the code dismisses it.
+   * `'until-closed'`: the user's ✕. The floor skin has no ✕, so there such a toast fades after its tone's default
+   * duration (a timeout, not a close) and stays in the history.
+   */
+  persist?: 'until-closed';
   /** Hovering / focusing the toast pauses its countdown. Default `true`. */
   pauseOnHover?: boolean;
   /** Stable key: showing the same id again updates the toast in place (no duplicate). */
@@ -75,6 +81,12 @@ export function resolveDuration(input: ToastInput, tone: ToastTone): number | nu
   if (input.durationMs !== undefined) return input.durationMs;
   const base = DEFAULT_DURATION_MS[tone];
   return input.action ? Math.max(base, MIN_ACTION_DURATION_MS) : base;
+}
+
+/** The delay a toast actually leaves after under `skin`: on the floor, a toast kept until closed cannot be closed, so it fades. */
+export function effectiveDuration(item: Pick<ToastItem, 'durationMs' | 'persist' | 'tone'>, skin: ToastSkin | null): number | null {
+  if (item.durationMs !== null) return item.durationMs;
+  return skin === 'floor' && item.persist === 'until-closed' ? DEFAULT_DURATION_MS[item.tone] : null;
 }
 
 interface LayoutEntry<T> {
@@ -131,6 +143,21 @@ export const useToastStore = create<ToastState>((set, get) => {
     });
   };
 
+  /** The skin changed: a toast kept until closed starts fading on the floor, and stays again off it. */
+  const syncTimers = () => {
+    const skin = get().skins.at(-1)?.value ?? null;
+    for (const t of get().toasts) {
+      if (t.durationMs !== null || t.persist !== 'until-closed') continue;
+      const ms = effectiveDuration(t, skin);
+      if (ms !== null) {
+        if (!timers.has(t.id)) startTimer(t.id, ms);
+      } else if (timers.has(t.id)) {
+        clearTimer(t.id);
+        if (t.paused) set((s) => ({ toasts: s.toasts.map((x) => (x.id === t.id ? { ...x, paused: false } : x)) }));
+      }
+    }
+  };
+
   return {
     toasts: [],
     offsets: [],
@@ -181,8 +208,9 @@ export const useToastStore = create<ToastState>((set, get) => {
         old.onDismiss?.('programmatic');
       }
 
-      if (item.durationMs === null) clearTimer(id);
-      else startTimer(id, item.durationMs);
+      const ms = effectiveDuration(item, get().skins.at(-1)?.value ?? null);
+      if (ms === null) clearTimer(id);
+      else startTimer(id, ms);
       return id;
     },
 
@@ -226,6 +254,7 @@ export const useToastStore = create<ToastState>((set, get) => {
     pushSkin: (skin, style = null) => {
       const key = ++nextLayoutKey;
       set((s) => ({ skins: [...s.skins, { key, value: skin }], skinStyle: style }));
+      syncTimers();
       return key;
     },
 
@@ -235,6 +264,7 @@ export const useToastStore = create<ToastState>((set, get) => {
         anchors: s.anchors.filter((a) => a.key !== key),
         skins: s.skins.filter((k) => k.key !== key),
       }));
+      syncTimers();
     },
   };
 });
