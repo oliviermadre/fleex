@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { builtRect, FactoryView, floorRect } from './renderer';
+import { FactoryView, FLOOR_MARGIN, floorRect } from './renderer';
 import type { FactoryLayout, MachineSpec } from './types';
 
 const station = (id: string, x: number, y: number): MachineSpec => ({ id, kind: 'station', x, y, w: 5, h: 4, name: id, exec: 'agent', outcomes: ['ok'], cap: 2 });
@@ -99,12 +99,44 @@ describe('the smallest floor', () => {
 });
 
 describe('what the minimap frames', () => {
-  it('is what is built, with a tile of room round it, and not the floor\'s margins', () => {
-    const l = layout(station('a', 10, 4), station('b', 30, 12));
-    expect(builtRect(l)).toEqual({ x: 9, y: 3, w: 27, h: 14 });
-    const f = floorRect(l);
-    expect(f.w).toBeGreaterThan(27);                                                // the floor itself is wider: it has its margins
-    expect(builtRect(layout())).toBeNull();
+  /* #837: the minimap is the map, not the view. Out of build mode the layout does not move, so neither may the map:
+     only the view's rectangle goes about on it, and leaves it when the view is zoomed far out. */
+  const quiet = { id: 'quiet', ground: () => {}, pieces: () => {}, top: () => {}, minimap: () => {} };
+  const mini = { getContext: () => ({}), clientWidth: 220, clientHeight: 140, width: 0, height: 0 } as unknown as HTMLCanvasElement;
+  const st = (l: FactoryLayout) => ({ layout: l, tickets: [], arms: new Map(), selMachine: null, selMany: [], marquee: null, selTicket: null, hoverMachine: null, edit: false, ghost: null, drag: null });
+  /** Where two corners of the minimap fall on the floor: the map's frame, as the console reads it back on a click. */
+  const frameAt = (v: FactoryView, l: FactoryLayout, cam: { x: number; y: number; z: number }) => {
+    Object.assign(v.cam, cam); v.constrain(l); v.minimap(mini, st(l));
+    return [v.miniToWorld(0, 0), v.miniToWorld(220, 140)];
+  };
+  const framed = () => { const v = new FactoryView({ getContext: () => null, clientWidth: 1200, clientHeight: 800, width: 0, height: 0 } as unknown as HTMLCanvasElement, quiet); v.resize(); return v; };
+
+  it('does not move when the view zooms or pans over a layout that does not change', () => {
+    const l = layout(station('a', 10, 4), station('b', 30, 12)), v = framed();
+    const first = frameAt(v, l, { x: 22, y: 10, z: 40 });
+    for (const cam of [{ x: 22, y: 10, z: 20 }, { x: 22, y: 10, z: 8 }, { x: 22, y: 10, z: 4 }, { x: 0, y: 0, z: 20 }, { x: 60, y: 30, z: 12 }])
+      expect(frameAt(v, l, cam)).toEqual(first);
+  });
+
+  it('holds still under the cursor while the view is dragged by it', () => {
+    const l = layout(station('a', 10, 4), station('b', 30, 12)), v = framed();
+    Object.assign(v.cam, { x: 22, y: 10, z: 8 }); v.constrain(l); v.minimap(mini, st(l));
+    const p = v.miniToWorld(40, 70)!;
+    Object.assign(v.cam, { x: p.x, y: p.y }); v.constrain(l); v.minimap(mini, st(l));
+    expect(v.miniToWorld(40, 70)).toEqual(p);
+  });
+
+  it('follows the map when the layout grows, as it does in build mode', () => {
+    const v = framed(), cam = { x: 22, y: 10, z: 12 };
+    const small = frameAt(v, layout(station('a', 10, 4), station('b', 30, 12)), cam);
+    const grown = frameAt(v, layout(station('a', 10, 4), station('b', 30, 12), station('c', 90, 40)), cam);
+    expect(grown[1]!.x - grown[0]!.x).toBeGreaterThan(small[1]!.x - small[0]!.x);
+  });
+
+  it('frames all that is built with its margin round it', () => {
+    const l = layout(station('a', 10, 4), station('b', 30, 12)), [tl, br] = frameAt(framed(), l, { x: 22, y: 10, z: 20 });
+    expect(tl!.x).toBeLessThanOrEqual(10 - FLOOR_MARGIN); expect(tl!.y).toBeLessThanOrEqual(4 - FLOOR_MARGIN);
+    expect(br!.x).toBeGreaterThanOrEqual(35 + FLOOR_MARGIN); expect(br!.y).toBeGreaterThanOrEqual(16 + FLOOR_MARGIN);
   });
 });
 
