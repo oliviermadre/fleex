@@ -1,0 +1,201 @@
+/**
+ * Claude Agent SDK `query()` options for a Fleex agent run.
+ *
+ * Lives in `@fleex/shared` (not the server) because two processes build these
+ * options: the server for persona / workflow runs, and the companion
+ * (`packages/sidepanel-host`) for the Assistant. One implementation, so a
+ * variable or option added for personas reaches the Assistant with no change
+ * to the companion.
+ *
+ * Reads the host process env through `globalThis` so this module type-checks
+ * in the browser packages that import `@fleex/shared` (it is never called there).
+ */
+import type { MentionExecutionMode, EffortLevel } from './types/ticket.js';
+import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from './constants.js';
+
+function hostEnv(): Record<string, string | undefined> {
+  return (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+}
+
+export interface SdkOptionsContext {
+  model: string;
+  /** A full prompt (persona runs), or a preset with an appended part (the Assistant). */
+  systemPrompt: string | { type: 'preset'; preset: 'claude_code'; append?: string };
+  cwd?: string | null;
+  outputFormat?: Record<string, unknown>;
+  resume?: string;
+  /**
+   * Reasoning effort override. MUST already be resolved against `model` via
+   * `resolveEffortLevel` — this is a passthrough, not a gate, and a level the
+   * model doesn't accept (e.g. `xhigh` on Sonnet 4.6) is a hard 400.
+   */
+  effort?: EffortLevel;
+  /** Fast-mode toggle, applied via SDK settings only when the model supports it. */
+  fast?: boolean;
+  /**
+   * Talk mode only: the prompt references an image attachment materialized to a
+   * file. Talk is normally tool-free, but an image can only be viewed via the
+   * Read tool, so we enable just Read (+ a few turns) when one is present.
+   */
+  talkCanReadImages?: boolean;
+  /**
+   * Agentic loop cap for plan/edit modes (Settings › General → `agentMaxTurns`).
+   * Falls back to DEFAULT_AGENT_MAX_TURNS when unset, and is clamped to a sane
+   * range so a bad config value can't disable the loop or unbound it.
+   * Talk mode ignores this — its 0/4 caps are permission guards, not budgets.
+   *
+   * NB: this is the SDK's own `maxTurns` — "a turn consists of a user message
+   * and assistant response" (one API round-trip), not a per-tool-call count.
+   * A single turn can bundle several parallel tool calls (e.g. reading many
+   * files at once), so the number of tool actions visible in the Execution Log
+   * can exceed this value without indicating the cap was ignored.
+   */
+  maxTurns?: number;
+  /**
+   * Who the run is, for the `fleex` CLI/MCP it calls: exported to the agent's
+   * process as FLEEX_ACTOR_TYPE=agent / FLEEX_ACTOR_NAME, which the CLI sends
+   * as `x-fleex-actor-*` headers — so a todo item an agent writes is
+   * attributed to it, not to the human. The persona's display name, or
+   * `workflow:<template> → <step>` for a workflow step (same as its comments).
+   */
+  actorName?: string;
+  /**
+   * The persona's slug (`persona.name`), exported as FLEEX_ACTOR_PERSONA: a
+   * workflow step is named `workflow:<template> → <step>`, so the name alone
+   * cannot tell which todo items are assigned to this run. Absent for runs
+   * without a persona (a panel's orchestrator).
+   */
+  actorPersona?: string;
+  /**
+   * Run-specific variables layered over the shared env (e.g. the Assistant's
+   * FLEEX_WORKSPACE). Applied first, so it never overrides the shared ones.
+   */
+  extraEnv?: Record<string, string>;
+  /**
+   * Variables to drop from the inherited host env (e.g. the Assistant drops
+   * ANTHROPIC_API_KEY so Claude Code uses its own login first).
+   */
+  omitEnv?: string[];
+}
+
+/** Clamp a configured turn budget, falling back to the default when unusable. */
+export function resolveMaxTurns(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_AGENT_MAX_TURNS;
+  return Math.min(AGENT_MAX_TURNS_MAX, Math.max(AGENT_MAX_TURNS_MIN, Math.floor(value)));
+}
+
+/**
+ * The turn budget a run will actually get, for reporting purposes (execution
+ * header + `execution_end`). Mirrors what `buildSdkOptions` hands the SDK, so
+ * the number shown in the Execution Log is the real, clamped cap rather than
+ * the raw config value. Returns undefined for talk mode, whose 0/4 caps are
+ * permission guards rather than a user-facing budget.
+ */
+export function effectiveMaxTurns(
+  effectiveMode: MentionExecutionMode,
+  configured: number | undefined,
+): number | undefined {
+  if (effectiveMode === 'talk') return undefined;
+  return resolveMaxTurns(configured);
+}
+
+/**
+ * TEMPORARY workaround — forces every Agent / Bash call of a run to be
+ * synchronous (no `run_in_background`, no background sub-agents).
+ *
+ * Why: with an `outputFormat` (every Fleex run has one), the Claude Code CLI
+ * injects `[structured-output-enforce] … Call this tool now.` at EVERY turn
+ * end, without checking for still-running background tasks. A run that fans
+ * out sub-agents and ends its turn to wait for them is forced to hand back a
+ * partial StructuredOutput, then `streamSdkQuery` stops at that `result` and
+ * kills the CLI with the tasks still running. Upstream bug:
+ * https://github.com/anthropics/claude-code/issues/103157
+ *
+ * Remove once a CLI release stops enforcing structured output while
+ * background tasks are pending (and `streamSdkQuery` waits for them):
+ * sub-agents then run in parallel again.
+ */
+export const NO_BACKGROUND_TASKS_ENV: Readonly<Record<string, string>> = {
+  CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+};
+
+/** The env a run exports so the `fleex` CLI it spawns acts in its name. */
+export function agentActorEnv(actorName: string, personaSlug?: string): Record<string, string> {
+  return {
+    FLEEX_ACTOR_TYPE: 'agent',
+    FLEEX_ACTOR_NAME: actorName,
+    ...(personaSlug ? { FLEEX_ACTOR_PERSONA: personaSlug } : {}),
+  };
+}
+
+export function buildSdkOptions(
+  effectiveMode: MentionExecutionMode,
+  ctx: SdkOptionsContext,
+): Record<string, unknown> {
+  const env = hostEnv();
+  const cliPath = env['CLAUDE_CLI_PATH'];
+  const maxTurns = resolveMaxTurns(ctx.maxTurns);
+  const base: Record<string, unknown> = {
+    model: ctx.model,
+    systemPrompt: ctx.systemPrompt,
+    ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
+  };
+
+  // Reasoning effort is a direct query() option; fast mode goes through settings.
+  if (ctx.effort) base.effort = ctx.effort;
+  if (ctx.fast) base.settings = { ...(base.settings as Record<string, unknown> | undefined), fastMode: true };
+
+  if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;
+  // `env` replaces the SDK's default (process.env): keep everything else.
+  const inherited = { ...env };
+  for (const k of ctx.omitEnv ?? []) delete inherited[k];
+  base.env = {
+    ...inherited,
+    ...ctx.extraEnv,
+    ...NO_BACKGROUND_TASKS_ENV,
+    ...(ctx.actorName ? agentActorEnv(ctx.actorName, ctx.actorPersona) : {}),
+  };
+
+  switch (effectiveMode) {
+    case 'talk':
+      // One-shot: no agentic loop, no tools. dontAsk denies all unlisted tools.
+      // maxTurns: 0 is a defense-in-depth guard against any tool round-trip.
+      //
+      // Exception: when the prompt carries an image attachment, the only way to
+      // show it (talk has no worktree, images aren't inlined) is to let the
+      // agent Read the materialized file. Enable ONLY Read, with a few turns so
+      // the Read result can feed back before the final answer.
+      if (ctx.talkCanReadImages) {
+        return {
+          ...base,
+          allowedTools: ['Read'],
+          permissionMode: 'bypassPermissions',
+          allowDangerouslySkipPermissions: true,
+          maxTurns: 4,
+        };
+      }
+      return { ...base, allowedTools: [], permissionMode: 'dontAsk', maxTurns: 0 };
+
+    case 'plan':
+      return {
+        ...base,
+        allowedTools: ['Read', 'Glob', 'Grep', 'Skill'],
+        permissionMode: 'dontAsk',
+        settingSources: ['user', 'project'],
+        maxTurns,
+        ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
+      };
+
+    case 'edit':
+      return {
+        ...base,
+        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Skill'],
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        settingSources: ['user', 'project'],
+        maxTurns,
+        ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
+        ...(ctx.resume ? { resume: ctx.resume } : {}),
+      };
+  }
+}

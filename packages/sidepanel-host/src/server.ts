@@ -1,44 +1,64 @@
 #!/usr/bin/env bun
 /**
- * fleex-sidepanel-host — local companion for the Chrome side panel assistant.
+ * fleex-sidepanel-host — the companion behind the Fleex Assistant (web and
+ * desktop panel, mobile tab, Chrome side panel).
  *
- * Holds the Anthropic API key, runs the tool-use loop server-side, gates
- * mutating tool calls behind a WebSocket confirmation round-trip, and executes
- * tools by running the fleex CLI. Manages multiple persisted conversations
- * (sessions) over a single WebSocket, routed by sessionId.
+ * Each conversation is a Claude Agent SDK session, built with the same options
+ * and env as a persona run (`buildSdkOptions('edit')`): every Claude Code tool,
+ * the user's MCP servers and skills, the whole `fleex` CLI through Bash,
+ * `bypassPermissions`. Its cwd is the conversation folder
+ * `<workspacesRoot>/assistant-<id>`; the one thing that asks first is a file
+ * write outside that folder. Conversations are multiplexed over one WebSocket.
  *
  * Config (env):
- *   ANTHROPIC_API_KEY        required for live use
+ *   ANTHROPIC_API_KEY        fallback when Claude Code has no login
  *   FLEEX_SIDEPANEL_PORT     listen port (default 4399)
  *   FLEEX_SIDEPANEL_MODEL    model id (default claude-opus-5)
+ *   FLEEX_SIDEPANEL_ALLOWED_ORIGINS  extra WebSocket origins (comma-separated)
  *   FLEEX_MCP_BIN/PREFIX     fleex binary + prefix args (in-repo dev)
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import type { ServerWebSocket } from 'bun';
-import type Anthropic from '@anthropic-ai/sdk';
-import { buildProgram } from '@fleex/cli/program';
-import { generateTools } from '@fleex/mcp';
+import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import type { ExecOptions } from '@fleex/mcp';
-import { runAssistant, type AssistantEvent } from './assistant.ts';
-import { toAnthropicTools } from './tools.ts';
-import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.ts';
 import { FALLBACK_MODELS } from '@fleex/shared';
-import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
 import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
-import { SessionStore, isToolAutoApproved, type TranscriptItem } from './sessions.ts';
-import { applyConfirm, applySetAutoApprove, disarmForPage, type PendingConfirm } from './auto-approve.ts';
+import { SessionStore } from './sessions.ts';
 import {
   findRunningInstance,
   findWorkspaceServerPort,
   instanceBranch,
 } from './instance-discovery.ts';
 import { scheduleRemember, cancelRemember } from './remember.ts';
+import { Runner, type ClientEvent } from './runner.ts';
+import type { QueryFn } from './agent-turn.ts';
+import { loadAccessCatalog, type AccessCatalog } from './fleex-access.ts';
+import { allWorkspacesRoots, removeWorkDir, workspacesRootFor } from './work-dir.ts';
+import { deliverableTypeFor, lastCitedTicket } from './artifacts.ts';
+import { attachDeliverable, createRunCli, listTickets } from './fleex-cli.ts';
+import { isAllowedOrigin } from './origin.ts';
 
-interface PageRef { url?: string; title?: string; content: string }
+export const DEFAULT_MODEL = 'claude-opus-5';
+
 interface WsData { id: string }
 
 interface ThemeConfig { activeThemeId: string | null; customThemes: unknown[] }
+
+/** `agentMaxTurns` of a workspace's running server, if any (D9). */
+async function fetchMaxTurns(workspace?: string): Promise<number | undefined> {
+  const port = await findWorkspaceServerPort(workspace);
+  if (!port) return undefined;
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/config`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return undefined;
+    const cfg = (await r.json()) as { agentMaxTurns?: unknown };
+    return typeof cfg.agentMaxTurns === 'number' ? cfg.agentMaxTurns : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Read a live workspace server's theme config (activeThemeId + customThemes). */
 async function fetchThemeConfig(serverPort: number): Promise<ThemeConfig> {
@@ -69,26 +89,22 @@ async function listWorkspacesEnriched() {
   );
 }
 
-/** Events streamed to the client: assistant events plus server-level notices. */
-type ServerEvent =
-  | AssistantEvent
-  | { type: 'error'; message: string }
-  | { type: 'auto_approve_disarmed'; reason: 'page_attached' };
-
 const PORT = Number(process.env.FLEEX_SIDEPANEL_PORT ?? 4399);
 const MODEL = process.env.FLEEX_SIDEPANEL_MODEL ?? DEFAULT_MODEL;
-
-// Shared, built once. The llm is built per-turn from the session's model
-// (see handleUserTurn), so a conversation can pick its own Anthropic model.
-const tools = generateTools(await buildProgram());
-const anthropicTools = toAnthropicTools(tools);
-const client = createClient();
 const store = new SessionStore();
 
 const baseExecOpts: ExecOptions = {
   bin: process.env.FLEEX_MCP_BIN,
   prefixArgs: process.env.FLEEX_MCP_PREFIX ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean) : undefined,
 };
+const runCli = createRunCli(baseExecOpts);
+
+// Badges on `fleex` lines, from the installed CLI's own catalogue. Loaded in
+// the background: until it lands, lines simply have no badge.
+let accessCatalog: AccessCatalog = new Map();
+void loadAccessCatalog(baseExecOpts).then((c) => {
+  accessCatalog = c;
+});
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -98,10 +114,6 @@ const CORS = {
 
 // One client at a time in practice, but support several sockets defensively.
 const sockets = new Set<ServerWebSocket<WsData>>();
-// Pending tool confirmations, keyed by tool_use id (unique per call).
-const pendingConfirms = new Map<string, PendingConfirm>();
-// Page attached but not yet consumed, keyed by session id.
-const pendingPages = new Map<string, PageRef>();
 
 function send(ws: ServerWebSocket<WsData>, msg: unknown): void {
   try {
@@ -123,7 +135,7 @@ function broadcastSessions(): void {
   }
 }
 
-function broadcastEvent(sessionId: string, event: ServerEvent): void {
+function broadcastEvent(sessionId: string, event: ClientEvent): void {
   const payload = JSON.stringify({ ...event, sessionId });
   for (const ws of sockets) {
     try {
@@ -134,129 +146,43 @@ function broadcastEvent(sessionId: string, event: ServerEvent): void {
   }
 }
 
-async function handleUserTurn(sessionId: string, text: string): Promise<void> {
-  const session = store.get(sessionId);
-  if (!session) return;
-  if (session.status !== 'idle') {
-    broadcastEvent(sessionId, { type: 'error', message: 'This conversation is still working.' });
-    return;
-  }
+const runner = new Runner({
+  store,
+  query: sdkQuery as unknown as QueryFn,
+  emit: broadcastEvent,
+  sessionsChanged: broadcastSessions,
+  resolveWorkspace,
+  workspacesRoot: (ws) => workspacesRootFor(ws),
+  accessCatalog: () => accessCatalog,
+  defaultModel: MODEL,
+  maxTurns: fetchMaxTurns,
+  apiKey: () => process.env.ANTHROPIC_API_KEY || undefined,
+  log: (m) => process.stderr.write(`fleex-sidepanel-host: ${m}\n`),
+  // When this conversation goes quiet, offer it to the workspace's memory.
+  onTurnEnd: (session) => scheduleRemember(session, (msg, meta) => console.log(msg, meta ?? '')),
+});
 
-  // A session with no explicit workspace resolves to the configured default,
-  // so we never fall back to the CLI's ambient (worktree-current) workspace.
-  const workspace = resolveWorkspace(session.workspace);
-  // The model is per-conversation; an unset session model uses the host default.
-  const llm = createLlm(client, session.model || MODEL);
-
-  store.maybeTitleFrom(sessionId, text);
-
-  const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text }];
-  const page = pendingPages.get(sessionId);
-  if (page) {
-    content.push({ type: 'text', text: formatPageContext(page) });
-    pendingPages.delete(sessionId);
-  }
-  session.messages.push({ role: 'user', content });
-  session.transcript.push({ role: 'user', text });
-  store.touchMessage(sessionId);
-  store.setStatus(sessionId, 'working');
-  store.save(sessionId);
-  broadcastSessions();
-
-  // Build the transcript incrementally from the event stream.
-  let assistantBuf = '';
-  const toolItems = new Map<string, Extract<TranscriptItem, { tool: unknown }>>();
-  const flushAssistant = (): void => {
-    if (assistantBuf) {
-      session.transcript.push({ role: 'assistant', text: assistantBuf });
-      assistantBuf = '';
-      store.touchMessage(sessionId);
-      store.save(sessionId);
-    }
-  };
-
-  const onEvent = (e: AssistantEvent): void => {
-    broadcastEvent(sessionId, e);
-    switch (e.type) {
-      case 'text':
-        assistantBuf += e.text;
-        break;
-      case 'tool_call': {
-        flushAssistant();
-        const item: TranscriptItem = {
-          tool: { name: e.name, argv: e.argv, status: 'running', ...(e.autoApproved ? { autoApproved: true } : {}) },
-        };
-        session.transcript.push(item);
-        toolItems.set(e.id, item as Extract<TranscriptItem, { tool: unknown }>);
-        store.save(sessionId);
-        break;
-      }
-      case 'tool_result': {
-        const item = toolItems.get(e.id);
-        if (item) {
-          item.tool.status = e.ok ? 'ok' : 'fail';
-          item.tool.text = e.text;
-          store.save(sessionId);
-        }
-        break;
-      }
-      case 'tool_denied': {
-        const item = toolItems.get(e.id);
-        if (item) {
-          item.tool.status = 'denied';
-          store.save(sessionId);
-        }
-        break;
-      }
-      case 'done':
-        flushAssistant();
-        break;
-    }
-  };
-
-  const exec = createExec({ ...baseExecOpts, workspace });
-  const confirm = (req: { id: string; name: string; input: Record<string, unknown>; argv: string[] }) =>
-    new Promise<boolean>((resolve) => {
-      store.setStatus(sessionId, 'awaiting_input');
-      broadcastSessions();
-      pendingConfirms.set(req.id, {
-        sessionId,
-        name: req.name,
-        resolve: (approved) => {
-          store.setStatus(sessionId, 'working');
-          broadcastSessions();
-          resolve(approved);
-        },
-      });
-      for (const ws of sockets) send(ws, { type: 'confirm_request', sessionId, id: req.id, name: req.name, argv: req.argv, input: req.input });
-    });
-
+/** Open a file or reveal a folder with the machine's default app (desktop / local web only). */
+function openOnHost(target: string, reveal: boolean): void {
+  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
+  const args = reveal && process.platform === 'darwin' ? ['-R', target] : [target];
   try {
-    await runAssistant({
-      llm,
-      exec,
-      confirm,
-      tools,
-      anthropicTools,
-      system: buildSystemPrompt({ workspace }),
-      messages: session.messages,
-      onEvent,
-      workspace,
-      // Read through the live session the store owns, so an "always allow"
-      // clicked on the first call of this turn covers the remaining ones.
-      isAutoApproved: (name) => isToolAutoApproved(session.autoApprove, name),
-    });
-  } catch (e) {
-    broadcastEvent(sessionId, { type: 'error', message: e instanceof Error ? e.message : String(e) });
-  } finally {
-    flushAssistant();
-    store.setStatus(sessionId, 'idle');
-    store.save(sessionId);
-    broadcastSessions();
-    // Arm the idle timer: when this conversation goes quiet, offer it to the
-    // workspace's memory. Resets on each turn, so an active conversation is
-    // distilled once at the end rather than after every exchange.
-    scheduleRemember(session, (msg, meta) => console.log(msg, meta ?? ''));
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  } catch {
+    /* nothing to open with */
+  }
+}
+
+/** Delete a conversation and its folder (R7: the conversation goes even if the folder cannot). */
+async function deleteConversation(id: string): Promise<void> {
+  const s = store.get(id);
+  await runner.forget(id);
+  cancelRemember(id);
+  const workDir = s?.workDir;
+  store.delete(id);
+  if (workDir) {
+    const err = removeWorkDir(workDir, allWorkspacesRoots());
+    if (err) process.stderr.write(`fleex-sidepanel-host: ${err}\n`);
   }
 }
 
@@ -274,7 +200,7 @@ Bun.serve<WsData>({
       // started before ANTHROPIC_API_KEY landed in ~/.fleex/config) and restart
       // it instead of silently reusing one that can't talk to Claude.
       return Response.json(
-        { ok: true, tools: tools.length, hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
+        { ok: true, engine: 'claude-agent-sdk', hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
         { headers: CORS },
       );
     }
@@ -293,6 +219,8 @@ Bun.serve<WsData>({
       return Response.json(await fetchThemeConfig(serverPort), { headers: CORS });
     }
     if (url.pathname === '/chat') {
+      // The Assistant runs Bash without asking: only Fleex's own surfaces may drive it.
+      if (!isAllowedOrigin(req.headers.get('origin'))) return new Response('Forbidden origin', { status: 403 });
       const ok = server.upgrade(req, { data: { id: crypto.randomUUID() } satisfies WsData });
       return ok ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
     }
@@ -351,7 +279,13 @@ Bun.serve<WsData>({
         case 'open_session': {
           const id = asString(msg.id);
           const s = id ? store.get(id) : undefined;
-          if (s) send(ws, { type: 'session_history', id: s.id, transcript: s.transcript });
+          if (s) {
+            send(ws, { type: 'session_history', id: s.id, transcript: s.transcript });
+            // A confirmation survives a closed panel (R4): show it again.
+            for (const req of runner.pendingFor(s.id)) send(ws, { type: 'confirm_request', sessionId: s.id, ...req });
+            const mcp = runner.mcpStatus(s.id);
+            if (mcp) send(ws, { type: 'mcp_status', sessionId: s.id, servers: mcp });
+          }
           break;
         }
         case 'rename_session': {
@@ -365,12 +299,7 @@ Bun.serve<WsData>({
         }
         case 'delete_session': {
           const id = asString(msg.id);
-          if (id) {
-            cancelRemember(id);
-            store.delete(id);
-            pendingPages.delete(id);
-            broadcastSessions();
-          }
+          if (id) void deleteConversation(id).then(broadcastSessions);
           break;
         }
         case 'set_workspace': {
@@ -396,33 +325,85 @@ Bun.serve<WsData>({
         case 'user': {
           const id = asString(msg.sessionId);
           const text = asString(msg.text);
-          if (id && text) void handleUserTurn(id, text);
+          if (id && text) void runner.handleUserTurn(id, text);
+          break;
+        }
+        case 'continue': {
+          // After the turn budget ran out (P21): a technical "Continue." turn.
+          const id = asString(msg.sessionId);
+          if (id) void runner.handleUserTurn(id, 'Continue.', { continued: true });
+          break;
+        }
+        case 'stop': {
+          const id = asString(msg.sessionId);
+          if (id) void runner.stop(id);
           break;
         }
         case 'page': {
           const id = asString(msg.sessionId);
           const content = asString(msg.content);
           if (id && content) {
-            pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
+            runner.attachPage(id, { content, url: asString(msg.url), title: asString(msg.title) });
             send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
-            // Untrusted page content just entered this conversation: any
-            // standing approval granted before it is void.
-            if (disarmForPage(id, store)) {
-              broadcastSessions();
-              broadcastEvent(id, { type: 'auto_approve_disarmed', reason: 'page_attached' });
-            }
           }
           break;
         }
         case 'confirm': {
-          const outcome = applyConfirm(msg, pendingConfirms, store);
-          if (!outcome) break;
-          if (outcome.allowlistChanged) broadcastSessions();
-          outcome.pending.resolve(outcome.approved);
+          runner.confirm(msg);
           break;
         }
-        case 'set_auto_approve': {
-          if (applySetAutoApprove(msg, store)) broadcastSessions();
+        case 'set_outside_writes': {
+          const id = asString(msg.sessionId);
+          if (id && store.setOutsideWritesAllowed(id, msg.allowed === true)) broadcastSessions();
+          break;
+        }
+        case 'open_path':
+        case 'reveal_folder': {
+          const id = asString(msg.sessionId);
+          const target = msg.type === 'reveal_folder' ? (id ? store.get(id)?.workDir : undefined) : asString(msg.path);
+          // Only the conversation's own folder and files: a frame must not launch anything else.
+          if (id && target && runner.canOpen(id, target)) openOnHost(target, msg.type === 'reveal_folder');
+          else send(ws, { type: 'error', sessionId: id, message: 'Ce chemin ne fait pas partie du dossier de la conversation.' });
+          break;
+        }
+        case 'list_tickets': {
+          const id = asString(msg.sessionId);
+          const s = id ? store.get(id) : undefined;
+          if (!s) break;
+          const texts = s.transcript.flatMap((i) => ('role' in i ? [i.text] : []));
+          listTickets(runCli, resolveWorkspace(s.workspace), asString(msg.query))
+            .then((tickets) => send(ws, { type: 'tickets', sessionId: s.id, tickets, preselect: lastCitedTicket(texts) ?? null }))
+            .catch((e) => send(ws, { type: 'error', sessionId: s.id, message: e instanceof Error ? e.message : String(e) }));
+          break;
+        }
+        case 'attach_artifact': {
+          const id = asString(msg.sessionId);
+          const filePath = asString(msg.path);
+          const ticketId = asString(msg.ticketId);
+          const s = id ? store.get(id) : undefined;
+          const card = s && filePath ? runner.artifact(s.id, filePath) : undefined;
+          if (!s || !card || !ticketId) {
+            send(ws, { type: 'error', sessionId: id, message: 'Artefact ou ticket introuvable.' });
+            break;
+          }
+          if (!card.attachable) {
+            send(ws, { type: 'error', sessionId: s.id, message: 'Format ou taille non pris en charge comme livrable.' });
+            break;
+          }
+          void attachDeliverable(runCli, resolveWorkspace(s.workspace), {
+            ticketId,
+            file: card.path,
+            title: card.name,
+            type: deliverableTypeFor(card.path),
+          }).then((res) => {
+            if (!res.ok) {
+              send(ws, { type: 'artifact_attach_failed', sessionId: s.id, path: card.path, message: (res.stderr || res.stdout).trim() || 'fleex ticket deliverable add failed' });
+              return;
+            }
+            card.attachments.push({ ticketId, displayId: asString(msg.displayId) ?? ticketId });
+            store.save(s.id);
+            broadcastEvent(s.id, { type: 'artifact', turnId: card.turnId, card, replaces: true });
+          });
           break;
         }
         default:
@@ -430,10 +411,8 @@ Bun.serve<WsData>({
       }
     },
     close(ws) {
+      // A pending confirmation outlives the socket (R4): it is shown again on reopen.
       sockets.delete(ws);
-      // Client gone — unwind any awaiting confirmations as denied.
-      for (const p of pendingConfirms.values()) p.resolve(false);
-      pendingConfirms.clear();
     },
   },
 });
@@ -466,4 +445,4 @@ if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
   }
 }
 
-process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`);
+process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (Claude Agent SDK, ${store.list().length} sessions)\n`);
