@@ -1,14 +1,34 @@
 # @fleex/sidepanel-host
 
-Local companion for the Fleex Chrome side panel assistant. Holds the Anthropic
-API key, runs the tool-use loop **server-side**, gates mutating tool calls
-behind a confirmation round-trip, and executes tools via the fleex CLI. The
-browser extension is a thin client.
+The companion behind the Fleex **Assistant**: the web/desktop panel, the mobile
+tab and the Chrome side panel all talk to it over one WebSocket.
+
+Each conversation is a **Claude Agent SDK session**, built by the same function
+as a persona run in edit mode (`buildSdkOptions('edit')` in `@fleex/shared`):
+
+- every Claude Code tool (Read, Write, Edit, Bash, Glob, Grep, Skill, Web…),
+  `AskUserQuestion` aside (the Assistant asks in text);
+- the user's and the project's MCP servers and skills (`settingSources`);
+- the whole `fleex` CLI through Bash;
+- `bypassPermissions`, and the persona env (`FLEEX_ACTOR_*` signed
+  `Assistant`, background tasks off) plus `FLEEX_WORKSPACE` of the conversation;
+- Claude Code's own login, `ANTHROPIC_API_KEY` as a fallback.
+
+Its cwd is the **conversation folder** `<basePath>/workspaces/assistant-<8 hex>`
+(`basePath` of the conversation's workspace in `~/.fleex/workspaces.json`),
+created on the first message with a `{ kind: 'assistant' }` `.fleex.json`, and
+deleted with the conversation. `fleex worktree cleanup` lists these folders
+(`assistant_workspace`) and never removes them.
+
+**The one confirmation:** a `Write`, `Edit` or `NotebookEdit` whose target
+(symlinks followed) is outside the conversation folder waits for the user —
+a `PreToolUse` hook awaits the answer. "Always" lets later outside writes of
+that conversation through (persisted, shown as a removable chip). Bash, MCP and
+`fleex` are never blocked.
 
 ## Run
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
 # production (fleex on PATH)
 bun run packages/sidepanel-host/src/server.ts
 # in-repo dev (run the CLI via bun)
@@ -18,72 +38,58 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 
 | Env | Meaning |
 |---|---|
-| `ANTHROPIC_API_KEY` | Required for live use |
+| `ANTHROPIC_API_KEY` | Fallback when Claude Code is not logged in |
 | `FLEEX_SIDEPANEL_PORT` | Listen port (default 4399) |
 | `FLEEX_SIDEPANEL_MODEL` | Model id (default `claude-opus-5`) |
-| `FLEEX_MCP_BIN` / `FLEEX_MCP_PREFIX` | fleex binary + prefix args |
-| `FLEEX_SIDEPANEL_DEV` | `1` enables hot reload: watch the extension dir and tell the panel to reload on change |
+| `FLEEX_SIDEPANEL_ALLOWED_ORIGINS` | Extra WebSocket origins, comma-separated |
+| `FLEEX_MCP_BIN` / `FLEEX_MCP_PREFIX` | fleex binary + prefix args (badges catalogue, ticket picker, attach) |
+| `FLEEX_SIDEPANEL_DEV` | `1` enables hot reload of the extension |
 | `FLEEX_EXTENSION_DIR` | Override the watched extension dir (default: repo `extension/`) |
 
 ## HTTP
 
-- `GET /health` → `{ ok, tools }`
-- `GET /workspaces` → `[{ name, isDefault }]`
-- `GET /chat` → WebSocket upgrade
+- `GET /health` → `{ ok, engine, hasApiKey }`
+- `GET /workspaces`, `GET /models`, `GET /theme`
+- `GET /chat` → WebSocket upgrade. **Origins:** none (non-browser),
+  `chrome-extension://`, `localhost` / `127.0.0.1`, `https://*.ts.net`, plus
+  `FLEEX_SIDEPANEL_ALLOWED_ORIGINS`. Anything else gets a 403: the Assistant
+  runs Bash without asking, and browsers let any page open a WebSocket to
+  localhost.
 
 ## WebSocket protocol (`/chat`)
 
-Multiple conversations (**sessions**) are multiplexed over one socket, routed by
-`sessionId`. Sessions are persisted to `~/.fleex/.sidepanel/sessions/<id>.json`
-and survive a restart (a stale `working` status is reset to `idle` on load).
+Conversations are multiplexed by `sessionId` and persisted to
+`~/.fleex/.sidepanel/sessions/<id>.json`.
 
 Client → server:
 
 | `type` | Fields | Effect |
 |---|---|---|
-| `list_sessions` | — | Request the session list |
-| `new_session` | `workspace?` | Create a conversation; replies `session_created` |
-| `open_session` | `id` | Fetch a conversation's transcript (on switch) |
-| `rename_session` | `id`, `title` | Rename |
-| `delete_session` | `id` | Close/delete |
-| `set_workspace` | `id`, `workspace` | Set a conversation's workspace (`--workspace`) |
-| `user` | `sessionId`, `text` | Run an assistant turn |
-| `page` | `sessionId`, `content`, `url?`, `title?` | Attach current page (used once, untrusted) |
-| `confirm` | `sessionId`, `id`, `approved`, `always?` | Approve/deny a pending mutating tool call. `always: 'tool' \| 'session'` also grants a standing approval (ignored on a denial) |
-| `set_auto_approve` | `id`, `all`, `tools` | Replace a conversation's auto-approval state (full replacement, not a patch) |
+| `list_sessions` / `new_session` / `open_session` / `rename_session` / `delete_session` / `set_workspace` / `set_model` / `record_exchange` | as before | Conversation management. `open_session` also re-sends pending confirmations and the MCP status; `delete_session` deletes the folder too |
+| `user` | `sessionId`, `text` | Run a turn |
+| `continue` | `sessionId` | Go on after `max_turns` (a technical "Continue." turn) |
+| `stop` | `sessionId` | Interrupt the turn; a pending confirmation is refused |
+| `page` | `sessionId`, `content`, `url?`, `title?` | Attach the current page to the next turn (data, never instructions) |
+| `confirm` | `id`, `decision: 'allow' \| 'deny' \| 'always'` | Answer an outside-folder write |
+| `set_outside_writes` | `sessionId`, `allowed` | The ⚡ chip |
+| `open_path` / `reveal_folder` | `sessionId`, `path?` | Open a file of the folder / reveal the folder (paths outside the folder are refused) |
+| `list_tickets` | `sessionId`, `query?` | Ticket picker → `tickets` |
+| `attach_artifact` | `sessionId`, `path`, `ticketId`, `displayId?` | `fleex ticket deliverable add … --agent-name Assistant` → `artifact` updated, or `artifact_attach_failed` |
 
-Server → client:
+Server → client (all carry `sessionId`):
 
 | `type` | Fields |
 |---|---|
-| `sessions` | `sessions: [{ id, title, workspace?, status, messageCount, createdAt, autoApprove }]` — drives the sidebar; re-sent on every change |
-| `session_created` | `id` |
-| `session_history` | `id`, `transcript` — re-render the chat on switch |
-| `text` | `sessionId`, `text` (streamed delta) |
-| `tool_call` | `sessionId`, `id`, `name`, `input`, `argv`, `mutating`, `autoApproved` |
-| `confirm_request` | `sessionId`, `id`, `name`, `argv`, `input` |
-| `tool_result` | `sessionId`, `id`, `name`, `ok`, `text` |
-| `tool_denied` | `sessionId`, `id`, `name` |
-| `done` | `sessionId`, `stopReason` |
-| `error` | `sessionId?`, `message` |
-| `page_attached` | `sessionId`, `title` |
-| `auto_approve_disarmed` | `sessionId`, `reason: 'page_attached'` |
+| `sessions` | `[{ id, title, workspace?, model?, status, messageCount, createdAt, lastMessageAt, workDir?, outsideWritesAllowed, legacy }]` |
+| `session_history` | `id`, `transcript` (`{role,text}`, `{tool}`, `{artifact}`, `{notice}`) |
+| `text` | `text` (a whole text block, appended) |
+| `tool_call` | `id`, `name`, `toolKind`, `target`, `input`, `access?` (fleex badge), `outsideWorkDir?` |
+| `tool_result` | `id`, `name`, `status`, `ok`, `text`, `exitCode?`, `truncated?`, `outsideAutoAllowed?` |
+| `confirm_request` | `id`, `tool`, `path`, `diff`, `isNewFile` |
+| `artifact` | `turnId`, `card`, `replaces?` · `artifact_modified` `path` |
+| `mcp_status` | `servers: [{ name, status, error? }]` |
+| `max_turns` | `limit` · `notice` `notice` |
+| `auth_missing` · `tickets` · `error` · `done` · `page_attached` | |
 
-**Status** (`idle` / `working` / `awaiting_input`) is broadcast via `sessions`
-so the sidebar shows, per conversation, whether the LLM is working, waiting for
-your confirmation, or idle.
-
-**Gating:** read-only tools run automatically; mutating tools emit
-`confirm_request` and block until the client replies with `confirm`.
-
-**Auto-approval** (`⚡ Always allow`) short-circuits that round-trip for a
-command name — or for everything — within **one conversation**. It is stored on
-the session (so it survives a companion restart mid-batch), never inherited by
-a new conversation, and wiped when a page is attached (untrusted content is the
-injection vector the gate defends against). The predicate is re-read on every
-call, so approving the first of 50 `ticket create` calls clears the other 49 in
-the same turn.
-
-The loop, gating, and streaming are unit-tested in `tests/assistant.test.ts`;
-the session store in `tests/sessions.test.ts`; the auto-approval decisions in
-`tests/auto-approve.test.ts`.
+Tested in `tests/runner.test.ts` (whole turns against a scripted SDK), plus one
+test file per module.

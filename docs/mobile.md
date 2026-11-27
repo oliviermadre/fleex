@@ -100,8 +100,9 @@ exécution.
 Prérequis sur le laptop — un seul :
 
 - Le companion tourne : `fleex companion status` (démarré automatiquement par
-  `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
-  dans `~/.fleex/config`.
+  `fleex start` ; sinon `fleex companion start`). Il utilise la connexion
+  Claude Code de la machine, comme les personas (`ANTHROPIC_API_KEY` dans
+  `~/.fleex/config` sert de secours).
 
 C'est tout. Avec `fleex start` (qui lance toujours le dev server Vite), le
 proxy `/companion/*` → companion (port 4399 par défaut, `FLEEX_SIDEPANEL_PORT`
