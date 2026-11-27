@@ -108,7 +108,7 @@ export async function probeCompanion(port: number = COMPANION_PORT, timeoutMs = 
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(`http://localhost:${port}/health`, { signal: ctrl.signal });
+    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: ctrl.signal });
     clearTimeout(t);
     if (!res.ok) return null;
     const body = (await res.json()) as CompanionHealth;

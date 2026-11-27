@@ -126,6 +126,11 @@ tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
 - **« Host not allowed » en dev** : le hostname `.ts.net` est autorisé dans
   `packages/web/vite.config.ts` (`allowedHosts`). Si tu passes par un autre
   domaine (reverse proxy custom), ajoute-le là.
+- **L'Assistant ne se connecte pas (403 « Forbidden origin »)** : le companion
+  n'accepte que le nom tailnet de **cette** machine (lu dans
+  `tailscale status`), pas n'importe quel `*.ts.net`. Si tu passes par un autre
+  nom, ajoute son origine à `FLEEX_SIDEPANEL_ALLOWED_ORIGINS` dans
+  `~/.fleex/config`, puis `fleex companion stop && fleex companion start`.
 - **Le HMR (rechargement dev) ne suit pas via HTTPS** : utilise le build de
   prod (`bun run build` puis `bun run start`) et pointe `tailscale serve` sur
   le port du serveur au lieu du port web.

@@ -41,7 +41,7 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 | `ANTHROPIC_API_KEY` | Fallback when Claude Code is not logged in |
 | `FLEEX_SIDEPANEL_PORT` | Listen port (default 4399) |
 | `FLEEX_SIDEPANEL_MODEL` | Model id (default `claude-opus-5`) |
-| `FLEEX_SIDEPANEL_ALLOWED_ORIGINS` | Extra WebSocket origins, comma-separated |
+| `FLEEX_SIDEPANEL_ALLOWED_ORIGINS` | Extra WebSocket origins, comma-separated. Listing a `chrome-extension://<id>` pins the extension: other extensions are refused |
 | `FLEEX_MCP_BIN` / `FLEEX_MCP_PREFIX` | fleex binary + prefix args (badges catalogue, ticket picker, attach) |
 | `FLEEX_SIDEPANEL_DEV` | `1` enables hot reload of the extension |
 | `FLEEX_EXTENSION_DIR` | Override the watched extension dir (default: repo `extension/`) |
@@ -50,11 +50,18 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 
 - `GET /health` → `{ ok, engine, hasApiKey }`
 - `GET /workspaces`, `GET /models`, `GET /theme`
-- `GET /chat` → WebSocket upgrade. **Origins:** none (non-browser),
-  `chrome-extension://`, `localhost` / `127.0.0.1`, `https://*.ts.net`, plus
+- `GET /chat` → WebSocket upgrade. **Origins:** none (non-browser, local
+  only since the host listens on `127.0.0.1`), `localhost` / `127.0.0.1`,
+  `https://<this machine's tailnet name>` (read from `tailscale status`, never
+  any `*.ts.net`: Funnel lets anyone publish one), `chrome-extension://` (any,
+  unless one is pinned in `FLEEX_SIDEPANEL_ALLOWED_ORIGINS`), plus
   `FLEEX_SIDEPANEL_ALLOWED_ORIGINS`. Anything else gets a 403: the Assistant
   runs Bash without asking, and browsers let any page open a WebSocket to
   localhost.
+
+The host listens on **`127.0.0.1` only**: the LAN and the tailnet cannot reach
+it directly. The phone goes through the Vite proxy (`/companion`) or
+`tailscale serve`, which both connect from the machine itself.
 
 ## WebSocket protocol (`/chat`)
 

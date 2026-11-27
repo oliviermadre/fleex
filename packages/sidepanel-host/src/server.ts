@@ -38,7 +38,7 @@ import { loadAccessCatalog, type AccessCatalog } from './fleex-access.ts';
 import { allWorkspacesRoots, removeWorkDir, workspacesRootFor } from './work-dir.ts';
 import { deliverableTypeFor, lastCitedTicket } from './artifacts.ts';
 import { attachDeliverable, createRunCli, listTickets } from './fleex-cli.ts';
-import { isAllowedOrigin } from './origin.ts';
+import { isAllowedOrigin, LISTEN_HOSTNAME } from './origin.ts';
 
 export const DEFAULT_MODEL = 'claude-opus-5';
 
@@ -191,6 +191,8 @@ function asString(v: unknown): string | undefined {
 }
 
 Bun.serve<WsData>({
+  // Loopback only: the Assistant runs Bash without asking (see origin.ts).
+  hostname: LISTEN_HOSTNAME,
   port: PORT,
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -445,4 +447,4 @@ if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
   }
 }
 
-process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (Claude Agent SDK, ${store.list().length} sessions)\n`);
+process.stderr.write(`fleex-sidepanel-host listening on http://${LISTEN_HOSTNAME}:${PORT} (Claude Agent SDK, ${store.list().length} sessions)\n`);
