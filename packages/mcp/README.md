@@ -1,7 +1,7 @@
 # @fleex/mcp
 
 A Model Context Protocol (MCP) **stdio server** exposing the fleex CLI domain
-surface — tickets, epics, boards, deliverables — as typed tools, plus the
+surface — tickets, epics, routines, workflows, memory, the agenda, deliverables, the Factory floor — as typed tools, plus the
 generator that produces them.
 
 ## How it works
@@ -38,7 +38,7 @@ the running CLI):
 # foreground stdio server scoped to one workspace
 fleex mcp start --workspace evaneos
 
-# limit the exposed command groups (default: ticket,epic)
+# choose the exposed command groups (default: ticket,epic,routine,workflow,memory,agenda,deliverable,factory)
 fleex mcp start --workspace evaneos --include ticket,epic,panel
 ```
 
@@ -73,4 +73,4 @@ claude mcp add fleex -- bunx @fleex/mcp
 | `FLEEX_WORKSPACE` | Target workspace, injected as `--workspace` |
 | `FLEEX_MCP_BIN` | fleex binary (default `fleex`) |
 | `FLEEX_MCP_PREFIX` | Space-separated args before the fleex argv (e.g. `run …index.ts` for bun) |
-| `FLEEX_MCP_INCLUDE` | Comma-separated top-level groups to expose (default `ticket,epic`) |
+| `FLEEX_MCP_INCLUDE` | Comma-separated top-level groups to expose (default: `DEFAULT_INCLUDE` in `src/generator.ts`) |

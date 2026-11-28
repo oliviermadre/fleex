@@ -16,7 +16,7 @@ const def: CommandDef = {
     );
     cmd.option(
       '--include <groups>',
-      'Comma-separated top-level command groups to expose as tools (default: ticket,epic)',
+      'Comma-separated top-level command groups to expose as tools (default: ticket,epic,routine,workflow,memory,agenda,deliverable,factory)',
     );
   },
   extraHelp: `\n${SECTION('Foreground only:')}

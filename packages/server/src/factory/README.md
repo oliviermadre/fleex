@@ -683,6 +683,62 @@ Imported machines get new ids (teleporters stay paired). On an empty floor the i
 replace the floor (Undo brings it back, the tickets of the machines gone lie on the floor), or take it in hand like a
 paste (the report shows once it is put down). A file of another layout version is refused.
 
+## From the command line, the MCP and the API
+
+The floor is operated without the page too, as the rest of Fleex is. Three ways in, one behind the other: a tool of
+the MCP runs a command of the CLI, a command calls routes of the API, and the routes are the ones the page uses plus a
+few made for this.
+
+**The API** (`/api/factory`, `factory.routes.ts`). The page draws from `GET /state`, the whole snapshot with its
+layout: thousands of belt tiles, which is not what a command or a tool call should print. So the same snapshot is
+also read as answers of a few lines, with no layout in them (`operate.ts`, pure functions of a snapshot):
+
+- `GET /overview`: stopped or not, runs against the two limits, tickets and items, how many wait for someone and for
+  what, how many machines of each kind, the stations that start nothing (switched off, not set up).
+- `GET /needs`: what waits for someone, the longest wait first, as the page lists it (`needs.ts` on the page; the two
+  say the same thing of the same ticket).
+- `GET /tickets` (`?kind=ticket|item`, `?machineId=`) and `GET /tickets/:id`: each ticket or item with where it
+  stands in words (`where`, `state`), what it waits for (`need`), what can be done with it now (`actions`, as the
+  engine would accept it) and the outcomes it can be given.
+- `GET /machines` (`?kind=`): the machines without their settings, each with how much stands on it;
+  `GET /machines/:id`: one, with its settings as the layout holds them (`spec`) and what stands on it.
+- `GET /layout`: the layout alone, as `PUT /layout` takes it back.
+
+The page saves the whole layout. A command changes one machine, so three routes read and write the layout in one go
+on the server (a change made there cannot undo one the page made meanwhile), each checked as a whole layout is
+(`normaliseLayout`) and refused with the reason: `POST /machines` (a spec, or `{ machines: [...] }` for a line of
+belts; ids are given when missing), `PATCH /machines/:id` (what the body names replaces what the machine had, a
+`null` takes a setting off; neither its id nor its kind changes), `DELETE /machines/:id` (what stood on it is left on
+the floor). Everything else a command does goes through the routes the page already had.
+
+**The CLI** (`packages/cli/src/commands/factory/`, `fleex factory --help`):
+
+| | |
+|---|---|
+| `status`, `enable`, `disable` | the floor at a glance; the workspace's switch (`factoryEnabled`) |
+| `needs` | what waits for someone, with what to type for each |
+| `halt`, `resume`, `limits` | the emergency stop; the two run limits |
+| `stats`, `runs`, `exits` | what the floor did, its latest runs, what left by the exits |
+| `ticket list\|show\|send\|move\|release\|decide\|retry\|aside\|put-back\|take-back\|runs` | a ticket of the floor: hand it over, move it, decide at a gate, run its station again |
+| `item list\|show\|create\|edit\|archive\|archived\|bring-back\|runs` | what only an item has; it is moved and decided on with the `ticket` commands |
+| `machine list\|show\|power\|add\|edit\|remove` | one machine at a time: common settings as flags, anything else as `--spec <json>` |
+| `layout export\|import` | the floor as the file the page's Export writes |
+| `intake pull\|mail` | pull a Gmail intake now; whether the mailbox can be read |
+
+A ticket is named by its number (`42`, `#42`), an item by the start of its id, a machine by its name (case does not
+matter), its id or the start of it; a reference that matches several is refused with the list, never guessed. Every
+command that acts on a ticket answers with where it stands now, so what to do next is in the answer; with `--json` that
+is one line of JSON, and never the snapshot. `machine remove` and `layout import` ask first (`-f` skips it).
+`layout export` prints and writes no file: it is also a tool an agent calls, and a shell redirects.
+
+**The MCP** (`packages/mcp`): the tools are made from the CLI's command tree, so the group is one more name in
+`DEFAULT_INCLUDE` (`generator.ts`) and each command is a tool, `fleex_factory_<command>`; readings are announced
+read-only, `machine remove` and `layout import` destructive.
+
+Not there: drawing a floor (placing by hand is the page's job; a plan from a workflow is made in the page), the
+saved selections, and a floor from another instance, which the page's Import matches by name where `layout import`
+keeps what the file says.
+
 ## What waits for someone
 
 Out of build mode, the tickets that wait for someone are listed top-left over the floor (`needs.ts`,
@@ -830,6 +886,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | `infrastructure/container.ts` | builds the module (with the gogcli mail source), exposes `container.factory` |
 | `application/ports/agent-event-store.port.ts` and its four adapters | an optional `getExecutionsByIds`: what a run with no ticket (an item's) cost. It can stay |
 | `main.ts` | registers `/api/factory/*`, starts and stops the engine |
+| cli: `packages/cli/src/commands/factory/`, mcp: `generator.ts` | the `fleex factory` commands, and `factory` in `DEFAULT_INCLUDE` so each is a tool (see "From the command line, the MCP and the API") |
 | `application/ports/config.port.ts` | `factoryEnabled`, `isFactoryEnabled()` |
 | `infrastructure/http/focus.routes.ts` | a Factory-managed ticket is not listed as `idle` |
 | `application/use-cases/execute-agent.ts`, `services/step-executors/{types,agent-step-executor,skill-step-executor}.ts` | an optional model for one workflow-step or skill execution (`model`, `modelOverride`): unset by workflows, set by an agent or skill station |
@@ -855,7 +912,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 ## Removing it
 
 1. Switch the flag off, then run the migrations' `down()` (`cli-migrate.ts rollback`, 051 to 045), or drop the seven tables.
-2. Delete this folder, `packages/web/src/factory/`, `infrastructure/google/gog-mail.source.ts`, the migration files and the test files
+2. Delete this folder, `packages/web/src/factory/`, `packages/cli/src/commands/factory/` (and `factory` in the MCP's `DEFAULT_INCLUDE`), `infrastructure/google/gog-mail.source.ts`, the migration files and the test files
    (`tests/unit/factory-*.test.ts`).
 3. Revert the hooks listed above: each is a few lines that mention `factory`. The optional model of a workflow-step
    execution does not; it can stay, since it changes nothing while unset.

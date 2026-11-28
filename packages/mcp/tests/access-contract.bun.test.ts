@@ -39,6 +39,12 @@ const CORRECTED: Record<string, { readOnlyHint: boolean; destructiveHint: boolea
   fleex_memory_compile: { readOnlyHint: false, destructiveHint: false },
 };
 
+/**
+ * Groups added to the default surface after the migration: they never had a verb-list
+ * annotation, so the fixture has nothing to say about them. Their own test is below.
+ */
+const ADDED_SINCE = ['fleex_factory_'];
+
 function runnable(cmd: Command, path: string[] = []): Array<{ cmd: Command; path: string[] }> {
   const subs = cmd.commands.filter((c) => c.name() !== 'help');
   const out = subs.flatMap((c) => runnable(c, [...path, c.name()]));
@@ -56,7 +62,7 @@ describe('CommandDef.access', () => {
 
   it('keeps the default MCP surface annotations, apart from the listed corrections', () => {
     const now = Object.fromEntries(
-      listTools(generateTools(root)).tools.map((t) => [
+      listTools(generateTools(root)).tools.filter((t) => !ADDED_SINCE.some((prefix) => t.name.startsWith(prefix))).map((t) => [
         t.name,
         { readOnlyHint: t.annotations.readOnlyHint, destructiveHint: t.annotations.destructiveHint },
       ]),
@@ -64,5 +70,21 @@ describe('CommandDef.access', () => {
     const expected = { ...(before as typeof now), ...CORRECTED };
     expect(Object.keys(now).sort()).toEqual(Object.keys(expected).sort());
     expect(now).toEqual(expected);
+  });
+
+  it('announces the Factory tools as what they are: readings read-only, removals destructive', () => {
+    const factory = Object.fromEntries(
+      listTools(generateTools(root)).tools.filter((t) => t.name.startsWith('fleex_factory_')).map((t) => [t.name, t.annotations]),
+    );
+    expect(Object.keys(factory).length).toBeGreaterThan(30);
+    for (const name of ['status', 'needs', 'stats', 'runs', 'exits', 'ticket_list', 'ticket_show', 'item_show', 'machine_list', 'machine_show', 'layout_export']) {
+      expect(factory[`fleex_factory_${name}`], name).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    }
+    // Losing a machine's settings, or the whole floor, is what a host should ask about first.
+    const destructive = Object.entries(factory).filter(([, a]) => a.destructiveHint).map(([name]) => name).sort();
+    expect(destructive).toEqual(['fleex_factory_layout_import', 'fleex_factory_machine_remove']);
+    for (const name of ['halt', 'ticket_decide', 'ticket_send', 'ticket_take_back', 'machine_edit', 'item_archive']) {
+      expect(factory[`fleex_factory_${name}`], name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    }
   });
 });
