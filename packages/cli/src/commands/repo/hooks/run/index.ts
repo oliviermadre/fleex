@@ -8,6 +8,7 @@ import { WORKTREE_OPTION, fetchWorktrees, singleWorktree, worktreeTarget } from 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'run',
+  access: 'write',
   description: 'Run a worktree hook now (setup: file hooks then the Setup script; teardown)',
   setup(cmd) {
     cmd.argument('<hook>', 'setup | teardown');

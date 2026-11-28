@@ -17,12 +17,6 @@ export const ASSISTANT_BASE = '/companion';
 
 export type AssistantSessionStatus = 'idle' | 'working' | 'awaiting_input';
 
-/** Mutating commands this conversation runs without asking again. */
-export interface AssistantAutoApprove {
-  all: boolean;
-  tools: string[];
-}
-
 export interface AssistantSession {
   id: string;
   title: string;
@@ -33,8 +27,12 @@ export interface AssistantSession {
   createdAt: string;
   /** Absent on sessions persisted by an older companion. */
   lastMessageAt?: string;
-  /** Absent when served by an older companion — treat as nothing approved. */
-  autoApprove?: AssistantAutoApprove;
+  /** The conversation folder, once its first message created it. */
+  workDir?: string;
+  /** "Always allow writes outside the folder" is on for this conversation. */
+  outsideWritesAllowed?: boolean;
+  /** A conversation from before the SDK, not resumed yet. */
+  legacy?: boolean;
 }
 
 export interface AssistantWorkspace {
@@ -43,32 +41,101 @@ export interface AssistantWorkspace {
   branch?: string | null;
 }
 
-export type AssistantToolStatus = 'running' | 'ok' | 'fail' | 'denied';
+export type AssistantToolStatus = 'running' | 'ok' | 'fail' | 'denied' | 'stopped' | 'interrupted';
+export type AssistantAccess = 'read' | 'write' | 'destructive';
+
+export type AssistantArtifactPreview =
+  | { type: 'csv'; rows: string[][] }
+  | { type: 'markdown'; text: string }
+  | { type: 'html'; html: string }
+  | { type: 'text'; text: string }
+  | { type: 'image'; dataUrl: string };
+
+export interface AssistantArtifact {
+  path: string;
+  relPath: string;
+  name: string;
+  kind: 'script' | 'full';
+  mime: string;
+  sizeBytes: number;
+  preview?: AssistantArtifactPreview;
+  attachable: boolean;
+  attachments: Array<{ ticketId: string; displayId: string; url?: string }>;
+  modifiedSince?: boolean;
+  turnId: string;
+}
+
+export type AssistantNotice = 'max_turns' | 'continued' | 'legacy_resumed' | 'context_reloaded';
+
+export interface AssistantToolItem {
+  kind: 'tool';
+  id?: string;
+  name: string;
+  /** Pre-SDK lines: the fleex argv that ran. */
+  argv?: string[];
+  toolKind?: string;
+  target?: string;
+  access?: AssistantAccess;
+  outsideWorkDir?: boolean;
+  outsideAutoAllowed?: boolean;
+  status: AssistantToolStatus;
+  text?: string;
+  exitCode?: number;
+  truncated?: boolean;
+  /** Pre-SDK lines: ran without a confirmation. */
+  autoApproved?: boolean;
+  /** Client clock when the call started (live lines only), for the chrono. */
+  startedAt?: number;
+}
 
 export type AssistantChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
-  | {
-      kind: 'tool';
-      id?: string;
-      name: string;
-      argv: string[];
-      status: AssistantToolStatus;
-      text?: string;
-      /** Ran without a confirmation — surfaced in the transcript for audit. */
-      autoApproved?: boolean;
-    };
+  | AssistantToolItem
+  | { kind: 'artifact'; artifact: AssistantArtifact }
+  | { kind: 'notice'; notice: AssistantNotice; limit?: number };
 
 /** `fleex_ticket_create` → `ticket create`, for labels a human can read. */
 export function toolLabel(name: string): string {
   return name.replace(/^fleex_/, '').replace(/_/g, ' ');
 }
 
+/** "outil · cible" of a tool line. */
+export function toolLineLabel(item: AssistantToolItem): string {
+  if (item.argv) return `fleex ${item.argv.join(' ')}`;
+  return item.target ? `${item.name} · ${item.target}` : item.name;
+}
+
+/** A write outside the conversation folder, waiting for the user. */
 export interface AssistantConfirmRequest {
   sessionId: string;
   id: string;
+  tool: string;
+  path: string;
+  diff: string;
+  isNewFile: boolean;
+}
+
+export type AssistantConfirmDecision = 'allow' | 'deny' | 'always';
+
+export interface AssistantMcpServer {
   name: string;
-  argv: string[];
+  status: 'connected' | 'needs-auth' | 'failed' | 'pending';
+  error?: string;
+}
+
+export interface AssistantTicketOption {
+  id: string;
+  displayId: string;
+  title: string;
+  status: string;
+}
+
+export interface AssistantTicketPicker {
+  sessionId: string;
+  tickets: AssistantTicketOption[];
+  /** Last ticket cited in the conversation (display id or UUID). */
+  preselect: string | null;
 }
 
 interface AssistantState {
@@ -76,12 +143,16 @@ interface AssistantState {
   sessions: AssistantSession[];
   activeId: string | null;
   itemsBySession: Record<string, AssistantChatItem[]>;
-  /** Pending mutating-command approvals — one per session can be in flight. */
+  /** Writes outside a conversation folder waiting for the user. */
   confirmReqs: AssistantConfirmRequest[];
   errorMsg: string | null;
   workspaces: AssistantWorkspace[];
-  /** Set when the server disarmed auto-approval on its own; null = nothing to say. */
-  autoApproveNotice: string | null;
+  /** MCP servers as the last turn of each conversation saw them. */
+  mcpBySession: Record<string, AssistantMcpServer[]>;
+  /** Neither a Claude Code login nor an API key: where to set one up. */
+  authMissing: boolean;
+  /** Tickets for the "attach to a ticket" picker, once listed. */
+  ticketPicker: AssistantTicketPicker | null;
 
   /** Connect once and keep the socket for the app's lifetime (idempotent). */
   ensureConnected: () => void;
@@ -110,10 +181,19 @@ interface AssistantState {
   renameSession: (id: string, title: string) => void;
   setModel: (id: string, model: string | undefined) => void;
   sendUser: (text: string) => void;
-  /** `always` upgrades an approval into a standing one for this conversation. */
-  answerConfirm: (id: string, approved: boolean, always?: 'tool' | 'session') => void;
-  setAutoApprove: (sessionId: string, next: AssistantAutoApprove) => void;
-  clearAutoApproveNotice: () => void;
+  /** `always` also lets every later outside write of this conversation through. */
+  answerConfirm: (id: string, decision: AssistantConfirmDecision) => void;
+  /** The ⚡ chip: turn "always allow writes outside the folder" off (or on). */
+  setOutsideWrites: (sessionId: string, allowed: boolean) => void;
+  /** Interrupt the running turn (a pending confirmation counts as refused). */
+  stop: (sessionId: string) => void;
+  /** Go on after the turn budget ran out. */
+  continueTurn: (sessionId: string) => void;
+  openPath: (sessionId: string, path: string) => void;
+  revealFolder: (sessionId: string) => void;
+  listTickets: (sessionId: string, query?: string) => void;
+  closeTicketPicker: () => void;
+  attachArtifact: (sessionId: string, path: string, ticket: AssistantTicketOption) => void;
   clearError: () => void;
 }
 
@@ -162,6 +242,31 @@ function sendMsg(msg: Record<string, unknown>, queue = true): void {
   outbox.push(msg);
 }
 
+function isAccess(v: unknown): v is AssistantAccess {
+  return v === 'read' || v === 'write' || v === 'destructive';
+}
+
+function isToolStatus(v: unknown): v is AssistantToolStatus {
+  return v === 'running' || v === 'ok' || v === 'fail' || v === 'denied' || v === 'stopped' || v === 'interrupted';
+}
+
+/** One persisted transcript entry → a chat item. */
+export function fromTranscript(t: unknown): AssistantChatItem {
+  const o = t as Record<string, unknown>;
+  if (o.tool) {
+    const tool = o.tool as Omit<AssistantToolItem, 'kind'>;
+    return {
+      kind: 'tool',
+      ...tool,
+      status: isToolStatus(tool.status) ? tool.status : 'interrupted',
+      autoApproved: tool.autoApproved === true,
+    };
+  }
+  if (o.artifact) return { kind: 'artifact', artifact: o.artifact as AssistantArtifact };
+  if (o.notice) return { kind: 'notice', notice: o.notice as AssistantNotice, ...(typeof o.limit === 'number' ? { limit: o.limit } : {}) };
+  return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
+}
+
 export const useAssistantStore = create<AssistantState>((set, get) => {
   function appendItem(sessionId: string, item: AssistantChatItem): void {
     set((s) => ({
@@ -169,6 +274,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         ...s.itemsBySession,
         [sessionId]: [...(s.itemsBySession[sessionId] ?? []), item],
       },
+    }));
+  }
+
+  function updateItems(sessionId: string, f: (it: AssistantChatItem) => AssistantChatItem): void {
+    set((s) => ({
+      itemsBySession: { ...s.itemsBySession, [sessionId]: (s.itemsBySession[sessionId] ?? []).map(f) },
     }));
   }
 
@@ -187,27 +298,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       case 'session_history': {
         const id = msg.id as string;
         const transcript = (msg.transcript as unknown[]) ?? [];
-        const items = transcript.map((t): AssistantChatItem => {
-          const o = t as Record<string, unknown>;
-          if (o.tool) {
-            const tool = o.tool as {
-              name: string;
-              argv: string[];
-              status: AssistantToolStatus;
-              text?: string;
-              autoApproved?: boolean;
-            };
-            return {
-              kind: 'tool',
-              name: tool.name,
-              argv: tool.argv ?? [],
-              status: tool.status,
-              text: tool.text,
-              autoApproved: tool.autoApproved === true,
-            };
-          }
-          return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
-        });
+        const items = transcript.map(fromTranscript);
         set((s) => ({ itemsBySession: { ...s.itemsBySession, [id]: items } }));
         // The history is on screen, so the question carried in can join it
         // without being replaced a moment later. Cleared first: a re-sent history
@@ -240,45 +331,99 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           kind: 'tool',
           id: msg.id as string,
           name: msg.name as string,
-          argv: (msg.argv as string[]) ?? [],
+          ...(Array.isArray(msg.argv) ? { argv: msg.argv as string[] } : {}),
+          ...(typeof msg.toolKind === 'string' ? { toolKind: msg.toolKind } : {}),
+          ...(typeof msg.target === 'string' ? { target: msg.target } : {}),
+          ...(isAccess(msg.access) ? { access: msg.access } : {}),
+          ...(msg.outsideWorkDir === true ? { outsideWorkDir: true } : {}),
           status: 'running',
-          autoApproved: msg.autoApproved === true,
+          startedAt: Date.now(),
         });
         break;
       case 'tool_result':
       case 'tool_denied': {
         if (!sessionId) break;
         const status: AssistantToolStatus =
-          msg.type === 'tool_denied' ? 'denied' : (msg.ok as boolean) ? 'ok' : 'fail';
-        set((s) => ({
-          itemsBySession: {
-            ...s.itemsBySession,
-            [sessionId]: (s.itemsBySession[sessionId] ?? []).map((it) =>
-              it.kind === 'tool' && it.id === msg.id
-                ? { ...it, status, text: (msg.text as string | undefined) ?? it.text }
-                : it,
-            ),
-          },
-        }));
+          msg.type === 'tool_denied'
+            ? 'denied'
+            : isToolStatus(msg.status)
+              ? msg.status
+              : (msg.ok as boolean)
+                ? 'ok'
+                : 'fail';
+        updateItems(sessionId, (it) =>
+          it.kind === 'tool' && it.id === msg.id
+            ? {
+                ...it,
+                status,
+                text: (msg.text as string | undefined) ?? it.text,
+                ...(typeof msg.exitCode === 'number' ? { exitCode: msg.exitCode } : {}),
+                ...(msg.truncated === true ? { truncated: true } : {}),
+                ...(msg.outsideAutoAllowed === true ? { outsideAutoAllowed: true } : {}),
+              }
+            : it,
+        );
         break;
       }
+      case 'artifact': {
+        if (!sessionId) break;
+        const artifact = { ...(msg.card as Omit<AssistantArtifact, 'turnId'>), turnId: msg.turnId as string };
+        const items = get().itemsBySession[sessionId] ?? [];
+        const same = (it: AssistantChatItem) =>
+          it.kind === 'artifact' && it.artifact.path === artifact.path && it.artifact.turnId === artifact.turnId;
+        if (items.some(same)) updateItems(sessionId, (it) => (same(it) ? { kind: 'artifact', artifact } : it));
+        else appendItem(sessionId, { kind: 'artifact', artifact });
+        break;
+      }
+      case 'artifact_modified':
+        if (!sessionId) break;
+        updateItems(sessionId, (it) =>
+          it.kind === 'artifact' && it.artifact.path === msg.path ? { kind: 'artifact', artifact: { ...it.artifact, modifiedSince: true } } : it,
+        );
+        break;
+      case 'artifact_attach_failed':
+        set({ errorMsg: `Attache impossible : ${String(msg.message ?? '')}` });
+        break;
+      case 'notice':
+        if (sessionId) appendItem(sessionId, { kind: 'notice', notice: msg.notice as AssistantNotice });
+        break;
+      case 'max_turns':
+        if (sessionId) appendItem(sessionId, { kind: 'notice', notice: 'max_turns', limit: msg.limit as number });
+        break;
+      case 'mcp_status':
+        if (sessionId) set((s) => ({ mcpBySession: { ...s.mcpBySession, [sessionId]: (msg.servers as AssistantMcpServer[]) ?? [] } }));
+        break;
+      case 'auth_missing':
+        set({ authMissing: true });
+        break;
+      case 'tickets':
+        if (sessionId) {
+          set({
+            ticketPicker: {
+              sessionId,
+              tickets: (msg.tickets as AssistantTicketOption[]) ?? [],
+              preselect: (msg.preselect as string | null) ?? null,
+            },
+          });
+        }
+        break;
       case 'confirm_request': {
         const req: AssistantConfirmRequest = {
           sessionId: sessionId ?? '',
           id: msg.id as string,
-          name: msg.name as string,
-          argv: (msg.argv as string[]) ?? [],
+          tool: (msg.tool as string) ?? 'Write',
+          path: (msg.path as string) ?? '',
+          diff: (msg.diff as string) ?? '',
+          isNewFile: msg.isNewFile === true,
         };
         set((s) => ({
           confirmReqs: s.confirmReqs.some((r) => r.id === req.id) ? s.confirmReqs : [...s.confirmReqs, req],
         }));
         break;
       }
-      case 'auto_approve_disarmed':
-        set({
-          autoApproveNotice:
-            "Auto-approbation désactivée : une page web a été jointe à la conversation.",
-        });
+      case 'done':
+        // A confirmation never outlives its turn: Stop or the end refused it.
+        if (sessionId) set((s) => ({ confirmReqs: s.confirmReqs.filter((r) => r.sessionId !== sessionId) }));
         break;
       case 'error':
         if (!sessionId || sessionId === get().activeId) {
@@ -319,7 +464,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       // A stale socket (replaced by a reconnect) must not clobber the live one.
       if (ws === socket) {
         ws = null;
-        // The server unwinds pending confirmations as denied on disconnect.
+        // Pending confirmations survive on the companion and come back with
+        // the conversation's history on reconnect.
         set({ connected: false, confirmReqs: [] });
         retryTimer = setTimeout(connect, 3000);
       }
@@ -342,7 +488,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     confirmReqs: [],
     errorMsg: null,
     workspaces: [],
-    autoApproveNotice: null,
+    mcpBySession: {},
+    authMissing: false,
+    ticketPicker: null,
 
     ensureConnected: () => {
       if (started) return;
@@ -415,19 +563,38 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       sendMsg({ type: 'user', sessionId: activeId, text: trimmed });
     },
 
-    answerConfirm: (id, approved, always) => {
+    answerConfirm: (id, decision) => {
       if (!get().confirmReqs.some((r) => r.id === id)) return;
-      // The server derives WHICH session/tool `always` applies to from its own
-      // pending-confirm entry, so we only send the scope.
-      sendMsg({ type: 'confirm', id, approved, ...(always ? { always } : {}) }, false);
+      // The server applies "always" to the pending call's own conversation.
+      sendMsg({ type: 'confirm', id, decision }, false);
       set((s) => ({ confirmReqs: s.confirmReqs.filter((r) => r.id !== id) }));
     },
 
-    setAutoApprove: (sessionId, next) => {
-      sendMsg({ type: 'set_auto_approve', id: sessionId, all: next.all, tools: next.tools });
+    setOutsideWrites: (sessionId, allowed) => {
+      sendMsg({ type: 'set_outside_writes', sessionId, allowed });
     },
 
-    clearAutoApproveNotice: () => set({ autoApproveNotice: null }),
+    stop: (sessionId) => {
+      sendMsg({ type: 'stop', sessionId }, false);
+    },
+
+    continueTurn: (sessionId) => {
+      set({ errorMsg: null });
+      sendMsg({ type: 'continue', sessionId });
+    },
+
+    openPath: (sessionId, path) => sendMsg({ type: 'open_path', sessionId, path }, false),
+
+    revealFolder: (sessionId) => sendMsg({ type: 'reveal_folder', sessionId }, false),
+
+    listTickets: (sessionId, query) => sendMsg({ type: 'list_tickets', sessionId, ...(query ? { query } : {}) }, false),
+
+    closeTicketPicker: () => set({ ticketPicker: null }),
+
+    attachArtifact: (sessionId, path, ticket) => {
+      sendMsg({ type: 'attach_artifact', sessionId, path, ticketId: ticket.id, displayId: ticket.displayId }, false);
+      set({ ticketPicker: null });
+    },
 
     clearError: () => set({ errorMsg: null }),
   };

@@ -6,6 +6,7 @@ import type { Session } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List live tmux sessions',
   action: async () => {

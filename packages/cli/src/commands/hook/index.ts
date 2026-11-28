@@ -114,6 +114,7 @@ async function postToInstance(target: InstanceTarget, body: unknown): Promise<vo
 
 const def: CommandDef = {
   name: 'hook',
+  access: 'write',
   description: 'Internal — forward a Claude Code hook event to running Fleex instances',
   setup(cmd) {
     cmd.argument(

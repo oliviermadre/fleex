@@ -9,6 +9,7 @@ interface Options { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'worktrees',
+  access: 'read',
   aliases: ['wt'],
   description: 'List the worktrees (branch ↔ path pairs) of a repository',
   setup(cmd) {

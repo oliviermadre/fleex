@@ -15,6 +15,7 @@ interface Options { repo?: string; state?: string; json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'pr',
+  access: 'read',
   aliases: ['prs', 'pulls'],
   description: 'List the pull requests of a repository',
   extraHelp: `\n${SECTION('Read-only:')}  lists a repo's PRs — it does NOT create or attach a PR.

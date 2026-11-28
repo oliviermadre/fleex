@@ -14,6 +14,7 @@ interface StatusOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'status',
+  access: 'read',
   description: 'Show what is currently exposed on tailscale (and whether an instance is)',
   setup(cmd: Command) {
     cmd.argument('[instance]', 'Instance slug to report on (defaults to the resolved instance, e.g. default@main)');

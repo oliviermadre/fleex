@@ -11,6 +11,7 @@ interface SearchOptions extends ItemFilterOptions { since?: string; until?: stri
 const def: CommandDef = {
   workspaceAware: true,
   name: 'search',
+  access: 'read',
   description:
     'Find agenda items over a long period (no window limit), nearest to today first: by text (--q), by meeting guest (--attendee) and/or type. ' +
     'Without --since/--until it looks one year back and three months ahead, and says which period it covered. ' +

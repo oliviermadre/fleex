@@ -11,6 +11,7 @@ import { runStart } from '../start/_impl.ts';
 
 const def: CommandDef = {
   name: 'desktop',
+  access: 'write',
   description: 'Open the Electron desktop window (starts stack if not running)',
   setup(cmd) {
     cmd.option('--workspace <name>', 'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)');

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import type { CommandDef } from './types.ts';
 import { applyPrettyHelp, recordExtraHelp, setRootProgram } from './help.ts';
+import { recordCommandAccess } from './access.ts';
 import { activateWorkspace } from './workspaces.ts';
 import { FleexCommand } from './parse-errors.ts';
 import { isJsonMode, setJsonMode } from './colors.ts';
@@ -59,6 +60,7 @@ function attachCommand(parent: Command, def: CommandDef): void {
   cmd.description(def.description);
   if (def.aliases?.length) cmd.aliases(def.aliases);
   if (def.setup) def.setup(cmd);
+  if (def.access) recordCommandAccess(cmd, def.access);
   const hasOption = (long: string): boolean => cmd.options.some((o) => o.long === long);
   // Global `--json` flag on every command: machine-readable output for
   // programmatic consumers (the MCP tool layer). Hidden from the MCP tool

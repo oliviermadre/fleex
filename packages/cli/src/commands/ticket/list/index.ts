@@ -164,6 +164,7 @@ export function toSlim(t: Ticket, ctx: { boardName: (id: string) => string; epic
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List tickets: done/cancelled hidden unless --status/--all, capped by --limit (default 50). --json is slim (no description); --json-full is expensive.',
   extraHelp: `

@@ -9,6 +9,7 @@ interface Options { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'branches',
+  access: 'read',
   description: 'List the branches of a repository',
   setup(cmd) {
     cmd.argument('<org/name>', 'Repository reference');

@@ -9,6 +9,7 @@ interface RevokeOptions { force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'revoke',
+  access: 'destructive',
   aliases: ['rm', 'delete'],
   description: 'Revoke an agent API token (prompts unless -f is given)',
   setup(cmd) {

@@ -11,6 +11,7 @@ interface DeleteOptions { board?: string; force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'comment-delete',
+  access: 'destructive',
   aliases: ['comment-rm'],
   description: 'Delete a comment from a ticket (comment-delete <ticket> <comment>)',
   setup(cmd) {

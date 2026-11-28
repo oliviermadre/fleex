@@ -84,6 +84,7 @@ async function runHubStatus(): Promise<void> {
 
 const def: CommandDef = {
   name: 'status',
+  access: 'read',
   description: 'Show event hub status (port, connected clients, uptime)',
   action: async () => {
     await runHubStatus();

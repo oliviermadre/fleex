@@ -31,6 +31,7 @@ const runnable = (s: ClaudeCodeSkillRow) => s.enabled && s.status === 'present';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List skills with their @skill: handle, name and origin (fleex or cc:<origin>)',
   setup(cmd) {

@@ -3,64 +3,59 @@
  *
  * Each conversation is a Session persisted to disk under
  * `~/.fleex/.sidepanel/sessions/<id>.json`, so sessions survive a companion
- * restart or dev hot-reload (in-memory-only state would be wiped). The store
- * keeps both the Anthropic `messages` (for the LLM) and a `transcript` (UI
- * items) so a session can be re-rendered verbatim when the user switches to it.
+ * restart or dev hot-reload (in-memory-only state would be wiped).
+ *
+ * The model's context lives in the Claude Agent SDK session (`sdkSessionId`,
+ * resumed each turn). `transcript` holds the UI items so a conversation is
+ * re-rendered verbatim when the user switches to it. `messages` (Messages API
+ * format) is only read: it holds what the SDK session has not seen yet — the
+ * history of a conversation from before the SDK, or an exchange recorded from
+ * the command palette — and is handed over as a preamble on the next turn.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Access } from './fleex-access.ts';
+import type { ArtifactCard } from './artifacts.ts';
+import type { ToolKind, ToolStatus } from './agent-turn.ts';
 
 export type SessionStatus = 'idle' | 'working' | 'awaiting_input';
+
+/** One tool call as the chat shows it. */
+export interface ToolLine {
+  /** tool_use id (absent on lines persisted before the SDK). */
+  id?: string;
+  name: string;
+  /** Legacy (pre-SDK) lines: the fleex argv that ran. */
+  argv?: string[];
+  toolKind?: ToolKind;
+  /** "outil · cible" — path, command, pattern, `server · tool`… */
+  target?: string;
+  /** Badge of a Bash line running `fleex` (display only). */
+  access?: Access;
+  /** A Write/Edit aimed outside the conversation folder. */
+  outsideWorkDir?: boolean;
+  /** Let through by "always allow outside writes" (⚡). */
+  outsideAutoAllowed?: boolean;
+  status: ToolStatus;
+  text?: string;
+  exitCode?: number;
+  truncated?: boolean;
+  /** Legacy: ran without a confirmation round-trip. */
+  autoApproved?: boolean;
+}
+
+export type NoticeKind = 'max_turns' | 'continued' | 'legacy_resumed' | 'context_reloaded';
 
 /** A rendered transcript entry — enough to rebuild the chat view on switch. */
 export type TranscriptItem =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string }
-  | {
-      tool: {
-        name: string;
-        argv: string[];
-        status: 'running' | 'ok' | 'fail' | 'denied';
-        text?: string;
-        /** Ran without a confirmation round-trip (conversation allowlist). */
-        autoApproved?: boolean;
-      };
-    };
-
-/**
- * Auto-approval of mutating tools, scoped to a single conversation.
- *
- * Consent never leaves the conversation that granted it: a new session always
- * starts empty (see `create`), and it is wiped as soon as untrusted web-page
- * content is attached (the prompt-injection vector the confirmation gate exists
- * for — see `server.ts`, `page` handler).
- */
-export interface AutoApprove {
-  /** true = every mutating tool runs without confirmation in this conversation. */
-  all: boolean;
-  /** Explicitly allowed tool names (e.g. 'fleex_ticket_create'). */
-  tools: string[];
-}
-
-/** A fresh, disarmed state. A factory, not a shared const: `tools` is mutated
- *  in place by `allowTool`, so every session needs its own array. */
-export function noAutoApprove(): AutoApprove {
-  return { all: false, tools: [] };
-}
-
-/** True when this tool may run without a confirmation round-trip. */
-export function isToolAutoApproved(aa: AutoApprove | undefined, toolName: string): boolean {
-  if (!aa) return false;
-  return aa.all || aa.tools.includes(toolName);
-}
-
-/** True when the conversation has any auto-approval armed. */
-export function isAutoApproveActive(aa: AutoApprove | undefined): boolean {
-  return Boolean(aa && (aa.all || aa.tools.length > 0));
-}
+  | { tool: ToolLine }
+  | { artifact: ArtifactCard & { turnId: string } }
+  | { notice: NoticeKind; limit?: number };
 
 export interface SessionData {
   id: string;
@@ -72,10 +67,21 @@ export interface SessionData {
   createdAt: string;
   /** Timestamp of the last user/assistant message (absent on legacy sessions). */
   lastMessageAt?: string;
+  /** Read-only context the SDK session has not seen yet (see the file header). */
   messages: Anthropic.MessageParam[];
+  /** How many of `messages` the SDK session already carries. */
+  sdkContextUpTo?: number;
   transcript: TranscriptItem[];
-  /** Absent on sessions persisted by an older companion. */
-  autoApprove?: AutoApprove;
+  /** Claude Agent SDK session, resumed on every turn. */
+  sdkSessionId?: string;
+  /** Set on conversations created since the Assistant runs on the SDK. */
+  engine?: 'sdk';
+  /** The conversation folder, set on the first message (never before). */
+  workDir?: string;
+  /** "Always allow writes outside the folder" for this conversation only. */
+  outsideWritesAllowed?: boolean;
+  /** Pre-SDK field, ignored: its standing approvals do not carry over. */
+  autoApprove?: unknown;
 }
 
 /** Lightweight projection sent to the side panel for the session list. */
@@ -89,8 +95,10 @@ export interface SessionSummary {
   createdAt: string;
   /** Last user/assistant message time; falls back to createdAt for legacy sessions. */
   lastMessageAt: string;
-  /** Always defined client-side, even for sessions persisted before the field existed. */
-  autoApprove: AutoApprove;
+  workDir?: string;
+  outsideWritesAllowed: boolean;
+  /** A conversation from before the SDK that has not been resumed yet. */
+  legacy: boolean;
 }
 
 const DEFAULT_TITLE = 'New conversation';
@@ -104,6 +112,11 @@ export function messageCount(s: SessionData): number {
   return s.transcript.filter((i) => 'role' in i).length;
 }
 
+/** Holds pre-SDK history and no SDK session yet: resumed with its text history (D8). */
+export function isLegacy(s: SessionData): boolean {
+  return s.engine !== 'sdk' && !s.sdkSessionId && s.messages.length > 0;
+}
+
 export function toSummary(s: SessionData): SessionSummary {
   return {
     id: s.id,
@@ -114,7 +127,9 @@ export function toSummary(s: SessionData): SessionSummary {
     messageCount: messageCount(s),
     createdAt: s.createdAt,
     lastMessageAt: s.lastMessageAt ?? s.createdAt,
-    autoApprove: s.autoApprove ?? noAutoApprove(),
+    ...(s.workDir ? { workDir: s.workDir } : {}),
+    outsideWritesAllowed: s.outsideWritesAllowed === true,
+    legacy: isLegacy(s),
   };
 }
 
@@ -147,7 +162,13 @@ export class SessionStore {
         s.status = 'idle';
         s.messages ??= [];
         s.transcript ??= [];
-        s.autoApprove ??= noAutoApprove();
+        // Standing approvals from the pre-SDK confirmation gate never carry over.
+        delete s.autoApprove;
+        // A call running (or awaiting a confirmation) when the companion stopped
+        // is lost: never replayed (P8).
+        for (const item of s.transcript) {
+          if ('tool' in item && item.tool.status === 'running') item.tool.status = 'interrupted';
+        }
         this.sessions.set(s.id, s);
       } catch {
         // skip corrupt file
@@ -192,7 +213,8 @@ export class SessionStore {
       messages: [],
       transcript: [],
       // Consent is never inherited: a fresh conversation re-earns it.
-      autoApprove: noAutoApprove(),
+      outsideWritesAllowed: false,
+      engine: 'sdk',
     };
     this.sessions.set(s.id, s);
     this.save(s.id);
@@ -225,33 +247,16 @@ export class SessionStore {
   }
 
   /**
-   * Replace the conversation's auto-approval state (full replacement, so the
-   * caller never has to reason about a partial patch).
-   *
-   * Mutates the live SessionData the running turn holds a reference to — that
-   * is what makes a mid-turn "always allow" cover the remaining tool calls of
-   * the *same* turn without another round-trip.
+   * Turn "always allow writes outside the folder" on or off for one conversation.
+   * Mutates the live SessionData a running turn reads, so a mid-turn "always"
+   * covers the remaining writes of the same turn.
    */
-  setAutoApprove(id: string, next: AutoApprove): void {
+  setOutsideWritesAllowed(id: string, allowed: boolean): boolean {
     const s = this.sessions.get(id);
-    if (!s) return;
-    s.autoApprove = { all: next.all, tools: [...new Set(next.tools)] };
+    if (!s) return false;
+    s.outsideWritesAllowed = allowed;
     this.save(id);
-  }
-
-  /** Add one tool name to the conversation's allowlist (no-op if redundant). */
-  allowTool(id: string, toolName: string): void {
-    const s = this.sessions.get(id);
-    if (!s || !toolName) return;
-    s.autoApprove ??= noAutoApprove();
-    if (s.autoApprove.all || s.autoApprove.tools.includes(toolName)) return;
-    s.autoApprove.tools.push(toolName);
-    this.save(id);
-  }
-
-  /** Disarm every auto-approval for this conversation. */
-  clearAutoApprove(id: string): void {
-    this.setAutoApprove(id, noAutoApprove());
+    return true;
   }
 
   /** Stamp the last-message time (called when a user/assistant item lands). */

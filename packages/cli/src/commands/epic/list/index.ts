@@ -17,6 +17,7 @@ interface ListOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List epics (sorted by timeframe now → next → later)',
   setup(cmd) {

@@ -7,6 +7,7 @@ interface ShowOptions { ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view'],
   description: 'Show a workflow run and its step runs',
   setup(cmd) {

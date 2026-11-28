@@ -15,6 +15,7 @@ const RUN_TIMEOUT_MS = 150_000;
 const def: CommandDef = {
   workspaceAware: true,
   name: 'run',
+  access: 'write',
   description: "Run a worktree command by id (npm:test, make:up, launch:web…) or a server verb (start, stop, restart, status, open, logs)",
   extraHelp: `\n${chalk.bold.yellow('Same as the worktree button of the Work view:')} the command runs on the Fleex
 server (its terminal and logs appear in the UI). ${chalk.green('fleex repo actions')} lists the ids.

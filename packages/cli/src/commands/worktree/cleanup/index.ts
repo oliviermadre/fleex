@@ -66,6 +66,7 @@ function progress(msg: string): void {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'cleanup',
+  access: 'destructive',
   description: 'Find the worktrees of closed tickets and remove the ones holding no unpushed work (dry-run by default)',
   setup(cmd) {
     cmd.option('--older-than <duration>', 'Only tickets closed for at least this long: 36h, 14d, 2w, or days', DEFAULT_CLEANUP_OLDER_THAN);

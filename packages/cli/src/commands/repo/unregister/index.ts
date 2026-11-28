@@ -8,6 +8,7 @@ interface Options { force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unregister',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Unregister a repository from the workspace config (deletes its local clone)',
   setup(cmd) {

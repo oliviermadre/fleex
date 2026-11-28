@@ -10,6 +10,7 @@ interface RenamedView extends DeliverableTypesView {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'rename',
+  access: 'write',
   description: 'Rename a deliverable type id, migrating existing deliverables to the new id',
   setup(cmd) {
     cmd.argument('<id>', 'Current deliverable type id');

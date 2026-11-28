@@ -14,6 +14,7 @@ interface ListOptions { json?: boolean; enabled?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List panels with their @panel: handle and description',
   setup(cmd) {

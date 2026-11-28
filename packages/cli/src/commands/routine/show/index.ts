@@ -10,6 +10,7 @@ interface RunDetail {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show one routine (by slug, name or UUID): subject, trigger, last and next run',
   setup(cmd) {
     cmd.argument('<slug>', 'Routine slug, name, or UUID');

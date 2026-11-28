@@ -100,8 +100,9 @@ exécution.
 Prérequis sur le laptop — un seul :
 
 - Le companion tourne : `fleex companion status` (démarré automatiquement par
-  `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
-  dans `~/.fleex/config`.
+  `fleex start` ; sinon `fleex companion start`). Il utilise la connexion
+  Claude Code de la machine, comme les personas (`ANTHROPIC_API_KEY` dans
+  `~/.fleex/config` sert de secours).
 
 C'est tout. Avec `fleex start` (qui lance toujours le dev server Vite), le
 proxy `/companion/*` → companion (port 4399 par défaut, `FLEEX_SIDEPANEL_PORT`
@@ -125,6 +126,11 @@ tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
 - **« Host not allowed » en dev** : le hostname `.ts.net` est autorisé dans
   `packages/web/vite.config.ts` (`allowedHosts`). Si tu passes par un autre
   domaine (reverse proxy custom), ajoute-le là.
+- **L'Assistant ne se connecte pas (403 « Forbidden origin »)** : le companion
+  n'accepte que le nom tailnet de **cette** machine (lu dans
+  `tailscale status`), pas n'importe quel `*.ts.net`. Si tu passes par un autre
+  nom, ajoute son origine à `FLEEX_SIDEPANEL_ALLOWED_ORIGINS` dans
+  `~/.fleex/config`, puis `fleex companion stop && fleex companion start`.
 - **Le HMR (rechargement dev) ne suit pas via HTTPS** : utilise le build de
   prod (`bun run build` puis `bun run start`) et pointe `tailscale serve` sur
   le port du serveur au lieu du port web.

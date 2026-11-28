@@ -40,6 +40,7 @@ function parseToken(token: string): { type: AgenticType; name: string } | null {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'trigger',
+  access: 'write',
   description: 'Trigger an agentic action on a ticket (agent / skill / panel / workflow) via a mention',
   setup(cmd) {
     cmd.argument('<ticket>', 'Ticket display ID or UUID');

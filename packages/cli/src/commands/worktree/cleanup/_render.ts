@@ -1,6 +1,6 @@
 import os from 'node:os';
 import chalk from 'chalk';
-import type { WorktreeCleanupReport, WorktreeCleanupTicket, WorktreeCleanupWorktree } from '@fleex/shared';
+import type { WorktreeCleanupReport, WorktreeCleanupTicket, WorktreeCleanupUnknownReason, WorktreeCleanupWorktree } from '@fleex/shared';
 
 /**
  * Text rendering of a cleanup report: sections coloured by what happens to
@@ -108,14 +108,20 @@ export function renderPlan(report: WorktreeCleanupReport, opts: { verbose?: bool
   }
 
   out.push('', `${chalk.bold.magenta('UNKNOWN FOLDERS')} ${chalk.dim('(reported, never touched)')}  ${t.unknownDirs}`);
-  // Routine runs pile up by the hundred: one summary line, the detail is in --json.
-  const routines = report.unknown.filter((u) => u.reason === 'routine_workspace');
-  for (const u of report.unknown.filter((x) => x.reason !== 'routine_workspace')) {
-    out.push(`  ${pad(u.path.split('/').pop()!, 34)} ${chalk.magenta(pad(u.reason, 18))}${formatBytes(u.sizeBytes)}`);
+  // Routine runs and Assistant conversations pile up by the hundred: one summary
+  // line each, the detail is in --json.
+  const grouped: Array<[WorktreeCleanupUnknownReason, string]> = [
+    ['routine_workspace', 'routine run folder'],
+    ['assistant_workspace', 'assistant conversation folder'],
+  ];
+  for (const u of report.unknown.filter((x) => !grouped.some(([r]) => r === x.reason))) {
+    out.push(`  ${pad(u.path.split('/').pop()!, 34)} ${chalk.magenta(pad(u.reason, 20))}${formatBytes(u.sizeBytes)}`);
   }
-  if (routines.length > 0) {
-    const size = routines.some((u) => u.sizeBytes === null) ? '' : formatBytes(routines.reduce((s, u) => s + (u.sizeBytes ?? 0), 0));
-    out.push(`  ${pad(`${routines.length} routine run folder${routines.length === 1 ? '' : 's'}`, 34)} ${chalk.magenta(pad('routine_workspace', 18))}${size}`);
+  for (const [reason, label] of grouped) {
+    const group = report.unknown.filter((u) => u.reason === reason);
+    if (group.length === 0) continue;
+    const size = group.some((u) => u.sizeBytes === null) ? '' : formatBytes(group.reduce((s, u) => s + (u.sizeBytes ?? 0), 0));
+    out.push(`  ${pad(`${group.length} ${label}${group.length === 1 ? '' : 's'}`, 34)} ${chalk.magenta(pad(reason, 20))}${size}`);
   }
 
   if (opts.verbose && report.skipped.length > 0) {

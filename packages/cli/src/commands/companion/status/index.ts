@@ -10,6 +10,7 @@ import {
 
 const def: CommandDef = {
   name: 'status',
+  access: 'read',
   description: 'Show whether the side-panel companion is running',
   action: async () => {
     const health = await probeCompanion();

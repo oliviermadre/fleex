@@ -9,6 +9,7 @@ interface KillOptions { force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'kill',
+  access: 'destructive',
   aliases: ['rm'],
   description: 'Terminate a session (prompts unless -f is given)',
   setup(cmd) {

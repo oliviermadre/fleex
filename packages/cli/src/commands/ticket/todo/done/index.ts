@@ -7,6 +7,7 @@ interface Options { board?: string; as?: string; reason?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'done',
+  access: 'write',
   aliases: ['check'],
   description: "Mark one or several items of the ticket's todo list done as you complete them. Idempotent: an item already done is reported, not rewritten.",
   setup(cmd) {

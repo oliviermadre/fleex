@@ -8,6 +8,7 @@ import { resolveInstance, ensureDirs, logFile } from '../../core/instance.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'logs',
+  access: 'read',
   description: 'Tail logs (all services, or a specific one via [service])',
   setup(cmd) {
     cmd.argument('[service]', 'Service to tail (gateway | server | web). Omit for all.');

@@ -44,6 +44,7 @@ async function runClientAdd(name: string): Promise<void> {
 
 const def: CommandDef = {
   name: 'add',
+  access: 'write',
   description: 'Authorize a new client and print its token (shown once)',
   setup(cmd) {
     cmd.argument('<name>', 'Client name (e.g. my-laptop, ci, worktree-feat-xyz)');

@@ -2,39 +2,24 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { NOOP } from './noop';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
-import {
-  useAssistantStore,
-  toolLabel,
-  type AssistantChatItem,
-  type AssistantToolStatus,
-} from '../stores/assistantStore';
+import { useAssistantStore, type AssistantChatItem } from '../stores/assistantStore';
 import { tint, tintText } from '../lib/tints';
+import { AssistantMessage, AssistantOutsideWriteCard, useFoldedItems } from '../components/assistant/AssistantTranscript';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 import { useFileUpload } from '../hooks/useFileUpload';
 import { MobilePageHeader } from './MobilePageHeader';
+import { AssistantSuggestions, ASSISTANT_INTRO } from '../components/assistant/AssistantSuggestions';
 import { AssistantIcon } from './MobileIcons';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
  * side panel and the desktop Assistant panel; the WS protocol lives in
- * assistantStore. Mutating fleex commands are approved from a bottom sheet
- * showing the exact command.
+ * assistantStore. Tool lines and artefact cards are the desktop ones; a file
+ * write outside the conversation folder is approved from a bottom sheet.
+ * Files live on the companion's machine: cards show a preview, never "Ouvrir".
  */
 
 const EMPTY_ITEMS: AssistantChatItem[] = [];
-
-function toolStatusBadge(status: AssistantToolStatus): { label: string; className: string } {
-  switch (status) {
-    case 'running':
-      return { label: '⏳', className: tintText('yellow') };
-    case 'ok':
-      return { label: '✓', className: tintText('green') };
-    case 'fail':
-      return { label: '✗', className: tintText('red') };
-    case 'denied':
-      return { label: '⊘ refusé', className: tintText('gray') };
-  }
-}
 
 /** The ticket open behind the sheet, passed to the companion as context. */
 export type AssistantTicketContext = { id: string; displayId: number | string; title: string } | null;
@@ -52,8 +37,9 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
   const openSessionInStore = useAssistantStore((s) => s.openSession);
   const deleteSession = useAssistantStore((s) => s.deleteSession);
   const sendUser = useAssistantStore((s) => s.sendUser);
-  const answerConfirm = useAssistantStore((s) => s.answerConfirm);
-  const setAutoApprove = useAssistantStore((s) => s.setAutoApprove);
+  const setOutsideWrites = useAssistantStore((s) => s.setOutsideWrites);
+  const stop = useAssistantStore((s) => s.stop);
+  const authMissing = useAssistantStore((s) => s.authMissing);
 
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
@@ -61,6 +47,7 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
   // Same upload engine as the desktop assistant composer: paste or pick an image/file
   const fileUpload = useFileUpload({ textareaRef: draftRef, value: draft, onChange: setDraft });
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
+  const folded = useFoldedItems(items);
 
   useEffect(() => {
     ensureConnected();
@@ -128,14 +115,14 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
         icon={<AssistantIcon size={24} />}
         trailing={
           <>
-            {/* Standing approvals — visible while armed, tap to revoke them all */}
-            {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+            {/* Writes outside the folder allowed — visible while on, tap to remove */}
+            {activeSession?.outsideWritesAllowed && (
               <button
-                onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
+                onClick={() => setOutsideWrites(activeSession.id, false)}
                 className={`flex h-11 shrink-0 items-center rounded-full px-3 text-xs font-medium ${tint('yellow')}`}
-                title="Auto-approbation active — appuyer pour désactiver"
+                title="Écriture hors dossier autorisée — appuyer pour redemander"
               >
-                ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+                ⚡ hors dossier
               </button>
             )}
             <button
@@ -177,9 +164,7 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {!activeId ? (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-sm text-[var(--theme-text-muted)]">
-              L'assistant pilote tes boards, tickets, epics et deliverables via le CLI fleex.
-            </p>
+            <p className="text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
             <button
               onClick={() => createSession()}
               className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)]"
@@ -189,39 +174,29 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {items.map((item, i) => {
-              if (item.kind === 'user') {
-                return (
-                  <div key={i} className="ml-8 rounded-xl bg-[var(--theme-accent)]/10 p-3 text-sm text-[var(--theme-text-primary)]">
-                    <div className="overflow-x-auto whitespace-pre-wrap break-words">{item.text}</div>
-                  </div>
-                );
-              }
-              if (item.kind === 'assistant') {
-                return (
-                  <div key={i} className="overflow-x-auto text-[13px]">
-                    <MarkdownRenderer content={item.text} onToggleCheckbox={NOOP} />
-                  </div>
-                );
-              }
-              const badge = toolStatusBadge(item.status);
-              return (
-                <div
-                  key={i}
-                  className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2 font-mono text-[11px]"
-                >
-                  {item.autoApproved && (
-                    <span className={`mr-1 ${tintText('yellow')}`} title="Auto-approuvé">
-                      ⚡
-                    </span>
-                  )}
-                  <span className={`mr-2 ${badge.className}`}>{badge.label}</span>
-                  <span className="break-all text-[var(--theme-text-secondary)]">
-                    fleex {item.argv.join(' ')}
-                  </span>
+            {items.length === 0 && !busy && (
+              <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <p className="text-sm text-[var(--theme-text-muted)]">{ASSISTANT_INTRO}</p>
+                <AssistantSuggestions onPick={sendUser} className="flex w-full flex-col gap-1.5 text-xs" />
+              </div>
+            )}
+            {folded.map((item, i) =>
+              item.kind === 'more' ? (
+                <p key={`more-${item.turnId}`} className="text-xs text-[var(--theme-text-faint)]">
+                  + {item.hidden.length} autres fichiers
+                </p>
+              ) : item.kind === 'user' ? (
+                <div key={i} className="ml-8 rounded-xl bg-[var(--theme-accent)]/10 p-3 text-sm text-[var(--theme-text-primary)]">
+                  <div className="overflow-x-auto whitespace-pre-wrap break-words">{item.text}</div>
                 </div>
-              );
-            })}
+              ) : item.kind === 'assistant' ? (
+                <div key={i} className="overflow-x-auto text-[13px]">
+                  <MarkdownRenderer content={item.text} onToggleCheckbox={NOOP} />
+                </div>
+              ) : (
+                <AssistantMessage key={i} item={item} sessionId={activeId ?? ''} canOpen={false} />
+              ),
+            )}
             {busy && (
               <p className="animate-pulse px-1 text-xs text-[var(--theme-text-faint)]">
                 {activeSession?.status === 'awaiting_input' ? 'En attente de ta confirmation…' : 'Réflexion…'}
@@ -229,9 +204,11 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
             )}
           </div>
         )}
-        {errorMsg && (
+        {(authMissing || errorMsg) && (
           <p className={`mt-3 rounded-lg border p-2 text-xs ${tint('red')}`}>
-            {errorMsg}
+            {authMissing
+              ? 'Aucune authentification Claude : connecte Claude Code sur la machine du companion, ou ajoute ANTHROPIC_API_KEY dans ~/.fleex/config.'
+              : errorMsg}
           </p>
         )}
       </div>
@@ -269,52 +246,34 @@ export function MobileAssistant({ ticket = null }: { ticket?: AssistantTicketCon
               </svg>
             )}
           </button>
-          <button
-            onClick={handleSend}
-            disabled={!draft.trim() || busy || fileUpload.isUploading}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
-          >
-            ➤
-          </button>
+          {busy && activeId ? (
+            <button
+              onClick={() => stop(activeId)}
+              aria-label="Arrêter"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--theme-border)] text-base font-semibold text-[var(--theme-text-primary)]"
+            >
+              ■
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!draft.trim() || fileUpload.isUploading}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--theme-accent)] text-base font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
+            >
+              ➤
+            </button>
+          )}
         </div>
       )}
 
-      {/* Confirmation of a mutating fleex command */}
+      {/* Confirmation of a file write outside the conversation folder */}
       {confirmReq && (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/60">
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
           >
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
-              L'assistant veut exécuter
-            </p>
-            <pre className="mb-3 overflow-x-auto rounded-lg bg-[var(--theme-bg-secondary)] p-3 font-mono text-[11px] leading-relaxed text-[var(--theme-text-primary)]">
-              fleex {confirmReq.argv.join(' ')}
-            </pre>
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => answerConfirm(confirmReq.id, false)}
-                  className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-4 py-3 text-sm font-medium text-[var(--theme-text-primary)]"
-                >
-                  Refuser
-                </button>
-                <button
-                  onClick={() => answerConfirm(confirmReq.id, true)}
-                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
-                >
-                  Approuver
-                </button>
-              </div>
-              {/* Standing approval for this command name only, this conversation only */}
-              <button
-                onClick={() => answerConfirm(confirmReq.id, true, 'tool')}
-                className={`rounded-lg border px-4 py-3 text-sm font-medium ${tint('yellow')}`}
-              >
-                ⚡ Toujours autoriser «&nbsp;{toolLabel(confirmReq.name)}&nbsp;»
-              </button>
-            </div>
+            <AssistantOutsideWriteCard req={confirmReq} compact />
           </div>
         </div>
       )}

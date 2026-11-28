@@ -818,3 +818,13 @@ export type {
   AgendaRsvp,
 } from './types/agenda.js';
 export { AGENDA_ITEM_TYPES, AGENDA_RSVPS, DEFAULT_AGENDA_PREFS, GOGCLI_SETUP_URL, GOGCLI_INSTALL_COMMAND } from './types/agenda.js';
+
+// Claude Agent SDK options shared by persona runs (server) and the Assistant (companion)
+export {
+  buildSdkOptions,
+  agentActorEnv,
+  effectiveMaxTurns,
+  resolveMaxTurns,
+  NO_BACKGROUND_TASKS_ENV,
+} from './agent-sdk-options.js';
+export type { SdkOptionsContext } from './agent-sdk-options.js';

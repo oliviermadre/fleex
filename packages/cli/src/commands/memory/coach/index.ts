@@ -27,6 +27,7 @@ const REASONS: Record<string, string> = {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'coach',
+  access: 'write',
   description: 'Propose what an agent should have learned from the times you corrected it',
   setup(cmd) {
     cmd.argument('<agent>', 'Agent name or id');

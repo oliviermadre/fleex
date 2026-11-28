@@ -21,6 +21,7 @@ function pull(mp: RegisteredMarketplace): boolean {
 
 const def: CommandDef = {
   name: 'update',
+  access: 'write',
   description: 'Pull the latest version of a marketplace (or all of them)',
   setup(cmd: Command) {
     cmd.argument('[name]', 'marketplace to update (default: all)');

@@ -69,6 +69,7 @@ async function printDocumentation(format: string): Promise<void> {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'apply',
+  access: 'write',
   description:
     'Create or REPLACE a whole workflow template from a JSON document (keyed by its "slug"). No partial edit: the document is the entire template. Atomic, and every violation is reported in one call. Read `fleex workflow apply --documentation` before writing a document.',
   setup(cmd) {

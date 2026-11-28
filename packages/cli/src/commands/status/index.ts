@@ -3,6 +3,7 @@ import { runStatus } from './_impl.ts';
 
 const def: CommandDef = {
   name: 'status',
+  access: 'read',
   description: 'Show status of all instances (running services, ports, PIDs)',
   action: async () => runStatus(),
 };

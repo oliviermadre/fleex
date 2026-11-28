@@ -9,6 +9,7 @@ interface CancelOptions { force?: boolean; ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'cancel',
+  access: 'write',
   description: 'Cancel a workflow run (prompts unless -f is given)',
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');

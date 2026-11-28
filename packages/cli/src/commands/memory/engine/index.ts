@@ -49,6 +49,7 @@ function assertKnown(keys: string[] | undefined): FeatureKey[] {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'engine',
+  access: 'write',
   description: 'Show or change the context engine and its feature switches',
   setup(cmd) {
     cmd.argument('[mode]', 'Engine to use: legacy or semantic (omit to only report)');

@@ -9,6 +9,7 @@ import { addEventOptions, buildEventInput, eventLine, resolveEventId, resolveRef
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['edit', 'move'],
   description:
     'Edit, move or resize a free agenda event (the whole series for a repeating one). A new --start without --end (or --date without --last-day) keeps the length, like dragging in the agenda.',

@@ -61,7 +61,9 @@ export async function rememberNow(
   session: SessionData,
   log: (msg: string, meta?: unknown) => void,
 ): Promise<boolean> {
-  const turns = toTurns(session.messages);
+  // Since the SDK, the transcript holds every exchanged text (recorded palette
+  // exchanges included); before it, `messages` did.
+  const turns = session.engine === 'sdk' || session.sdkSessionId ? transcriptTurns(session) : toTurns(session.messages);
   if (turns.length < MIN_TURNS) return false;
 
   const port = await findWorkspaceServerPort(session.workspace);
@@ -114,6 +116,15 @@ export function toTurns(messages: Anthropic.MessageParam[]): Array<{ role: 'user
         .join('\n');
 
     if (text.trim()) turns.push({ role: message.role, content: text.trim() });
+  }
+  return turns;
+}
+
+/** The text the two parties exchanged, read from the transcript (tool lines and cards dropped). */
+export function transcriptTurns(session: SessionData): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const turns: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  for (const item of session.transcript) {
+    if ('role' in item && item.text.trim()) turns.push({ role: item.role, content: item.text.trim() });
   }
   return turns;
 }

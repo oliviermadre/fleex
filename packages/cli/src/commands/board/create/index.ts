@@ -8,6 +8,7 @@ interface CreateOptions { name?: string; emoji?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   description: 'Create a board (create --name "Name" [--emoji 🗺️])',
   setup(cmd) {
     cmd.requiredOption('--name <name>', 'Board name');

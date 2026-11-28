@@ -39,6 +39,7 @@ interface SearchOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'search',
+  access: 'read',
   aliases: ['s'],
   description: 'Search memory by meaning — ranked excerpts from past work, with no LLM call',
   setup(cmd) {

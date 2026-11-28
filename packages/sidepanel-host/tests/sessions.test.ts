@@ -2,13 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  SessionStore,
-  messageCount,
-  isToolAutoApproved,
-  isAutoApproveActive,
-  type SessionData,
-} from '../src/sessions.ts';
+import { SessionStore, messageCount, isLegacy, type SessionData } from '../src/sessions.ts';
 
 let dir: string;
 beforeEach(() => {
@@ -91,88 +85,74 @@ describe('SessionStore', () => {
   });
 });
 
-describe('SessionStore auto-approval', () => {
-  it('starts every new conversation with no standing approval', () => {
+describe('SessionStore outside-folder writes', () => {
+  it('starts every new conversation asking before a write outside its folder', () => {
     const store = new SessionStore(dir);
     const s = store.create();
-    expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: [] });
-    expect(store.list()[0]!.autoApprove).toEqual({ all: false, tools: [] });
+    expect(store.get(s.id)!.outsideWritesAllowed).toBe(false);
+    expect(store.list()[0]!.outsideWritesAllowed).toBe(false);
   });
 
-  it('does not inherit approvals granted in another conversation', () => {
+  it('never carries "always allow" over to another conversation', () => {
     const store = new SessionStore(dir);
     const granted = store.create();
-    store.allowTool(granted.id, 'fleex_ticket_create');
+    store.setOutsideWritesAllowed(granted.id, true);
     const fresh = store.create();
-    expect(store.get(fresh.id)!.autoApprove).toEqual({ all: false, tools: [] });
+    expect(store.get(fresh.id)!.outsideWritesAllowed).toBe(false);
   });
 
-  it('allows a tool idempotently and survives a companion restart', () => {
-    // A restart mid-batch must not re-arm 30 confirmations the user already
-    // cleared, so the allowlist is persisted alongside the session.
+  it('keeps "always allow" across a companion restart, until the chip is removed (P7)', () => {
     const store = new SessionStore(dir);
     const s = store.create();
-    store.allowTool(s.id, 'fleex_ticket_create');
-    store.allowTool(s.id, 'fleex_ticket_create');
-    expect(store.get(s.id)!.autoApprove!.tools).toEqual(['fleex_ticket_create']);
-
-    expect(new SessionStore(dir).get(s.id)!.autoApprove).toEqual({
-      all: false,
-      tools: ['fleex_ticket_create'],
-    });
+    store.setOutsideWritesAllowed(s.id, true);
+    expect(new SessionStore(dir).get(s.id)!.outsideWritesAllowed).toBe(true);
+    store.setOutsideWritesAllowed(s.id, false);
+    expect(new SessionStore(dir).list()[0]!.outsideWritesAllowed).toBe(false);
   });
 
-  it('keeps allowTool a no-op once everything is auto-approved', () => {
-    const store = new SessionStore(dir);
-    const s = store.create();
-    store.setAutoApprove(s.id, { all: true, tools: [] });
-    store.allowTool(s.id, 'fleex_ticket_create');
-    expect(store.get(s.id)!.autoApprove).toEqual({ all: true, tools: [] });
-  });
-
-  it('replaces (never patches) on setAutoApprove and clears on demand', () => {
-    const store = new SessionStore(dir);
-    const s = store.create();
-    store.setAutoApprove(s.id, { all: false, tools: ['a', 'b'] });
-    store.setAutoApprove(s.id, { all: false, tools: ['c'] });
-    expect(store.get(s.id)!.autoApprove!.tools).toEqual(['c']);
-    store.clearAutoApprove(s.id);
-    expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: [] });
-  });
-
-  it('ignores auto-approval writes for an unknown session', () => {
-    const store = new SessionStore(dir);
-    expect(() => store.allowTool('nope', 'fleex_ticket_create')).not.toThrow();
-    expect(() => store.setAutoApprove('nope', { all: true, tools: [] })).not.toThrow();
-  });
-
-  it('hydrates a session persisted before the field existed', () => {
-    const legacy: SessionData = {
-      id: 'legacy', title: 'Old', status: 'idle', createdAt: '2020', messages: [], transcript: [],
-    };
-    fs.writeFileSync(path.join(dir, 'legacy.json'), JSON.stringify(legacy));
-    const store = new SessionStore(dir);
-    expect(store.get('legacy')!.autoApprove).toEqual({ all: false, tools: [] });
-    expect(store.list().find((x) => x.id === 'legacy')!.autoApprove).toEqual({ all: false, tools: [] });
+  it('ignores a write for an unknown conversation', () => {
+    expect(new SessionStore(dir).setOutsideWritesAllowed('nope', true)).toBe(false);
   });
 });
 
-describe('isToolAutoApproved / isAutoApproveActive', () => {
-  it.each([
-    ['undefined state', undefined, 'fleex_ticket_create', false],
-    ['empty allowlist', { all: false, tools: [] }, 'fleex_ticket_create', false],
-    ['listed tool', { all: false, tools: ['fleex_ticket_create'] }, 'fleex_ticket_create', true],
-    ['unlisted tool', { all: false, tools: ['fleex_ticket_create'] }, 'fleex_ticket_delete', false],
-    ['blanket', { all: true, tools: [] }, 'fleex_ticket_delete', true],
-  ])('%s', (_label, aa, name, expected) => {
-    expect(isToolAutoApproved(aa, name as string)).toBe(expected);
+describe('conversations from before the SDK', () => {
+  const legacyFile = (extra: Partial<SessionData> = {}): void => {
+    const legacy = {
+      id: 'legacy', title: 'Old', status: 'idle', createdAt: '2020',
+      messages: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }],
+      transcript: [{ role: 'user', text: 'hi' }, { tool: { name: 'fleex_ticket_list', argv: ['ticket', 'list'], status: 'running' } }],
+      autoApprove: { all: true, tools: [] },
+      ...extra,
+    };
+    fs.writeFileSync(path.join(dir, 'legacy.json'), JSON.stringify(legacy));
+  };
+
+  it('drops their standing approvals: the old gate\'s consent does not carry over', () => {
+    legacyFile();
+    const store = new SessionStore(dir);
+    expect(store.get('legacy')!.autoApprove).toBeUndefined();
+    expect(store.list()[0]!.outsideWritesAllowed).toBe(false);
   });
 
-  it('reports whether anything is armed', () => {
-    expect(isAutoApproveActive(undefined)).toBe(false);
-    expect(isAutoApproveActive({ all: false, tools: [] })).toBe(false);
-    expect(isAutoApproveActive({ all: false, tools: ['x'] })).toBe(true);
-    expect(isAutoApproveActive({ all: true, tools: [] })).toBe(true);
+  it('is flagged legacy until a SDK session takes it over', () => {
+    legacyFile();
+    const store = new SessionStore(dir);
+    const s = store.get('legacy')!;
+    expect(isLegacy(s)).toBe(true);
+    expect(store.list()[0]!.legacy).toBe(true);
+    s.sdkSessionId = 'sdk-1';
+    expect(isLegacy(s)).toBe(false);
+  });
+
+  it('never takes a new conversation with recorded exchanges for a legacy one', () => {
+    const store = new SessionStore(dir);
+    expect(isLegacy(store.recordExchange({ id: 'c1', question: 'q', answer: 'a' }))).toBe(false);
+  });
+
+  it('marks a call left running by a restart as interrupted, never to replay (P8)', () => {
+    legacyFile();
+    const item = new SessionStore(dir).get('legacy')!.transcript[1]!;
+    expect('tool' in item && item.tool.status).toBe('interrupted');
   });
 });
 
@@ -245,7 +225,7 @@ describe('SessionStore.recordExchange', () => {
     // reason to start one.
     const store = new SessionStore(dir);
     const s = store.recordExchange({ id: 'c1', question: 'q', answer: 'a' });
-    expect(isAutoApproveActive(s.autoApprove)).toBe(false);
+    expect(s.outsideWritesAllowed).toBe(false);
   });
 
   it('honours the workspace it was asked for', () => {

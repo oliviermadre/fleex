@@ -8,6 +8,7 @@ interface SearchOptions { q?: string; type?: string; origin?: string; agent?: st
 const def: CommandDef = {
   workspaceAware: true,
   name: 'search',
+  access: 'read',
   aliases: ['list', 'ls'],
   description:
     'Find deliverables across every ticket and routine run (transcripts, PRDs, notes…), newest first, by name (deliverable title, ticket title or routine name), type, origin or agent. ' +

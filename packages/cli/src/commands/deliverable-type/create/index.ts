@@ -14,6 +14,7 @@ interface CreateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   aliases: ['new'],
   description: 'Create a deliverable type (create --id diagram --label Diagram [--renderer html] [--color violet])',
   setup(cmd) {

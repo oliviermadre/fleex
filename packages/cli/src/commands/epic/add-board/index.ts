@@ -7,6 +7,7 @@ import { resolveBoard } from '../../board/_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add-board',
+  access: 'write',
   description: 'Link a board to an epic (add-board <epic> <board>)',
   setup(cmd) {
     cmd.argument('<epic>', 'Epic UUID or 8-char prefix');

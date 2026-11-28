@@ -17,6 +17,7 @@ interface AddOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add',
+  access: 'write',
   aliases: ['create', 'new'],
   description: 'Pin an annotation to an instant of the ticket Timeline',
   setup(cmd) {

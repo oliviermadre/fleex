@@ -57,9 +57,11 @@ export async function ensureCompanion(opts: CompanionStartOptions = {}): Promise
   }
 
   if (!haveKey) {
-    warn(
-      `No ANTHROPIC_API_KEY found. Add it to ${path.join(FLEEX_HOME, 'config')} ` +
-        `(ANTHROPIC_API_KEY=sk-ant-…) — the companion will boot but can't talk to Claude until it's set.`,
+    // The Assistant runs on Claude Code's own login, like the personas: the key
+    // is only the fallback when Claude Code is not logged in.
+    info(
+      `No ANTHROPIC_API_KEY in ${path.join(FLEEX_HOME, 'config')}: the Assistant uses Claude Code's login ` +
+        `(fallback key: ANTHROPIC_API_KEY=sk-ant-… in that file).`,
     );
   }
 

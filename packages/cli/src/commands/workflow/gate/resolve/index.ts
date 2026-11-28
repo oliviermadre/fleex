@@ -8,6 +8,7 @@ interface ResolveOptions { outcome?: string; notes?: string; ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'resolve',
+  access: 'write',
   description: 'Resolve a human-gate step (resolve <runId> <stepRunId> --outcome <name>)',
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');

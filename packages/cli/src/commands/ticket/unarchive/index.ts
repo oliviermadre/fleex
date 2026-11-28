@@ -8,6 +8,7 @@ interface ArchiveResult { displayId: number; title: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unarchive',
+  access: 'write',
   description: 'Restore an archived ticket (unarchive <id>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

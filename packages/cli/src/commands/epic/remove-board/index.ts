@@ -7,6 +7,7 @@ import { resolveBoard } from '../../board/_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'remove-board',
+  access: 'write',
   aliases: ['rm-board'],
   description: 'Unlink a board from an epic (remove-board <epic> <board>)',
   setup(cmd) {

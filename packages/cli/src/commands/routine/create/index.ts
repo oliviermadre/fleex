@@ -68,6 +68,7 @@ export function parseOverlap(value: string | undefined): 'skip' | 'queue' | unde
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   description: 'Create a routine: a named recipe that runs a workflow, agent, skill or panel on a subject and a trigger, no ticket',
   setup(cmd) {
     cmd.argument('<name>', 'Routine name (the slug is derived from it server-side)');

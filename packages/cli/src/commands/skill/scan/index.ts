@@ -8,6 +8,7 @@ interface ScanReport { hostId: string; added: number; changed: number; missing: 
 const def: CommandDef = {
   workspaceAware: true,
   name: 'scan',
+  access: 'write',
   description: "Re-scan the Claude Code skills (SKILL.md) of the server's machine",
   setup(cmd) {
     cmd.option('--json', 'Output raw JSON');

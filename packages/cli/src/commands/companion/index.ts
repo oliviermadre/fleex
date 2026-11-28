@@ -19,7 +19,8 @@ const def: CommandDef = {
 ${SECTION('Source & key:')}
   Runs from ${GREEN('~/.fleex/repo')} (canonical install), not the current worktree, so the
   shared singleton isn't pinned to one branch. Override with FLEEX_COMPANION_REPO.
-  The Anthropic key is read from ${GREEN('~/.fleex/config')} (ANTHROPIC_API_KEY=sk-ant-…).
+  The Assistant uses Claude Code's login, like the personas; ANTHROPIC_API_KEY in
+  ${GREEN('~/.fleex/config')} is the fallback when Claude Code is not logged in.
 
 ${SECTION('Lifecycle:')}
   ${DIM('$')} fleex companion start     ${DIM('# idempotent — reused if already healthy')}

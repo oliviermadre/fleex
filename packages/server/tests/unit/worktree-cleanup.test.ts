@@ -426,7 +426,7 @@ describe('worktree cleanup — scope', () => {
     expect(report.tickets[0]).toMatchObject({ ticketId: ticket.id, workspacePath: ws });
   });
 
-  it('folders with no manifest, a broken one, a routine run, or a deleted ticket are reported unknown and left alone', async () => {
+  it('folders with no manifest, a broken one, a routine run, an Assistant conversation, or a deleted ticket are reported unknown and left alone', async () => {
     const wsRoot = resolver.workspacesRoot();
     mkdirSync(join(wsRoot, 'tmp-experiments'), { recursive: true });
     mkdirSync(join(wsRoot, '7f0e11-broken'));
@@ -435,16 +435,19 @@ describe('worktree cleanup — scope', () => {
     writeFileSync(join(wsRoot, 'abc123-gone', '.fleex.json'), JSON.stringify({ ticketId: 'deleted-ticket' }));
     mkdirSync(join(wsRoot, 'routine-2fc3af36-00f27f07'));
     writeFileSync(join(wsRoot, 'routine-2fc3af36-00f27f07', '.fleex.json'), JSON.stringify({ routineId: 'r', workflowRunId: 'w' }));
+    mkdirSync(join(wsRoot, 'assistant-3f9a12c4'));
+    writeFileSync(join(wsRoot, 'assistant-3f9a12c4', '.fleex.json'), JSON.stringify({ kind: 'assistant', conversationId: 'c' }));
 
     const report = await useCase().plan(OPTS);
     expect(report.unknown.map((u) => [u.path.split('/').pop(), u.reason])).toEqual([
       ['7f0e11-broken', 'manifest_invalid'],
       ['abc123-gone', 'ticket_not_found'],
+      ['assistant-3f9a12c4', 'assistant_workspace'],
       ['routine-2fc3af36-00f27f07', 'routine_workspace'],
       ['tmp-experiments', 'no_manifest'],
     ]);
     await useCase().apply({ ...OPTS });
-    for (const d of ['tmp-experiments', '7f0e11-broken', 'abc123-gone', 'routine-2fc3af36-00f27f07']) expect(existsSync(join(wsRoot, d))).toBe(true);
+    for (const d of ['tmp-experiments', '7f0e11-broken', 'abc123-gone', 'routine-2fc3af36-00f27f07', 'assistant-3f9a12c4']) expect(existsSync(join(wsRoot, d))).toBe(true);
   });
 
   it('--ticket restricts the run to one ticket (by #displayId)', async () => {

@@ -13,6 +13,7 @@ interface StopOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'stop',
+  access: 'write',
   description: 'Stop the current instance (or a named one with [name])',
   setup(cmd) {
     cmd.argument('[instance]', 'Instance slug to stop. Defaults to the current worktree.');

@@ -29,6 +29,7 @@ interface Served {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'serve',
+  access: 'write',
   aliases: ['start', 'up'],
   description: 'Expose a Fleex instance on tailscale (HTTPS 443 and HTTP 80 by default)',
   setup(cmd: Command) {

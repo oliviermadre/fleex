@@ -143,6 +143,7 @@ function backfillSqlitePathInWorkspaces(): void {
 
 const def: CommandDef = {
   name: 'self-update',
+  access: 'write',
   description: 'Pull latest code and update the fleex CLI',
   setup(cmd) {
     cmd.option('--workspace <name>', 'Migrate only the named workspace database (defaults to the is_default workspace)');

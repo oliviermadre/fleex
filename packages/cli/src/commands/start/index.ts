@@ -4,6 +4,7 @@ import { runStart, type StartOptions } from './_impl.ts';
 
 const def: CommandDef = {
   name: 'start',
+  access: 'write',
   description: 'Start all services (gateway, server, web) for the current instance',
   setup(cmd) {
     cmd.addOption(new Option('--port <port>', 'Force the web (Vite) service to use a specific port'));

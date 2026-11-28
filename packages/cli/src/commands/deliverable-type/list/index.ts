@@ -5,6 +5,7 @@ import { fetchDeliverableTypes, typeLine } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List configured deliverable types with usage counts',
   action: async () => {

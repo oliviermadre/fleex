@@ -17,6 +17,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['edit'],
   description: 'Update an annotation (partial — only provided fields change)',
   setup(cmd) {

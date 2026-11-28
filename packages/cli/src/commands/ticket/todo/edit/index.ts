@@ -10,6 +10,7 @@ interface Options { board?: string; as?: string; text?: string; note?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'edit',
+  access: 'write',
   aliases: ['update'],
   description: "Edit the text or the note of a todo item (its state is changed with done / cancel / reopen).",
   setup(cmd) {

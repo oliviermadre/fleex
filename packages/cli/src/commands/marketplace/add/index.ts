@@ -20,6 +20,7 @@ interface AddOptions {
 
 const def: CommandDef = {
   name: 'add',
+  access: 'write',
   description: 'Register a marketplace by cloning its git repository',
   setup(cmd: Command) {
     cmd.argument('<git-url>', 'git URL of the marketplace repository');

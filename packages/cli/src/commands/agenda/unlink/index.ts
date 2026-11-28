@@ -6,6 +6,7 @@ import { agendaRequest, describeAgendaError } from '../_shared.ts';
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unlink',
+  access: 'destructive',
   description: 'Remove a deliverable ↔ meeting link (unlink <link-id>; ids from `fleex agenda links`)',
   setup(cmd) {
     cmd.argument('<link-id>', 'Link id (see `fleex agenda links`)');

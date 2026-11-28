@@ -13,6 +13,7 @@ const ANSWERS: Record<string, 'accepted' | 'tentative' | 'declined'> = {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'respond',
+  access: 'write',
   aliases: ['rsvp'],
   description: 'Answer a Google Calendar invitation: yes, maybe or no (the one write Fleex makes to Google)',
   setup(cmd) {

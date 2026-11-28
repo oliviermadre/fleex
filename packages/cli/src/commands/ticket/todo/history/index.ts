@@ -10,6 +10,7 @@ interface Options { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'history',
+  access: 'read',
   aliases: ['log'],
   description: "Who changed what in the ticket's todo list, when, and from where (web / cli / mcp / agent-api). Newest first; deleted items included.",
   setup(cmd) {

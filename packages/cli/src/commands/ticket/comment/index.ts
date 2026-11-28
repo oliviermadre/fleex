@@ -8,6 +8,7 @@ interface CommentOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'comment',
+  access: 'write',
   description: 'Add a comment to a ticket (comment <id> "body")',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

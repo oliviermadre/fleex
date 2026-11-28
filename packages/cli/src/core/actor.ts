@@ -13,7 +13,8 @@
  * `cli` otherwise. The name is URL-encoded: headers are latin-1 only and a
  * workflow step is named `workflow:<template> → <step>`.
  *
- * Only the todo routes read these headers today; other routes ignore them.
+ * The todo routes and the comment route (POST /api/tickets/:id/comments) read
+ * these headers; other routes ignore them.
  */
 let asOverride: string | undefined;
 

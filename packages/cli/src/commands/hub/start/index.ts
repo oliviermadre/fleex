@@ -3,6 +3,7 @@ import { runHubStart, setupOptions, type HubStartOptions } from './_impl.ts';
 
 const def: CommandDef = {
   name: 'start',
+  access: 'write',
   description: 'Start the event hub process',
   setup(cmd) {
     setupOptions(cmd);

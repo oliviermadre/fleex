@@ -9,6 +9,7 @@ interface ListOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'list',
+  access: 'read',
   aliases: ['ls'],
   description: 'List workflow runs for a ticket',
   setup(cmd) {

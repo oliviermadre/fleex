@@ -13,7 +13,7 @@ import { parsePRRefs } from '../../domain/services/pr-ref.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { registerFocusRoutes } from './focus.routes.js';
 import { registerTodoRoutes } from './todos.routes.js';
-import { resolveTodoActor } from './todo-actor.js';
+import { resolveCommentAuthor, resolveTodoActor } from './todo-actor.js';
 import { parseDeliverableBody } from './deliverable-body.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError, WorkflowRefusedError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
@@ -1652,10 +1652,12 @@ export function ticketRoutes(container: Container) {
         // 'queue' → no pre-action; the scheduler serializes it after the current run.
 
         const { humanDisplayName, humanMentionName } = container.config.get();
+        // An agent driving the CLI (persona, companion Assistant) signs its own comment.
+        const { authorType, authorName } = resolveCommentAuthor(request.headers, humanDisplayName || humanMentionName || 'user');
         const { comment, createdMentions } = await container.postComment.execute({
           ticketId: request.params.id,
-          authorType: 'user',
-          authorName: humanDisplayName || humanMentionName || 'user',
+          authorType,
+          authorName,
           body: request.body.body,
           visibility: 'public',
           humanMentionNames: humanMentionName ? [humanMentionName] : [],
@@ -1668,8 +1670,8 @@ export function ticketRoutes(container: Container) {
           type: 'comment.posted',
           commentId: comment.id,
           ticketId: request.params.id,
-          authorType: 'user',
-          authorName: humanDisplayName || humanMentionName || 'user',
+          authorType,
+          authorName,
           executionMode: request.body.executionMode,
           wakeExcludeAgents,
           createdMentions: createdMentions.map((m) => ({

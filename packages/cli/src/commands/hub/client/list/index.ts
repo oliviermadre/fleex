@@ -58,6 +58,7 @@ async function runClientList(): Promise<void> {
 
 const def: CommandDef = {
   name: 'list',
+  access: 'read',
   description: 'List authorized clients and their current connection status',
   action: async () => {
     await runClientList();

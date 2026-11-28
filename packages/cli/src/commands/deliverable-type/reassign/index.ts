@@ -9,6 +9,7 @@ interface ReassignOptions { force?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'reassign',
+  access: 'write',
   description: 'Move every deliverable of one type to another type (bulk migration)',
   setup(cmd) {
     cmd.argument('<from>', 'Source type id (may be a legacy/unconfigured id)');

@@ -9,6 +9,7 @@ interface AddTicketOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'add-ticket',
+  access: 'write',
   description: 'Add a ticket to an epic (add-ticket <epic> <ticket>)',
   setup(cmd) {
     cmd.argument('<epic>', 'Epic UUID or 8-char prefix');

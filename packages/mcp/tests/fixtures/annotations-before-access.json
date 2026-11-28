@@ -1,0 +1,386 @@
+{
+  "fleex_agenda_event_create": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_agenda_event_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_agenda_event_update": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_agenda_link": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_agenda_links": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_agenda_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_agenda_respond": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_agenda_search": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_agenda_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_agenda_status": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_agenda_unlink": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_deliverable_search": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_deliverable_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_add_board": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_add_ticket": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_archive": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_epic_create": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_epic_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_epic_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_remove_board": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_remove_ticket": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_epic_unarchive": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_epic_update": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_ask": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_bench": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_coach": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_compile": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_consolidate": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_engine": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_forget": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_keep": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_links": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_reindex": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_memory_search": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_similar": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_memory_status": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_routine_create": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_routine_disable": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_routine_edit": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_routine_enable": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_routine_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_routine_run": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_routine_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_routine_suggest": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_annotation_add": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_annotation_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_annotation_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_annotation_update": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_archive": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_boards": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_comment": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_comment_delete": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_comments": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_create": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_deliverable_add": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_deliverable_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_deliverable_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_deliverable_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_deliverable_update": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_import": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_link": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_mention_ack": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_mention_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_mention_resolve": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_mention_run": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_mention_wait": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_mentions": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_move": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_add": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_assign": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_cancel": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_delete": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_todo_done": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_edit": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_history": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_move": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_todo_reopen": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_ticket_unarchive": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_ticket_unlink": {
+    "readOnlyHint": false,
+    "destructiveHint": true
+  },
+  "fleex_ticket_update": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_apply": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_gate_resolve": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_workflow_route": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_run_cancel": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_run_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_workflow_run_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_workflow_show": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_workflow_step_deliverable_add": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  },
+  "fleex_workflow_step_deliverable_list": {
+    "readOnlyHint": true,
+    "destructiveHint": false
+  },
+  "fleex_workflow_step_retry": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+  }
+}

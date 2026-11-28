@@ -16,6 +16,7 @@ interface RouteOptions { edge?: string; notes?: string; ticket?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'route',
+  access: 'write',
   description: 'Pick the branch of a step parked on an ambiguous route (route <runId> <stepRunId> [--edge <id>])',
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');

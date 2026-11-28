@@ -16,6 +16,7 @@ interface UpdateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'update',
+  access: 'write',
   aliases: ['edit'],
   description: 'Update an epic (update <id> [--name ...] [--timeframe next] [--blocked] ...)',
   setup(cmd) {

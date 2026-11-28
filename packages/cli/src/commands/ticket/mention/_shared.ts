@@ -1,5 +1,5 @@
 import type { MentionStatus } from '@fleex/shared';
-import type { CommandDef } from '../../../core/types.ts';
+import type { CommandAccess, CommandDef } from '../../../core/types.ts';
 import { die, err, ok, present } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPatch } from '../../../core/api.ts';
 import { matchById } from '../../../core/match.ts';
@@ -44,6 +44,7 @@ export async function getMention(ticketArg: string, mentionArg: string, board?: 
  */
 export function makeStatusCommand(opts: {
   name: string;
+  access: CommandAccess;
   status: MentionStatus;
   description: string;
   pastTense: string;
@@ -51,6 +52,7 @@ export function makeStatusCommand(opts: {
   return {
     workspaceAware: true,
     name: opts.name,
+    access: opts.access,
     description: opts.description,
     setup(cmd) {
       cmd.argument('<ticket>', 'Ticket display ID or UUID');

@@ -9,6 +9,7 @@ interface Comment { id: string; authorType: string; authorName: string; createdA
 const def: CommandDef = {
   workspaceAware: true,
   name: 'comments',
+  access: 'read',
   description: 'List comments on a ticket (with their ids, for `comment-delete`)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');

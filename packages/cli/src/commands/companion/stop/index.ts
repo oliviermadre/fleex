@@ -4,6 +4,7 @@ import { stopCompanion } from '../../../core/companion.ts';
 
 const def: CommandDef = {
   name: 'stop',
+  access: 'write',
   description: 'Stop the side-panel companion',
   action: async () => {
     const stopped = await stopCompanion();

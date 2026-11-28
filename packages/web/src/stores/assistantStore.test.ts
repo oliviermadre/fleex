@@ -74,13 +74,13 @@ describe('assistantStore.newSession — workspace pinning', () => {
   });
 });
 
-describe('assistantStore — auto-approval', () => {
+describe('assistantStore — the Assistant on the SDK', () => {
   beforeEach(() => {
     FakeWebSocket.last = null;
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
     __resetAssistantSocketForTests();
-    useAssistantStore.setState({ confirmReqs: [], itemsBySession: {}, autoApproveNotice: null });
+    useAssistantStore.setState({ confirmReqs: [], itemsBySession: {}, ticketPicker: null, authMissing: false, mcpBySession: {} });
   });
 
   afterEach(() => {
@@ -92,64 +92,81 @@ describe('assistantStore — auto-approval', () => {
     FakeWebSocket.last?.onmessage?.({ data: JSON.stringify(msg) });
   }
 
-  it('sends the always-scope alongside the approval', () => {
+  const outsideWrite = { type: 'confirm_request', sessionId: 's1', id: 'c1', tool: 'Edit', path: '/Users/x/.zshrc', diff: '+alias fx=fleex', isNewFile: false };
+
+  it('answers an outside-folder write with the decision, "always" included', () => {
     useAssistantStore.getState().ensureConnected();
-    receive({ type: 'confirm_request', sessionId: 's1', id: 'c1', name: 'fleex_ticket_create', argv: ['ticket', 'create'] });
+    receive(outsideWrite);
+    expect(useAssistantStore.getState().confirmReqs[0]).toMatchObject({ path: '/Users/x/.zshrc', tool: 'Edit' });
 
-    useAssistantStore.getState().answerConfirm('c1', true, 'tool');
+    useAssistantStore.getState().answerConfirm('c1', 'always');
 
-    expect(sentMessages()).toContainEqual({ type: 'confirm', id: 'c1', approved: true, always: 'tool' });
+    expect(sentMessages()).toContainEqual({ type: 'confirm', id: 'c1', decision: 'always' });
     expect(useAssistantStore.getState().confirmReqs).toHaveLength(0);
   });
 
-  it('omits the scope on a plain one-shot approval', () => {
+  it('removing the ⚡ chip turns outside writes back to asking', () => {
     useAssistantStore.getState().ensureConnected();
-    receive({ type: 'confirm_request', sessionId: 's1', id: 'c1', name: 'fleex_ticket_create', argv: [] });
-
-    useAssistantStore.getState().answerConfirm('c1', true);
-
-    expect(sentMessages()).toContainEqual({ type: 'confirm', id: 'c1', approved: true });
+    useAssistantStore.getState().setOutsideWrites('s1', false);
+    expect(sentMessages()).toContainEqual({ type: 'set_outside_writes', sessionId: 's1', allowed: false });
   });
 
-  it('sends a full replacement when the conversation toggle changes', () => {
+  it('drops a confirmation when its turn ends (Stop refused it server-side)', () => {
     useAssistantStore.getState().ensureConnected();
-
-    useAssistantStore.getState().setAutoApprove('s1', { all: true, tools: [] });
-
-    expect(sentMessages()).toContainEqual({ type: 'set_auto_approve', id: 's1', all: true, tools: [] });
+    receive(outsideWrite);
+    useAssistantStore.getState().stop('s1');
+    expect(sentMessages()).toContainEqual({ type: 'stop', sessionId: 's1' });
+    receive({ type: 'done', sessionId: 's1', stopReason: 'error_during_execution' });
+    expect(useAssistantStore.getState().confirmReqs).toHaveLength(0);
   });
 
-  it('marks auto-approved tool calls so the transcript stays auditable', () => {
+  it('builds a tool line with its target, fleex badge and outcome', () => {
     useAssistantStore.getState().ensureConnected();
+    receive({ type: 'tool_call', sessionId: 's1', id: 't1', name: 'Bash', toolKind: 'bash', target: 'fleex ticket comment 482 ok', access: 'write' });
+    receive({ type: 'tool_result', sessionId: 's1', id: 't1', name: 'Bash', status: 'fail', ok: false, text: 'boom', exitCode: 1 });
+    const [line] = useAssistantStore.getState().itemsBySession['s1']!;
+    expect(line).toMatchObject({ kind: 'tool', target: 'fleex ticket comment 482 ok', access: 'write', status: 'fail', exitCode: 1 });
+  });
 
-    receive({ type: 'tool_call', sessionId: 's1', id: 't1', name: 'fleex_ticket_create', argv: ['ticket', 'create'], autoApproved: true });
-    receive({ type: 'tool_call', sessionId: 's1', id: 't2', name: 'fleex_ticket_delete', argv: ['ticket', 'delete'] });
-
+  it('shows one card per file per turn, updated in place', () => {
+    useAssistantStore.getState().ensureConnected();
+    const card = { path: '/w/a.csv', relPath: 'a.csv', name: 'a.csv', kind: 'full', mime: 'text/csv', sizeBytes: 1, attachable: true, attachments: [] };
+    receive({ type: 'artifact', sessionId: 's1', turnId: 't', card });
+    receive({ type: 'artifact', sessionId: 's1', turnId: 't', card: { ...card, sizeBytes: 9 }, replaces: true });
     const items = useAssistantStore.getState().itemsBySession['s1']!;
-    expect(items.map((i) => i.kind === 'tool' && i.autoApproved)).toEqual([true, false]);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.kind === 'artifact' && items[0]!.artifact.sizeBytes).toBe(9);
   });
 
-  it('keeps the auto-approved marker when a session is reloaded', () => {
+  it('rebuilds tool lines, cards and notices from a saved conversation', () => {
     useAssistantStore.getState().ensureConnected();
-
     receive({
       type: 'session_history',
       id: 's1',
-      transcript: [{ tool: { name: 'fleex_ticket_create', argv: ['ticket', 'create'], status: 'ok', autoApproved: true } }],
+      transcript: [
+        { tool: { name: 'fleex_ticket_create', argv: ['ticket', 'create'], status: 'ok', autoApproved: true } },
+        { artifact: { path: '/w/a.md', relPath: 'a.md', name: 'a.md', kind: 'full', mime: 'text/markdown', sizeBytes: 1, attachable: true, attachments: [], turnId: 't' } },
+        { notice: 'max_turns', limit: 3 },
+      ],
     });
-
     const items = useAssistantStore.getState().itemsBySession['s1']!;
+    expect(items.map((i) => i.kind)).toEqual(['tool', 'artifact', 'notice']);
     expect(items[0]!.kind === 'tool' && items[0]!.autoApproved).toBe(true);
   });
 
-  it('surfaces a dismissible notice when the server disarms auto-approval', () => {
+  it('attaches an artefact to the picked ticket and closes the picker', () => {
     useAssistantStore.getState().ensureConnected();
+    receive({ type: 'tickets', sessionId: 's1', tickets: [{ id: 'u1', displayId: '482', title: 'Relance', status: 'doing' }], preselect: '482' });
+    expect(useAssistantStore.getState().ticketPicker?.preselect).toBe('482');
+    useAssistantStore.getState().attachArtifact('s1', '/w/a.csv', { id: 'u1', displayId: '482', title: 'Relance', status: 'doing' });
+    expect(sentMessages()).toContainEqual({ type: 'attach_artifact', sessionId: 's1', path: '/w/a.csv', ticketId: 'u1', displayId: '482' });
+    expect(useAssistantStore.getState().ticketPicker).toBeNull();
+  });
 
-    receive({ type: 'auto_approve_disarmed', sessionId: 's1', reason: 'page_attached' });
-    expect(useAssistantStore.getState().autoApproveNotice).toContain('page web');
-
-    useAssistantStore.getState().clearAutoApproveNotice();
-    expect(useAssistantStore.getState().autoApproveNotice).toBeNull();
+  it('says where to log in when the companion has no Claude authentication', () => {
+    useAssistantStore.getState().ensureConnected();
+    receive({ type: 'auth_missing', sessionId: 's1' });
+    expect(useAssistantStore.getState().authMissing).toBe(true);
   });
 });
 
@@ -237,13 +254,13 @@ describe('assistantStore — the outbox', () => {
   });
 
   it('does not replay an approval answered while the socket was down', () => {
-    // The server unwinds pending confirmations as denied on disconnect, so a
-    // queued approval would authorise a command nobody is waiting on any more.
+    // A confirmation comes back with the history on reconnect: a queued answer
+    // would approve a write the user has not seen again.
     useAssistantStore.getState().ensureConnected();
     useAssistantStore.setState({
-      confirmReqs: [{ sessionId: 'conv-1', id: 'c1', name: 'fleex_ticket_create', argv: [] }],
+      confirmReqs: [{ sessionId: 'conv-1', id: 'c1', tool: 'Write', path: '/x', diff: '', isNewFile: true }],
     });
-    useAssistantStore.getState().answerConfirm('c1', true);
+    useAssistantStore.getState().answerConfirm('c1', 'allow');
 
     openSocket();
 

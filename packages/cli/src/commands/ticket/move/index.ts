@@ -8,6 +8,7 @@ interface MoveOptions { board?: string }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'move',
+  access: 'write',
   aliases: ['mv'],
   description: 'Change a ticket status (move <id> <status>)',
   setup(cmd) {

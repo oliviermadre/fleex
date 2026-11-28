@@ -7,6 +7,7 @@ import startDef from '../start/index.ts';
 
 const def: CommandDef = {
   name: 'restart',
+  access: 'write',
   description: 'Restart the current instance (stop then start with same options)',
   setup(cmd) {
     cmd.option('--port <port>', 'Force the web (Vite) service to use a specific port');

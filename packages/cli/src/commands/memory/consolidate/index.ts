@@ -38,6 +38,7 @@ interface ConsolidationResult {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'consolidate',
+  access: 'write',
   description: 'Run the nightly pass now: learn from the times a human corrected an agent unprompted',
   setup(cmd) {
     cmd.option('--since <days>', 'Look back this many days instead of from the last pass (catch-up; leaves the nightly watermark alone)');

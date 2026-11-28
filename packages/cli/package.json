@@ -11,6 +11,16 @@
       "types": "./src/core/program.ts",
       "development": "./src/core/program.ts",
       "default": "./src/core/program.ts"
+    },
+    "./access": {
+      "types": "./src/core/access.ts",
+      "development": "./src/core/access.ts",
+      "default": "./src/core/access.ts"
+    },
+    "./tailscale": {
+      "types": "./src/commands/tailscale/_shared.ts",
+      "development": "./src/commands/tailscale/_shared.ts",
+      "default": "./src/commands/tailscale/_shared.ts"
     }
   },
   "scripts": {

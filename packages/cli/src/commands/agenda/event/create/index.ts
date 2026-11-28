@@ -8,6 +8,7 @@ import { addEventOptions, buildEventInput, eventLine, resolveRefs, type EventOpt
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   description:
     'Create a free agenda event: timed (--start + --end/--duration) or all-day (--all-day --date [--last-day]), with optional notes, colour, linked ticket or epic, and a daily/weekly/monthly repeat',
   setup(cmd) {

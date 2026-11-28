@@ -39,6 +39,7 @@ interface AgentActivity { ticketId: string; cumulativeCostUsd: number }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   aliases: ['view'],
   description: 'Show ticket details (use --full for comments + deliverables)',
   setup(cmd) {

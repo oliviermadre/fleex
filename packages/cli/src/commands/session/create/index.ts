@@ -13,6 +13,7 @@ interface CreateOptions {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'create',
+  access: 'write',
   aliases: ['new'],
   description: 'Create a tmux session (create [--type shell|claude] [--cwd <dir>])',
   setup(cmd) {

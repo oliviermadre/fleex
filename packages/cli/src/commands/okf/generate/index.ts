@@ -48,6 +48,7 @@ function pickWorkspace(name?: string): Workspace | null {
 
 const def: CommandDef = {
   name: 'generate',
+  access: 'write',
   aliases: ['gen'],
   description: "Generate an OKF bundle from a workspace's data (driver auto-selected)",
   setup(cmd: Command) {

@@ -20,6 +20,7 @@ interface ShowOptions { json?: boolean }
 const def: CommandDef = {
   workspaceAware: true,
   name: 'show',
+  access: 'read',
   description: 'Show a repository dashboard (PRs, issues, worktrees)',
   setup(cmd) {
     cmd.argument('<org/name>', 'Repository reference');
