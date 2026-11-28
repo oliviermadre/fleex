@@ -193,6 +193,32 @@ describe('a skin whose zoom goes by steps', () => {
     expect(v.resting).toBe(true);
   });
 
+  it('takes two fingers spreading for a step once they have spread enough, not at each of their moves', () => {
+    const v = stepView(1300, 600);
+    v.cam.z = 32;
+    v.pinch(650, 300, 1.1); v.pinch(650, 300, 1.1);
+    frames(v, 60);
+    expect(v.cam.z).toBe(32);
+    v.pinch(650, 300, 1.1);                                                     // 1.1 three times: past the step
+    frames(v, 60);
+    expect(v.cam.z).toBe(48);
+    v.pinch(650, 300, 0.7);
+    frames(v, 60);
+    expect(v.cam.z).toBe(32);
+  });
+
+  it('follows two fingers exactly for a skin without steps, round the point between them', () => {
+    const v = view(1300, 600);
+    v.constrain(built); v.cam.z = 20;
+    const before = v.toWorld(400, 200);
+    v.pinch(400, 200, 1.5);
+    expect(v.cam.z).toBeCloseTo(30);
+    const after = v.toWorld(400, 200);
+    expect(after.x).toBeCloseTo(before.x); expect(after.y).toBeCloseTo(before.y);
+    v.pinch(400, 200, NaN); v.pinch(400, 200, 0);                                // two fingers on the same spot
+    expect(v.cam.z).toBeCloseTo(30);
+  });
+
   it('leaves the zoom free for a skin without steps', () => {
     const v = view(1300, 600);
     v.constrain(built); v.cam.z = 22;

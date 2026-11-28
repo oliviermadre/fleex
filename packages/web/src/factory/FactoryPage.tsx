@@ -1,4 +1,4 @@
-import { arrivalOf, portDrop } from './teleport';
+import { dropAt, type Drop } from './dropTarget';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -80,7 +80,6 @@ const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator
 /** What was copied or cut in build mode. Kept for the session, so it survives leaving the page and coming back. */
 let clipboard: Clip | null = null;
 const NO_TICKETS: never[] = [];
-const ARROW = ['→', '↓', '←', '↑'];
 /** The build menu: tool, hotkey, label, what it is. */
 const TOOLS: [Tool, string, string, string][] = [
   ['belt', 'C', 'Belt', 'Drag to lay belts: each tile points the way you drag'],
@@ -407,20 +406,7 @@ function Floor() {
     const m = target.machineId ? v.machine(target.machineId) : null;
     return !!m && (m.kind === 'zone' || m.kind === 'station' || m.kind === 'exit');
   };
-  const dropTarget = (v: FactoryView, wx: number, wy: number): { target: Target; ok: boolean; can: boolean; text: string } => {
-    const tx = Math.floor(wx), ty = Math.floor(wy), m = v.at(tx, ty);
-    if (!m) return { target: { x: tx, y: ty }, ok: false, can: true, text: 'On the floor: it will not move by itself' };
-    if (m.kind === 'arm' || m.kind === 'label') return { target: {}, ok: false, can: false, text: 'Not on an arm' };
-    if (m.kind === 'desk') return { target: {}, ok: false, can: false, text: 'Not on a desk: tickets are born there' };
-    if (m.kind === 'intake') return { target: {}, ok: false, can: false, text: 'Not in an intake: items come to it from their source' };
-    if (m.kind === 'teleporter') {
-      /* as for an arm: a departure takes one ticket, an arrival none */
-      const held = !!useFactoryStore.getState().snapshot?.tickets.some((t) => t.machineId === m.id), drop = portDrop(m, held, arrivalOf(m, (id) => v.machine(id)));
-      return { target: drop.ok ? { machineId: m.id } : {}, ok: drop.ok, can: drop.ok, text: drop.text };
-    }
-    const dest = m.kind === 'belt' ? v.leadsTo(m) : null;
-    return { target: { machineId: m.id }, ok: true, can: true, text: m.kind === 'belt' ? `Belt ${ARROW[m.dir]}${dest ? ` towards ${dest.name ?? dest.kind}` : ': leads nowhere'}` : m.kind === 'exit' ? 'Ship: sets it to done' : `Drop in ${m.name ?? m.kind}` };
-  };
+  const dropTarget = (v: FactoryView, wx: number, wy: number): Drop => dropAt(v, useFactoryStore.getState().snapshot?.tickets ?? [], wx, wy);
 
   // ---------- pointer ----------
   const press = useRef<Press>(null);

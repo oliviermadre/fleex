@@ -19,6 +19,7 @@ import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 import { MobileComposer } from './MobileComposer';
 import { tint } from '../lib/tints';
+import { MobileFactoryAsk } from '../factory/mobile/MobileFactoryTicket';
 
 const MENTION_STATUS_LABEL: Record<TicketMention['status'], string> = {
   pending: '⏳ en attente',
@@ -451,6 +452,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           </div>
         </div>
       )}
+
+      {/* Experimental Factory: what the floor asks about this ticket, where the answer is written. */}
+      <MobileFactoryAsk ticketId={ticketId} />
 
       {/* Composer */}
       <div

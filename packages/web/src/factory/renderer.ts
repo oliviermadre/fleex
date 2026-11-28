@@ -136,6 +136,8 @@ const GLOW_MOMENTS = 4, GLOW_RUN_S = 0.5 / CHEVRON_PACE;
 const PASSING = new Set(['arms', 'armAge']);
 /** The wheel's travel that makes a notch, for a skin whose zoom goes by steps; and how fast the zoom glides to a step. */
 const NOTCH = 40, GLIDE = 14;
+/** How far two fingers spread or close, as a ratio, to make a step of the zoom for a skin whose zoom goes by steps. */
+const PINCH_STEP = 1.3;
 
 export class FactoryView {
   cam = { x: 24, y: 15, z: 18 };
@@ -187,6 +189,17 @@ export class FactoryView {
     if (!this.skin.steps) { this.zoomTo(sx, sy, this.cam.z * Math.exp(-Math.max(-120, Math.min(120, deltaY)) * (fine ? 0.012 : 0.0022))); return; }
     this.notch += lines ? deltaY * 30 : deltaY;
     if (Math.abs(this.notch) >= NOTCH) { this.step(this.notch < 0 ? 1 : -1, sx, sy); this.notch = 0; }
+  }
+  /**
+   * Two fingers on a touch screen: zoom by the ratio their gap changed by, round the point between them. Free for most
+   * skins; for one with steps, the ratio adds up until it makes a step (`PINCH_STEP`), and the zoom glides there.
+   */
+  private spread = 1;
+  pinch(sx: number, sy: number, ratio: number): void {
+    if (!(ratio > 0) || !Number.isFinite(ratio)) return;
+    if (!this.skin.steps) { this.zoomTo(sx, sy, this.cam.z * ratio); return; }
+    this.spread *= ratio;
+    if (this.spread >= PINCH_STEP || this.spread <= 1 / PINCH_STEP) { this.step(this.spread > 1 ? 1 : -1, sx, sy); this.spread = 1; }
   }
   private zoomTo(sx: number, sy: number, z: number): void {
     const before = this.toWorld(sx, sy);

@@ -25,6 +25,7 @@ import { DiffPanel } from '../components/work/panel/DiffPanel';
 import { MobileDeliverables } from './MobileDeliverables';
 import { MobileTicketMeta } from './MobileTicketMeta';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import { MobileFactoryHandover, MobileFactoryWhere } from '../factory/mobile/MobileFactoryTicket';
 
 type Tab = MobileDetailTab;
 
@@ -210,6 +211,9 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
         </div>
       </div>
 
+      {/* Experimental Factory: where the ticket stands on the floor. Nothing unless it is on it. */}
+      <MobileFactoryWhere ticketId={ticket.id} />
+
       {/* Tabs */}
       <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-[var(--theme-border)] px-3 [scrollbar-width:none]">
         {tabs.map((t) => (
@@ -304,6 +308,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
               >
                 ✎ Modifier
               </button>
+              <MobileFactoryHandover ticketId={ticket.id} displayId={ticket.displayId} status={ticket.status} />
             </div>
           )}
         </div>

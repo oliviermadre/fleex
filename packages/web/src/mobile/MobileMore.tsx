@@ -16,6 +16,7 @@ import {
   MobileRoutinesPage,
   MobileSettingsPage,
 } from './MobileMorePages';
+import { MobileFactoryTile } from '../factory/mobile/MobileFactory';
 
 export function BellIcon({ size = 20 }: { size?: number }) {
   return (
@@ -111,6 +112,8 @@ export function MobileMoreSheet() {
             )}
           </button>
         ))}
+        {/* the experimental Factory, when it is on: a mode of its own, not a page */}
+        <MobileFactoryTile onOpen={() => setOpen(false)} />
       </div>
       <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2">
         <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--theme-success)]" />

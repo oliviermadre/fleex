@@ -212,6 +212,10 @@ construit sur téléphone.
   feuille (une zone y liste ses tickets, avec « Release »). **Déplacer un ticket** ne se fait pas en glissant : « Take », les
   machines qui peuvent le recevoir s'allument, un toucher choisit, un autre confirme.
 
+**Implémentée** dans `packages/web/src/factory/mobile/` (mode à part, Tickets · + · Map) : voir « On a phone » dans
+`packages/server/src/factory/README.md`. La maquette reste l'intention visuelle ; l'app suit les primitives du mobile
+(`MobileSheet`, l'en-tête commun, le toast unique).
+
 La page liste le périmètre avec la route de chaque geste : aucune n'est à ajouter côté serveur. Un choix reste à trancher (la
 Factory comme mode à part ou comme onglet de Fleex) ; il change le téléphone de la maquette. Reportés à plus tard : l'arrêt
 d'urgence et les limites, l'interrupteur d'une station, la ligne pour parler, les calques, les items, les notifications.

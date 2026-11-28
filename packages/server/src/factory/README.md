@@ -776,6 +776,47 @@ engine's ten-second sweep.
 Off unless `factoryEnabled` is `true` in the workspace config (Settings › General). While off the engine does not
 tick, no `factory_*` table is read or written, the routes answer 403 and the nav entry is hidden.
 
+## On a phone
+
+The mobile shell (`docs/mobile.md`) has the Factory as a mode of its own, picked on `docs/factory/mobile.html`: its
+tile among the "Plus" pages opens it in place of Fleex's tabs and bar, and the back arrow of its header goes back to
+them. It is all in `packages/web/src/factory/mobile/`, and asks nothing new of the server: every gesture is a route
+the page already calls. The phone follows the floor, settles what waits for someone and moves tickets; nothing is
+built from it, and items (mails) are only shown.
+
+- **Tickets**, the first screen (`MobileFactoryTickets.tsx`). **Needs you** is the page's list (`needsOf`), longest
+  wait first, each ticket a card with its buttons. **All tickets** lists every ticket by the machine it stands in, the
+  machines from left to right as they stand on the floor, then what travels, then what lies on the floor
+  (`ticketList.ts`); a zone that still holds several has Release all. A search narrows both (number, title, type, tag).
+- **What a ticket offers** is read from where it stands, by the rules of the command card (`ticketActs.ts`, drawn by
+  `TicketActsBar`): a gate's outcomes; Run again, or Leave as one of its station's outcomes, for a ticket set aside, a
+  failed run or a question; Release in a zone; Set aside while a station works on it. A question whose agent declared
+  one closed question has its options as buttons (the agent's last comment is read once per time the ticket came
+  there, `useLastWord`); any other is answered in words, in the ticket's conversation.
+- **The undo window** (`mobileFactoryStore.ts`, as Focus has on the phone): a gesture hides what it acts on at once,
+  and its request leaves five seconds later, unless Undo was touched. What the floor does next cannot be taken back
+  on the server, so Undo has to come before the request. What still waits is sent when the page goes away. Sending a
+  ticket to the Factory is the exception: it is sent at once, since taking it back undoes it.
+- **A ticket's own screen** is the shell's (`MobileTicketDetail`), with three pieces of the Factory
+  (`MobileFactoryTicket.tsx`): under its title, where it stands on the floor, which a tap shows on the map; at the
+  foot of its conversation, what the floor asks, with a gate's optional reason, and Set aside; at the foot of its
+  context, Send to Factory, or Take and Take back from Factory.
+- **The +** in the middle of the Factory's bar (`MobileFactoryPlus.tsx`) brings a ticket onto the floor: a new one,
+  through the new-task flow of Tasks on a draft of its own, born at a desk as with `FactoryDeskForm` (one line a desk
+  when the floor has several; in Inbound when it has none); or one of the open tickets Fleex drives, sent to Inbound.
+- **Map** (`MobileFactoryMap.tsx`) is the page's own view (`FactoryView`, the skin chosen in Settings) moved by touch:
+  one finger moves it, two fingers zoom (`FactoryView.pinch`: free, or a step at a time for a skin whose zoom goes by
+  steps), a tap opens a sheet. Seen from far (under `FAR_Z` pixels a tile) each place carries how many tickets it
+  holds, in amber when one waits for someone (`farBadges`, painted on a canvas of its own over the view), and a tap
+  means the place before the tickets in it; a finger reaches a ticket from 26 pixels (`nearestTicket`). A machine's
+  sheet says how it stands and lists its tickets, a zone's with Release; a ticket's has its buttons, Take and Open.
+  Next goes to the next ticket that waits.
+- **A ticket is not dragged.** Take puts it in hand: the map then waits to be touched where it goes, shows the ticket
+  there with what putting it there does (the rules of a drag on the page, now shared: `dropTarget.ts`), and Put it
+  there sends the move. On the bare floor it may be put, and will not move by itself.
+
+Left for later: the emergency stop and the limits, a station's switch, the line to talk, the layers, what items offer.
+
 ## What it touches
 
 Everything lives here, in `packages/web/src/factory/`, and in seven tables created by migrations `045_factory`
@@ -846,6 +887,7 @@ database. With the flag off nothing is read at all, not even the floor. What doe
 | web: `work/WorkView.tsx` | an `embedded` prop that leaves out the queue column, for the workbench |
 | web: `work/timeline/buildTimeline.ts`, `TimelineGlyph.tsx`, `useTicketTimeline.ts` | a run a station started goes by the station's name on a ticket's timeline, with the Factory's glyph, instead of "Workflow": an optional `stationRuns` source (read by `useFactoryStationRuns`, empty while the Factory is off) and a `factory` glyph |
 | web: `work/panel/ContextPanel.tsx`, `work/task/TaskPane.tsx` | one line each: the Factory group of Context, and what the floor asks at the foot of the thread |
+| web: `mobile/MobileApp.tsx`, `MobileMore.tsx`, `MobileTicketDetail.tsx`, `MobileConversation.tsx` | the Factory on a phone: its mode in place of the tabs and the bar while it is open, its tile among the "Plus" pages, and on a ticket's screen where it stands, what the floor asks and who drives it. One or two lines each; nothing shows while the Factory is off |
 | web: `work/new/newTaskDraft.ts`, `NewTask.tsx`, `NewTaskEntry.tsx`, `SourcePicker.tsx`, `NewTaskCompose.tsx` | the new-task screens read their draft and their Cancel from `useNewTaskDraft` (the Work store's, unless a `NewTaskDraftProvider` gives another), and `NewTask` takes an optional `onCreated` and `onOpenTicket`. Without a provider or those props, the Work view is unchanged; they can stay |
 
 ## Removing it

@@ -73,6 +73,24 @@ restent montés : un flux ou un scroll survit à un changement d'onglet.
 - **Assistant** : le centre de la barre ouvre l'assistant en **sheet** au-dessus
   de l'écran courant. Fermer la sheet ne le démonte pas : la conversation
   continue. Quand un ticket est ouvert, il est passé en contexte.
+- **Factory** (expérimental, si la Factory est activée) : une tuile de **Plus**
+  ouvre un mode à part, à la place des onglets et de la barre de Fleex ; la
+  flèche de son en-tête y ramène. Sa barre : Tickets · **+** · Map.
+  - *Tickets* : « Needs you » (ce qui attend quelqu'un, le plus ancien d'abord,
+    avec ses boutons : issues d'un gate, réponses fermées d'un agent, Run again
+    ou Leave as, Release) et « All tickets » (tous les tickets, par machine),
+    avec une recherche.
+  - *+* : un nouveau ticket, né à un desk du plan, ou un ticket de Fleex envoyé
+    dans Inbound.
+  - *Map* : le plan, avec le skin choisi ; un doigt déplace, deux doigts
+    zooment, un toucher ouvre la feuille d'une machine ou d'un ticket. « Take »
+    prend un ticket en main : on touche où il va, puis on confirme.
+  - Sur l'écran d'un ticket du plan : où il se trouve (un toucher le montre sur
+    la carte), ce que l'usine attend au pied de la conversation, et dans
+    Contexte « Send to Factory » ou « Take back from Factory ».
+  - Chaque geste part après 5 s, le temps de l'annuler (comme dans Focus). Rien
+    ne se construit depuis le téléphone ; les items (mails) sont seulement
+    affichés. Détail : `packages/server/src/factory/README.md`, « On a phone ».
 - **Plus** (sheet, grille 3 colonnes) : Notifications, Routines (activer,
   approuver une gate, lancer), Notes, Documents, Repositories, Settings (thème
   parmi les thèmes intégrés, persisté comme sur desktop) et bascule vers la vue

@@ -24,6 +24,7 @@ import { MobileAssistant } from './MobileAssistant';
 import { MobileDeliverableOverlayHost } from './MobileDeliverableReader';
 import { MobileMoreSheet, MobileMorePageHost, MoreDotsIcon } from './MobileMore';
 import { useMobileNavStore, type MobileView } from './mobileNavStore';
+import { MobileFactory, useMobileFactory } from '../factory/mobile/MobileFactory';
 
 /**
  * Mobile shell — the phone is a remote control: Focus (home), Tasks, Kanban,
@@ -60,6 +61,8 @@ export function MobileApp() {
   const setMoreSheetOpen = useMobileNavStore((s) => s.setMoreSheetOpen);
   const morePage = useMobileNavStore((s) => s.morePage);
   const focusCount = useFocusCount();
+  /* the experimental Factory: a mode of its own, in place of these tabs and this bar while it is open */
+  const factory = useMobileFactory();
   // Keep toasts clear of the floating bar (80 px + the Toaster's 1.5 rem gap = 104 px).
   useToastOffset(ticket ? 0 : 80);
 
@@ -80,6 +83,7 @@ export function MobileApp() {
         <MobileBoard />
       </div>
       <MobileMorePageHost />
+      {factory.open && <MobileFactory />}
 
       {/* Ticket detail: full screen, above the bar (which is hidden there) */}
       {ticket && (
@@ -92,7 +96,7 @@ export function MobileApp() {
       )}
 
       {/* Floating glass bar: Focus · Tasks · ✦ · Kanban · Plus */}
-      {!ticket && (
+      {!ticket && !factory.open && (
         <nav
           className="fixed inset-x-3.5 z-30 flex h-16 items-center justify-around rounded-[32px] border border-white/[0.08] shadow-[0_12px_40px_rgba(0,0,0,.45)] backdrop-blur-[24px] backdrop-saturate-[1.4]"
           style={{
