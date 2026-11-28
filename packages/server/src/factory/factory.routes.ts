@@ -3,6 +3,7 @@ import { ForbiddenError } from '../domain/errors.js';
 import type { FactoryModule } from './factory.module.js';
 import { FactoryError } from './engine.js';
 import type { FactoryLayout, FactorySettings, ItemInput } from './types.js';
+import { machine, machines, needs, overview, token, tokens, withMachinePatched, withMachines, withoutMachine } from './operate.js';
 
 type Target = { machineId?: string; x?: number; y?: number };
 
@@ -17,7 +18,7 @@ export function factoryRoutes(factory: FactoryModule | null) {
     if (!factory) return;
 
     const ready = async (): Promise<FactoryModule> => {
-      if (!factory.enabled()) throw new ForbiddenError('The Factory is switched off in this workspace');
+      if (!factory.enabled()) throw new ForbiddenError('The Factory is switched off in this workspace (Settings › General, or `fleex factory enable`)');
       await factory.ensureReady();
       return factory;
     };
@@ -31,12 +32,78 @@ export function factoryRoutes(factory: FactoryModule | null) {
       return f.state();
     };
 
+    const refused = (reply: FastifyReply, err: unknown) => {
+      if (err instanceof FactoryError) return reply.code(400).send({ error: 'FACTORY_REFUSED', message: err.message });
+      throw err;
+    };
+
     app.get('/api/factory/state', async () => (await ready()).state());
     /** Ids only, for the "managed by the Factory" banner on a ticket; empty rather than 403 when off. */
     app.get('/api/factory/managed', async () => {
       if (!factory.enabled()) return { ticketIds: [] };
       await factory.ensureReady();
       return { ticketIds: [...factory.engine.managedIds()] };
+    });
+
+    /*
+     * The floor for whoever operates it without the page (the CLI, the MCP, another program): the same snapshot, read
+     * as answers of a few lines with no layout in them (`operate.ts`). `/state` stays what the page draws from.
+     */
+    /** The floor at a glance: stopped or not, how full against its limits, how many wait for someone, what is idle. */
+    app.get('/api/factory/overview', async () => overview((await ready()).engine.snapshot()));
+    /** What waits for someone and for what (a decision, an answer, a failed run…), the longest wait first. */
+    app.get('/api/factory/needs', async () => needs((await ready()).engine.snapshot()));
+    /** Every ticket and item on the floor, with where it stands in words; `kind` (ticket, item) and `machineId` narrow it. */
+    app.get<{ Querystring: { kind?: string; machineId?: string } }>('/api/factory/tickets', async (request) => {
+      const { kind, machineId } = request.query;
+      return tokens((await ready()).engine.snapshot()).filter((t) => (!kind || t.kind === kind) && (!machineId || t.machineId === machineId));
+    });
+    /** One ticket or item of the floor: where it stands, what it waits for, what can be done with it. */
+    app.get<{ Params: { ticketId: string } }>('/api/factory/tickets/:ticketId', async (request, reply) => {
+      const found = token((await ready()).engine.snapshot(), request.params.ticketId);
+      return found ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'This ticket is not on the factory floor' });
+    });
+    /** The layout alone, as `PUT /api/factory/layout` takes it back: what an export is made of. */
+    app.get('/api/factory/layout', async () => ({ layout: (await ready()).engine.snapshot().floor.layout }));
+    /** The machines of the floor without their settings, each with how much stands on it; `kind` narrows it. */
+    app.get<{ Querystring: { kind?: string } }>('/api/factory/machines', async (request) => {
+      const { kind } = request.query;
+      return machines((await ready()).engine.snapshot()).filter((m) => !kind || m.kind === kind);
+    });
+    /** One machine: its settings as the layout holds them (`spec`) and what stands on it. */
+    app.get<{ Params: { machineId: string } }>('/api/factory/machines/:machineId', async (request, reply) => {
+      const found = machine((await ready()).engine.snapshot(), request.params.machineId);
+      return found ?? reply.code(404).send({ error: 'NOT_FOUND', message: 'No such machine on the floor' });
+    });
+    /*
+     * One machine at a time, where the page saves the whole layout: read and written in one go on the server, so a
+     * change made here cannot undo one the page made meanwhile. Each is checked as a whole layout is (`normaliseLayout`).
+     */
+    /** Add a machine (its spec), or several (`{ machines: [...] }`): a line of belts is one request. Ids are given when missing. */
+    app.post<{ Body: unknown }>('/api/factory/machines', async (request, reply) => {
+      const f = await ready(), body = request.body as { machines?: unknown } | null;
+      try {
+        const { layout, ids } = withMachines(f.engine.snapshot().floor.layout, Array.isArray(body?.machines) ? body.machines : body);
+        await f.engine.setLayout(layout);
+        const after = f.engine.snapshot();
+        return { machines: ids.map((id) => machine(after, id)).filter((m) => m !== null) };
+      } catch (err) { return refused(reply, err); }
+    });
+    /** Change a machine's settings: what the body names replaces what it had, a null takes a setting off. */
+    app.patch<{ Params: { machineId: string }; Body: unknown }>('/api/factory/machines/:machineId', async (request, reply) => {
+      const f = await ready();
+      try {
+        await f.engine.setLayout(withMachinePatched(f.engine.snapshot().floor.layout, request.params.machineId, request.body));
+        return machine(f.engine.snapshot(), request.params.machineId);
+      } catch (err) { return refused(reply, err); }
+    });
+    /** Remove a machine. What stood on it is left on the floor where it stood. */
+    app.delete<{ Params: { machineId: string } }>('/api/factory/machines/:machineId', async (request, reply) => {
+      const f = await ready();
+      try {
+        await f.engine.setLayout(withoutMachine(f.engine.snapshot().floor.layout, request.params.machineId));
+        return { removed: request.params.machineId };
+      } catch (err) { return refused(reply, err); }
     });
 
     app.post('/api/factory/notice/ack', async () => { const f = await ready(); f.engine.ackNotice(); return f.state(); });

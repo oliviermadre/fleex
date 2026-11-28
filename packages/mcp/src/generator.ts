@@ -24,6 +24,9 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `agenda` and `deliverable` are in so an assistant can read the agenda (Google
  * meetings included, through Fleex), manage free events, and find, read and
  * link deliverables — a routine's transcript has no ticket to reach it through.
+ * `factory` is in so the floor can be operated headless: what waits for someone
+ * there (a gate's decision, a failed run) is asked nowhere else, since a Factory
+ * run creates no mention and no workflow step run.
  * Infra commands
  * (`start`, `stop`, `logs`, `doctor`, `self-update`, `token`, shell helpers)
  * drive processes on the host machine and stay off the surface on purpose.
@@ -33,7 +36,7 @@ import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaPro
  * `tests/parity.bun.test.ts`). Narrowing the perimeter is a deliberate product
  * decision; silently dropping an option is a bug.
  */
-export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory', 'agenda', 'deliverable'] as const;
+export const DEFAULT_INCLUDE = ['ticket', 'epic', 'routine', 'workflow', 'memory', 'agenda', 'deliverable', 'factory'] as const;
 
 /** Options we never expose as tool params (handled specially or noise). */
 const HIDDEN_OPTION_LONGS = new Set(['--help', '--workspace', '--json']);
