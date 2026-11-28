@@ -193,20 +193,25 @@ Work autres que Context, Diff, Docs et Todo. Le floor est une seule ligne, sans 
 ## Mobile : le poste de garde
 
 Troisième maquette, [`mobile.html`](./mobile.html) (un seul fichier, données simulées, même enveloppe que `workbench.html`).
-Elle répond à une question : que devient la Factory sur un téléphone. Elle ne rétrécit pas la page du bureau : elle garde ce
-qui se fait en trois minutes sous un pouce, et laisse la construction au bureau.
+Elle répond à une question : que devient la Factory sur un téléphone. Elle ne rétrécit pas la page du bureau. Deuxième
+version, resserrée sur l'urgence : suivre les tickets, les résoudre, en créer un, en faire venir un de Fleex. Rien ne se
+construit sur téléphone.
 
-- **Needs, l'accueil.** Une carte par ticket qui attend quelqu'un (la liste de `needs.ts`, la plus ancienne d'abord), le plan
-  entier en bandeau au-dessus, et les issues d'un gate, les réponses fermées d'un agent ou « Run again » en boutons au-dessus
-  de la barre. Chaque geste s'annule pendant cinq secondes.
-- **Floor.** Le plan, lu plus que manipulé : un doigt déplace, deux doigts zooment ; de loin une station est sa couleur, son
-  feu et un compte, de près ses places et ses tickets. « Next » emmène la vue au ticket suivant, toucher une machine ouvre sa
-  feuille (console et popup réunis). « Lines » montre le même plan en liste.
-- **Déplacer un ticket** ne se fait pas en glissant : « Send to… », les machines qui peuvent le prendre s'allument, un toucher
-  choisit, un autre confirme.
-- **✦** est la ligne « Entrée » du bureau, ses commandes slash en pastilles. **Pulse** donne ce qui s'est passé depuis la
-  dernière visite, les limites, où ça bouche, et l'arrêt d'urgence tenu une seconde.
+- **Tickets, l'accueil.** « Needs you » est la liste de `needs.ts`, la plus ancienne d'abord, chaque carte avec ses boutons :
+  les issues d'un gate, les réponses fermées d'un agent, « Run again » ou « Leave as… » (une issue de la station) pour un
+  ticket mis de côté ou un run échoué, « Release » pour une zone. « All tickets » range tous les tickets du plan par
+  machine, dans l'ordre du flux, avec une recherche et « Release all » sur une zone. Chaque geste s'annule pendant cinq
+  secondes.
+- **Un ticket, en plein écran** (la barre disparaît, comme dans Fleex mobile) : une vignette du plan dit où il se trouve, son
+  fil, et au pied ce que l'usine attend, avec la raison facultative d'un gate, la réponse libre à une question, « Set aside »
+  sur un ticket qui tourne, « Take » et « Take back from Factory ».
+- **« + »** au centre de la barre : « New ticket » (le ticket naît à un desk et part aussitôt) ou « From Fleex » (chercher un
+  ticket de Fleex, « Send » : il attend dans Inbound).
+- **Map.** Le plan, lu plus que manipulé : un doigt déplace, deux doigts zooment ; de loin une station est sa couleur, son
+  feu et un compte, de près ses places et ses tickets. « Next » emmène la vue au ticket suivant. Toucher une machine ouvre sa
+  feuille (une zone y liste ses tickets, avec « Release »). **Déplacer un ticket** ne se fait pas en glissant : « Take », les
+  machines qui peuvent le recevoir s'allument, un toucher choisit, un autre confirme.
 
-Trois choix restent à trancher sur la page (ce qu'on voit en ouvrant, ce que fait un balayage sur une carte, où vit la
-Factory dans l'app mobile) ; ils changent le téléphone de la maquette. Ce qu'elle ne montre pas : le mode build, les réglages
-complets d'une station, le paysage, les notifications.
+La page liste le périmètre avec la route de chaque geste : aucune n'est à ajouter côté serveur. Un choix reste à trancher (la
+Factory comme mode à part ou comme onglet de Fleex) ; il change le téléphone de la maquette. Reportés à plus tard : l'arrêt
+d'urgence et les limites, l'interrupteur d'une station, la ligne pour parler, les calques, les items, les notifications.
